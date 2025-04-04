@@ -8,6 +8,15 @@
     <style>
         body { padding-top: 5rem; }
         .metric-link { margin: 5px; }
+        /* Add some basic table styling */
+        table { margin-top: 20px; }
+        th, td { text-align: center; vertical-align: middle; }
+        .table thead th { vertical-align: middle; }
+        /* Style for NaN values */
+        .nan-value { color: #ccc; font-style: italic; }
+         /* Style for Z-scores outside +/- 2 */
+        .z-high { background-color: #ffcccc; } /* Light red */
+        .z-low { background-color: #ccccff; } /* Light blue */
     </style>
 </head>
 <body>
@@ -18,13 +27,69 @@
     <main role="main" class="container">
         <div class="jumbotron">
             <h1>Dashboard</h1>
-            <p class="lead">Select a metric below to view the checks.</p>
+            <p class="lead">Select a metric below to view the detailed checks, or see the latest Z-Score summary below.</p>
             <div>
                 {% for metric in metrics %}
                 <a href="{{ url_for('metric_page', metric_name=metric) }}" class="btn btn-primary metric-link">{{ metric }}</a>
                 {% endfor %}
             </div>
         </div>
+
+        <!-- Z-Score Summary Table -->
+        {% if not summary_data.empty %}
+        <h2>Latest Spread Change Z-Score Summary (Based on First Fund Column vs Benchmark)</h2>
+        <div class="table-responsive"> <!-- Make table scrollable on small screens -->
+            <table class="table table-striped table-bordered table-hover table-sm">
+                <thead class="thead-light">
+                    <tr>
+                        <th>Fund Code</th>
+                        {% for metric in summary_metrics %}
+                        <th>{{ metric }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fund_code, row in summary_data.iterrows() %}
+                    <tr>
+                        <td>{{ fund_code }}</td>
+                        {% for metric in summary_metrics %}
+                            {% set z_score = row[metric] %}
+                            {% if z_score is none or z_score != z_score %}
+                                {# Handle NaN/None #}
+                                <td class="nan-value">N/A</td>
+                            {% else %}
+                                {# Apply conditional styling based on Z-score value #}
+                                {% set z_abs = z_score|abs %}
+                                {% set cell_class = '' %}
+                                {% if z_abs > 2.0 %}
+                                    {# Decide between high or low based on sign #}
+                                    {% if z_score > 0 %}
+                                        {% set cell_class = 'z-high' %}
+                                    {% else %}
+                                        {% set cell_class = 'z-low' %}
+                                    {% endif %}
+                                {% endif %}
+                                <td class="{{ cell_class }}">{{ "%.2f"|format(z_score) }}</td>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-warning" role="alert">
+            No Z-score data could be generated for the summary table. Check the console logs for errors.
+        </div>
+        {% endif %}
+
+        <!-- Add a link to the new Securities page -->
+        <div class="mt-4 p-3 border rounded bg-light">
+            <h5>Securities Data Check</h5>
+            <p>View checks for individual securities based on latest daily changes.</p>
+            <a href="{{ url_for('securities_page') }}" class="btn btn-info btn-sm">View Securities Check</a>
+        </div>
+
     </main>
 
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>

@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block title %}Security Details: {{ security_id }} - {{ metric_name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ security_id }} - {{ metric_name }}</h1>
+    <p>Latest data as of: <strong>{{ latest_date }}</strong></p>
+    
+    {# Display Static Info #}
+    {% if static_info %}
+    <div class="mb-3 p-3 border rounded bg-light small">
+        <strong>Static Details:</strong> 
+        {% for key, value in static_info.items() %}
+            <span class="me-3">{{ key }}: {{ value }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Chart Area - Add explicit height style to the container #}
+    <div id="chart-container" class="mb-4" style="height: 500px; position: relative;">
+        <canvas id="securityChart"></canvas>
+    </div>
+
+    {# Hidden script tag for chart data #}
+    <script id="chartJsonData" type="application/json">
+        {{ chart_data_json|safe }}
+    </script>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+    {# Include Chart.js library #}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    {# We'll need a specific JS function to render this single chart #}
+    {# Let's add it to a new file or adapt chartRenderer.js later #}
+{% endblock %} 

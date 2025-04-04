@@ -28,7 +28,7 @@
     <main role="main" class="container">
         <h1>{{ metric_name }} Check</h1>
         <p>Latest Data Date: <strong>{{ latest_date }}</strong></p>
-        <p>Charts sorted by the absolute Z-score of the latest <strong>Fund - Benchmark Spread</strong> (most deviation first).</p>
+        <p>Charts sorted by the maximum absolute <strong>Change Z-Score</strong> across all columns for the fund (most deviation first).</p>
 
         {% if not missing_funds.empty %}
             <div class="alert alert-warning" role="alert">

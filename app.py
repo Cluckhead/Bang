@@ -4,6 +4,9 @@ import os
 import pandas as pd
 import numpy as np
 from data_processing import load_and_process_data, calculate_latest_metrics
+# Import the new security processing functions
+from security_processing import load_and_process_security_data, calculate_security_latest_metrics
+import traceback # Import traceback for detailed error logging
 
 app = Flask(__name__)
 # Serve static files (for JS)
@@ -22,95 +25,410 @@ COLOR_PALETTE = [
 
 @app.route('/')
 def index():
-    """Renders the main dashboard page."""
-    files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
-    metrics = [os.path.splitext(f)[0] for f in files]
-    return render_template('index.html', metrics=metrics)
+    """Renders the main dashboard page with a summary table of Z-scores for ts_ files."""
+    # Find only files starting with ts_ and ending with .csv
+    files = [f for f in os.listdir(DATA_FOLDER) if f.startswith('ts_') and f.endswith('.csv')]
+    
+    # Create two lists: one for filenames (with ts_), one for display (without ts_)
+    metric_filenames = sorted([os.path.splitext(f)[0] for f in files])
+    metric_display_names = sorted([name[3:] for name in metric_filenames]) # Remove 'ts_' prefix
+    
+    all_z_scores_list = []
+    processed_display_metrics = [] # Store display names of successfully processed metrics
+
+    print("Starting Change Z-score aggregation for dashboard (ts_ files only)...")
+
+    # Iterate using the filenames with prefix
+    for metric_filename in metric_filenames:
+        filename = f"{metric_filename}.csv"
+        # Get the corresponding display name for this file
+        display_name = metric_filename[3:] 
+        
+        try:
+            print(f"Processing {filename}...")
+            df, fund_cols, benchmark_col = load_and_process_data(filename)
+
+            if not fund_cols:
+                 print(f"Warning: No fund columns identified in {filename}. Skipping.")
+                 continue
+
+            # Calculate metrics using the current function (individual column focus)
+            latest_metrics = calculate_latest_metrics(df, fund_cols, benchmark_col)
+
+            # --- Extract Change Z-score for the *first* fund column --- 
+            if not latest_metrics.empty and fund_cols: # Check if metrics were calculated and fund_cols exist
+                first_fund_col = fund_cols[0]
+                z_score_col_name = f'{first_fund_col} Change Z-Score'
+
+                if z_score_col_name in latest_metrics.columns:
+                    # Rename the column to the *display name* (without ts_)
+                    metric_z_scores = latest_metrics[[z_score_col_name]].rename(columns={z_score_col_name: display_name})
+                    all_z_scores_list.append(metric_z_scores)
+                    processed_display_metrics.append(display_name) # Add display name to list for header
+                    print(f"Successfully extracted Change Z-scores for {display_name} (from {filename}).")
+                else:
+                    print(f"Warning: Z-score column '{z_score_col_name}' not found for metric {display_name} (from {filename}). Skipping.")
+            else:
+                 print(f"Warning: Could not calculate latest_metrics or no fund columns for {filename}. Skipping Z-score extraction.")
+
+        except FileNotFoundError:
+            print(f"Error: Data file '{filename}' not found.")
+        except ValueError as ve:
+            print(f"Value Error processing {metric_filename}: {ve}") # Log with filename
+        except Exception as e:
+            print(f"Error processing {metric_filename} during dashboard aggregation: {e}") # Log with filename
+            traceback.print_exc()
+
+    # Combine all Z-score Series/DataFrames into one
+    summary_df = pd.DataFrame()
+    if all_z_scores_list:
+        summary_df = pd.concat(all_z_scores_list, axis=1, join='outer')
+        # Ensure the columns are in the same order as the processed_display_metrics list
+        if processed_display_metrics: # Check if list is not empty
+             summary_df = summary_df[processed_display_metrics] 
+        print("Successfully combined Change Z-scores.")
+    else:
+        print("No Change Z-scores could be extracted.")
+
+    return render_template('index.html', 
+                           metrics=metric_display_names, # Pass display names for links
+                           summary_data=summary_df,
+                           summary_metrics=processed_display_metrics) # Pass display names for table header
 
 @app.route('/metric/<metric_name>')
 def metric_page(metric_name):
-    """Renders the page for a specific metric, handling multiple fund columns."""
-    filename = f"{metric_name}.csv"
+    """Renders the page for a specific metric (identified by display name) from a ts_ file."""
+    # metric_name is the display name (e.g., 'Spread Duration')
+    # Prepend 'ts_' to get the actual filename base
+    metric_filename_base = f"ts_{metric_name}" 
+    filename = f"{metric_filename_base}.csv"
+    
+    fund_code = 'N/A' # Initialize for potential use in exception handling
     try:
-        # Load data, get df, list of fund columns, and benchmark column
+        print(f"Loading data for display metric '{metric_name}' from file '{filename}'...")
+        # Load data using the filename with the prefix
         df, fund_cols, benchmark_col = load_and_process_data(filename)
         latest_date_overall = df.index.get_level_values(0).max()
-        # Calculate metrics for all fund columns vs benchmark
+        
+        # Calculate metrics (function doesn't need display name)
         latest_metrics = calculate_latest_metrics(df, fund_cols, benchmark_col)
         
-        # Determine missing funds based on the presence of ANY NaN Z-score for that fund
-        # Check across all potential Z-score columns
-        z_score_cols = [col for col in latest_metrics.columns if 'Z-Score' in col]
-        missing_latest = latest_metrics[latest_metrics[z_score_cols].isna().any(axis=1)]
+        # Determine missing funds based on ANY NaN Change Z-score
+        # Construct the list of all possible Change Z-Score columns
+        all_cols_for_z = [benchmark_col] + fund_cols
+        z_score_cols = [f'{col} Change Z-Score' for col in all_cols_for_z 
+                        if f'{col} Change Z-Score' in latest_metrics.columns]
+        
+        if not z_score_cols:
+            print(f"Warning: No 'Change Z-Score' columns found in latest_metrics for {metric_name} (from {filename})")
+            latest_val_cols = [f'{col} Latest Value' for col in all_cols_for_z 
+                               if f'{col} Latest Value' in latest_metrics.columns]
+            if latest_val_cols:
+                 missing_latest = latest_metrics[latest_metrics[latest_val_cols].isna().any(axis=1)]
+            else:
+                 missing_latest = pd.DataFrame(index=latest_metrics.index) 
+        else:
+             missing_latest = latest_metrics[latest_metrics[z_score_cols].isna().any(axis=1)]
 
         # --- Prepare data for JavaScript --- 
         charts_data_for_js = {}
-        for fund_code in latest_metrics.index:
-            if fund_code not in latest_metrics.index: continue
-
-            fund_hist_data = df.xs(fund_code, level=1).sort_index()
-            fund_latest_metrics = latest_metrics.loc[fund_code]
-            # Fund is missing latest if *any* of its Z-scores are NaN
+        for fund_code in latest_metrics.index: 
+            # Retrieve historical data for the specific fund (needed for charts)
+            # Use .copy() to avoid potential warnings
+            fund_hist_data = df.xs(fund_code, level=1).sort_index().copy()
+            
+            # Retrieve the calculated latest metrics (flattened row) for this fund
+            # This now contains keys like 'Benchmark Spread Duration Latest Value', 'Fund Spread Duration Change Z-Score', etc.
+            fund_latest_metrics_row = latest_metrics.loc[fund_code]
+            
+            # Check if this fund was flagged as missing (based on Z-score or fallback)
             is_missing_latest = fund_code in missing_latest.index
 
+            # Prepare labels (dates) for the chart
             labels = fund_hist_data.index.strftime('%Y-%m-%d').tolist()
             datasets = []
 
+            # Create datasets for the chart (raw values)
+            # Add benchmark dataset
+            if benchmark_col in fund_hist_data.columns:
+                bench_values = fund_hist_data[benchmark_col].round(3).fillna(np.nan).tolist()
+                datasets.append({
+                    'label': benchmark_col,
+                    'data': bench_values,
+                    'borderColor': 'black', 'backgroundColor': 'grey',
+                    'borderDash': [5, 5], 'tension': 0.1
+                })
             # Add dataset for each fund column
             for i, fund_col in enumerate(fund_cols):
-                fund_values = fund_hist_data[fund_col].round(3).fillna(np.nan).tolist()
-                color = COLOR_PALETTE[i % len(COLOR_PALETTE)] # Cycle through colors
-                datasets.append({
-                    'label': fund_col,
-                    'data': fund_values,
-                    'borderColor': color,
-                    'backgroundColor': color + '40', # Add some transparency for points
-                    'tension': 0.1
-                })
+                 if fund_col in fund_hist_data.columns:
+                    fund_values = fund_hist_data[fund_col].round(3).fillna(np.nan).tolist()
+                    color = COLOR_PALETTE[i % len(COLOR_PALETTE)]
+                    datasets.append({
+                        'label': fund_col,
+                        'data': fund_values,
+                        'borderColor': color, 'backgroundColor': color + '40',
+                        'tension': 0.1
+                    })
             
-            # Add dataset for the benchmark column
-            bench_values = fund_hist_data[benchmark_col].round(3).fillna(np.nan).tolist()
-            datasets.append({
-                'label': benchmark_col,
-                'data': bench_values,
-                'borderColor': 'black', # Make benchmark distinct
-                'backgroundColor': 'grey',
-                'borderDash': [5, 5], # Dashed line for benchmark
-                'tension': 0.1
-            })
+            # Convert metrics row to dictionary (structure is already correct)
+            fund_latest_metrics_dict = fund_latest_metrics_row.round(3).where(pd.notnull(fund_latest_metrics_row), None).to_dict()
             
-            # Convert metrics row to dictionary, handling NaNs for JSON
-            fund_latest_metrics_dict = fund_latest_metrics.round(3).where(pd.notnull(fund_latest_metrics), None).to_dict()
-            
+            # Assemble data for JS
             charts_data_for_js[fund_code] = {
                 'labels': labels,
-                'datasets': datasets, # Now contains multiple fund datasets + benchmark
-                'metrics': fund_latest_metrics_dict, # Contains metrics for all spreads
+                'datasets': datasets, 
+                'metrics': fund_latest_metrics_dict, 
                 'is_missing_latest': is_missing_latest,
-                # Pass column names needed by JS chart title/table (benchmark already known)
-                'fund_column_names': fund_cols 
+                'fund_column_names': fund_cols, 
+                'benchmark_column_name': benchmark_col 
             }
 
+        # Render the template, passing the *display name* (metric_name) for the title
         return render_template('metric_page_js.html',
-                               metric_name=metric_name,
+                               metric_name=metric_name, # Pass display name for title
                                charts_data_json=jsonify(charts_data_for_js).get_data(as_text=True),
                                latest_date=latest_date_overall.strftime('%d/%m/%Y'),
                                missing_funds=missing_latest,
-                               # Pass list of fund cols and single benchmark col
                                fund_col_names = fund_cols, 
                                benchmark_col_name = benchmark_col)
 
     except FileNotFoundError:
-        return f"Error: Data file '{filename}' not found.", 404
+        # Use the display name in the error message for user clarity
+        return f"Error: Data file for metric '{metric_name}' (expected: '{filename}') not found.", 404 
     except ValueError as ve:
-        print(f"Value Error processing {metric_name}: {ve}")
+        # Use display name in error message
+        print(f"Value Error processing {metric_name} (from {filename}): {ve}")
         return f"Error processing {metric_name}: {ve}", 400
     except Exception as e:
-        fund_code_context = fund_code if 'fund_code' in locals() else 'N/A'
-        print(f"Error processing {metric_name} for fund {fund_code_context}: {e}")
-        import traceback
+        # Use display name in error message
+        print(f"Error processing {metric_name} (from {filename}) for fund {fund_code}: {e}")
         traceback.print_exc()
         return f"An error occurred processing {metric_name}: {e}", 500
+
+# --- New Route for Securities --- 
+@app.route('/securities')
+def securities_page():
+    """Renders a page summarizing potential issues in security-level data from sec_ files."""
+    print("--- Starting Security Data Processing --- ")
+    # Find only files starting with sec_
+    sec_files = [f for f in os.listdir(DATA_FOLDER) if f.startswith('sec_') and f.endswith('.csv')]
+    
+    all_metrics_list = []
+    all_static_columns = set() # Keep track of all unique static columns across files
+    filter_options = {} # Dictionary to store unique values for each filterable static column
+
+    if not sec_files:
+        print("No 'sec_' prefixed files found in Data folder.")
+        # Render template with a message indicating no files found?
+        return render_template('securities_page.html', 
+                           securities_data={}, 
+                           filter_options={}, 
+                           all_static_cols=[], 
+                           message="No security data files (sec_*.csv) found.")
+
+    print(f"Found security files: {sec_files}")
+
+    for filename in sec_files:
+        try:
+            print(f"Processing security file: {filename}")
+            # 1. Load and process (melts data to long format)
+            df_long, static_cols = load_and_process_security_data(filename)
+            
+            if df_long is None or df_long.empty:
+                print(f"Skipping {filename} due to load/process errors or empty data after processing.")
+                continue
+                
+            print(f"Loaded {filename}. Identifying static columns: {static_cols}")
+            all_static_columns.update(static_cols) # Add newly found static columns
+
+            # 2. Calculate latest metrics
+            latest_sec_metrics = calculate_security_latest_metrics(df_long, static_cols)
+
+            if latest_sec_metrics.empty:
+                print(f"No metrics calculated for {filename}. Skipping.")
+                continue
+                
+            # 3. Add Source Metric and store
+            metric_name = filename.replace('sec_', '').replace('.csv', '')
+            latest_sec_metrics['Source Metric'] = metric_name
+            all_metrics_list.append(latest_sec_metrics)
+            print(f"Successfully calculated metrics for {filename}")
+            
+            # 4. Collect filter options from static columns 
+            # Ensure we only try to get unique values from columns present in *this* df
+            current_static_in_df = [col for col in static_cols if col in latest_sec_metrics.columns]
+            for col in current_static_in_df:
+                unique_vals = latest_sec_metrics[col].unique().tolist()
+                # Convert numpy types to standard python types if necessary for JSON later
+                unique_vals = [item.item() if isinstance(item, np.generic) else item for item in unique_vals]
+                unique_vals = [val for val in unique_vals if pd.notna(val)] # Remove NaN
+                
+                if col not in filter_options:
+                    filter_options[col] = set(unique_vals)
+                else:
+                    filter_options[col].update(unique_vals)
+            
+        except Exception as e:
+            print(f"Error processing security file {filename}: {e}")
+            traceback.print_exc()
+            # Optionally continue to next file or stop? Let's continue.
+
+    # Combine all metrics DataFrames
+    if not all_metrics_list:
+        print("No security metrics were successfully generated from any file.")
+        return render_template('securities_page.html', 
+                               securities_data={}, 
+                               filter_options={}, 
+                               all_static_cols=[], 
+                               message="Could not generate metrics from any security data files.")
+
+    combined_metrics_df = pd.concat(all_metrics_list)
+
+    # --- Sorting by Change Z-Score --- 
+    if 'Change Z-Score' in combined_metrics_df.columns:
+        # Handle potential NaNs before calculating absolute value and sorting
+        combined_metrics_df['Abs Change Z-Score'] = combined_metrics_df['Change Z-Score'].fillna(0).abs()
+        combined_metrics_df.sort_values(by='Abs Change Z-Score', ascending=False, inplace=True)
+        combined_metrics_df.drop(columns=['Abs Change Z-Score'], inplace=True)
+        print("Sorted combined security metrics by absolute Change Z-Score.")
+    else:
+        print("Warning: 'Change Z-Score' column not found in combined metrics. Cannot sort.")
+
+    # Convert final filter options sets to sorted lists
+    final_filter_options = {k: sorted(list(v)) for k, v in filter_options.items()}
+    
+    # Convert DataFrame to list of dictionaries for easier template processing
+    securities_data_list = combined_metrics_df.reset_index().round(3).to_dict(orient='records')
+    # Replace NaN/NaT with None for JSON compatibility if needed, but template might handle it
+    for row in securities_data_list:
+        for key, value in row.items():
+            if pd.isna(value):
+                row[key] = None 
+                
+    # Define order of columns for display (Security ID first, then Source, then Static, then Metrics)
+    id_col_name = combined_metrics_df.index.name or 'Security ID' # Get index name
+    ordered_static_cols = sorted(list(all_static_columns))
+    metric_cols_ordered = ['Latest Value', 'Change', 'Change Z-Score', 'Mean', 'Max', 'Min']
+    # Ensure only existing columns are included
+    final_col_order = [id_col_name, 'Source Metric'] + \
+                      [col for col in ordered_static_cols if col in combined_metrics_df.columns] + \
+                      [col for col in metric_cols_ordered if col in combined_metrics_df.columns]
+                      
+    print(f"Final column order for display: {final_col_order}")
+
+    return render_template('securities_page.html',
+                           securities_data=securities_data_list,
+                           filter_options=final_filter_options,
+                           column_order=final_col_order, # Pass column order to template
+                           id_col_name=id_col_name, # Pass the identified ID column name
+                           message=None)
+
+# --- New Route for Security Details/Charts --- 
+@app.route('/security_details/<metric_name>/<security_id>')
+def security_details_page(metric_name, security_id):
+    """Renders a page showing the time series chart for a specific security from a specific metric file."""
+    filename = f"sec_{metric_name}.csv"
+    price_filename = "sec_Price.csv" # Define price filename
+    print(f"--- Requesting Security Details --- Metric: {metric_name}, Security ID: {security_id}, File: {filename}")
+
+    try:
+        # 1. Load and process the specific security data file (for the primary metric)
+        df_long, static_cols = load_and_process_security_data(filename)
+
+        if df_long is None or df_long.empty:
+            return f"Error: Could not load or process data for file '{filename}'", 404
+            
+        # Check if the requested security ID exists in the data
+        # Get the actual name of the ID level in the index
+        actual_id_col_name = df_long.index.names[1]
+        if security_id not in df_long.index.get_level_values(actual_id_col_name):
+             return f"Error: Security ID '{security_id}' not found in file '{filename}'.", 404
+
+        # 2. Extract historical data for the specific security
+        # Use .copy() to avoid potential SettingWithCopyWarning if we modify later
+        security_data = df_long.xs(security_id, level=actual_id_col_name).sort_index().copy()
+
+        if security_data.empty:
+            return f"Error: No historical data found for Security ID '{security_id}' in file '{filename}'.", 404
+            
+        # Extract static dimension values for display
+        static_info = {} 
+        first_row = security_data.iloc[0]
+        for col in static_cols:
+            if col in first_row.index:
+                static_info[col] = first_row[col]
+                
+        # 3. Prepare data for Chart.js
+        labels = security_data.index.strftime('%Y-%m-%d').tolist()
+        datasets = [{
+            'label': f'{security_id} - {metric_name} Value',
+            'data': security_data['Value'].round(3).fillna(np.nan).tolist(),
+            'borderColor': COLOR_PALETTE[0], # Use first color
+            'backgroundColor': COLOR_PALETTE[0] + '40',
+            'tension': 0.1,
+            'yAxisID': 'y' # Assign primary metric to the default 'y' axis
+        }]
+
+        # --- Attempt to load and add Price data ---
+        try:
+            print(f"Attempting to load price data from {price_filename} for {security_id}...")
+            price_df_long, _ = load_and_process_security_data(price_filename) # Ignore static cols from price file
+
+            if price_df_long is not None and not price_df_long.empty:
+                if security_id in price_df_long.index.get_level_values(actual_id_col_name):
+                    price_data = price_df_long.xs(security_id, level=actual_id_col_name).sort_index().copy()
+                    # Reindex price data to align dates with the main metric data
+                    price_data = price_data.reindex(security_data.index) 
+                    
+                    if not price_data.empty:
+                        price_dataset = {
+                            'label': f'{security_id} - Price',
+                            'data': price_data['Value'].round(3).fillna(np.nan).tolist(),
+                            'borderColor': COLOR_PALETTE[1 % len(COLOR_PALETTE)], # Use second color
+                            'backgroundColor': COLOR_PALETTE[1 % len(COLOR_PALETTE)] + '40',
+                            'tension': 0.1,
+                            'yAxisID': 'y1' # Assign price data to the second y-axis
+                        }
+                        datasets.append(price_dataset)
+                        print("Successfully added Price data overlay.")
+                    else:
+                         print(f"Warning: Price data found for {security_id}, but was empty after aligning dates.")
+                else:
+                     print(f"Warning: Security ID {security_id} not found in {price_filename}.")
+            else:
+                 print(f"Warning: Could not load or process {price_filename}.")
+        except FileNotFoundError:
+            print(f"Warning: Price data file '{price_filename}' not found. Skipping price overlay.")
+        except Exception as e_price:
+            print(f"Warning: Error processing price data for {security_id} from {price_filename}: {e_price}")
+            traceback.print_exc() # Log the price processing error but continue
+
+        # --- End of Price data loading ---
+
+        chart_data_for_js = {
+            'labels': labels,
+            'datasets': datasets # Now contains metric and potentially price datasets
+        }
+        
+        latest_date_overall = security_data.index.max()
+
+        # 4. Render a new template
+        return render_template('security_details_page.html',
+                               metric_name=metric_name,
+                               security_id=security_id,
+                               static_info=static_info,
+                               chart_data_json=jsonify(chart_data_for_js).get_data(as_text=True),
+                               latest_date=latest_date_overall.strftime('%d/%m/%Y'))
+
+    except FileNotFoundError:
+        return f"Error: Data file '{filename}' not found.", 404
+    except ValueError as ve:
+        print(f"Value Error processing security details for {metric_name}/{security_id}: {ve}")
+        return f"Error processing details for {security_id}: {ve}", 400
+    except Exception as e:
+        print(f"Error processing security details for {metric_name}/{security_id}: {e}")
+        traceback.print_exc()
+        return f"An error occurred processing details for {security_id}: {e}", 500
 
 if __name__ == '__main__':
     app.run(debug=True) 

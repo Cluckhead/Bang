@@ -26,132 +26,135 @@ def load_and_process_data(filename):
     if len(original_cols) < 4:
         raise ValueError(f"File '{filename}' must have at least 4 columns (Date, Code, Fund Value, Benchmark Value).")
 
-    # --- Identify column names --- 
+    # --- Identify column names ---
     date_col_name = original_cols[0]
     fund_code_col_name = original_cols[1]
     # Assume benchmark is column 3
     benchmark_val_col_name = original_cols[3].strip()
     # All other columns (except date and code) are treated as fund values
-    fund_val_col_names = [col.strip() for i, col in enumerate(original_cols) 
-                            if i != 0 and i != 1]
-    
-    # Ensure benchmark column is not accidentally included in fund columns if file structure changes
-    if benchmark_val_col_name in fund_val_col_names:
-        fund_val_col_names.remove(benchmark_val_col_name)
-        # Re-add it separately if it wasn't column 3 (handle edge case)
-        if original_cols[3].strip() != benchmark_val_col_name:
-             print(f"Warning: Identified benchmark column '{benchmark_val_col_name}' was not in expected position 3.")
-    else: 
-        # If benchmark col wasn't in the list (i.e., it was col 0 or 1), raise error
+    # **IMPORTANT**: Ensure benchmark is NOT in the fund list if it was already identified
+    fund_val_col_names = [col.strip() for i, col in enumerate(original_cols)
+                            if i != 0 and i != 1 and col.strip() != benchmark_val_col_name]
+
+    # Validate benchmark identification
+    if original_cols[3].strip() != benchmark_val_col_name:
+         # This case should ideally not happen if the previous list comprehension works
+         # but check just in case columns were rearranged weirdly
+         print(f"Warning: Identified benchmark column '{benchmark_val_col_name}' was not in expected position 3.")
+         # Ensure it's not the date or fund code col
          if benchmark_val_col_name == date_col_name or benchmark_val_col_name == fund_code_col_name:
               raise ValueError(f"Benchmark column '{benchmark_val_col_name}' cannot be the same as Date or Fund Code column.")
-         # Otherwise, if benchmark wasn't col 3 and not in fund list, something is wrong
-         elif original_cols[3].strip() != benchmark_val_col_name:
-             raise ValueError(f"Could not reliably identify benchmark column '{benchmark_val_col_name}'. Expected at index 3.")
 
     # Read the full CSV
     df = pd.read_csv(filepath, parse_dates=[date_col_name], dayfirst=True)
-    df.columns = df.columns.str.strip()
+    df.columns = df.columns.str.strip() # Strip whitespace from column names during read
     df.set_index([date_col_name, fund_code_col_name], inplace=True)
 
     # Convert all identified fund value columns AND the benchmark column to numeric
-    value_cols_to_convert = fund_val_col_names + [benchmark_val_col_name]
+    # Ensure we only try to convert columns that actually exist after stripping whitespace
+    value_cols_to_convert = [col for col in fund_val_col_names + [benchmark_val_col_name] if col in df.columns]
+    if not value_cols_to_convert:
+        raise ValueError(f"No valid fund or benchmark columns found to convert in {filename}.")
+
     df[value_cols_to_convert] = df[value_cols_to_convert].apply(pd.to_numeric, errors='coerce')
 
     # Return the DataFrame, LIST of fund columns, and the benchmark column
     return df, fund_val_col_names, benchmark_val_col_name
 
-# Modify calculate_latest_metrics to handle multiple fund columns
+
+# Completely rewritten function
 def calculate_latest_metrics(df, fund_cols, benchmark_col):
-    """Calculates metrics for the latest data point, focusing on spreads for multiple fund columns.
+    """Calculates latest metrics for *each individual column* (benchmark and funds).
+
+    For each column, calculates: Latest Value, Change, Mean, Max, Min, and Change Z-Score.
 
     Args:
-        df (pd.DataFrame): Processed DataFrame.
+        df (pd.DataFrame): Processed DataFrame indexed by Date and Fund Code.
         fund_cols (list[str]): List of fund value column names.
         benchmark_col (str): Name of the benchmark value column.
 
     Returns:
-        pandas.DataFrame: Metrics including spreads and Z-scores for all fund columns,
-                          indexed by Fund Code, sorted by the MAX absolute Z-Score across columns.
+        pandas.DataFrame: Flattened metrics indexed by Fund Code, sorted by the MAX absolute
+                          'Change Z-Score' across all columns for that fund.
+                          Columns are named like '{col_name} Latest Value', '{col_name} Change', etc.
     """
     latest_date = df.index.get_level_values(0).max()
     fund_codes = df.index.get_level_values(1).unique()
+    cols_to_process = [benchmark_col] + fund_cols # Process benchmark first, then funds
 
-    latest_metrics_list = []
-    max_abs_z_scores = {} # To store max Z-score for sorting
+    all_metrics_list = []
+    max_abs_change_z_scores = {} # Store max z-score *per fund* for sorting
 
     for fund_code in fund_codes:
         fund_data_hist = df.xs(fund_code, level=1).sort_index()
-        metrics = {'Fund Code': fund_code}
-        current_max_abs_z = 0.0
-        has_latest_data = latest_date in fund_data_hist.index
+        fund_metrics = {'Fund Code': fund_code}
+        current_fund_max_abs_z = 0.0 # Track max Z for *this fund* across all columns
+        has_latest_data_for_fund = latest_date in fund_data_hist.index
 
-        # Store latest benchmark value once
-        if has_latest_data:
-            metrics[f'Latest {benchmark_col}'] = fund_data_hist.loc[latest_date, benchmark_col]
-        else:
-            metrics[f'Latest {benchmark_col}'] = np.nan
+        for col_name in cols_to_process:
+            if col_name not in fund_data_hist.columns:
+                print(f"Warning: Column '{col_name}' not found for fund '{fund_code}'. Skipping metrics for this column.")
+                # Add NaN placeholders for this column for this fund
+                fund_metrics[f'{col_name} Latest Value'] = np.nan
+                fund_metrics[f'{col_name} Change'] = np.nan
+                fund_metrics[f'{col_name} Mean'] = np.nan
+                fund_metrics[f'{col_name} Max'] = np.nan
+                fund_metrics[f'{col_name} Min'] = np.nan
+                fund_metrics[f'{col_name} Change Z-Score'] = np.nan
+                continue # Skip to the next column for this fund
 
-        # Calculate metrics for EACH fund column
-        for fund_col in fund_cols:
-            spread_col_name = f'{fund_col} Spread'
-            z_score_col_name = f'{spread_col_name} Z-Score'
-            fund_change_col_name = f'{fund_col} Change'
-            spread_change_col_name = f'{spread_col_name} Change'
-            hist_mean_col_name = f'{spread_col_name} Mean'
-            hist_std_dev_col_name = f'{spread_col_name} Std Dev'
+            col_hist = fund_data_hist[col_name]
+            col_change_hist = col_hist.diff()
 
-            # Calculate spread for this column
-            fund_data_hist[spread_col_name] = fund_data_hist[fund_col] - fund_data_hist[benchmark_col]
+            # Calculate base historical stats for the column *level*
+            hist_mean = col_hist.mean()
+            hist_max = col_hist.max()
+            hist_min = col_hist.min()
 
-            historical_spread = fund_data_hist[spread_col_name]
-            spread_mean = historical_spread.mean()
-            spread_std = historical_spread.std()
+            fund_metrics[f'{col_name} Mean'] = hist_mean
+            fund_metrics[f'{col_name} Max'] = hist_max
+            fund_metrics[f'{col_name} Min'] = hist_min
 
-            metrics[hist_mean_col_name] = spread_mean
-            metrics[hist_std_dev_col_name] = spread_std
+            # Calculate stats for the column *change*
+            change_mean = col_change_hist.mean()
+            change_std = col_change_hist.std()
 
-            if has_latest_data:
-                latest_row = fund_data_hist.loc[latest_date]
-                latest_spread = latest_row[spread_col_name]
+            # Get latest values if the fund has data for the overall latest date
+            if has_latest_data_for_fund:
+                latest_value = fund_data_hist.loc[latest_date, col_name]
+                latest_change = col_change_hist.loc[latest_date] # Get change for the latest date
+
+                fund_metrics[f'{col_name} Latest Value'] = latest_value
+                fund_metrics[f'{col_name} Change'] = latest_change
+
+                # Calculate Change Z-Score
+                change_z_score = np.nan # Default to NaN
+                if change_std is not None and change_std != 0 and pd.notna(change_std) and pd.notna(latest_change):
+                    change_z_score = (latest_change - change_mean) / change_std
+                    # Update the fund's overall max abs Z if this one is larger
+                    current_fund_max_abs_z = max(current_fund_max_abs_z, abs(change_z_score))
                 
-                metrics[f'Latest {fund_col}'] = latest_row[fund_col]
-                metrics[f'Latest {spread_col_name}'] = latest_spread
-
-                # Calculate Z-score
-                if spread_std is not None and spread_std != 0 and not np.isnan(spread_std):
-                    z = (latest_spread - spread_mean) / spread_std
-                    metrics[z_score_col_name] = z
-                    current_max_abs_z = max(current_max_abs_z, abs(z))
-                else:
-                    metrics[z_score_col_name] = 0.0
-                
-                # Calculate changes
-                fund_data_hist[fund_change_col_name] = fund_data_hist[fund_col].diff()
-                fund_data_hist[spread_change_col_name] = fund_data_hist[spread_col_name].diff()
-                latest_changes = fund_data_hist.loc[latest_date]
-                metrics[fund_change_col_name] = latest_changes[fund_change_col_name]
-                metrics[spread_change_col_name] = latest_changes[spread_change_col_name]
+                fund_metrics[f'{col_name} Change Z-Score'] = change_z_score
 
             else:
-                 # Handle missing latest data for this column
-                metrics[f'Latest {fund_col}'] = np.nan
-                metrics[f'Latest {spread_col_name}'] = np.nan
-                metrics[z_score_col_name] = np.nan
-                metrics[fund_change_col_name] = np.nan
-                metrics[spread_change_col_name] = np.nan
+                # Fund is missing the latest date entirely
+                fund_metrics[f'{col_name} Latest Value'] = np.nan
+                fund_metrics[f'{col_name} Change'] = np.nan
+                fund_metrics[f'{col_name} Change Z-Score'] = np.nan
 
-        latest_metrics_list.append(metrics)
-        # Store the maximum absolute Z-score found for this fund code for sorting
-        max_abs_z_scores[fund_code] = current_max_abs_z if pd.notna(current_max_abs_z) else -1 # Use -1 for missing to sort last
+        # Store the calculated metrics for this fund
+        all_metrics_list.append(fund_metrics)
+        # Store the max abs change Z-score found *for this fund* across all its columns
+        max_abs_change_z_scores[fund_code] = current_fund_max_abs_z if pd.notna(current_fund_max_abs_z) else -1
+
+    if not all_metrics_list:
+        return pd.DataFrame() # Return empty DataFrame if no funds were processed
 
     # Create DataFrame
-    latest_metrics_df = pd.DataFrame(latest_metrics_list).set_index('Fund Code')
+    latest_metrics_df = pd.DataFrame(all_metrics_list).set_index('Fund Code')
 
-    # Create a Series from the max Z-scores for sorting
-    sort_series = pd.Series(max_abs_z_scores)
-    
-    # Sort DataFrame based on the max absolute Z-score across all spread columns
+    # Sort by the max absolute change Z-score across any column for the fund
+    sort_series = pd.Series(max_abs_change_z_scores)
     latest_metrics_df = latest_metrics_df.reindex(sort_series.sort_values(ascending=False).index)
 
     return latest_metrics_df 
