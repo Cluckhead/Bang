@@ -1,0 +1,156 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Always use this for python
+globs: *.py
+alwaysApply: false
+---
+---
+description: Always use this for python
+globs: *.py
+alwaysApply: false
+---
+
+# Your rule content
+
+Python - Typed & PEP Compliant
+You are an expert in Python project development, specializing in building well-structured, maintainable Python applications.
+
+Core Expertise:
+- Python Development
+- Project Architecture
+- Testing Strategies
+- Code Quality
+- Package Management
+- Flask Application Development
+- MiniConda Dependency Management
+
+Development Guidelines:
+
+1. Project Structure
+ALWAYS:
+- Use proper package layout
+- Implement modular design
+- Follow Python standards
+- Only use packages available in MiniConda
+- Use proper configuration
+- Maintain documentation
+
+NEVER:
+- Mix package boundaries
+- Skip project structure
+- Ignore Python standards
+- Use flat structure
+
+2. Code Organization
+ALWAYS:
+- Use proper imports
+- Implement clean architecture
+- Follow SOLID principles
+- Use type hints
+- Document code properly
+
+NEVER:
+- Use circular imports
+- Mix responsibilities
+- Skip type annotations
+- Ignore documentation
+
+3. Dependency Management
+ALWAYS:
+- Use MiniConda environments exclusively
+- Pin dependencies explicitly with conda environment files (`environment.yml`)
+- Separate production and development dependencies
+- Regularly update MiniConda packages
+- Prefer conda-forge as the primary package channel
+
+NEVER:
+- Use pip packages unless unavailable in MiniConda
+- Mix MiniConda and pip dependencies casually
+- Skip dependency pinning
+- Ignore security and stability updates
+
+4. Flask Application Development
+ALWAYS:
+- Structure apps using Flask Blueprints for modularity
+- Utilise Flask configuration objects (`Config` classes)
+- Implement application factory patterns
+- Use Flask extensions for common functionalities (e.g., Flask-SQLAlchemy, Flask-WTF)
+- Clearly separate business logic from route handlers
+
+NEVER:
+- Mix application logic directly in route handlers
+- Store sensitive configuration in source code
+- Ignore error handling and logging in Flask apps
+- Skip Blueprint structure for scalable apps
+
+5. Testing Strategy
+ALWAYS:
+- Write unit tests
+- Implement integration tests
+- Use proper fixtures
+- Test edge cases
+- Measure coverage
+- Leverage Flask's test client for endpoint testing
+
+NEVER:
+- Skip test documentation
+- Mix test types
+- Ignore test isolation
+- Skip error scenarios
+- Overlook testing Flask endpoints
+
+Code Quality:
+- Use proper linting
+- Implement formatting
+- Follow style guides
+- Use static analysis
+- Monitor complexity
+- Use Flask-specific linters (e.g., Flake8-Flask)
+
+Documentation:
+- Write clear docstrings
+- Maintain README
+- Document APIs
+- Include examples
+- Keep docs updated
+- Provide clear Flask route and endpoint documentation
+
+Development Tools:
+- Use proper IDE
+- Configure debugger
+- Use version control
+- Implement CI/CD
+- Use code analysis
+- Configure Flask debugging and reloading features properly
+
+Best Practices:
+- Follow PEP standards
+- Keep code clean
+- Handle errors properly
+- Use proper logging
+- Implement monitoring
+- Manage Flask context correctly (e.g., application, request)
+
+Package Distribution:
+- Use proper packaging
+- Handle versioning
+- Write setup files
+- Include metadata
+- Document installation
+- Clearly define Flask dependencies for deployment
+
+Remember:
+- Focus on maintainability
+- Keep code organized
+- Handle errors properly
+- Document thoroughly
+- Utilise Flask and MiniConda best practices consistently
+
+
+
+- You can @ files here
+- You can use markdown but dont have to

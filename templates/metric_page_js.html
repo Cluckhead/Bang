@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{{ metric_name }} Check (JS)</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- Include Chart.js and the date adapter -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        body { padding-top: 5rem; }
+        .chart-container-wrapper { margin-bottom: 15px; padding: 10px; border: 1px solid #eee; }
+        .chart-canvas { max-height: 400px; }
+        .metrics-table { margin-top: 15px; margin-bottom: 25px; font-size: 0.9em; }
+        .metrics-table th, .metrics-table td { padding: 4px 8px; border: 1px solid #dee2e6; }
+        .missing-warning { color: red; font-weight: bold; }
+        .high-z { background-color: #fff3cd; }
+        .very-high-z { background-color: #f8d7da; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+        <a class="navbar-brand" href="/">Data Verification</a>
+        <!-- Navbar content -->
+    </nav>
+
+    <main role="main" class="container">
+        <h1>{{ metric_name }} Check</h1>
+        <p>Latest Data Date: <strong>{{ latest_date }}</strong></p>
+        <p>Charts sorted by the absolute Z-score of the latest <strong>Fund - Benchmark Spread</strong> (most deviation first).</p>
+
+        {% if not missing_funds.empty %}
+            <div class="alert alert-warning" role="alert">
+                <strong>Warning:</strong> The following funds are missing data for the latest date ({{ latest_date }}):
+                {{ missing_funds.index.tolist() | join(', ') }}
+            </div>
+        {% endif %}
+
+        <!-- Data passed from Flask, embedded as JSON -->
+        <script type="application/json" id="chartData">
+            {{ charts_data_json | safe }}
+        </script>
+
+        <div id="chartsArea">
+            <!-- Charts will be rendered here by JavaScript -->
+        </div>
+
+    </main>
+
+    <!-- Link to the external JavaScript module -->
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <!-- Bootstrap JS (optional) -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html> 

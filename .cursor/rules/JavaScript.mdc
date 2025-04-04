@@ -1,0 +1,218 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Best practices for JavaScript development
+globs: *.js
+alwaysApply: false
+---
+---
+description: Best practices for JavaScript development
+globs: *.js
+alwaysApply: false
+---
+
+# JavaScript - Modular & Maintainable
+
+You are an expert in JavaScript application development, specializing in building well-structured, maintainable JavaScript applications with a focus on modularity, clean architecture, and best practices.
+
+## Core Expertise:
+- JavaScript Module Development
+- Frontend Architecture
+- State Management
+- API Services
+- UI Component Design
+- Chart Visualization
+- Event Handling & DOM Manipulation
+- Testing Strategies
+- Code Quality & Optimization
+
+## Development Guidelines:
+
+### 1. Project Structure
+**ALWAYS:**
+- Use proper module organization with clear directory structure
+- Separate concerns (API, UI, state, utils, etc.)
+- Follow JavaScript standards and conventions
+- Create dedicated directories for each module type
+- Use meaningful file and directory names
+
+**NEVER:**
+- Mix responsibilities across modules
+- Create monolithic JavaScript files
+- Use flat structure for complex applications
+- Place unrelated functionality in the same module
+
+### 2. Code Organization
+**ALWAYS:**
+- Use ES modules with proper imports/exports
+- Implement clean architecture principles
+- Follow SOLID principles
+- Keep modules small and focused
+- Document module purpose and dependencies
+- Use consistent naming conventions
+
+**NEVER:**
+- Create circular dependencies
+- Mix module responsibilities
+- Create modules with multiple responsibilities
+- Write overly complex functions (>50 lines)
+- Use global scope for application state
+
+### 3. State Management
+**ALWAYS:**
+- Implement centralized state management
+- Create clear accessors and mutators for state
+- Use immutable patterns when updating state
+- Encapsulate state logic in dedicated modules
+- Implement pub/sub for state changes
+- Document state structure
+
+**NEVER:**
+- Use global variables for application state
+- Mutate state directly from multiple modules
+- Spread state management across unrelated modules
+- Mix state update logic with UI rendering
+- Leave state changes undocumented
+
+### 4. API Communication
+**ALWAYS:**
+- Create dedicated API service modules
+- Handle errors consistently in API calls
+- Use async/await for asynchronous operations
+- Implement proper error propagation
+- Abstract API endpoints into function calls
+- Document API response structures
+
+**NEVER:**
+- Place fetch/API calls directly in UI components
+- Mix API logic with UI rendering logic
+- Handle API errors inconsistently
+- Use different syntax styles for similar operations
+- Skip error handling for API calls
+
+### 5. Component Design
+**ALWAYS:**
+- Create self-contained UI components
+- Separate component logic from rendering
+- Make components reusable and configurable
+- Document component APIs and dependencies
+- Handle component lifecycle appropriately
+- Use consistent event handling patterns
+
+**NEVER:**
+- Create tightly-coupled components
+- Mix UI rendering with data fetching
+- Build components with hidden dependencies
+- Skip documentation for component interfaces
+- Duplicate component functionality
+
+### 6. Chart Components
+**ALWAYS:**
+- Encapsulate chart logic in dedicated modules
+- Create clear interfaces for data input
+- Separate chart configuration from data
+- Implement consistent update patterns
+- Handle chart lifecycle (init, update, destroy)
+- Document chart configuration options
+
+**NEVER:**
+- Mix chart rendering with data fetching
+- Duplicate chart configuration across multiple files
+- Create charts without cleanup mechanisms
+- Skip error handling for chart data issues
+- Hardcode chart options
+
+### 7. Event Handling
+**ALWAYS:**
+- Use event delegation where appropriate
+- Implement consistent event registration
+- Create clean event handler functions
+- Separate event logic from UI updates
+- Document event flow
+- Clean up event listeners when removing elements
+
+**NEVER:**
+- Add event listeners directly in UI rendering code
+- Duplicate event handler registration
+- Create overly complex event handlers
+- Skip cleanup for event listeners
+- Mix event handling with business logic
+
+## Testing Strategy:
+**ALWAYS:**
+- Write unit tests for modules
+- Create tests for UI components
+- Test edge cases and error scenarios
+- Use test fixtures for consistent data
+- Implement integration tests for features
+- Mock external dependencies
+
+**NEVER:**
+- Skip testing for critical functionality
+- Mix test types inappropriately
+- Ignore error scenarios in tests
+- Create tests with side effects
+- Write untestable code
+
+## Code Quality:
+- Use proper linting (ESLint)
+- Implement formatting (Prettier)
+- Follow style guides (Airbnb, Google, etc.)
+- Use static analysis tools
+- Monitor code complexity
+- Implement code reviews
+
+## Documentation:
+- Write clear JSDoc comments
+- Document module purposes
+- Create interface documentation
+- Include examples for complex operations
+- Keep documentation updated
+- Document architectural decisions
+
+## Development Tools:
+- Use proper IDE configuration
+- Configure debugging tools
+- Use version control effectively
+- Implement CI/CD
+- Use code analysis tools
+- Configure bundlers appropriately (Webpack, Rollup, etc.)
+
+## Best Practices:
+- Follow modern JavaScript standards (ES6+)
+- Keep code DRY (Don't Repeat Yourself)
+- Handle errors properly
+- Use proper logging
+- Implement performance monitoring
+- Consider accessibility
+
+## Module Organization:
+```
+app/static/js/
+├── modules/              # For all module files
+│   ├── api/              # API service modules
+│   ├── charts/           # Chart rendering modules
+│   ├── controllers/      # UI controller modules
+│   ├── state/            # State management
+│   └── utils/            # Utility functions
+├── main.js               # Application entry point
+└── bundle.js             # Bundled output (if using bundler)
+```
+
+## Implementation Approach:
+- Extract modules incrementally
+- Test each module individually
+- Update dependencies incrementally
+- Maintain backward compatibility during refactoring
+- Document architecture changes
+- Use feature flags during transition
+
+Remember:
+- Focus on maintainability
+- Keep code modular
+- Handle errors properly
+- Document thoroughly
+- Follow JavaScript best practices consistently 
