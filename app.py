@@ -394,6 +394,7 @@ def security_details_page(metric_name, security_id):
     """Renders a page showing the time series chart for a specific security from a specific metric file."""
     filename = f"sec_{metric_name}.csv"
     price_filename = "sec_Price.csv" # Define price filename
+    duration_filename = "sec_Duration.csv" # Define duration filename
     print(f"--- Requesting Security Details --- Metric: {metric_name}, Security ID: {security_id}, File: {filename}")
 
     try:
@@ -425,7 +426,8 @@ def security_details_page(metric_name, security_id):
                 
         # 3. Prepare data for Chart.js
         labels = security_data.index.strftime('%Y-%m-%d').tolist()
-        datasets = [{
+        # Initialize datasets list for the primary chart
+        primary_datasets = [{
             'label': f'{security_id} - {metric_name} Value',
             'data': security_data['Value'].round(3).fillna(np.nan).tolist(),
             'borderColor': COLOR_PALETTE[0], # Use first color
@@ -433,15 +435,26 @@ def security_details_page(metric_name, security_id):
             'tension': 0.1,
             'yAxisID': 'y' # Assign primary metric to the default 'y' axis
         }]
+        
+        # Initialize chart_data_for_js with primary data
+        chart_data_for_js = {
+            'labels': labels,
+            'primary_datasets': primary_datasets, # Use a specific key for primary chart datasets
+            'duration_dataset': None # Initialize duration dataset as None
+        }
+        
+        latest_date_overall = security_data.index.max()
 
-        # --- Attempt to load and add Price data ---
+
+        # --- Attempt to load and add Price data to the primary chart ---
         try:
             print(f"Attempting to load price data from {price_filename} for {security_id}...")
             price_df_long, _ = load_and_process_security_data(price_filename) # Ignore static cols from price file
 
             if price_df_long is not None and not price_df_long.empty:
-                if security_id in price_df_long.index.get_level_values(actual_id_col_name):
-                    price_data = price_df_long.xs(security_id, level=actual_id_col_name).sort_index().copy()
+                price_actual_id_col = price_df_long.index.names[1] # Get ID column name from price file
+                if security_id in price_df_long.index.get_level_values(price_actual_id_col):
+                    price_data = price_df_long.xs(security_id, level=price_actual_id_col).sort_index().copy()
                     # Reindex price data to align dates with the main metric data
                     price_data = price_data.reindex(security_data.index) 
                     
@@ -454,8 +467,9 @@ def security_details_page(metric_name, security_id):
                             'tension': 0.1,
                             'yAxisID': 'y1' # Assign price data to the second y-axis
                         }
-                        datasets.append(price_dataset)
-                        print("Successfully added Price data overlay.")
+                        # Append price dataset to the primary_datasets list
+                        chart_data_for_js['primary_datasets'].append(price_dataset)
+                        print("Successfully added Price data overlay to primary chart.")
                     else:
                          print(f"Warning: Price data found for {security_id}, but was empty after aligning dates.")
                 else:
@@ -468,16 +482,43 @@ def security_details_page(metric_name, security_id):
             print(f"Warning: Error processing price data for {security_id} from {price_filename}: {e_price}")
             traceback.print_exc() # Log the price processing error but continue
 
-        # --- End of Price data loading ---
+        # --- Attempt to load and add Duration data for the second chart ---
+        try:
+            print(f"Attempting to load duration data from {duration_filename} for {security_id}...")
+            duration_df_long, _ = load_and_process_security_data(duration_filename) # Ignore static cols
 
-        chart_data_for_js = {
-            'labels': labels,
-            'datasets': datasets # Now contains metric and potentially price datasets
-        }
-        
-        latest_date_overall = security_data.index.max()
+            if duration_df_long is not None and not duration_df_long.empty:
+                duration_actual_id_col = duration_df_long.index.names[1] # Get ID column name
+                if security_id in duration_df_long.index.get_level_values(duration_actual_id_col):
+                    duration_data = duration_df_long.xs(security_id, level=duration_actual_id_col).sort_index().copy()
+                    # Reindex duration data to align dates with the main metric data
+                    duration_data = duration_data.reindex(security_data.index) 
+                    
+                    if not duration_data.empty:
+                        duration_dataset = {
+                            'label': f'{security_id} - Duration',
+                            'data': duration_data['Value'].round(3).fillna(np.nan).tolist(),
+                            'borderColor': COLOR_PALETTE[2 % len(COLOR_PALETTE)], # Use third color
+                            'backgroundColor': COLOR_PALETTE[2 % len(COLOR_PALETTE)] + '40',
+                            'tension': 0.1
+                            # No yAxisID needed if it's a separate chart with its own scale
+                        }
+                        # Assign duration dataset to its specific key
+                        chart_data_for_js['duration_dataset'] = duration_dataset 
+                        print("Successfully prepared Duration data for separate chart.")
+                    else:
+                         print(f"Warning: Duration data found for {security_id}, but was empty after aligning dates.")
+                else:
+                     print(f"Warning: Security ID {security_id} not found in {duration_filename}.")
+            else:
+                 print(f"Warning: Could not load or process {duration_filename}.")
+        except FileNotFoundError:
+            print(f"Warning: Duration data file '{duration_filename}' not found. Skipping duration chart.")
+        except Exception as e_duration:
+            print(f"Warning: Error processing duration data for {security_id} from {duration_filename}: {e_duration}")
+            traceback.print_exc() # Log the duration processing error but continue
 
-        # 4. Render a new template
+        # 4. Render the template
         return render_template('security_details_page.html',
                                metric_name=metric_name,
                                security_id=security_id,

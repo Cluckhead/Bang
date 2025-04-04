@@ -17,9 +17,16 @@
     </div>
     {% endif %}
 
-    {# Chart Area - Add explicit height style to the container #}
-    <div id="chart-container" class="mb-4" style="height: 500px; position: relative;">
-        <canvas id="securityChart"></canvas>
+    {# Primary Chart Area (Metric + Price Overlay) #}
+    <h2>{{ metric_name }} and Price Time Series</h2>
+    <div id="primary-chart-container" class="mb-4" style="height: 450px; position: relative;">
+        <canvas id="primarySecurityChart"></canvas>
+    </div>
+
+    {# Duration Chart Area #}
+    <h2>Duration Time Series</h2>
+    <div id="duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
+        <canvas id="durationSecurityChart"></canvas>
     </div>
 
     {# Hidden script tag for chart data #}
@@ -31,8 +38,117 @@
 {% endblock %}
 
 {% block scripts %}
-    {# Include Chart.js library #}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    {# We'll need a specific JS function to render this single chart #}
-    {# Let's add it to a new file or adapt chartRenderer.js later #}
+{# Include Chart.js library (Likely inherited from base.html, but included here for safety/explicitness if needed) #}
+{# If base.html already includes it, this line can be removed #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get the chart data passed from Flask
+        const chartDataElement = document.getElementById('chartJsonData');
+        const chartData = JSON.parse(chartDataElement.textContent);
+
+        // --- Render Primary Chart (Metric + Price) ---
+        const primaryCtx = document.getElementById('primarySecurityChart').getContext('2d');
+        if (chartData.primary_datasets && chartData.primary_datasets.length > 0) {
+            new Chart(primaryCtx, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: chartData.primary_datasets // Use the primary datasets array
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: { // Primary Y-axis (for the main metric)
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '{{ metric_name }} Value' // Use the metric name dynamically
+                            }
+                        },
+                        y1: { // Secondary Y-axis (for Price)
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Price'
+                            },
+                            grid: {
+                                drawOnChartArea: false, // only draw grid lines for the first Y axis
+                            },
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        }
+                    }
+                }
+            });
+        } else {
+            console.error('No primary datasets found for the primary chart.');
+            document.getElementById('primary-chart-container').innerHTML = '<p class="text-danger">Could not render primary chart: No data available.</p>';
+        }
+
+        // --- Render Duration Chart ---
+        const durationCtx = document.getElementById('durationSecurityChart').getContext('2d');
+        if (chartData.duration_dataset) {
+             // Check if there's actual data in the duration dataset
+            const hasDurationData = chartData.duration_dataset.data && chartData.duration_dataset.data.some(value => value !== null);
+            
+            if (hasDurationData) {
+                new Chart(durationCtx, {
+                    type: 'line',
+                    data: {
+                        labels: chartData.labels,
+                        datasets: [chartData.duration_dataset] // Pass the single duration dataset in an array
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Date'
+                                }
+                            },
+                            y: { // Single Y-axis for duration
+                                title: {
+                                    display: true,
+                                    text: 'Duration Value'
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            }
+                        }
+                    }
+                });
+            } else {
+                 console.log('No non-null data points found for the duration chart.');
+                 document.getElementById('duration-chart-container').innerHTML = '<p class="text-info">No duration data available for this security over the selected period.</p>';
+            }
+        } else {
+            console.log('Duration dataset not provided or empty.');
+            document.getElementById('duration-chart-container').innerHTML = '<p class="text-info">Duration data not available for this security.</p>';
+        }
+    });
+</script>
 {% endblock %} 

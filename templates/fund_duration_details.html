@@ -44,7 +44,8 @@
                             <td>
                                 {# Special formatting for the change column or others if needed #}
                                 {% if col_name == id_col_name %}
-                                     {{ row[col_name] }} {# Just display the name, no link needed here by default #}
+                                     {# Make the Security Name a link #}
+                                     <a href="{{ url_for('security_details_page', metric_name='Duration', security_id=row[col_name]) }}">{{ row[col_name] }}</a>
                                 {% elif row[col_name] is number %}
                                     {# Format numeric columns, maybe specific format for change #}
                                      {{ "%.3f"|format(row[col_name]) }}
