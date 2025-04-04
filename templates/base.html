@@ -24,17 +24,17 @@
 <body>
     <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('index') }}">Data Checker</a>
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">Data Checker</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarCollapse">
                 <ul class="navbar-nav me-auto mb-2 mb-md-0">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('index') }}">Time Series Dashboard</a>
+                        <a class="nav-link" href="{{ url_for('main.index') }}">Time Series Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('securities_page') }}">Securities Check</a>
+                        <a class="nav-link" href="{{ url_for('security.securities_page') }}">Securities Check</a>
                     </li>
                 </ul>
             </div>

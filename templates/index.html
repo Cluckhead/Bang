@@ -28,9 +28,17 @@
         <div class="jumbotron">
             <h1>Dashboard</h1>
             <p class="lead">Select a metric below to view the detailed checks, or see the latest Z-Score summary below.</p>
-            <div>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                 {% for metric in metrics %}
-                <a href="{{ url_for('metric_page', metric_name=metric) }}" class="btn btn-primary metric-link">{{ metric }}</a>
+                <div class="col">
+                    <div class="card h-100 metric-card">
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title">{{ metric }}</h5>
+                            <p class="card-text flex-grow-1">View details for {{ metric }}.</p>
+                            <a href="{{ url_for('metric.metric_page', metric_name=metric) }}" class="btn btn-primary metric-link">View Details</a>
+                        </div>
+                    </div>
+                </div>
                 {% endfor %}
             </div>
         </div>
@@ -89,7 +97,7 @@
         <div class="mt-4 p-3 border rounded bg-light">
             <h5>Securities Data Check</h5>
             <p>View checks for individual securities based on latest daily changes.</p>
-            <a href="{{ url_for('securities_page') }}" class="btn btn-info btn-sm">View Securities Check</a>
+            <a href="{{ url_for('security.securities_page') }}" class="btn btn-info btn-sm">View Securities Check</a>
         </div>
 
     </main>
