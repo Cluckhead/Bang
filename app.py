@@ -7,6 +7,7 @@ from data_processing import load_and_process_data, calculate_latest_metrics
 # Import the new security processing functions
 from security_processing import load_and_process_security_data, calculate_security_latest_metrics
 import traceback # Import traceback for detailed error logging
+import re # Import regex for parsing
 
 app = Flask(__name__)
 # Serve static files (for JS)
@@ -22,6 +23,23 @@ COLOR_PALETTE = [
     '#DC143C', # Crimson
     '#00FFFF'  # Aqua
 ]
+
+# --- Helper Function for Parsing Funds Column ---
+def parse_fund_list(fund_string):
+    """Safely parses the fund list string like '[FUND1,FUND2]' or '[FUND1]' into a list.
+       Handles potential errors and variations in spacing.
+    """
+    if not isinstance(fund_string, str) or not fund_string.startswith('[') or not fund_string.endswith(']'):
+        return [] # Return empty list if format is unexpected
+    try:
+        # Remove brackets and split by comma
+        content = fund_string[1:-1]
+        # Split by comma, strip whitespace from each element
+        funds = [f.strip() for f in content.split(',') if f.strip()] 
+        return funds
+    except Exception as e:
+        print(f"Error parsing fund string '{fund_string}': {e}")
+        return []
 
 @app.route('/')
 def index():
@@ -476,6 +494,111 @@ def security_details_page(metric_name, security_id):
         print(f"Error processing security details for {metric_name}/{security_id}: {e}")
         traceback.print_exc()
         return f"An error occurred processing details for {security_id}: {e}", 500
+
+# --- New Route for Fund-Specific Duration Details ---
+@app.route('/fund_duration_details/<fund_code>')
+def fund_duration_details(fund_code):
+    """Renders a page showing duration changes for securities held by a specific fund."""
+    duration_filename = "sec_duration.csv"
+    data_filepath = os.path.join(DATA_FOLDER, duration_filename)
+    print(f"--- Requesting Duration Details for Fund: {fund_code} --- File: {duration_filename}")
+
+    if not os.path.exists(data_filepath):
+        print(f"Error: Duration file '{duration_filename}' not found.")
+        return f"Error: Data file '{duration_filename}' not found.", 404
+
+    try:
+        # 1. Load the duration data
+        df = pd.read_csv(data_filepath)
+        print(f"Loaded {duration_filename}")
+
+        # 2. Identify static and date columns
+        # Assuming first few columns are static based on observation
+        # A more robust method might involve config or pattern matching if format varies widely
+        potential_static_cols = ['Security Name', 'Funds', 'Type', 'Callable', 'Currency']
+        static_cols = [col for col in potential_static_cols if col in df.columns]
+        date_cols = [col for col in df.columns if col not in static_cols]
+        
+        if not date_cols or len(date_cols) < 2:
+             print("Error: Not enough date columns found in duration file to calculate change.")
+             return f"Error: Insufficient date columns in '{duration_filename}' to calculate change.", 500
+
+        # Ensure date columns are sortable (attempt conversion if needed, basic check)
+        try:
+            # Basic check assuming 'DD/MM/YYYY' format, adjust if different
+            pd.to_datetime(date_cols, format='%d/%m/%Y', errors='raise') 
+            # Sort date columns to ensure correct order for last two days calculation
+            date_cols = sorted(date_cols, key=lambda d: pd.to_datetime(d, format='%d/%m/%Y'))
+            print(f"Identified and sorted date columns: {date_cols[-5:]} (last 5 shown)")
+        except ValueError:
+            print("Warning: Could not parse all date columns using DD/MM/YYYY format. Using original order.")
+            # Fallback: Use original order if parsing fails
+            # This might be incorrect if columns are not ordered chronologically in the CSV
+        
+        # Identify last two date columns based on sorted list (or original if parsing failed)
+        last_date_col = date_cols[-1]
+        second_last_date_col = date_cols[-2]
+        print(f"Using dates for change calculation: {second_last_date_col} and {last_date_col}")
+
+        # Ensure the relevant date columns are numeric for calculation
+        df[last_date_col] = pd.to_numeric(df[last_date_col], errors='coerce')
+        df[second_last_date_col] = pd.to_numeric(df[second_last_date_col], errors='coerce')
+
+        # 3. Filter by Fund Code
+        # Apply the parsing function to the 'Funds' column
+        fund_lists = df['Funds'].apply(parse_fund_list)
+        # Create a boolean mask to filter rows where the fund_code is in the parsed list
+        mask = fund_lists.apply(lambda funds: fund_code in funds)
+        filtered_df = df[mask].copy() # Use copy to avoid SettingWithCopyWarning
+
+        if filtered_df.empty:
+            print(f"No securities found for fund '{fund_code}' in {duration_filename}.")
+            # Render a template indicating no data found for this fund
+            return render_template('fund_duration_details.html', 
+                                   fund_code=fund_code,
+                                   securities_data=[],
+                                   column_order=[],
+                                   id_col_name=None,
+                                   message=f"No securities found held by fund '{fund_code}' in {duration_filename}.")
+
+        print(f"Found {len(filtered_df)} securities for fund '{fund_code}'. Calculating changes...")
+        
+        # 4. Calculate 1-day Change
+        change_col_name = '1 Day Duration Change'
+        filtered_df[change_col_name] = filtered_df[last_date_col] - filtered_df[second_last_date_col]
+        
+        # 5. Sort by Change (descending, NaN last)
+        filtered_df.sort_values(by=change_col_name, ascending=False, na_position='last', inplace=True)
+        print(f"Sorted securities by {change_col_name}.")
+
+        # 6. Prepare data for template
+        # Select columns for display
+        id_col_name = 'Security Name' # Assuming this is the primary ID
+        display_cols = [id_col_name] + [col for col in static_cols if col != id_col_name] + [second_last_date_col, last_date_col, change_col_name]
+        final_col_order = [col for col in display_cols if col in filtered_df.columns] # Ensure only existing columns are kept
+        
+        securities_data_list = filtered_df[final_col_order].round(3).to_dict(orient='records')
+        # Handle potential NaN values for template rendering
+        for row in securities_data_list:
+             for key, value in row.items():
+                 if pd.isna(value):
+                     row[key] = None
+                     
+        print(f"Final column order for display: {final_col_order}")
+
+        return render_template('fund_duration_details.html',
+                               fund_code=fund_code,
+                               securities_data=securities_data_list,
+                               column_order=final_col_order,
+                               id_col_name=id_col_name,
+                               message=None)
+
+    except FileNotFoundError:
+         return f"Error: Data file '{duration_filename}' not found.", 404
+    except Exception as e:
+        print(f"Error processing duration details for fund {fund_code}: {e}")
+        traceback.print_exc()
+        return f"An error occurred processing duration details for fund {fund_code}: {e}", 500
 
 if __name__ == '__main__':
     app.run(debug=True) 

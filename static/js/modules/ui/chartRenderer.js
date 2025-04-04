@@ -58,6 +58,18 @@ export function renderChartsAndTables(container, chartsData, metricName, latestD
         wrapper.className = `chart-container-wrapper ${zClass}`;
         wrapper.id = `chart-wrapper-${fundCode}`;
 
+        // Add Duration Details Link (if applicable)
+        if (metricName === 'Duration') {
+            const linkDiv = document.createElement('div');
+            linkDiv.className = 'mb-2 text-right'; // Add some margin below
+            const link = document.createElement('a');
+            link.href = `/fund_duration_details/${fundCode}`; // Construct the URL
+            link.className = 'btn btn-info btn-sm';
+            link.textContent = `View Security Duration Changes for ${fundCode} →`;
+            linkDiv.appendChild(link);
+            wrapper.appendChild(linkDiv); // Add link *before* chart
+        }
+
         // Create Chart Canvas
         const canvas = document.createElement('canvas');
         canvas.id = `chart-${fundCode}`;
