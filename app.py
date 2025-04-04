@@ -3,7 +3,9 @@ from flask import Flask, render_template, jsonify
 import os
 import pandas as pd
 import numpy as np
-from data_processing import load_and_process_data, calculate_latest_metrics
+# from data_processing import load_and_process_data, calculate_latest_metrics
+from data_loader import load_and_process_data
+from metric_calculator import calculate_latest_metrics
 # Import the new security processing functions
 from security_processing import load_and_process_security_data, calculate_security_latest_metrics
 import traceback # Import traceback for detailed error logging
