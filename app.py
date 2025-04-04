@@ -34,7 +34,8 @@ def index():
     metric_display_names = sorted([name[3:] for name in metric_filenames]) # Remove 'ts_' prefix
     
     all_z_scores_list = []
-    processed_display_metrics = [] # Store display names of successfully processed metrics
+    # Store the unique combined column names for the summary table header
+    processed_summary_columns = [] 
 
     print("Starting Change Z-score aggregation for dashboard (ts_ files only)...")
 
@@ -48,28 +49,52 @@ def index():
             print(f"Processing {filename}...")
             df, fund_cols, benchmark_col = load_and_process_data(filename)
 
-            if not fund_cols:
-                 print(f"Warning: No fund columns identified in {filename}. Skipping.")
+            # Skip if no benchmark AND no fund columns identified
+            if not benchmark_col and not fund_cols:
+                 print(f"Warning: No benchmark or fund columns identified in {filename}. Skipping.")
                  continue
 
-            # Calculate metrics using the current function (individual column focus)
+            # Calculate metrics using the current function
             latest_metrics = calculate_latest_metrics(df, fund_cols, benchmark_col)
 
-            # --- Extract Change Z-score for the *first* fund column --- 
-            if not latest_metrics.empty and fund_cols: # Check if metrics were calculated and fund_cols exist
-                first_fund_col = fund_cols[0]
-                z_score_col_name = f'{first_fund_col} Change Z-Score'
+            # --- Extract Change Z-score for ALL columns (benchmark + funds) --- 
+            if not latest_metrics.empty:
+                columns_to_check = []
+                if benchmark_col:
+                    columns_to_check.append(benchmark_col)
+                if fund_cols:
+                    columns_to_check.extend(fund_cols)
+                
+                if not columns_to_check:
+                    print(f"Warning: No columns to check for Z-scores in {filename} despite loading data.")
+                    continue
 
-                if z_score_col_name in latest_metrics.columns:
-                    # Rename the column to the *display name* (without ts_)
-                    metric_z_scores = latest_metrics[[z_score_col_name]].rename(columns={z_score_col_name: display_name})
-                    all_z_scores_list.append(metric_z_scores)
-                    processed_display_metrics.append(display_name) # Add display name to list for header
-                    print(f"Successfully extracted Change Z-scores for {display_name} (from {filename}).")
-                else:
-                    print(f"Warning: Z-score column '{z_score_col_name}' not found for metric {display_name} (from {filename}). Skipping.")
+                print(f"Checking for Z-scores for columns: {columns_to_check} in metric {display_name}")
+                found_z_for_metric = False
+                for original_col_name in columns_to_check:
+                    z_score_col_name = f'{original_col_name} Change Z-Score'
+
+                    if z_score_col_name in latest_metrics.columns:
+                        # Create a unique name for the summary table column
+                        summary_col_name = f"{original_col_name} - {display_name}" 
+                        
+                        # Extract and rename
+                        metric_z_scores = latest_metrics[[z_score_col_name]].rename(columns={z_score_col_name: summary_col_name})
+                        all_z_scores_list.append(metric_z_scores)
+                        
+                        # Add the unique column name to our list if not already present (preserves order of discovery)
+                        if summary_col_name not in processed_summary_columns:
+                             processed_summary_columns.append(summary_col_name)
+                        found_z_for_metric = True
+                        print(f"  -> Extracted: {summary_col_name}")
+                    else:
+                        print(f"  -> Z-score column '{z_score_col_name}' not found.")
+                
+                if not found_z_for_metric:
+                    print(f"Warning: No Z-score columns found for any checked column in metric {display_name} (from {filename}).")
+
             else:
-                 print(f"Warning: Could not calculate latest_metrics or no fund columns for {filename}. Skipping Z-score extraction.")
+                 print(f"Warning: Could not calculate latest_metrics for {filename}. Skipping Z-score extraction.")
 
         except FileNotFoundError:
             print(f"Error: Data file '{filename}' not found.")
@@ -82,18 +107,23 @@ def index():
     # Combine all Z-score Series/DataFrames into one
     summary_df = pd.DataFrame()
     if all_z_scores_list:
-        summary_df = pd.concat(all_z_scores_list, axis=1, join='outer')
-        # Ensure the columns are in the same order as the processed_display_metrics list
-        if processed_display_metrics: # Check if list is not empty
-             summary_df = summary_df[processed_display_metrics] 
+        summary_df = pd.concat(all_z_scores_list, axis=1) 
+        # Ensure the columns are in the order they were discovered
+        if processed_summary_columns: 
+             # Handle potential missing columns if a file failed processing midway
+             cols_available_in_summary = [col for col in processed_summary_columns if col in summary_df.columns]
+             summary_df = summary_df[cols_available_in_summary] 
+             # Update the list of columns to only those actually present
+             processed_summary_columns = cols_available_in_summary 
         print("Successfully combined Change Z-scores.")
+        print(f"Summary DF columns: {summary_df.columns.tolist()}")
     else:
-        print("No Change Z-scores could be extracted.")
+        print("No Change Z-scores could be extracted for the summary.")
 
     return render_template('index.html', 
-                           metrics=metric_display_names, # Pass display names for links
+                           metrics=metric_display_names, # Still used for top-level metric links
                            summary_data=summary_df,
-                           summary_metrics=processed_display_metrics) # Pass display names for table header
+                           summary_metrics=processed_summary_columns) # Pass the NEW list of combined column names
 
 @app.route('/metric/<metric_name>')
 def metric_page(metric_name):
@@ -209,80 +239,98 @@ def metric_page(metric_name):
 @app.route('/securities')
 def securities_page():
     """Renders a page summarizing potential issues in security-level data from sec_ files."""
-    print("--- Starting Security Data Processing --- ")
-    # Find only files starting with sec_
-    sec_files = [f for f in os.listdir(DATA_FOLDER) if f.startswith('sec_') and f.endswith('.csv')]
-    
+    print("--- Starting Security Data Processing for Spread --- ")
+    spread_filename = "sec_Spread.csv"
+    data_filepath = os.path.join(DATA_FOLDER, spread_filename)
+
     all_metrics_list = []
     all_static_columns = set() # Keep track of all unique static columns across files
     filter_options = {} # Dictionary to store unique values for each filterable static column
+    combined_metrics_df = pd.DataFrame() # Initialize DataFrame
 
-    if not sec_files:
-        print("No 'sec_' prefixed files found in Data folder.")
-        # Render template with a message indicating no files found?
+    if not os.path.exists(data_filepath):
+        print(f"Error: The required file '{spread_filename}' was not found in the '{DATA_FOLDER}' directory.")
         return render_template('securities_page.html', 
                            securities_data={}, 
                            filter_options={}, 
                            all_static_cols=[], 
-                           message="No security data files (sec_*.csv) found.")
+                           message=f"Error: Required data file '{spread_filename}' not found.")
 
-    print(f"Found security files: {sec_files}")
-
-    for filename in sec_files:
-        try:
-            print(f"Processing security file: {filename}")
-            # 1. Load and process (melts data to long format)
-            df_long, static_cols = load_and_process_security_data(filename)
+    try:
+        print(f"Processing security file: {spread_filename}")
+        # 1. Load and process (melts data to long format)
+        df_long, static_cols = load_and_process_security_data(spread_filename)
+        
+        if df_long is None or df_long.empty:
+            print(f"Skipping {spread_filename} due to load/process errors or empty data after processing.")
+            # Render template with a specific error message for the spread file
+            return render_template('securities_page.html', 
+                                   securities_data={}, 
+                                   filter_options={}, 
+                                   all_static_cols=[], 
+                                   message=f"Error loading or processing '{spread_filename}'.")
             
-            if df_long is None or df_long.empty:
-                print(f"Skipping {filename} due to load/process errors or empty data after processing.")
-                continue
-                
-            print(f"Loaded {filename}. Identifying static columns: {static_cols}")
-            all_static_columns.update(static_cols) # Add newly found static columns
+        print(f"Loaded {spread_filename}. Identifying static columns: {static_cols}")
+        all_static_columns.update(static_cols) # Add newly found static columns
 
-            # 2. Calculate latest metrics
-            latest_sec_metrics = calculate_security_latest_metrics(df_long, static_cols)
+        # 2. Calculate latest metrics
+        latest_sec_metrics = calculate_security_latest_metrics(df_long, static_cols)
 
-            if latest_sec_metrics.empty:
-                print(f"No metrics calculated for {filename}. Skipping.")
-                continue
-                
-            # 3. Add Source Metric and store
-            metric_name = filename.replace('sec_', '').replace('.csv', '')
-            latest_sec_metrics['Source Metric'] = metric_name
-            all_metrics_list.append(latest_sec_metrics)
-            print(f"Successfully calculated metrics for {filename}")
+        if latest_sec_metrics.empty:
+            print(f"No metrics calculated for {spread_filename}. Skipping.")
+             # Render template indicating no metrics calculated
+            return render_template('securities_page.html', 
+                                   securities_data={}, 
+                                   filter_options={}, 
+                                   all_static_cols=[], 
+                                   message=f"Could not calculate metrics from '{spread_filename}'.")
             
-            # 4. Collect filter options from static columns 
-            # Ensure we only try to get unique values from columns present in *this* df
-            current_static_in_df = [col for col in static_cols if col in latest_sec_metrics.columns]
-            for col in current_static_in_df:
-                unique_vals = latest_sec_metrics[col].unique().tolist()
-                # Convert numpy types to standard python types if necessary for JSON later
-                unique_vals = [item.item() if isinstance(item, np.generic) else item for item in unique_vals]
-                unique_vals = [val for val in unique_vals if pd.notna(val)] # Remove NaN
-                
-                if col not in filter_options:
-                    filter_options[col] = set(unique_vals)
-                else:
-                    filter_options[col].update(unique_vals)
+        # 3. Store the calculated metrics (No need to add Source Metric anymore)
+        # metric_name = spread_filename.replace('sec_', '').replace('.csv', '') # Not needed
+        # latest_sec_metrics['Source Metric'] = metric_name # REMOVED
+        # all_metrics_list.append(latest_sec_metrics) # Not needed if only one file
+        combined_metrics_df = latest_sec_metrics # Assign directly
+        print(f"Successfully calculated metrics for {spread_filename}")
+        
+        # 4. Collect filter options from static columns 
+        current_static_in_df = [col for col in static_cols if col in combined_metrics_df.columns]
+        for col in current_static_in_df:
+            unique_vals = combined_metrics_df[col].unique().tolist()
+            unique_vals = [item.item() if isinstance(item, np.generic) else item for item in unique_vals]
+            unique_vals = [val for val in unique_vals if pd.notna(val)] # Remove NaN
             
-        except Exception as e:
-            print(f"Error processing security file {filename}: {e}")
-            traceback.print_exc()
-            # Optionally continue to next file or stop? Let's continue.
-
-    # Combine all metrics DataFrames
-    if not all_metrics_list:
-        print("No security metrics were successfully generated from any file.")
+            if col not in filter_options:
+                filter_options[col] = set(unique_vals)
+            else:
+                filter_options[col].update(unique_vals)
+        
+    except Exception as e:
+        print(f"Error processing security file {spread_filename}: {e}")
+        traceback.print_exc()
         return render_template('securities_page.html', 
                                securities_data={}, 
                                filter_options={}, 
                                all_static_cols=[], 
-                               message="Could not generate metrics from any security data files.")
+                               message=f"An error occurred while processing '{spread_filename}'.")
 
-    combined_metrics_df = pd.concat(all_metrics_list)
+    # Combine all metrics DataFrames - Not needed anymore as we process only one file
+    # if not all_metrics_list:
+    #     print("No security metrics were successfully generated from any file.")
+    #     return render_template('securities_page.html', 
+    #                            securities_data={}, 
+    #                            filter_options={}, 
+    #                            all_static_cols=[], 
+    #                            message="Could not generate metrics from any security data files.")
+    # combined_metrics_df = pd.concat(all_metrics_list) # Not needed
+
+    if combined_metrics_df.empty:
+         print("No security metrics were generated from sec_Spread.csv.")
+         # This case should be caught earlier, but added as a safeguard
+         return render_template('securities_page.html', 
+                                securities_data={}, 
+                                filter_options={}, 
+                                all_static_cols=[], 
+                                message=f"Could not generate metrics from '{spread_filename}'.")
 
     # --- Sorting by Change Z-Score --- 
     if 'Change Z-Score' in combined_metrics_df.columns:
@@ -299,18 +347,17 @@ def securities_page():
     
     # Convert DataFrame to list of dictionaries for easier template processing
     securities_data_list = combined_metrics_df.reset_index().round(3).to_dict(orient='records')
-    # Replace NaN/NaT with None for JSON compatibility if needed, but template might handle it
     for row in securities_data_list:
         for key, value in row.items():
             if pd.isna(value):
                 row[key] = None 
                 
-    # Define order of columns for display (Security ID first, then Source, then Static, then Metrics)
+    # Define order of columns for display (Security ID first, then Static, then Metrics)
     id_col_name = combined_metrics_df.index.name or 'Security ID' # Get index name
     ordered_static_cols = sorted(list(all_static_columns))
     metric_cols_ordered = ['Latest Value', 'Change', 'Change Z-Score', 'Mean', 'Max', 'Min']
-    # Ensure only existing columns are included
-    final_col_order = [id_col_name, 'Source Metric'] + \
+    # Ensure only existing columns are included, REMOVE 'Source Metric'
+    final_col_order = [id_col_name] + \
                       [col for col in ordered_static_cols if col in combined_metrics_df.columns] + \
                       [col for col in metric_cols_ordered if col in combined_metrics_df.columns]
                       

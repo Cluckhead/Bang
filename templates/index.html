@@ -37,14 +37,15 @@
 
         <!-- Z-Score Summary Table -->
         {% if not summary_data.empty %}
-        <h2>Latest Spread Change Z-Score Summary (Based on First Fund Column vs Benchmark)</h2>
+        <h2>Latest Change Z-Score Summary</h2>
         <div class="table-responsive"> <!-- Make table scrollable on small screens -->
             <table class="table table-striped table-bordered table-hover table-sm">
                 <thead class="thead-light">
                     <tr>
                         <th>Fund Code</th>
-                        {% for metric in summary_metrics %}
-                        <th>{{ metric }}</th>
+                        {# Use the new summary_metrics list which contains combined names #}
+                        {% for full_metric_name in summary_metrics %}
+                        <th>{{ full_metric_name }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -52,8 +53,9 @@
                     {% for fund_code, row in summary_data.iterrows() %}
                     <tr>
                         <td>{{ fund_code }}</td>
-                        {% for metric in summary_metrics %}
-                            {% set z_score = row[metric] %}
+                        {# Iterate through the same new list for data access #}
+                        {% for full_metric_name in summary_metrics %}
+                            {% set z_score = row[full_metric_name] %}
                             {% if z_score is none or z_score != z_score %}
                                 {# Handle NaN/None #}
                                 <td class="nan-value">N/A</td>
