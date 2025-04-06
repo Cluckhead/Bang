@@ -82,7 +82,23 @@ def read_and_sort_dates(dates_file):
         # Format dates as 'YYYY-MM-DD' strings for column headers
         date_strings = sorted_dates.dt.strftime('%Y-%m-%d').tolist()
         logger.info(f"Successfully read and sorted {len(date_strings)} dates from {dates_file}.")
-        return date_strings
+
+        # --- Deduplicate the date list while preserving order --- 
+        unique_date_strings = []
+        seen_dates = set()
+        duplicates_found = False
+        for date_str in date_strings:
+            if date_str not in seen_dates:
+                unique_date_strings.append(date_str)
+                seen_dates.add(date_str)
+            else:
+                duplicates_found = True
+        
+        if duplicates_found:
+            logger.warning(f"Duplicate dates found in {dates_file}. Using unique sorted dates: {len(unique_date_strings)} unique dates.")
+        # --- End Deduplication ---
+
+        return unique_date_strings # Return the deduplicated list
     except FileNotFoundError:
         logger.error(f"Error: Dates file not found at {dates_file}")
         return None
@@ -153,65 +169,101 @@ def process_csv_file(input_path, output_path, date_columns):
         # Decide on the final columns to use for processing
         current_cols = original_cols # Default to original columns
 
-        # Find the first potential placeholder column and its repeating sequence within candidate_cols
-        first_placeholder_name = None
-        placeholder_start_index_in_candidates = -1 # Index relative to start of candidate_cols
+        # --- Enhanced Placeholder Detection ---
+        # Detect sequences like 'Col', 'Col.1', 'Col.2', ...
+        potential_placeholder_base = None
+        placeholder_start_index_in_candidates = -1
+        detected_sequence = []
 
         if not candidate_cols:
             logger.warning(f"File {input_path} has no columns after required columns '{required_cols}'. Cannot check for date placeholders.")
         else:
-            # Iterate through candidate columns to find the start of a repeating sequence
-            for i in range(len(candidate_cols) - 1): # Stop one before the end
-                if candidate_cols[i+1] == candidate_cols[i]:
-                    first_placeholder_name = candidate_cols[i]
-                    placeholder_start_index_in_candidates = i
-                    break # Found the start of the sequence
+            # Iterate through candidate columns to find the *start* of the sequence
+            found_sequence = False
+            for start_idx in range(len(candidate_cols)):
+                # Potential base is the column at start_idx
+                current_potential_base = candidate_cols[start_idx]
 
+                # Check if it's a potential base name (no '.' suffix)
+                if '.' not in current_potential_base:
+                    logger.debug(f"Checking potential base '{current_potential_base}' at index {start_idx} in candidate columns.")
+                    # Found a potential start, now check for the sequence
+                    potential_placeholder_base = current_potential_base
+                    placeholder_start_index_in_candidates = start_idx
+                    detected_sequence = [potential_placeholder_base] # Start sequence with the base
+
+                    # Check subsequent columns for the pattern 'base.1', 'base.2', etc.
+                    for i in range(1, len(candidate_cols) - start_idx):
+                        expected_col = f"{potential_placeholder_base}.{i}"
+                        actual_col_index = start_idx + i
+                        if candidate_cols[actual_col_index] == expected_col:
+                            detected_sequence.append(candidate_cols[actual_col_index])
+                        else:
+                            # Sequence broken
+                            logger.debug(f"Sequence broken at index {actual_col_index}. Expected '{expected_col}', found '{candidate_cols[actual_col_index]}'.")
+                            break # Stop checking for this base
+
+                    # Check if a sequence of at least length 2 (Base, Base.1) was found
+                    if len(detected_sequence) > 1:
+                        logger.info(f"Found sequence starting with '{potential_placeholder_base}' at candidate index {placeholder_start_index_in_candidates}.")
+                        found_sequence = True
+                        break # Exit the outer loop, we found our sequence
+                    else:
+                        # Only the base was found, or sequence broke immediately. Reset and continue searching.
+                        logger.debug(f"Only base '{potential_placeholder_base}' found or sequence too short. Continuing search.")
+                        potential_placeholder_base = None
+                        placeholder_start_index_in_candidates = -1
+                        detected_sequence = []
+                        # Continue the outer loop to check the next column as a potential base
+                else:
+                     logger.debug(f"Column '{current_potential_base}' at index {start_idx} has '.' suffix, skipping as potential base.")
+
+            if not found_sequence:
+                 logger.info(f"No placeholder sequence like 'Base', 'Base.1', ... found anywhere in candidate columns of {input_path}.")
+                 potential_placeholder_base = None # Ensure it's None if no sequence found
+                 detected_sequence = []
+
+
+        # --- Date Replacement Logic using Detected Sequence ---
         if date_columns is None:
             logger.warning(f"Date information from {DATES_FILE_PATH} is unavailable. Cannot check or replace headers in {input_path}. Processing with original headers: {original_cols}")
-        elif first_placeholder_name is not None:
-            # Found a repeating sequence, now count how many times it repeats consecutively
-            placeholder_count = 0
-            for j in range(placeholder_start_index_in_candidates, len(candidate_cols)):
-                if candidate_cols[j] == first_placeholder_name:
-                    placeholder_count += 1
-                else:
-                    break # End of the sequence
-
-            # Calculate the actual index in the original full list of columns
+        elif potential_placeholder_base is not None and detected_sequence:
+            # A sequence like 'Base', 'Base.1', ... was detected
+            placeholder_count = len(detected_sequence)
             original_placeholder_start_index = candidate_start_index + placeholder_start_index_in_candidates
-            logger.info(f"Detected potential placeholder sequence: '{first_placeholder_name}' repeating {placeholder_count} times, starting at index {original_placeholder_start_index} in original columns.")
+            logger.info(f"Detected placeholder sequence based on '{potential_placeholder_base}' with {placeholder_count} columns, starting at index {original_placeholder_start_index} in original columns.")
 
             # Compare count with loaded dates
             if len(date_columns) == placeholder_count:
-                logger.info(f"Replacing {placeholder_count} placeholder columns starting with '{first_placeholder_name}' with dates.")
+                logger.info(f"Replacing {placeholder_count} placeholder columns starting with '{potential_placeholder_base}' with dates.")
                 # Construct new columns: Keep columns before sequence + dates + columns after sequence
                 cols_before = original_cols[:original_placeholder_start_index]
+                # Important: Calculate cols_after based on the *original* position and *count* of placeholders
                 cols_after = original_cols[original_placeholder_start_index + placeholder_count:]
                 new_columns = cols_before + date_columns + cols_after
 
                 if len(new_columns) != len(original_cols):
-                    logger.error(f"Internal error: Column count mismatch after constructing new columns ({len(new_columns)} vs {len(original_cols)}). Reverting to original headers.")
+                    logger.error(f"Internal error: Column count mismatch after constructing new columns ({len(new_columns)} vs {len(original_cols)}). Columns before: {cols_before}, Dates: {date_columns}, Columns after: {cols_after}. Reverting to original headers.")
                     current_cols = original_cols # Revert to original
                 else:
                     df.columns = new_columns
                     current_cols = new_columns # Use the new columns for further processing
                     logger.info(f"Columns after replacement: {current_cols}")
             else:
-                # Counts mismatch - log warning and proceed with original (potentially incorrect) headers
-                logger.warning(f"Placeholder count mismatch in {input_path}: Found {placeholder_count} repeating columns ('{first_placeholder_name}'), but expected {len(date_columns)} dates based on {DATES_FILE_PATH}. Skipping date replacement. Processing with original headers.")
+                # Counts mismatch - log warning and proceed with original headers
+                logger.warning(f"Placeholder count mismatch in {input_path}: Found sequence based on '{potential_placeholder_base}' with {placeholder_count} columns, but expected {len(date_columns)} dates based on {DATES_FILE_PATH}. Skipping date replacement. Processing with original headers.")
                 # current_cols remains original_cols
 
         else:
-            # No repeating sequence found. Check if the candidate columns *already* match the date_columns.
-            logger.info(f"No consecutive repeating column sequence found in {input_path}. Checking if existing columns match dates.")
-            # Check if all non-required columns exactly match the date columns
+            # No 'Base', 'Base.1', ... sequence found. Check if the candidate columns *already* match the date_columns.
+            logger.info(f"No placeholder sequence like 'Base', 'Base.1', ... detected in {input_path}. Checking if existing columns match dates.")
             if candidate_cols == date_columns:
                  logger.info(f"Columns in {input_path} (after required ones) already match the expected dates. No replacement needed.")
                  # current_cols is already original_cols, which are correct.
             else:
-                logger.warning(f"Columns in {input_path} do not match expected dates and no repeating sequence found. Processing with original headers: {original_cols}")
-                # current_cols remains original_cols
+                 # Log the mismatch if they don't match dates either
+                 logger.warning(f"Columns in {input_path} do not match expected dates and no 'Base', 'Base.1', ... sequence found. Processing with original headers: {original_cols}")
+                 # current_cols remains original_cols
 
         # --- End Column Header Replacement Logic ---
 
