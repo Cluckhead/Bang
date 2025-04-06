@@ -67,7 +67,7 @@ export function renderChartsAndTables(container, chartsData, metricName, latestD
             const linkDiv = document.createElement('div');
             linkDiv.className = 'mb-2 text-right'; // Add some margin below
             const link = document.createElement('a');
-            link.href = `/fund_duration_details/${fundCode}`; // Construct the URL
+            link.href = `/fund/duration_details/${fundCode}`; // Construct the URL with the /fund prefix
             link.className = 'btn btn-info btn-sm';
             link.textContent = `View Security Duration Changes for ${fundCode} →`;
             linkDiv.appendChild(link);

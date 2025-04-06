@@ -65,15 +65,13 @@ def fund_duration_details(fund_code):
 
         # Ensure date columns are sortable (attempt conversion if needed, basic check)
         try:
-            # Basic check assuming 'DD/MM/YYYY' format, adjust if different
-            pd.to_datetime(date_cols, format='%d/%m/%Y', errors='raise')
-            # Sort date columns to ensure correct order for last two days calculation
-            date_cols = sorted(date_cols, key=lambda d: pd.to_datetime(d, format='%d/%m/%Y'))
-            print(f"Identified and sorted date columns: {date_cols[-5:]} (last 5 shown)")
+            # Check and sort date columns using the correct YYYY-MM-DD format
+            pd.to_datetime(date_cols, format='%Y-%m-%d', errors='raise')
+            date_cols = sorted(date_cols, key=lambda d: pd.to_datetime(d, format='%Y-%m-%d'))
+            print(f"Identified and sorted date columns (YYYY-MM-DD): {date_cols[-5:]} (last 5 shown)")
         except ValueError:
-            print("Warning: Could not parse all date columns using DD/MM/YYYY format. Using original order.")
-            # Fallback: Use original order if parsing fails
-            # This might be incorrect if columns are not ordered chronologically in the CSV
+            print("Warning: Could not parse all date columns using YYYY-MM-DD format. Using original order.")
+            # Fallback remains, but hopefully won't be needed as often
 
         # Identify last two date columns based on sorted list (or original if parsing failed)
         if len(date_cols) < 2: # Double check after potential parsing failure

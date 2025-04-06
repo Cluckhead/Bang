@@ -9,11 +9,11 @@ import re
 import pandas as pd
 
 def _is_date_like(column_name):
-    """Check if a column name looks like a date (e.g., DD/MM/YYYY).
+    """Check if a column name looks like a date (e.g., YYYY-MM-DD).
     Simple regex, adjust if date formats vary significantly.
     Ensures the pattern matches the entire string.
     """
-    return bool(re.match(r'^\d{2}/\d{2}/\d{4}$', str(column_name)))
+    return bool(re.match(r'^\d{4}-\d{2}-\d{2}$', str(column_name)))
 
 def parse_fund_list(fund_string):
     """Safely parses the fund list string like '[FUND1,FUND2]' or '[FUND1]' into a list.
