@@ -6,7 +6,7 @@ import pandas as pd
 from flask import Blueprint, render_template, request, current_app, jsonify
 import datetime
 from pandas.tseries.offsets import BDay
-#import tqs
+#from tqs import tqs_query as tqs
 # # Import the placeholder validation function
 from data_validation import validate_data
 
@@ -66,11 +66,7 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
     # --- Replace this section with the actual TQS API call --- 
     # Example using a hypothetical library `tqs_api_library`
     try:
-        # dataframe = tqs_api_library.fetch_data(query_id=QueryID,
-        #                                        funds=FundCodeList,
-        #                                        start=StartDate,
-        #                                        end=EndDate,
-        #                                        timeout=300) # Example 5 min timeout
+        # dataframe = tqs.get_data(QueryID,FundCodeList,StartDate,EndDate) # Example 5 min timeout
         # Mock success for demonstration when USE_REAL_TQS_API is True
         print("    [Placeholder] Real API call would happen here.")
         # Create a simple dummy DataFrame for testing the flow
@@ -163,9 +159,9 @@ def run_api_calls():
         # Calculate dates
         end_date = pd.to_datetime(end_date_str)
         start_date = end_date - pd.Timedelta(days=days_back)
-        # Format dates as DD/MM/YY for the tqs call simulation
-        start_date_tqs_str = start_date.strftime('%d/%m/%y')
-        end_date_tqs_str = end_date.strftime('%d/%m/%y')
+        # Format dates as YYYY-MM-DD for the TQS call
+        start_date_tqs_str = start_date.strftime('%Y-%m-%d')
+        end_date_tqs_str = end_date.strftime('%Y-%m-%d')
 
         # --- Get Query Map ---
         data_folder = current_app.config.get('DATA_FOLDER', 'Data')
