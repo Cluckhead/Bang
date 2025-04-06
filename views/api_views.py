@@ -440,9 +440,4 @@ def rerun_api_call():
         current_app.logger.error(f"Unexpected error in /rerun-api-call: {e}", exc_info=True)
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {e}"}), 500
 
-# Placeholder for data cleanup logic - called by JS
-@api_bp.route('/run-cleanup', methods=['POST'])
-def run_cleanup():
-    pass # Add pass to make the function valid
-
 # Removed the placeholder validate_data function from here as it's now imported 
