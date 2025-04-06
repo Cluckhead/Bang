@@ -440,4 +440,4 @@ def rerun_api_call():
         current_app.logger.error(f"Unexpected error in /rerun-api-call: {e}", exc_info=True)
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {e}"}), 500
 
-# Removed the placeholder validate_data function from here as it's now imported 
+# Ensure no code remains after this point in the file for this function. 
