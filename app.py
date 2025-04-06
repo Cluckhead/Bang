@@ -4,7 +4,7 @@
 # - Creating the Flask application instance.
 # - Setting up basic configuration (like the secret key).
 # - Ensuring necessary folders (like the instance folder) exist.
-# - Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`) from the `views`
+# - Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`) from the `views`
 #   directory, which contain the application's routes and view logic.
 # - Providing a conditional block (`if __name__ == '__main__':`) to run the development server
 #   when the script is executed directly.
@@ -20,7 +20,7 @@ import sys # To get python executable path
 # --- End imports ---
 
 # Import configurations and utilities (potentially needed by factory setup later)
-# from config import DATA_FOLDER, COLOR_PALETTE # Not directly used in factory itself yet
+from config import DATA_FOLDER, COLOR_PALETTE # Uncommented import
 # from utils import _is_date_like, parse_fund_list # Not directly used in factory itself yet
 
 def create_app():
@@ -32,6 +32,9 @@ def create_app():
         SECRET_KEY='dev', # Default secret key for development. CHANGE for production!
         # Add other default configurations if needed
     )
+
+    # Load configuration from config.py
+    app.config.from_object('config')
 
     # Ensure the instance folder exists (if using instance_relative_config)
     try:
@@ -49,12 +52,14 @@ def create_app():
     from views.security_views import security_bp
     from views.fund_views import fund_bp
     from views.api_views import api_bp
+    from views.exclusion_views import exclusion_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
     app.register_blueprint(security_bp)
     app.register_blueprint(fund_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(exclusion_bp)
 
     print("Registered Blueprints:")
     print(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
@@ -62,6 +67,7 @@ def create_app():
     print(f"- {security_bp.name} (prefix: {security_bp.url_prefix})")
     print(f"- {fund_bp.name} (prefix: {fund_bp.url_prefix})")
     print(f"- {api_bp.name} (prefix: {api_bp.url_prefix})")
+    print(f"- {exclusion_bp.name} (prefix: {exclusion_bp.url_prefix})")
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')

@@ -7,18 +7,48 @@ import pandas as pd
 import numpy as np
 import traceback
 from urllib.parse import unquote
+from datetime import datetime
+from flask import request # Import request
 
 # Import necessary functions/constants from other modules
 from config import DATA_FOLDER, COLOR_PALETTE
 from security_processing import load_and_process_security_data, calculate_security_latest_metrics
+# Import the exclusion loading function
+from views.exclusion_views import load_exclusions, get_data_path
 
 # Define the blueprint
 security_bp = Blueprint('security', __name__, url_prefix='/security')
+
+def get_active_exclusions():
+    """Loads exclusions and returns a set of SecurityIDs that are currently active."""
+    exclusions = load_exclusions() # This returns a list of dicts
+    active_exclusions = set()
+    today = datetime.now().date()
+
+    for ex in exclusions:
+        try:
+            add_date = ex['AddDate'].date() if pd.notna(ex['AddDate']) else None
+            end_date = ex['EndDate'].date() if pd.notna(ex['EndDate']) else None
+            security_id = str(ex['SecurityID']) # Ensure it's string for comparison
+
+            if add_date and add_date <= today:
+                if end_date is None or end_date >= today:
+                    active_exclusions.add(security_id)
+        except Exception as e:
+            print(f"Error processing exclusion record {ex}: {e}") # Use logging in production
+
+    print(f"Found {len(active_exclusions)} active exclusions: {active_exclusions}")
+    return active_exclusions
 
 @security_bp.route('/summary') # Renamed route for clarity, corresponds to /security/summary
 def securities_page():
     """Renders a page summarizing potential issues in security-level data from sec_ files."""
     print("--- Starting Security Data Processing for Spread --- ")
+
+    # --- Get Search Term from Request --- 
+    search_term = request.args.get('search_term', '') # Get search term, default to empty string
+    print(f"Search term received: '{search_term}'")
+
     spread_filename = "sec_Spread.csv"
     data_filepath = os.path.join(DATA_FOLDER, spread_filename)
 
@@ -81,6 +111,25 @@ def securities_page():
             else:
                 filter_options[col].update(unique_vals)
 
+        # --- Apply Search Term Filter --- 
+        if search_term and not combined_metrics_df.empty:
+            original_count = len(combined_metrics_df)
+            # Ensure index is string for searching
+            combined_metrics_df.index = combined_metrics_df.index.astype(str)
+            # Case-insensitive search
+            combined_metrics_df = combined_metrics_df[combined_metrics_df.index.str.contains(search_term, case=False, na=False)]
+            filtered_count = len(combined_metrics_df)
+            print(f"Filtered {original_count - filtered_count} securities based on search term '{search_term}'.")
+
+            if combined_metrics_df.empty:
+                print("No securities found matching the search term after initial loading.")
+                return render_template('securities_page.html',
+                                       securities_data={},
+                                       filter_options={},
+                                       all_static_cols=[],
+                                       search_term=search_term, # Pass search term back
+                                       message=f"No securities found matching '{search_term}'.")
+
     except Exception as e:
         print(f"Error processing security file {spread_filename}: {e}")
         traceback.print_exc()
@@ -98,6 +147,34 @@ def securities_page():
                                 filter_options={},
                                 all_static_cols=[],
                                 message=f"Could not generate metrics from '{spread_filename}'.")
+
+    # --- Load Active Exclusions --- 
+    try:
+        active_exclusion_ids = get_active_exclusions()
+    except Exception as e:
+        print(f"Error loading active exclusions: {e}")
+        active_exclusion_ids = set() # Proceed without exclusions if loading fails
+        # Optionally, add a message to the user
+        # message = "Warning: Could not load security exclusions."
+
+    # --- Filter out excluded securities --- 
+    if not combined_metrics_df.empty and active_exclusion_ids:
+        original_count = len(combined_metrics_df)
+        # Ensure index is treated as string for matching
+        combined_metrics_df.index = combined_metrics_df.index.astype(str)
+        combined_metrics_df = combined_metrics_df[~combined_metrics_df.index.isin(active_exclusion_ids)]
+        filtered_count = len(combined_metrics_df)
+        print(f"Filtered out {original_count - filtered_count} excluded securities.")
+
+        if combined_metrics_df.empty:
+            print("All securities were filtered out by the exclusion list.")
+            # Handle case where everything is excluded
+            return render_template('securities_page.html',
+                                   securities_data={},
+                                   filter_options={},
+                                   all_static_cols=[],
+                                   search_term=search_term, # Pass search term back
+                                   message="All securities matching the criteria are currently excluded.")
 
     # --- Sorting by Change Z-Score --- 
     if 'Change Z-Score' in combined_metrics_df.columns:
@@ -135,6 +212,7 @@ def securities_page():
                            filter_options=final_filter_options,
                            column_order=final_col_order, # Pass column order to template
                            id_col_name=id_col_name, # Pass the identified ID column name
+                           search_term=search_term, # Pass search term back to template
                            message=None)
 
 @security_bp.route('/details/<metric_name>/<path:security_id>') # Corresponds to /security/details/..., use path converter

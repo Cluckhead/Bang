@@ -2,6 +2,13 @@
 
 This application provides a web interface to load, process, and check financial data, primarily focusing on time-series metrics and security-level data. It helps identify potential data anomalies by calculating changes and Z-scores.
 
+## Features
+
+*   **Time-Series Metric Analysis:** Load `ts_*.csv` files, view latest changes, Z-scores, and historical data charts for various metrics per fund.
+*   **Security-Level Analysis:** Load wide-format `sec_*.csv` files, view latest changes and Z-scores across securities, and drill down into historical charts (Value, Price, Duration) for individual securities.
+*   **Fund-Specific Views:** Analyze data aggregated or filtered by specific funds (e.g., Fund Duration Details).
+*   **Security Exclusions:** Maintain a list of securities to temporarily exclude from the main Security Summary page (`/security/summary`). Exclusions can have start/end dates and comments.
+
 ## File Structure Overview
 
 ```mermaid
@@ -23,6 +30,7 @@ graph TD
     D --> D2(metric_views.py);
     D --> D3(security_views.py);
     D --> D4(fund_views.py);
+    D --> D5(exclusion_views.py);
 
     E --> E1(base.html);
     E --> E2(index.html);
@@ -30,7 +38,8 @@ graph TD
     E --> E4(securities_page.html);
     E --> E5(security_details_page.html);
     E --> E6(fund_duration_details.html);
-    E --> E7(metric_page.html)
+    E --> E7(metric_page.html);
+    E --> E8(exclusions_page.html);
 
     F --> F1(js);
     F1 --> F1a(main.js);
@@ -43,6 +52,12 @@ graph TD
     F1b --> F1b3(charts);
     F1b3 --> F1b3a(timeSeriesChart.js);
 
+    G --> G1(ts_*.csv);
+    G --> G2(sec_*.csv);
+    G --> G3(pre_*.csv);
+    G --> G4(new_*.csv);
+    G --> G5(exclusions.csv);
+
     H --> H1(config.py);
     H --> H2(utils.py);
 
@@ -53,6 +68,15 @@ graph TD
     E --> F;
 ```
 
+## Data Files (`Data/`)
+
+*   `ts_*.csv`: Time-series data, indexed by Date and Code (Fund/Benchmark).
+*   `sec_*.csv`: Security-level data, typically wide format with dates as columns.
+*   `pre_*.csv`: Input files for the `process_data.py` script.
+*   `new_*.csv`: Output files from the `process_data.py` script.
+*   **`exclusions.csv`**: Stores the list of excluded securities. Contains columns: `SecurityID`, `AddDate`, `EndDate`, `Comment`.
+*   Other files like `QueryMap.csv`, `FundList.csv`, `Dates.csv` may exist for specific configurations or helper data.
+
 ## Python Files
 
 ### `app.py`
@@ -61,7 +85,7 @@ graph TD
     *   Creating the Flask application instance.
     *   Setting up basic configuration (like the secret key).
     *   Ensuring necessary folders (like the instance folder) exist.
-    *   Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`) from the `views` directory, which contain the application's routes and view logic.
+    *   Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`) from the `views` directory, which contain the application's routes and view logic.
     *   Providing a conditional block (`if __name__ == '__main__':`) to run the development server when the script is executed directly.
 *   **Functions:**
     *   `create_app()`: Factory function to create and configure the Flask app.
@@ -151,15 +175,18 @@ graph LR
         BP_Metric[metric_bp]
         BP_Security[security_bp]
         BP_Fund[fund_bp]
+        BP_Exclusion[exclusion_bp]
     end
 
     subgraph Routes
         direction TB
         R_Index[/] --> BP_Main;
         R_Metric[/metric/<metric_name>] --> BP_Metric;
-        R_Securities[/securities] --> BP_Security;
-        R_SecDetails[/securities/<metric_name>/<security_id>] --> BP_Security;
+        R_Securities[/security/summary] --> BP_Security;
+        R_SecDetails[/security/details/<metric_name>/<security_id>] --> BP_Security;
         R_FundDetails[/fund_duration_details/<fund_code>] --> BP_Fund;
+        R_Exclusions[/exclusions] --> BP_Exclusion;
+        R_RemoveExclusion[/exclusions/remove] --> BP_Exclusion;
     end
 
     subgraph Templates
@@ -169,6 +196,7 @@ graph LR
         T_Securities[securities_page.html]
         T_SecDetails[security_details_page.html]
         T_FundDetails[fund_duration_details.html]
+        T_Exclusions[exclusions_page.html]
     end
     
     subgraph Data Processing
@@ -176,13 +204,16 @@ graph LR
         DP_Loader[data_loader.py]
         DP_MetricCalc[metric_calculator.py]
         DP_SecProc[security_processing.py]
+        DP_ExclView[exclusion_views.py]
         DP_Utils[utils.py]
+        Data_Excl[exclusions.csv]
     end
 
     FApp -- registers --> BP_Main;
     FApp -- registers --> BP_Metric;
     FApp -- registers --> BP_Security;
     FApp -- registers --> BP_Fund;
+    FApp -- registers --> BP_Exclusion;
 
     BP_Main -- uses --> DP_Loader;
     BP_Main -- uses --> DP_MetricCalc;
@@ -194,6 +225,7 @@ graph LR
     BP_Metric -- renders --> T_MetricJS;
     
     BP_Security -- uses --> DP_SecProc;
+    BP_Security -- uses --> DP_ExclView;
     BP_Security -- uses --> DP_Utils;
     BP_Security -- renders --> T_Securities;
     BP_Security -- renders --> T_SecDetails;
@@ -201,6 +233,12 @@ graph LR
     BP_Fund -- uses --> DP_SecProc;
     BP_Fund -- uses --> DP_Utils;
     BP_Fund -- renders --> T_FundDetails;
+
+    BP_Exclusion -- uses --> DP_ExclView;
+    DP_ExclView -- reads/writes --> Data_Excl;
+    BP_Exclusion -- renders --> T_Exclusions;
+
+    T_Securities -- links to --> R_Exclusions;
 
 ```
 
@@ -217,13 +255,30 @@ graph LR
 ### `views/security_views.py` (`security_bp`)
 *   **Purpose:** Defines routes related to displaying security-level data checks.
 *   **Routes:**
-    *   `/securities`: Renders `securities_page.html`. Loads data processed by `security_processing.py` (likely from `sec_*.csv` files), calculates latest metrics for each security, provides filter options based on static columns, and displays the results in a filterable table. Rows are highlighted based on 'Change Z-Score'. Security IDs link to the details page.
-    *   `/securities/<metric_name>/<security_id>`: Renders `security_details_page.html`. Loads historical data for a specific security and metric (and potentially related metrics like Price and Duration), prepares chart data, and passes it to the template for JavaScript rendering of time-series charts.
+    *   `/security/summary`: Renders `securities_page.html`. 
+        *   Accepts an optional `search_term` query parameter for filtering by security name (case-insensitive contains search).
+        *   Loads data processed by `security_processing.py` (currently from `sec_Spread.csv`).
+        *   Applies the `search_term` filter if provided.
+        *   Loads the active exclusions from `Data/exclusions.csv` via `exclusion_views.py` and filters out excluded securities.
+        *   Calculates latest metrics for each remaining security.
+        *   Provides filter options based on static columns.
+        *   Displays the results in a filterable table, sorted by absolute 'Change Z-Score'.
+        *   Rows are highlighted based on 'Change Z-Score'.
+        *   Security IDs link to the details page.
+        *   A button links to the 'Manage Exclusions' page.
+    *   `/security/details/<metric_name>/<security_id>`: Renders `security_details_page.html`. Loads historical data for a specific security and metric (and potentially related metrics like Price and Duration), prepares chart data, and passes it to the template for JavaScript rendering of time-series charts.
 
 ### `views/fund_views.py` (`fund_bp`)
 *   **Purpose:** Defines routes for displaying fund-specific details, currently focused on duration changes.
 *   **Routes:**
     *   `/fund_duration_details/<fund_code>`: Renders `fund_duration_details.html`. Loads security duration data (likely from `new_sec_duration.csv`), filters it for the specified `fund_code`, calculates recent duration changes for each security held by the fund, and displays the results sorted by the largest change. Security names link to their respective detail pages.
+
+### `views/exclusion_views.py` (`exclusion_bp`)
+*   **Purpose:** Defines routes for managing the security exclusion list.
+*   **Routes:**
+    *   `/exclusions` (GET): Renders `exclusions_page.html`. Loads the current list from `Data/exclusions.csv` and loads available securities (from `Data/sec_spread.csv`'s 'Security Name' column) for the add form dropdown.
+    *   `/exclusions` (POST): Processes the form submission to add a new exclusion entry to `Data/exclusions.csv`. Requires Security Name and Comment; End Date is optional.
+    *   `/exclusions/remove` (POST): Processes requests to remove an exclusion entry from `Data/exclusions.csv` based on SecurityID and AddDate.
 
 ## HTML Templates (`templates/`)
 
@@ -232,10 +287,15 @@ These files define the structure and presentation of the web pages using HTML an
 *   **`base.html`:** The main layout template. Includes the common structure (doctype, head, Bootstrap CSS/JS, navbar, main content block, script block). Other templates extend this base. Linked JS: `static/js/main.js`.
 *   **`index.html`:** The dashboard page. Extends `base.html`. Displays links to metric detail pages and a summary table of the latest 'Change Z-Scores' across all funds and time-series metrics.
 *   **`metric_page_js.html`:** The detail page for a specific time-series metric. Extends `base.html`. Displays the metric name, latest date, and warnings for missing data. Contains a `<script id="chartData">` tag where Flask embeds JSON data. An empty `<div id="chartsArea">` serves as the container where `main.js` (via `chartRenderer.js`) dynamically renders tables and charts for each fund code. Requires `Chart.js`.
-*   **`securities_page.html`:** Displays the table of security-level checks. Extends `base.html`. Includes filter dropdowns (powered by `securityTableFilter.js`) and the main table (`<table id="securities-table">`) populated with data from the `security_bp` view. Rows are styled based on Z-scores, and security IDs link to the details page.
+*   **`securities_page.html`:** Displays the table of security-level checks. Extends `base.html`. 
+    *   Includes a search bar to filter securities by name (submits via GET).
+    *   Includes filter dropdowns for static columns (powered by `securityTableFilter.js`).
+    *   Contains the main table (`<table id="securities-table">`) populated with data from the `security_bp` view.
+    *   Rows are styled based on Z-scores, and security IDs link to the details page.
 *   **`security_details_page.html`:** Shows details for a single security. Extends `base.html`. Displays static info and provides canvas elements (`<canvas id="primarySecurityChart">`, `<canvas id="durationSecurityChart">`) and embedded JSON data (`<script id="chartJsonData">`) for JavaScript to render time-series charts (metric value, price, duration). Requires `Chart.js`.
 *   **`fund_duration_details.html`:** Shows the security duration changes for a specific fund. Extends `base.html`. Displays a table (`<table id="fund-duration-table">`) listing securities held by the fund, sorted by their 1-day duration change. Security names link to their detail pages.
 *   **`metric_page.html`:** (Potentially older/alternative version) Similar to `metric_page_js.html` but seems designed for server-side rendering of charts (e.g., using a library like `mpld3` or passing chart HTML directly) rather than client-side rendering with JavaScript.
+*   **`exclusions_page.html`**: The UI for managing security exclusions. Extends `base.html`. Displays the current list of exclusions with their details (SecurityID, AddDate, EndDate, Comment) and a 'Remove' button for each. Also includes a form to add new exclusions, featuring a filterable dropdown for selecting securities and inputs for End Date (optional) and Comment (required).
 
 ## JavaScript Files (`static/js/`)
 

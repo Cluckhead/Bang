@@ -382,7 +382,8 @@ def main():
 
     input_dir = 'Data'
     input_prefix = 'pre_'
-    output_prefix = 'new_'
+    # output_prefix = 'new_' #disabled
+    output_prefix = ''
 
     if not os.path.isdir(input_dir):
         logger.error(f"Input directory '{input_dir}' not found.")

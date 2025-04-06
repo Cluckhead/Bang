@@ -4,7 +4,11 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2>Security Data Check</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Security Data Check</h2>
+        {# Add button to navigate to the exclusions page #}
+        <a href="{{ url_for('exclusion_bp.manage_exclusions') }}" class="btn btn-outline-secondary btn-sm">Manage Exclusions</a>
+    </div>
     <p>Potential data issues based on the latest daily change Z-score for each security and metric.</p>
     
     {% if message %}
@@ -12,6 +16,18 @@
         {{ message }}
     </div>
     {% endif %}
+
+    {# Search Form #}
+    <form method="GET" action="{{ url_for('security.securities_page') }}" class="mb-3">
+        <div class="input-group">
+            <input type="text" name="search_term" class="form-control" placeholder="Search by Security Name..." value="{{ search_term or '' }}">
+            <button class="btn btn-outline-secondary" type="submit">Search</button>
+            {# Optional: Add a clear button #}
+            {% if search_term %}
+                <a href="{{ url_for('security.securities_page') }}" class="btn btn-outline-danger">Clear</a>
+            {% endif %}
+        </div>
+    </form>
 
     {# Filter Section - Basic implementation without JS interactivity for now #}
     {% if filter_options %}
