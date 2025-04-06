@@ -75,28 +75,59 @@ graph TD
 
 ### `data_loader.py`
 *   **Purpose:** Responsible for loading and preprocessing data from time-series CSV files (typically prefixed with `ts_`). It includes functions to dynamically identify essential columns (Date, Code, Benchmark) based on patterns, handle potential naming variations, parse dates, standardize column names, set appropriate data types, and prepare the data in a pandas DataFrame format suitable for further analysis.
+*   **Robustness Features:**
+    *   Uses Python's `logging` module to report progress and errors. Warnings and errors are logged to `data_processing_errors.log` in the project root.
+    *   Handles file not found errors gracefully.
+    *   Uses `on_bad_lines='skip'` and `encoding_errors='replace'` when reading CSVs to handle malformed rows and encoding issues.
+    *   Performs data type conversion for value columns using `pd.to_numeric` with `errors='coerce'`, converting unparseable values to `NaN`. Logs a warning if all values in a column become `NaN`.
+    *   Dynamically finds required columns ('Date', 'Code') and optionally 'Benchmark', raising errors if they cannot be uniquely identified.
 *   **Functions:**
     *   `_find_column(pattern, columns, filename, col_type)`: Helper to find a single column matching a regex pattern (case-insensitive).
-    *   `load_and_process_data(filename, data_folder)`: Loads a CSV, identifies key columns dynamically, renames them, parses dates, sets a MultiIndex (Date, Code), identifies original fund column names, and ensures numeric types.
+    *   `load_and_process_data(filename, data_folder)`: Loads a CSV, identifies key columns dynamically, renames them, parses dates, sets a MultiIndex (Date, Code), identifies original fund column names, ensures numeric types, and logs issues encountered.
 
 ### `metric_calculator.py`
 *   **Purpose:** Provides functions for calculating various statistical metrics from the preprocessed time-series data. Key functionalities include calculating historical statistics (mean, max, min), latest values, period-over-period changes, and Z-scores for changes for both benchmark and fund columns. It operates on a pandas DataFrame indexed by Date and Fund Code.
+*   **Robustness Features:**
+    *   Uses the shared `logging` module (`data_processing_errors.log`).
+    *   Handles empty or incorrectly indexed input DataFrames gracefully.
+    *   Safely calculates statistics (mean, max, min, std) by implicitly or explicitly handling `NaN` values.
+    *   Handles potential `NaN` or `inf` results during Z-score calculation (e.g., due to missing data or zero standard deviation).
+    *   Checks for the existence of expected columns (benchmark, funds) and skips calculations with a warning if columns are missing.
+    *   Handles cases where a specific fund or the latest date might be missing for a given column.
 *   **Functions:**
-    *   `_calculate_column_stats(col_series, col_change_series, latest_date, col_name)`: Helper to calculate stats (mean, max, min, latest value, latest change, change Z-score) for a single column series.
+    *   `_calculate_column_stats(col_series, col_change_series, latest_date, col_name)`: Helper to calculate stats (mean, max, min, latest value, latest change, change Z-score) for a single column series, handling potential `NaN`s.
     *   `calculate_latest_metrics(df, fund_cols, benchmark_col)`: Calculates the latest metrics for each individual column (benchmark and funds) per fund code, returning a summary DataFrame sorted by the maximum absolute 'Change Z-Score' found across all columns for each fund.
 
 ### `process_data.py`
 *   **Purpose:** Serves as a pre-processing step for specific CSV files within the `Data` directory, typically targeting files prefixed with `pre_`. It reads these files, aggregates rows based on identical values across most columns (excluding 'Funds' and 'Security Name'), handles duplicate 'Security Name' entries by suffixing them, aggregates associated 'Funds' into a list-like string, and saves the processed data to a new CSV file prefixed with `new_`. This is often used for preparing security attribute files.
+*   **Robustness Features:**
+    *   Uses the shared `logging` module (`data_processing_errors.log`).
+    *   Reads input CSVs using `on_bad_lines='skip'` and encoding error handling.
+    *   Checks for required columns ('Funds', 'Security Name') and skips files if missing.
+    *   Handles empty or invalid input files.
+    *   Uses `dropna=False` and explicit type conversions during grouping to handle potential `NaN` values and diverse data types in grouping keys ('Security Name', `id_cols`).
+    *   Safely aggregates 'Funds', handling potential `NaN`s.
+    *   Catches errors during file processing and grouping, logging issues and attempting to continue where possible.
+    *   Logs a summary of files processed/skipped in the `main` function.
 *   **Functions:**
-    *   `process_csv_file(input_path, output_path)`: Reads a `pre_*.csv` file, performs the aggregation and renaming logic, and writes to a `new_*.csv` file.
-    *   `main()`: Finds and processes all `pre_*.csv` files in the `Data` directory when the script is run directly.
+    *   `process_csv_file(input_path, output_path)`: Reads a `pre_*.csv` file, performs the aggregation and renaming logic, handles errors, and writes to a `new_*.csv` file.
+    *   `main()`: Finds and processes all `pre_*.csv` files in the `Data` directory when the script is run directly, logging a summary.
 
 ### `security_processing.py`
 *   **Purpose:** Handles the loading, processing, and analysis of security-level data, assuming input CSV files are structured with one security per row and time-series data spread across columns where headers represent dates (e.g., DD/MM/YYYY).
+*   **Robustness Features:**
+    *   Uses the shared `logging` module (`data_processing_errors.log`).
+    *   Reads input CSVs using `on_bad_lines='skip'` and encoding error handling.
+    *   Dynamically identifies ID, static, and date columns; handles files missing date columns or ID columns by logging an error and returning an empty DataFrame.
+    *   Uses `errors='coerce'` for date parsing (`pd.to_datetime`) and value conversion (`pd.to_numeric`), turning errors into `NaT`/`NaN`.
+    *   Drops rows with conversion errors or missing IDs after melting, logging a warning about dropped rows.
+    *   Handles empty DataFrames after processing steps.
+    *   Metric calculation (`calculate_security_latest_metrics`) handles `NaN`s gracefully in stats (mean, max, min, std, diff) and Z-score calculations, including zero standard deviation cases.
+    *   Checks for missing 'Value' column or incorrect index structure before metric calculation.
 *   **Functions:**
-    *   `_is_date_like(column_name)`: Checks if a column name resembles a date format.
-    *   `load_and_process_security_data(filename)`: Reads a wide-format security CSV, identifies ID, static, and date columns, 'melts' the data into a long format (Date, Security ID), converts types, and returns the processed DataFrame and static column names.
-    *   `calculate_security_latest_metrics(df, static_cols)`: Takes the long-format security DataFrame and calculates metrics (Latest Value, Change, Mean, Max, Min, Change Z-Score) for each security's 'Value' over time, preserving static attributes.
+    *   `_is_date_like(column_name)`: Checks if a column name resembles a date format (more flexible matching).
+    *   `load_and_process_security_data(filename)`: Reads a wide-format security CSV, identifies ID, static, and date columns, 'melts' the data into a long format (Date, Security ID), converts types robustly, handles errors, and returns the processed DataFrame and static column names.
+    *   `calculate_security_latest_metrics(df, static_cols)`: Takes the long-format security DataFrame and calculates metrics (Latest Value, Change, Mean, Max, Min, Change Z-Score) for each security's 'Value' over time, preserving static attributes and handling potential data issues.
 
 ### `utils.py`
 *   **Purpose:** Contains utility functions used throughout the application, providing common helper functionalities like parsing specific string formats or validating data types.
