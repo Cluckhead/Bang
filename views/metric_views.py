@@ -103,7 +103,8 @@ def metric_page(metric_name):
             # Create datasets for the chart (raw values)
             # Add benchmark dataset
             if benchmark_col in fund_hist_data.columns:
-                bench_values = fund_hist_data[benchmark_col].round(3).fillna(np.nan).tolist()
+                # Replace NaN with 0 for JSON compatibility
+                bench_values = fund_hist_data[benchmark_col].round(3).fillna(0).tolist()
                 datasets.append({
                     'label': benchmark_col,
                     'data': bench_values,
@@ -113,7 +114,8 @@ def metric_page(metric_name):
             # Add dataset for each fund column
             for i, fund_col in enumerate(fund_cols):
                  if fund_col in fund_hist_data.columns:
-                    fund_values = fund_hist_data[fund_col].round(3).fillna(np.nan).tolist()
+                    # Replace NaN with 0 for JSON compatibility
+                    fund_values = fund_hist_data[fund_col].round(3).fillna(0).tolist()
                     color = COLOR_PALETTE[i % len(COLOR_PALETTE)]
                     datasets.append({
                         'label': fund_col,
@@ -122,8 +124,8 @@ def metric_page(metric_name):
                         'tension': 0.1
                     })
 
-            # Convert metrics row to dictionary (structure is already correct)
-            fund_latest_metrics_dict = fund_latest_metrics_row.round(3).where(pd.notnull(fund_latest_metrics_row), None).to_dict()
+            # Convert metrics row to dictionary, replacing NaN with 0
+            fund_latest_metrics_dict = fund_latest_metrics_row.round(3).fillna(0).to_dict()
 
             # Assemble data for JS
             charts_data_for_js[fund_code] = {
