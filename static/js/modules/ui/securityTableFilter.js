@@ -1,3 +1,7 @@
+// This file implements client-side filtering for the HTML table displaying security-level metrics.
+// It enhances the user experience by allowing interactive filtering based on the values
+// in specific static columns (e.g., Sector, Rating) without requiring a page reload.
+
 // static/js/modules/ui/securityTableFilter.js
 // This module handles client-side filtering for the securities table.
 

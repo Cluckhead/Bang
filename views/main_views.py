@@ -1,3 +1,6 @@
+# This file defines the routes related to the main, top-level views of the application.
+# It primarily handles the dashboard or index page.
+
 """
 Blueprint for main application routes, like the index page.
 """
@@ -11,12 +14,26 @@ from config import DATA_FOLDER
 from data_loader import load_and_process_data
 from metric_calculator import calculate_latest_metrics
 
-# Define the blueprint
+# Define the blueprint for main routes
 main_bp = Blueprint('main', __name__)
 
 @main_bp.route('/')
 def index():
-    """Renders the main dashboard page with a summary table of Z-scores for ts_ files."""
+    """Renders the main dashboard page (`index.html`).
+
+    This view performs the following steps:
+    1. Scans the `DATA_FOLDER` for time-series metric files (prefixed with `ts_`).
+    2. For each `ts_` file found:
+        a. Loads and processes the data using `data_loader.load_and_process_data`.
+        b. Calculates metrics (including Z-scores) using `metric_calculator.calculate_latest_metrics`.
+        c. Extracts the 'Change Z-Score' columns for both the benchmark and any specific fund columns.
+    3. Aggregates all extracted 'Change Z-Score' columns from all files into a single pandas DataFrame (`summary_df`).
+    4. Creates unique column names for the summary table by combining the original column name and the metric file name
+       (e.g., 'Benchmark - Yield', 'FUND_A - Duration').
+    5. Passes the list of available metric display names (filenames without `ts_`) and the aggregated Z-score
+       DataFrame (`summary_df`) along with its corresponding column headers (`summary_metrics`) to the `index.html` template.
+    This allows the dashboard to display a consolidated view of the most recent significant changes across all metrics.
+    """
     # Find only files starting with ts_ and ending with .csv
     files = [f for f in os.listdir(DATA_FOLDER) if f.startswith('ts_') and f.endswith('.csv')]
 

@@ -1,3 +1,7 @@
+// This file is responsible for dynamically creating and rendering the user interface elements
+// related to charts and associated metric tables within the application.
+// It separates the logic for generating the visual components from the main application flow.
+
 // static/js/modules/ui/chartRenderer.js
 // Handles creating DOM elements for charts and tables
 

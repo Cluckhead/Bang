@@ -1,3 +1,7 @@
+// This file contains the specific logic for creating and configuring time-series line charts
+// using the Chart.js library. It's designed to be reusable for generating consistent charts
+// across different metrics and funds.
+
 // static/js/modules/charts/timeSeriesChart.js
 // Encapsulates Chart.js configuration and rendering for multiple time series datasets
 

@@ -1,3 +1,11 @@
+# This script serves as a pre-processing step for specific CSV files within the 'Data' directory.
+# It targets files prefixed with 'pre_', reads them, and performs data aggregation and cleaning.
+# The core logic involves grouping rows based on identical values across most columns, excluding 'Funds' and 'Security Name'.
+# For rows sharing the same 'Security Name' but differing in other data points, the 'Security Name' is suffixed
+# (e.g., _1, _2) to ensure uniqueness. The 'Funds' associated with identical data rows are aggregated
+# into a single list-like string representation (e.g., '[FUND1,FUND2]').
+# The processed data is then saved to a new CSV file prefixed with 'new_'.
+
 # process_data.py
 # This script processes CSV files in the 'Data' directory that start with 'pre_'.
 # It merges rows based on identical values in all columns except 'Funds'.

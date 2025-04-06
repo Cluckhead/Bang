@@ -1,3 +1,9 @@
+# This file provides functions for calculating various statistical metrics from the preprocessed data.
+# Key functionalities include calculating historical statistics (mean, max, min), latest values,
+# period-over-period changes, and Z-scores for changes for both benchmark and fund columns.
+# It operates on a pandas DataFrame indexed by Date and Fund Code, producing a summary DataFrame
+# containing these metrics for each fund, often sorted by the most significant recent changes (Z-scores).
+
 # metric_calculator.py
 # This file contains functions for calculating metrics from the processed data.
 

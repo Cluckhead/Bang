@@ -1,3 +1,7 @@
+# This file defines configuration variables for the Simple Data Checker application.
+# It centralizes settings like file paths and visual parameters (e.g., chart colors)
+# to make them easily adjustable without modifying the core application code.
+
 """
 Configuration settings for the Flask application.
 """

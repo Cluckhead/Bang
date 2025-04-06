@@ -1,3 +1,7 @@
+# This file defines the routes for displaying detailed views of specific time-series metrics.
+# It handles requests where the user wants to see the data and charts for a single metric
+# (like 'Yield' or 'Spread Duration') across all applicable funds.
+
 """
 Blueprint for metric-specific routes (e.g., displaying individual metric charts).
 """
@@ -12,12 +16,34 @@ from config import DATA_FOLDER, COLOR_PALETTE
 from data_loader import load_and_process_data
 from metric_calculator import calculate_latest_metrics
 
-# Define the blueprint
+# Define the blueprint for metric routes, using '/metric' as the URL prefix
 metric_bp = Blueprint('metric', __name__, url_prefix='/metric')
 
 @metric_bp.route('/<metric_name>')
 def metric_page(metric_name):
-    """Renders the page for a specific metric (identified by display name) from a ts_ file."""
+    """Renders the detailed page (`metric_page_js.html`) for a specific metric.
+
+    This view takes the display name of a metric (e.g., 'Yield') from the URL,
+    finds the corresponding data file (e.g., 'ts_Yield.csv'), and performs the following:
+    1. Loads and processes the data using `data_loader.load_and_process_data`.
+    2. Calculates summary metrics (latest value, change, Z-score, etc.) for each fund code
+       within that metric using `metric_calculator.calculate_latest_metrics`.
+    3. Identifies funds that might have missing data for the latest period (based on NaN Z-scores).
+    4. Prepares data specifically for charting with Chart.js:
+       - Extracts historical time-series data (dates and values) for the benchmark and each fund column
+         for every fund code.
+       - Packages this historical data along with the calculated summary metrics and a flag indicating
+         if data was missing into a dictionary structure (`charts_data_for_js`).
+    5. Converts the prepared data structure into a JSON string.
+    6. Renders the `metric_page_js.html` template, passing:
+       - The `metric_name` (for display).
+       - The JSON string (`charts_data_json`) containing all data needed by the JavaScript.
+       - The overall latest date found in the data.
+       - A DataFrame (`missing_funds`) containing rows for funds flagged as potentially missing data.
+       - The names of the fund and benchmark columns.
+    This allows the template and its associated JavaScript to dynamically generate tables and charts
+    for the selected metric.
+    """
     # metric_name is the display name (e.g., 'Spread Duration')
     # Prepend 'ts_' to get the actual filename base
     metric_filename_base = f"ts_{metric_name}"

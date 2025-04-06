@@ -1,3 +1,7 @@
+# This file contains utility functions used throughout the Simple Data Checker application.
+# These functions provide common helper functionalities like parsing specific string formats
+# or validating data types, helping to keep the main application logic cleaner.
+
 """
 Utility functions for the Flask application.
 """

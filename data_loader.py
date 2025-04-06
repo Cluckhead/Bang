@@ -1,3 +1,8 @@
+# This file is responsible for loading and preprocessing data from CSV files.
+# It includes functions to dynamically identify essential columns (Date, Code, Benchmark)
+# based on patterns, handle potential naming variations, parse dates, standardize column names,
+# set appropriate data types, and prepare the data in a pandas DataFrame format
+# suitable for further analysis and processing within the application.
 # data_loader.py
 # This file contains functions for loading and preparing the data from CSV files.
 

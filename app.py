@@ -1,3 +1,15 @@
+# This file defines the main entry point and structure for the Simple Data Checker Flask web application.
+# It utilizes the Application Factory pattern (`create_app`) to initialize and configure the Flask app.
+# Key responsibilities include:
+# - Creating the Flask application instance.
+# - Setting up basic configuration (like the secret key).
+# - Ensuring necessary folders (like the instance folder) exist.
+# - Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`) from the `views`
+#   directory, which contain the application's routes and view logic.
+# - Providing a conditional block (`if __name__ == '__main__':`) to run the development server
+#   when the script is executed directly.
+# This modular structure using factories and blueprints makes the application more organized and scalable.
+
 # This file contains the main Flask application factory.
 from flask import Flask
 import os

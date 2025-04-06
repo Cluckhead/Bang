@@ -1,3 +1,6 @@
+// This file contains general JavaScript utility functions that can be reused across different modules.
+// It helps keep common tasks, like formatting numbers for display, consistent and DRY (Don't Repeat Yourself).
+
 // static/js/modules/utils/helpers.js
 // Utility functions
 

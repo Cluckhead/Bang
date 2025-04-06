@@ -1,6 +1,13 @@
-# security_processing.py
-# This file contains functions for loading and processing security-level data 
-# from files where time series data is stored in columns.
+# This file handles the loading, processing, and analysis of security-level data.
+# It assumes input CSV files are structured with one security per row and time series data
+# spread across columns where headers represent dates (e.g., DD/MM/YYYY).
+# Key functions:
+# - `load_and_process_security_data`: Reads a wide-format CSV, identifies the security ID column,
+#   static attribute columns, and date columns. It then 'melts' the data into a long format,
+#   converting date strings to datetime objects and setting a MultiIndex (Date, Security ID).
+# - `calculate_security_latest_metrics`: Takes the processed long-format DataFrame and calculates
+#   various metrics for each security's 'Value' over time, including latest value, change,
+#   historical stats (mean, max, min), and change Z-score. It also preserves the static attributes.
 
 import pandas as pd
 import os

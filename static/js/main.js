@@ -1,3 +1,23 @@
+// This file acts as the main entry point for the application's JavaScript.
+// It runs after the DOM is fully loaded and performs several key initializations:
+// 1. Imports necessary functions from UI modules (chart rendering, table filtering).
+// 2. Checks for the presence of specific elements on the page to determine the context
+//    (e.g., metric details page, securities list page, single security detail page).
+// 3. If on a metric details page (`metric_page_js.html`):
+//    - Finds the embedded JSON data (`<script id="chartData">`).
+//    - Parses the JSON data containing historical values and calculated metrics for all funds.
+//    - Calls `renderChartsAndTables` from `chartRenderer.js` to dynamically create
+//      the metric tables and time-series charts for each fund code.
+// 4. If on a securities list page (`securities_page.html`):
+//    - Finds the main securities table (`<table id="securities-table">`).
+//    - Calls `initSecurityTableFilter` from `securityTableFilter.js` to add
+//      interactive filtering capabilities to the table header.
+// 5. If on a single security detail page (`security_details_page.html`):
+//    - Finds the chart canvas (`<canvas id="securityChart">`) and its associated JSON data (`<script id="chartJsonData">`).
+//    - Parses the JSON data containing the time-series for that specific security.
+//    - Calls `renderSingleSecurityChart` from `chartRenderer.js` to display the chart.
+// This modular approach ensures that initialization code only runs when the corresponding HTML elements are present.
+
 // static/js/main.js
 // Application entry point
 
