@@ -56,7 +56,7 @@
                                 {% if col_name == id_col_name %}
                                     {# Construct the link - Requires a new route #}
                                     {# Since this page only shows Spread data now, hardcode metric_name #}
-                                    <a href="{{ url_for('security.security_details_page', metric_name='Spread', security_id=row[col_name]) }}">
+                                    <a href="{{ url_for('security.security_details_page', metric_name='Spread', security_id=row[col_name]|urlencode) }}">
                                         {{ row[col_name] }}
                                     </a>
                                 {% elif col_name == 'Change Z-Score' and row[col_name] is not none %}
