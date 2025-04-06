@@ -43,7 +43,7 @@
         </div>
 
         <button type="submit" class="btn btn-primary">Simulate API Calls</button>
-        <button type="button" id="run-cleanup-button" class="btn btn-secondary mt-3 ms-2" style="display: none;">Run Data Cleanup</button>
+        <button type="button" id="run-cleanup-button" class="btn btn-secondary ms-2" style="display: none;">Run Data Cleanup</button>
     </form>
 
     <div id="status-area" class="mt-4" style="display: none;">
@@ -62,6 +62,7 @@
                         <th>Simulated Rows Returned</th>
                         <th>Simulated File Lines</th>
                         <th>Status</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="results-table-body">
@@ -179,12 +180,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 resultsTableBody.innerHTML = ''; // Clear any potential previous entries
                 if (result.summary && result.summary.length > 0) {
                     result.summary.forEach(item => {
-                        const row = `<tr>
+                        const row = `<tr data-query-id="${item.query_id}">
                                         <td>${item.query_id}</td>
                                         <td>${item.file_name}</td>
                                         <td>${item.simulated_rows !== undefined ? item.simulated_rows : 'N/A'}</td>
                                         <td>${item.simulated_lines !== undefined ? item.simulated_lines : 'N/A'}</td>
                                         <td><span class="badge ${item.status.includes('OK') ? 'bg-success' : 'bg-warning'}">${item.status}</span></td>
+                                        <td><button class="btn btn-sm btn-outline-primary rerun-button" data-fund-code="${item.fund_code}">Rerun</button></td>
                                      </tr>`;
                         resultsTableBody.innerHTML += row;
                     });
@@ -213,6 +215,77 @@ document.addEventListener('DOMContentLoaded', function() {
             statusMessage.textContent = 'An error occurred during the request.';
             errorMessageDiv.textContent = 'Network error or server unreachable. Check console for details.';
             errorMessageDiv.style.display = 'block';
+        }
+    });
+
+    // Add event listener for the Rerun buttons using event delegation
+    resultsTableBody.addEventListener('click', async function(event) {
+        if (event.target.classList.contains('rerun-button')) {
+            const button = event.target;
+            const row = button.closest('tr');
+            const queryId = row.dataset.queryId;
+            const fundCode = button.dataset.fundCode;
+            const daysBack = document.getElementById('daysBack').value;
+            const endDate = document.getElementById('endDate').value;
+            const cells = row.cells; // Define cells here so it's available in all blocks
+
+            if (!fundCode || !queryId) {
+                console.error('Missing fund code or query ID for rerun');
+                // Optionally display an error to the user near the button/row
+                return;
+            }
+
+            // Provide visual feedback
+            button.disabled = true;
+            button.textContent = 'Running...';
+            // You could also add a temporary status cell or highlight the row
+
+            try {
+                const response = await fetch('/rerun-api-call', { // New endpoint needed
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query_id: queryId,
+                        // Send fundCode as a list in the 'funds' key
+                        funds: [fundCode],
+                        days_back: parseInt(daysBack, 10),
+                        end_date: endDate
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status.includes('OK')) {
+                    // Update the specific row in the table
+                    cells[2].textContent = result.simulated_rows !== undefined ? result.simulated_rows : 'N/A'; // Simulated Rows
+                    cells[3].textContent = result.simulated_lines !== undefined ? result.simulated_lines : 'N/A'; // Simulated Lines
+                    cells[4].innerHTML = `<span class="badge bg-success">${result.status}</span>`; // Status
+
+                    // Optional: Add a temporary success indicator
+                    button.textContent = 'Rerun Success';
+                    setTimeout(() => { button.textContent = 'Rerun'; }, 2000); // Reset after 2s
+
+                } else {
+                    // Handle error - update status cell, show message
+                    cells[4].innerHTML = `<span class="badge bg-danger">Error</span>`;
+                    console.error("Rerun failed:", result.message || 'Unknown error');
+                    // Optionally display error details near the row or in the main error area
+                     button.textContent = 'Rerun Failed';
+                     setTimeout(() => { button.textContent = 'Rerun'; }, 3000); // Reset after 3s
+                }
+
+            } catch (error) {
+                console.error("Rerun fetch error:", error);
+                 cells[4].innerHTML = `<span class="badge bg-danger">Network Error</span>`;
+                 button.textContent = 'Rerun Error';
+                 setTimeout(() => { button.textContent = 'Rerun'; }, 3000); // Reset after 3s
+                // Optionally display error details
+            } finally {
+                 button.disabled = false; // Re-enable button
+                 // Remove any temporary status indicators if needed
+            }
         }
     });
 
