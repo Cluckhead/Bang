@@ -130,48 +130,102 @@ def process_csv_file(input_path, output_path, date_columns):
 
         # --- Column Header Replacement Logic ---
         original_cols = df.columns.tolist()
-        required_cols = ['Funds', 'Security Name']
+        required_cols = ['Funds', 'Security Name'] # Core columns that should always exist
+        # Ensure required columns are actually in the dataframe before proceeding
         if not all(col in original_cols for col in required_cols):
              missing = [col for col in required_cols if col not in original_cols]
-             logger.error(f"Skipping {input_path}: Missing required columns: {missing}. Found: {original_cols}")
+             logger.error(f"Skipping {input_path}: Missing required columns: {missing}. Found columns: {original_cols}")
              return
 
-        # Identify columns potentially needing replacement (all except Funds and Security Name)
-        potential_date_cols = [col for col in original_cols if col not in required_cols]
+        # Find the index after the last required column to start searching for placeholders
+        # This assumes required columns appear early and together, adjust if needed.
+        last_required_idx = -1
+        for req_col in required_cols:
+            try:
+                last_required_idx = max(last_required_idx, original_cols.index(req_col))
+            except ValueError: # Should not happen due to check above, but safeguard
+                 logger.error(f"Required column '{req_col}' unexpectedly not found after initial check in {input_path}. Skipping.")
+                 return
 
-        # Check if replacement is needed and possible
-        if not potential_date_cols:
-             logger.warning(f"File {input_path} only contains 'Funds' and 'Security Name'. Cannot apply date columns. Check file structure.")
-             # Decide how to proceed: skip, process as is, etc. Let's skip for now.
-             return
-        elif potential_date_cols == date_columns:
-            logger.info(f"Columns in {input_path} already match the expected dates. No replacement needed.")
-            # Columns are correct, proceed with original_cols
-            current_cols = original_cols
-        elif len(potential_date_cols) == len(date_columns):
-            # Check if the columns look like placeholders (e.g., all the same name, or a known pattern)
-            # For now, we assume if the count matches and they aren't the dates, they should be replaced.
-            logger.info(f"Replacing {len(potential_date_cols)} placeholder columns in {input_path} with dates from {DATES_FILE_PATH}.")
-            # Construct the new column list
-            new_columns = required_cols + date_columns
-            df.columns = new_columns
-            current_cols = new_columns # Use the new columns for further processing
+        candidate_start_index = last_required_idx + 1
+        candidate_cols = original_cols[candidate_start_index:]
+
+        # Decide on the final columns to use for processing
+        current_cols = original_cols # Default to original columns
+
+        # Find the first potential placeholder column and its repeating sequence within candidate_cols
+        first_placeholder_name = None
+        placeholder_start_index_in_candidates = -1 # Index relative to start of candidate_cols
+
+        if not candidate_cols:
+            logger.warning(f"File {input_path} has no columns after required columns '{required_cols}'. Cannot check for date placeholders.")
         else:
-            logger.warning(f"Column mismatch in {input_path}: Found {len(potential_date_cols)} potential date columns, but expected {len(date_columns)} based on {DATES_FILE_PATH}. Skipping date replacement for this file. Processing with original headers.")
-            # Proceed with original columns if counts don't match
-            current_cols = original_cols
+            # Iterate through candidate columns to find the start of a repeating sequence
+            for i in range(len(candidate_cols) - 1): # Stop one before the end
+                if candidate_cols[i+1] == candidate_cols[i]:
+                    first_placeholder_name = candidate_cols[i]
+                    placeholder_start_index_in_candidates = i
+                    break # Found the start of the sequence
+
+        if date_columns is None:
+            logger.warning(f"Date information from {DATES_FILE_PATH} is unavailable. Cannot check or replace headers in {input_path}. Processing with original headers: {original_cols}")
+        elif first_placeholder_name is not None:
+            # Found a repeating sequence, now count how many times it repeats consecutively
+            placeholder_count = 0
+            for j in range(placeholder_start_index_in_candidates, len(candidate_cols)):
+                if candidate_cols[j] == first_placeholder_name:
+                    placeholder_count += 1
+                else:
+                    break # End of the sequence
+
+            # Calculate the actual index in the original full list of columns
+            original_placeholder_start_index = candidate_start_index + placeholder_start_index_in_candidates
+            logger.info(f"Detected potential placeholder sequence: '{first_placeholder_name}' repeating {placeholder_count} times, starting at index {original_placeholder_start_index} in original columns.")
+
+            # Compare count with loaded dates
+            if len(date_columns) == placeholder_count:
+                logger.info(f"Replacing {placeholder_count} placeholder columns starting with '{first_placeholder_name}' with dates.")
+                # Construct new columns: Keep columns before sequence + dates + columns after sequence
+                cols_before = original_cols[:original_placeholder_start_index]
+                cols_after = original_cols[original_placeholder_start_index + placeholder_count:]
+                new_columns = cols_before + date_columns + cols_after
+
+                if len(new_columns) != len(original_cols):
+                    logger.error(f"Internal error: Column count mismatch after constructing new columns ({len(new_columns)} vs {len(original_cols)}). Reverting to original headers.")
+                    current_cols = original_cols # Revert to original
+                else:
+                    df.columns = new_columns
+                    current_cols = new_columns # Use the new columns for further processing
+                    logger.info(f"Columns after replacement: {current_cols}")
+            else:
+                # Counts mismatch - log warning and proceed with original (potentially incorrect) headers
+                logger.warning(f"Placeholder count mismatch in {input_path}: Found {placeholder_count} repeating columns ('{first_placeholder_name}'), but expected {len(date_columns)} dates based on {DATES_FILE_PATH}. Skipping date replacement. Processing with original headers.")
+                # current_cols remains original_cols
+
+        else:
+            # No repeating sequence found. Check if the candidate columns *already* match the date_columns.
+            logger.info(f"No consecutive repeating column sequence found in {input_path}. Checking if existing columns match dates.")
+            # Check if all non-required columns exactly match the date columns
+            if candidate_cols == date_columns:
+                 logger.info(f"Columns in {input_path} (after required ones) already match the expected dates. No replacement needed.")
+                 # current_cols is already original_cols, which are correct.
+            else:
+                logger.warning(f"Columns in {input_path} do not match expected dates and no repeating sequence found. Processing with original headers: {original_cols}")
+                # current_cols remains original_cols
+
         # --- End Column Header Replacement Logic ---
 
 
         # Identify columns to check for identity (all except Funds and Security Name) using the CURRENT columns
-        id_cols = [col for col in current_cols if col not in ['Security Name', 'Funds']]
+        # These might be the original placeholders or the replaced dates.
+        # Crucially, this now correctly includes any original static columns that were *not* replaced.
+        id_cols = [col for col in current_cols if col not in required_cols]
 
         processed_rows = []
 
-        # Fill NaN values with a placeholder string for grouping purposes, as pandas groupby drops NaN keys by default
-        # We use dropna=False in groupby now, but filling might be safer for complex types if needed later
-        # df_filled = df.fillna("__NAN_PLACEHOLDER__") # Consider implications if "__NAN_PLACEHOLDER__" is real data
-        # Use original df and rely on dropna=False in groupby
+        # Convert 'Security Name' and 'Funds' to string first to handle potential non-string types causing issues later
+        df['Security Name'] = df['Security Name'].astype(str)
+        df['Funds'] = df['Funds'].astype(str)
 
         # Group by the primary identifier 'Security Name'
         # Convert 'Security Name' to string first to handle potential non-string types causing groupby issues
