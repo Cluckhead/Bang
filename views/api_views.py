@@ -209,22 +209,23 @@ def run_api_calls():
                                 current_app.logger.warning(f"Data validation failed for {file_name}: {validation_errors}")
                                 status = f"Validation Failed: {'; '.join(validation_errors)}"
                                 lines_in_file = 0 # Don't save invalid data
-                                continue # Skip saving attempt for this file
                             # else: Validation passed (implicit)
                             
-                        # Save the DataFrame to CSV (either empty or validated)
-                        try:
-                            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                            actual_df.to_csv(output_path, index=False)
-                            current_app.logger.info(f"Successfully saved data to {output_path}")
-                            lines_in_file = rows_returned + 1 # +1 for header
-                            # Update status only if it wasn't set to Saved OK (Empty) already
-                            if status != "Saved OK (Empty)": 
-                                status = "Saved OK" 
-                        except Exception as e:
-                            current_app.logger.error(f"Error saving DataFrame to {output_path}: {e}", exc_info=True)
-                            status = f"Save Error: {e}"
-                            lines_in_file = 0 # Save failed
+                        # Save the DataFrame to CSV (only if validation passed or df was empty)
+                        # This block is reached if df is empty OR if df is not empty and is_valid is True
+                        if status != f"Validation Failed: {'; '.join(validation_errors)}": # Check if validation failed above
+                            try:
+                                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                                actual_df.to_csv(output_path, index=False)
+                                current_app.logger.info(f"Successfully saved data to {output_path}")
+                                lines_in_file = rows_returned + 1 # +1 for header
+                                # Update status only if it wasn't set to Saved OK (Empty) already
+                                if status != "Saved OK (Empty)": 
+                                    status = "Saved OK" 
+                            except Exception as e:
+                                current_app.logger.error(f"Error saving DataFrame to {output_path}: {e}", exc_info=True)
+                                status = f"Save Error: {e}"
+                                lines_in_file = 0 # Save failed
                     
                     elif actual_df is None:
                         # _fetch_real_tqs_data returned None (API call failed, returned None explicitly, or TQS not imported)
