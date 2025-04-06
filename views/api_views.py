@@ -6,9 +6,15 @@ import pandas as pd
 from flask import Blueprint, render_template, request, current_app, jsonify
 import datetime
 from pandas.tseries.offsets import BDay
-
-# Import the placeholder validation function
+#import tqs
+# # Import the placeholder validation function
 from data_validation import validate_data
+
+# --- Feature Switch --- 
+# Set to True to attempt real API calls, validation, and saving.
+# Set to False to only simulate the API call (print to console).
+USE_REAL_TQS_API = False
+# ----------------------
 
 # Blueprint Configuration
 api_bp = Blueprint(
@@ -17,24 +23,81 @@ api_bp = Blueprint(
     static_folder='../static'
 )
 
-# Simulated REX API function (replace with actual API call later)
-def Rex(QueryID, FundCodeList, StartDate, EndDate):
-    '''Simulates calling the REX API.
 
-    In a real scenario, this function would interact with the external REX API.
-    For now, it prints the intended call signature and returns a dummy result.
+def _simulate_and_print_tqs_call(QueryID, FundCodeList, StartDate, EndDate):
+    '''Simulates calling the TQS API by printing the call signature.
+
+    This function is used when USE_REAL_TQS_API is False.
+    It does NOT interact with any external API.
+
+    Returns:
+        int: A simulated number of rows for status reporting.
     '''
-    # Format the call signature exactly as requested: rex(QueryID,[FundList],StartDate,EndDate)
-    call_signature = f"rex({QueryID}, {FundCodeList}, {StartDate}, {EndDate})"
-    print(f"--- SIMULATING API CALL ---")
+    # Format the call signature exactly as requested: tqs(QueryID,[FundList],StartDate,EndDate)
+    call_signature = f"tqs({QueryID}, {FundCodeList}, {StartDate}, {EndDate})"
+    print(f"--- SIMULATING TQS API CALL (USE_REAL_TQS_API = False) ---")
     print(call_signature)
-    print(f"--------------------------")
-    # Simulate returning a DataFrame structure or row count
-    # In a real implementation, return the actual DataFrame
-    # For demonstration, we'll return a simulated row count
-    # The checks should not fail in simulation, return a positive dummy count
+    print(f"--------------------------------------------------------")
+    # Return a simulated row count for the summary table
     simulated_row_count = len(FundCodeList) * 10 if FundCodeList else 0 # Dummy calculation
     return simulated_row_count
+
+def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
+    '''Placeholder for fetching real data from the TQS API.
+
+    This function is called when USE_REAL_TQS_API is True.
+    Replace the placeholder logic with the actual API interaction code.
+
+    Args:
+        QueryID: The query identifier.
+        FundCodeList: List of fund codes.
+        StartDate: Start date string (dd/mm/yy).
+        EndDate: End date string (dd/mm/yy).
+
+    Returns:
+        pd.DataFrame or None: The DataFrame containing the fetched data,
+                              or None if the API call fails or returns no data.
+    '''
+    current_app.logger.info(f"Attempting real TQS API call for QueryID: {QueryID}")
+    print(f"--- EXECUTING REAL TQS API CALL (USE_REAL_TQS_API = True) --- ")
+    print(f"tqs({QueryID}, {FundCodeList}, {StartDate}, {EndDate})") # Log the call
+    print(f"--------------------------------------------------------")
+
+    # --- Replace this section with the actual TQS API call --- 
+    # Example using a hypothetical library `tqs_api_library`
+    try:
+        # dataframe = tqs_api_library.fetch_data(query_id=QueryID,
+        #                                        funds=FundCodeList,
+        #                                        start=StartDate,
+        #                                        end=EndDate,
+        #                                        timeout=300) # Example 5 min timeout
+        # Mock success for demonstration when USE_REAL_TQS_API is True
+        print("    [Placeholder] Real API call would happen here.")
+        # Create a simple dummy DataFrame for testing the flow
+        num_rows = len(FundCodeList) * 5 # Different dummy calculation for real mode
+        if num_rows > 0:
+             dummy_data = {'Date': pd.to_datetime([datetime.date.today() - datetime.timedelta(days=i) for i in range(num_rows//len(FundCodeList))]*len(FundCodeList)),
+                           'Code': [f for f in FundCodeList for _ in range(num_rows//len(FundCodeList))],
+                           'Value': [100+i for i in range(num_rows)]}
+             dataframe = pd.DataFrame(dummy_data)
+             print(f"    [Placeholder] Successfully created dummy DataFrame with {len(dataframe)} rows.")
+        else:
+             dataframe = pd.DataFrame() # Return empty df if no funds
+             print("    [Placeholder] No funds selected, returning empty DataFrame.")
+
+        # Check if the API returned valid data (e.g., a DataFrame)
+        if dataframe is not None and isinstance(dataframe, pd.DataFrame):
+            current_app.logger.info(f"Real TQS API call successful for QueryID: {QueryID}, Rows: {len(dataframe)}")
+            return dataframe
+        else:
+            current_app.logger.warning(f"Real TQS API call for QueryID: {QueryID} returned no data or invalid format.")
+            return None
+    except Exception as e:
+        # Handle API call errors (timeout, connection issues, authentication, etc.)
+        current_app.logger.error(f"Real TQS API call failed for QueryID: {QueryID}. Error: {e}", exc_info=True)
+        print(f"    [Placeholder] Real API call FAILED. Error: {e}")
+        return None
+    # --- End of placeholder section ---
 
 
 @api_bp.route('/get_data')
@@ -83,7 +146,7 @@ def get_data_page():
 
 @api_bp.route('/run_api_calls', methods=['POST'])
 def run_api_calls():
-    '''Handles the form submission to trigger (simulated) API calls.'''
+    '''Handles the form submission to trigger API calls (real or simulated).'''
     try:
         # Get data from form
         data = request.get_json()
@@ -100,9 +163,9 @@ def run_api_calls():
         # Calculate dates
         end_date = pd.to_datetime(end_date_str)
         start_date = end_date - pd.Timedelta(days=days_back)
-        # Format dates as DD/MM/YY for the rex call simulation
-        start_date_rex_str = start_date.strftime('%d/%m/%y')
-        end_date_rex_str = end_date.strftime('%d/%m/%y')
+        # Format dates as DD/MM/YY for the tqs call simulation
+        start_date_tqs_str = start_date.strftime('%d/%m/%y')
+        end_date_tqs_str = end_date.strftime('%d/%m/%y')
 
         # --- Get Query Map ---
         data_folder = current_app.config.get('DATA_FOLDER', 'Data')
@@ -125,61 +188,66 @@ def run_api_calls():
             query_id = row['QueryID']
             file_name = row['FileName']
             output_path = os.path.join(data_folder, file_name)
-            status = "Simulated OK"
-            actual_df = None # Placeholder for real API result
+
+            # Reset status variables for each query
+            status = "Unknown Error"
+            rows_returned = 0
+            lines_in_file = 0
+            actual_df = None
 
             try:
-                # Simulate API call
-                # Add error handling (try/except) and timeout for real API calls
-                # A 5-minute timeout per query would be implemented here in a real scenario.
-                simulated_rows = Rex(query_id, selected_funds, start_date_rex_str, end_date_rex_str)
+                if USE_REAL_TQS_API:
+                    # --- Real API Call, Validation, and Save --- 
+                    actual_df = _fetch_real_tqs_data(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
 
-                # --- Placeholder for processing/saving the *actual* DataFrame ---
-                # In a real scenario, the Rex function would return the DataFrame:
-                # actual_df = Rex(query_id, selected_funds, start_date_rex_str, end_date_rex_str)
+                    if actual_df is not None:
+                        rows_returned = len(actual_df)
+                        # Validate the DataFrame structure
+                        is_valid, validation_errors = validate_data(actual_df, file_name)
+                        if not is_valid:
+                            current_app.logger.warning(f"Data validation failed for {file_name}: {validation_errors}")
+                            status = f"Validation Failed: {'; '.join(validation_errors)}"
+                            lines_in_file = 0 # Don't save invalid data
+                        else:
+                            # Save the DataFrame to CSV
+                            try:
+                                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                                actual_df.to_csv(output_path, index=False)
+                                current_app.logger.info(f"Successfully saved data to {output_path}")
+                                lines_in_file = rows_returned + 1 # +1 for header
+                                status = "Saved OK"
+                            except Exception as e:
+                                current_app.logger.error(f"Error saving DataFrame to {output_path}: {e}", exc_info=True)
+                                status = f"Save Error: {e}"
+                                lines_in_file = 0 # Save failed
+                    else:
+                        # _fetch_real_tqs_data returned None (API call failed or no data)
+                        current_app.logger.warning(f"Real API call for {query_id} ({file_name}) returned no data or failed.")
+                        status = "No Data/API Error"
+                        rows_returned = 0
+                        lines_in_file = 0
 
-                # if actual_df is not None and not actual_df.empty:
-                #     # 1. Validate the DataFrame structure (using imported validate_data)
-                #     is_valid, validation_errors = validate_data(actual_df, file_name)
-                #     if not is_valid:
-                #         current_app.logger.warning(f"Data validation failed for {file_name}: {validation_errors}")
-                #         status = f"Validation Failed: {'; '.join(validation_errors)}"
-                #         simulated_file_lines = 0 # Or based on df if saved despite errors
-                #     else:
-                #         # 2. Save the DataFrame to CSV (Uncomment to enable saving)
-                #         try:
-                #             # Ensure the directory exists before saving
-                #             # os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                #             # actual_df.to_csv(output_path, index=False)
-                #             # current_app.logger.info(f"Successfully saved data to {output_path}")
-                #             # simulated_file_lines = len(actual_df) + 1 # +1 for header
-                #             pass # Keep pass here until uncommenting above lines
-                #             status = "Saved OK"
-                #         except Exception as e:
-                #             current_app.logger.error(f"Error saving DataFrame to {output_path}: {e}")
-                #             status = f"Save Error: {e}"
-                #             simulated_file_lines = 0
-                # else:
-                #     current_app.logger.warning(f"Simulated API call for {query_id} ({file_name}) returned no data or failed.")
-                #     status = "No Data Returned"
-                #     simulated_file_lines = 0
-                # ---- End Placeholder -----
+                else:
+                    # --- Simulate API Call --- 
+                    simulated_rows = _simulate_and_print_tqs_call(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
+                    rows_returned = simulated_rows
+                    lines_in_file = simulated_rows + 1 if simulated_rows > 0 else 0
+                    status = "Simulated OK"
 
-                # Simulate file lines based on simulated rows (very rough estimate for now)
-                simulated_file_lines = simulated_rows + 1 if simulated_rows > 0 else 0
+            except Exception as e:
+                 # Catch unexpected errors during the processing of a single query
+                 current_app.logger.error(f"Unexpected error processing QueryID {query_id} ({file_name}): {e}", exc_info=True)
+                 status = f"Processing Error: {e}"
+                 rows_returned = 0
+                 lines_in_file = 0
 
-            except Exception as api_error:
-                 # Catch potential errors during the *simulated* call phase
-                 current_app.logger.error(f"Error during simulated API call for QueryID {query_id}: {api_error}")
-                 status = f"Simulation Error: {api_error}"
-                 simulated_rows = 0
-                 simulated_file_lines = 0
-
+            # Append results for this query
             results_summary.append({
                 "query_id": query_id,
                 "file_name": file_name,
-                "simulated_rows": simulated_rows,
-                "simulated_lines": simulated_file_lines,
+                # Use consistent key names regardless of mode
+                "simulated_rows": rows_returned, # Keep key name for template consistency
+                "simulated_lines": lines_in_file, # Keep key name for template consistency
                 "status": status
             })
             completed_queries += 1
@@ -189,7 +257,7 @@ def run_api_calls():
         # Return results
         return jsonify({
             "status": "completed",
-            "message": f"Simulated {completed_queries}/{total_queries} API calls.",
+            "message": f"Processed {completed_queries}/{total_queries} API calls ({'REAL' if USE_REAL_TQS_API else 'SIMULATED'} mode).",
             "summary": results_summary
         })
 
