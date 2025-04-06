@@ -114,7 +114,7 @@ graph TD
     *   `main()`: Finds and processes all `pre_*.csv` files in the `Data` directory when the script is run directly, logging a summary.
 
 ### `security_processing.py`
-*   **Purpose:** Handles the loading, processing, and analysis of security-level data, assuming input CSV files are structured with one security per row and time-series data spread across columns where headers represent dates (e.g., DD/MM/YYYY).
+*   **Purpose:** Handles the loading, processing, and analysis of security-level data, assuming input CSV files are structured with one security per row and time-series data spread across columns where headers represent dates (e.g., YYYY-MM-DD).
 *   **Robustness Features:**
     *   Uses the shared `logging` module (`data_processing_errors.log`).
     *   Reads input CSVs using `on_bad_lines='skip'` and encoding error handling.
@@ -132,7 +132,7 @@ graph TD
 ### `utils.py`
 *   **Purpose:** Contains utility functions used throughout the application, providing common helper functionalities like parsing specific string formats or validating data types.
 *   **Functions:**
-    *   `_is_date_like(column_name)`: Checks if a column name looks like a date (DD/MM/YYYY format). (Note: Also present in `security_processing.py`, potentially redundant).
+    *   `_is_date_like(column_name)`: Checks if a column name looks like a date (DD/MM/YYYY format). (Note: This function is specifically for the `ts_` files handled by `data_loader.py`. The `security_processing.py` module has its own check for YYYY-MM-DD format).
     *   `parse_fund_list(fund_string)`: Parses a string like `'[FUND1,FUND2]'` into a list of strings.
 
 ## View Modules (`views/`)

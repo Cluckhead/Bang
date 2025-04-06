@@ -1,6 +1,6 @@
 # This file handles the loading, processing, and analysis of security-level data.
 # It assumes input CSV files are structured with one security per row and time series data
-# spread across columns where headers represent dates (e.g., DD/MM/YYYY).
+# spread across columns where headers represent dates (e.g., YYYY-MM-DD).
 # Key functions:
 # - `load_and_process_security_data`: Reads a wide-format CSV, identifies the security ID column,
 #   static attribute columns, and date columns. It then 'melts' the data into a long format,
@@ -52,11 +52,9 @@ if not logger.handlers:
 DATA_FOLDER = 'Data'
 
 def _is_date_like(column_name):
-    """Check if a column name looks like a date (e.g., DD/MM/YYYY)."""
-    # Simple regex, adjust if date formats vary significantly
-    # Corrected regex: Use single backslashes in raw strings
-    # Allow variations like D/M/YYYY, DD/M/YYYY, D/MM/YYYY
-    return bool(re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', str(column_name)))
+    """Check if a column name looks like a date (e.g., YYYY-MM-DD)."""
+    # Regex to match YYYY-MM-DD format
+    return bool(re.match(r'^\d{4}-\d{2}-\d{2}$', str(column_name)))
 
 def load_and_process_security_data(filename):
     """Loads security data, identifies static/date columns, and melts to long format.
@@ -96,8 +94,8 @@ def load_and_process_security_data(filename):
                 static_cols.append(col) # Already stripped
 
         if not date_cols:
-            logger.error(f"No date-like columns found in '{filename}' (expected format like DD/MM/YYYY). Cannot process as security time series.")
-            raise ValueError("No date-like columns found (expected format DD/MM/YYYY).")
+            logger.error(f"No date-like columns found in '{filename}' (expected format like YYYY-MM-DD). Cannot process as security time series.")
+            raise ValueError("No date-like columns found (expected format YYYY-MM-DD).")
         if not id_col:
              # This case should technically not be reachable if all_cols is not empty
              logger.error(f"Could not identify the Security ID column (expected first column) in '{filename}'.")
@@ -133,7 +131,7 @@ def load_and_process_security_data(filename):
 
         # Process Date and Value columns
         # Coerce errors: invalid date formats will become NaT
-        df_long['Date'] = pd.to_datetime(df_long['Date_Str'], format='%d/%m/%Y', errors='coerce')
+        df_long['Date'] = pd.to_datetime(df_long['Date_Str'], format='%Y-%m-%d', errors='coerce')
         # Coerce errors: non-numeric values will become NaN
         df_long['Value'] = pd.to_numeric(df_long['Value'], errors='coerce')
 
