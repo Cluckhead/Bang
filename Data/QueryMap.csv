@@ -1,0 +1,11 @@
+QueryID,FileName
+10000,FundList.csv
+10100,new_sec_duration.csv
+10200,pre_sec_duration.csv
+10300,sec_duration.csv
+10400,sec_Price.csv
+10500,sec_Spread.csv
+10600,ts_Duration.csv
+10700,ts_Spread Duration.csv
+10800,ts_Spread.csv
+10900,ts_YTW.csv
