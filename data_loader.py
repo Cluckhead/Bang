@@ -139,8 +139,9 @@ def load_and_process_data(
 
         # --- Read the full CSV ---
         # Specify date parsing for the dynamically identified date column
+        # Expecting YYYY-MM-DD format, let pandas infer.
         # Added on_bad_lines='skip' for robustness
-        df = pd.read_csv(filepath, parse_dates=[actual_date_col], dayfirst=True, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip')
+        df = pd.read_csv(filepath, parse_dates=[actual_date_col], encoding='utf-8', encoding_errors='replace', on_bad_lines='skip') # Removed dayfirst=True
         df.columns = df.columns.str.strip() # Ensure columns are stripped again after full read
 
         # --- Rename columns to standard names ---

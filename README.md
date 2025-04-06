@@ -74,7 +74,7 @@ graph TD
     *   `COLOR_PALETTE`: Defines a list of colors for chart lines.
 
 ### `data_loader.py`
-*   **Purpose:** Responsible for loading and preprocessing data from time-series CSV files (typically prefixed with `ts_`). It includes functions to dynamically identify essential columns (Date, Code, Benchmark) based on patterns, handle potential naming variations, parse dates, standardize column names, set appropriate data types, and prepare the data in a pandas DataFrame format suitable for further analysis.
+*   **Purpose:** Responsible for loading and preprocessing data from time-series CSV files (typically prefixed with `ts_`). It includes functions to dynamically identify essential columns (Date, Code, Benchmark) based on patterns, handle potential naming variations, parse dates (expecting 'YYYY-MM-DD' format in the 'Date' column), standardize column names, set appropriate data types, and prepare the data in a pandas DataFrame format suitable for further analysis.
 *   **Robustness Features:**
     *   Uses Python's `logging` module to report progress and errors. Warnings and errors are logged to `data_processing_errors.log` in the project root.
     *   Handles file not found errors gracefully.
@@ -132,7 +132,6 @@ graph TD
 ### `utils.py`
 *   **Purpose:** Contains utility functions used throughout the application, providing common helper functionalities like parsing specific string formats or validating data types.
 *   **Functions:**
-    *   `_is_date_like(column_name)`: Checks if a column name looks like a date (DD/MM/YYYY format). (Note: This function is specifically for the `ts_` files handled by `data_loader.py`. The `security_processing.py` module has its own check for YYYY-MM-DD format).
     *   `parse_fund_list(fund_string)`: Parses a string like `'[FUND1,FUND2]'` into a list of strings.
 
 ## View Modules (`views/`)
