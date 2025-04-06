@@ -6,6 +6,7 @@ import pandas as pd
 from flask import Blueprint, render_template, request, current_app, jsonify
 import datetime
 from pandas.tseries.offsets import BDay
+import time # Import the time module
 #from tqs import tqs_query as tqs
 # # Import the placeholder validation function
 from data_validation import validate_data
@@ -67,7 +68,8 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
     try:
         # --- !!! Replace this comment and the line below with the actual API call !!! ---
         # Ensure the `tqs` function/library is imported (commented out at the top)
-        # dataframe = tqs(QueryID, FundCodeList, StartDate, EndDate, timeout=300) # Example real call
+        # dataframe = tqs.get_data(QueryID, FundCodeList, StartDate, EndDate) # Example real call
+        print(dataframe.head()) if dataframe is not None else print("No data to display")
         pass # Remove this pass when uncommenting the line above
         # --- End of section to replace --- 
         
@@ -213,7 +215,7 @@ def run_api_calls():
                             
                         # Save the DataFrame to CSV (only if validation passed or df was empty)
                         # This block is reached if df is empty OR if df is not empty and is_valid is True
-                        if status != f"Validation Failed: {'; '.join(validation_errors)}": # Check if validation failed above
+                        if status.startswith("Validation Failed") is False: # Check if validation passed or df was empty
                             try:
                                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                                 actual_df.to_csv(output_path, index=False)
@@ -264,8 +266,11 @@ def run_api_calls():
                 "status": status
             })
             completed_queries += 1
-            # In an async setup, you would emit progress here (e.g., via SocketIO)
-            # print(f"Progress: {completed_queries}/{total_queries} queries simulated.")
+            
+            # Pause between real API calls
+            if USE_REAL_TQS_API:
+                print(f"Pausing for 3 seconds before next real API call...") # Optional status message
+                time.sleep(3) 
 
         # Return results
         return jsonify({

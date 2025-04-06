@@ -43,6 +43,7 @@
         </div>
 
         <button type="submit" class="btn btn-primary">Simulate API Calls</button>
+        <button type="button" id="run-cleanup-button" class="btn btn-secondary mt-3 ms-2" style="display: none;">Run Data Cleanup</button>
     </form>
 
     <div id="status-area" class="mt-4" style="display: none;">
@@ -87,6 +88,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const resultsTableBody = document.getElementById('results-table-body');
     const errorMessageDiv = document.getElementById('error-message');
     const fundSelectionError = document.getElementById('fund-selection-error');
+    const cleanupButton = document.getElementById('run-cleanup-button');
+    const cleanupStatus = document.createElement('div');
+    cleanupStatus.id = 'cleanup-status';
+    cleanupStatus.className = 'mt-2';
+    cleanupButton.parentNode.insertBefore(cleanupStatus, cleanupButton.nextSibling);
     const fundCheckboxes = document.querySelectorAll('.fund-checkbox');
     const selectAllButton = document.getElementById('select-all-funds');
     const deselectAllButton = document.getElementById('deselect-all-funds');
@@ -109,6 +115,9 @@ document.addEventListener('DOMContentLoaded', function() {
         resultsTableBody.innerHTML = '';
         errorMessageDiv.style.display = 'none';
         errorMessageDiv.textContent = '';
+        cleanupButton.style.display = 'none';
+        cleanupStatus.textContent = '';
+        cleanupStatus.className = 'mt-2';
         statusMessage.textContent = '';
         progressBar.style.width = '0%';
         progressBar.textContent = '0%';
@@ -183,6 +192,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     resultsTableBody.innerHTML = '<tr><td colspan="5">No summary data returned.</td></tr>';
                 }
                  errorMessageDiv.style.display = 'none'; // Hide error div if successful
+                 cleanupButton.style.display = 'inline-block';
 
             } else {
                 // Handle errors reported by the server (e.g., validation errors, file not found)
@@ -203,6 +213,40 @@ document.addEventListener('DOMContentLoaded', function() {
             statusMessage.textContent = 'An error occurred during the request.';
             errorMessageDiv.textContent = 'Network error or server unreachable. Check console for details.';
             errorMessageDiv.style.display = 'block';
+        }
+    });
+
+    // Add event listener for the new Cleanup button
+    cleanupButton.addEventListener('click', async function() {
+        cleanupStatus.textContent = 'Starting cleanup process...';
+        cleanupStatus.className = 'mt-2 alert alert-info'; // Show feedback
+        cleanupButton.disabled = true; // Disable button while running
+
+        try {
+            const response = await fetch('/run-cleanup', { // Call the new endpoint
+                method: 'POST',
+                 headers: {
+                    'Content-Type': 'application/json', // Optional: Send empty JSON or adjust endpoint
+                },
+                // body: JSON.stringify({}) // Optional: Send empty JSON or adjust endpoint
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.status === 'success') {
+                cleanupStatus.textContent = `Cleanup process finished successfully. Output:\n${result.output}`;
+                cleanupStatus.className = 'mt-2 alert alert-success';
+            } else {
+                 cleanupStatus.textContent = `Cleanup process failed. Error:\n${result.error || result.message || 'Unknown error'}`;
+                 cleanupStatus.className = 'mt-2 alert alert-danger';
+            }
+
+        } catch (error) {
+            console.error("Cleanup fetch error:", error);
+            cleanupStatus.textContent = 'Failed to trigger cleanup process. Network error or server unreachable.';
+            cleanupStatus.className = 'mt-2 alert alert-danger';
+        } finally {
+             cleanupButton.disabled = false; // Re-enable button
         }
     });
 });

@@ -11,8 +11,13 @@
 # This modular structure using factories and blueprints makes the application more organized and scalable.
 
 # This file contains the main Flask application factory.
-from flask import Flask
+from flask import Flask, render_template, Blueprint, jsonify
 import os
+import logging
+# --- Add imports for the new route ---
+import subprocess
+import sys # To get python executable path
+# --- End imports ---
 
 # Import configurations and utilities (potentially needed by factory setup later)
 # from config import DATA_FOLDER, COLOR_PALETTE # Not directly used in factory itself yet
@@ -62,6 +67,43 @@ def create_app():
     @app.route('/hello')
     def hello():
         return 'Hello, World! App factory is working.'
+
+    # --- Add the new cleanup route ---
+    @app.route('/run-cleanup', methods=['POST'])
+    def run_cleanup():
+        """Endpoint to trigger the process_data.py script."""
+        script_path = os.path.join(os.path.dirname(__file__), 'process_data.py')
+        python_executable = sys.executable # Use the same python that runs flask
+
+        if not os.path.exists(script_path):
+            app.logger.error(f"Cleanup script not found at: {script_path}")
+            return jsonify({'status': 'error', 'message': 'Cleanup script not found.'}), 500
+
+        app.logger.info(f"Attempting to run cleanup script: {script_path}")
+        try:
+            # Run the script using the same Python interpreter that is running Flask
+            # Capture stdout and stderr, decode as UTF-8, handle potential errors
+            result = subprocess.run(
+                [python_executable, script_path],
+                capture_output=True,
+                text=True,
+                check=False, # Don't raise exception on non-zero exit code
+                encoding='utf-8' # Explicitly set encoding
+            )
+
+            log_output = f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+
+            if result.returncode == 0:
+                app.logger.info(f"Cleanup script finished successfully. Output:\n{log_output}")
+                return jsonify({'status': 'success', 'output': result.stdout or "No output", 'error': result.stderr}), 200
+            else:
+                app.logger.error(f"Cleanup script failed with return code {result.returncode}. Output:\n{log_output}")
+                return jsonify({'status': 'error', 'message': 'Cleanup script failed.', 'output': result.stdout, 'error': result.stderr}), 500
+
+        except Exception as e:
+            app.logger.error(f"Exception occurred while running cleanup script: {e}", exc_info=True)
+            return jsonify({'status': 'error', 'message': f'An exception occurred: {e}'}), 500
+    # --- End new route ---
 
     return app
 
