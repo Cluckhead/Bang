@@ -43,7 +43,7 @@ def _simulate_and_print_tqs_call(QueryID, FundCodeList, StartDate, EndDate):
     return simulated_row_count
 
 def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
-    '''Placeholder for fetching real data from the TQS API.
+    '''Fetches real data from the TQS API.
 
     This function is called when USE_REAL_TQS_API is True.
     Replace the placeholder logic with the actual API interaction code.
@@ -51,8 +51,8 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
     Args:
         QueryID: The query identifier.
         FundCodeList: List of fund codes.
-        StartDate: Start date string (dd/mm/yy).
-        EndDate: End date string (dd/mm/yy).
+        StartDate: Start date string (YYYY-MM-DD).
+        EndDate: End date string (YYYY-MM-DD).
 
     Returns:
         pd.DataFrame or None: The DataFrame containing the fetched data,
@@ -60,40 +60,40 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
     '''
     current_app.logger.info(f"Attempting real TQS API call for QueryID: {QueryID}")
     print(f"--- EXECUTING REAL TQS API CALL (USE_REAL_TQS_API = True) --- ")
-    print(f"tqs({QueryID}, {FundCodeList}, {StartDate}, {EndDate})") # Log the call
+    print(f"tqs({QueryID}, {FundCodeList}, {StartDate}, {EndDate})")
     print(f"--------------------------------------------------------")
 
-    # --- Replace this section with the actual TQS API call --- 
-    # Example using a hypothetical library `tqs_api_library`
+    dataframe = None # Initialize dataframe to None
     try:
-        # dataframe = tqs.get_data(QueryID,FundCodeList,StartDate,EndDate) # Example 5 min timeout
-        # Mock success for demonstration when USE_REAL_TQS_API is True
-        print("    [Placeholder] Real API call would happen here.")
-        # Create a simple dummy DataFrame for testing the flow
-        num_rows = len(FundCodeList) * 5 # Different dummy calculation for real mode
-        if num_rows > 0:
-             dummy_data = {'Date': pd.to_datetime([datetime.date.today() - datetime.timedelta(days=i) for i in range(num_rows//len(FundCodeList))]*len(FundCodeList)),
-                           'Code': [f for f in FundCodeList for _ in range(num_rows//len(FundCodeList))],
-                           'Value': [100+i for i in range(num_rows)]}
-             dataframe = pd.DataFrame(dummy_data)
-             print(f"    [Placeholder] Successfully created dummy DataFrame with {len(dataframe)} rows.")
-        else:
-             dataframe = pd.DataFrame() # Return empty df if no funds
-             print("    [Placeholder] No funds selected, returning empty DataFrame.")
-
+        # --- !!! Replace this comment and the line below with the actual API call !!! ---
+        # Ensure the `tqs` function/library is imported (commented out at the top)
+        # dataframe = tqs(QueryID, FundCodeList, StartDate, EndDate, timeout=300) # Example real call
+        pass # Remove this pass when uncommenting the line above
+        # --- End of section to replace --- 
+        
         # Check if the API returned valid data (e.g., a DataFrame)
         if dataframe is not None and isinstance(dataframe, pd.DataFrame):
             current_app.logger.info(f"Real TQS API call successful for QueryID: {QueryID}, Rows: {len(dataframe)}")
             return dataframe
+        elif dataframe is None:
+             # Explicitly handle the case where the API call itself returned None (e.g., planned failure or empty result coded as None)
+             current_app.logger.warning(f"Real TQS API call for QueryID: {QueryID} returned None.")
+             return None
         else:
-            current_app.logger.warning(f"Real TQS API call for QueryID: {QueryID} returned no data or invalid format.")
-            return None
+            # Handle cases where the API returned something unexpected (not a DataFrame)
+            current_app.logger.warning(f"Real TQS API call for QueryID: {QueryID} returned an unexpected data type: {type(dataframe)}.")
+            return None # Treat unexpected types as failure
+
+    except NameError as ne:
+         # Specific handling if the tqs function isn't defined (import is commented out)
+         current_app.logger.error(f"Real TQS API call failed for QueryID: {QueryID}. TQS function not imported/defined. Error: {ne}")
+         print(f"    ERROR: TQS function not available. Ensure 'from tqs import tqs_query as tqs' is uncommented and the library is installed.")
+         return None
     except Exception as e:
         # Handle API call errors (timeout, connection issues, authentication, etc.)
         current_app.logger.error(f"Real TQS API call failed for QueryID: {QueryID}. Error: {e}", exc_info=True)
-        print(f"    [Placeholder] Real API call FAILED. Error: {e}")
+        print(f"    ERROR during real API call: {e}")
         return None
-    # --- End of placeholder section ---
 
 
 @api_bp.route('/get_data')
@@ -196,30 +196,46 @@ def run_api_calls():
                     # --- Real API Call, Validation, and Save --- 
                     actual_df = _fetch_real_tqs_data(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
 
-                    if actual_df is not None:
+                    if actual_df is not None and isinstance(actual_df, pd.DataFrame):
                         rows_returned = len(actual_df)
-                        # Validate the DataFrame structure
-                        is_valid, validation_errors = validate_data(actual_df, file_name)
-                        if not is_valid:
-                            current_app.logger.warning(f"Data validation failed for {file_name}: {validation_errors}")
-                            status = f"Validation Failed: {'; '.join(validation_errors)}"
-                            lines_in_file = 0 # Don't save invalid data
-                        else:
-                            # Save the DataFrame to CSV
-                            try:
-                                os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                                actual_df.to_csv(output_path, index=False)
-                                current_app.logger.info(f"Successfully saved data to {output_path}")
-                                lines_in_file = rows_returned + 1 # +1 for header
-                                status = "Saved OK"
-                            except Exception as e:
-                                current_app.logger.error(f"Error saving DataFrame to {output_path}: {e}", exc_info=True)
-                                status = f"Save Error: {e}"
-                                lines_in_file = 0 # Save failed
+                        if actual_df.empty:
+                             current_app.logger.info(f"API returned empty DataFrame for {query_id} ({file_name}). Treating as valid, saving empty file.")
+                             status = "Saved OK (Empty)"
+                             # Proceed to save the empty DataFrame
+                        else: 
+                             # Validate the non-empty DataFrame structure
+                            is_valid, validation_errors = validate_data(actual_df, file_name)
+                            if not is_valid:
+                                current_app.logger.warning(f"Data validation failed for {file_name}: {validation_errors}")
+                                status = f"Validation Failed: {'; '.join(validation_errors)}"
+                                lines_in_file = 0 # Don't save invalid data
+                                continue # Skip saving attempt for this file
+                            # else: Validation passed (implicit)
+                            
+                        # Save the DataFrame to CSV (either empty or validated)
+                        try:
+                            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                            actual_df.to_csv(output_path, index=False)
+                            current_app.logger.info(f"Successfully saved data to {output_path}")
+                            lines_in_file = rows_returned + 1 # +1 for header
+                            # Update status only if it wasn't set to Saved OK (Empty) already
+                            if status != "Saved OK (Empty)": 
+                                status = "Saved OK" 
+                        except Exception as e:
+                            current_app.logger.error(f"Error saving DataFrame to {output_path}: {e}", exc_info=True)
+                            status = f"Save Error: {e}"
+                            lines_in_file = 0 # Save failed
+                    
+                    elif actual_df is None:
+                        # _fetch_real_tqs_data returned None (API call failed, returned None explicitly, or TQS not imported)
+                        current_app.logger.warning(f"Real API call/fetch for {query_id} ({file_name}) returned None.")
+                        status = "No Data / API Error / TQS Missing"
+                        rows_returned = 0
+                        lines_in_file = 0
                     else:
-                        # _fetch_real_tqs_data returned None (API call failed or no data)
-                        current_app.logger.warning(f"Real API call for {query_id} ({file_name}) returned no data or failed.")
-                        status = "No Data/API Error"
+                        # _fetch_real_tqs_data returned something unexpected (not DataFrame, not None)
+                        current_app.logger.error(f"Real API fetch for {query_id} ({file_name}) returned unexpected type: {type(actual_df)}.")
+                        status = "API Returned Invalid Type"
                         rows_returned = 0
                         lines_in_file = 0
 
