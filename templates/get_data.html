@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Get Data via API{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Get Data via Simulated API (Rex)</h2>
+    <p>Select funds and date range to simulate retrieving data using the Rex API.</p>
+    <p>The simulated API calls will be printed in the terminal where the Flask app is running.</p>
+
+    <form id="get-data-form">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label for="daysBack" class="form-label">Days Back:</label>
+                <input type="number" class="form-control" id="daysBack" name="days_back" value="30" required>
+                <div class="form-text">Number of days of history to retrieve ending on the End Date.</div>
+            </div>
+            <div class="col-md-4">
+                <label for="endDate" class="form-label">End Date:</label>
+                <input type="date" class="form-control" id="endDate" name="end_date" value="{{ default_end_date }}" required>
+                <div class="form-text">Defaults to the previous business day.</div>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Select Funds:</label>
+             <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="select-all-funds">Select All</button>
+             <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="deselect-all-funds">Deselect All</button>
+            <div id="fund-list" class="border p-3" style="max-height: 300px; overflow-y: auto;">
+                {% for fund in funds %}
+                <div class="form-check">
+                    <input class="form-check-input fund-checkbox" type="checkbox" value="{{ fund['Fund Code'] }}" id="fund-{{ fund['Fund Code'] }}" name="funds"
+                           {% if fund['Picked'] %}checked{% endif %}>
+                    <label class="form-check-label" for="fund-{{ fund['Fund Code'] }}">
+                        {{ fund['Fund Code'] }} (AUM: {{ fund['Total Asset Value USD']|int }})
+                    </label>
+                </div>
+                {% else %}
+                <p class="text-danger">No funds found or FundList.csv could not be loaded correctly.</p>
+                {% endfor %}
+            </div>
+             <div class="form-text text-danger d-none" id="fund-selection-error">Please select at least one fund.</div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Simulate API Calls</button>
+    </form>
+
+    <div id="status-area" class="mt-4" style="display: none;">
+        <h4>Processing Status</h4>
+        <div class="progress mb-2" style="height: 20px;">
+            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        </div>
+        <p id="status-message"></p>
+        <div id="results-summary" class="mt-3">
+            <h5>Results Summary</h5>
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>Query ID</th>
+                        <th>File Name</th>
+                        <th>Simulated Rows Returned</th>
+                        <th>Simulated File Lines</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="results-table-body">
+                    <!-- Results will be populated here -->
+                </tbody>
+            </table>
+        </div>
+         <div id="error-message" class="alert alert-danger mt-3" style="display: none;">
+             <!-- Errors shown here -->
+         </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base.html #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('get-data-form');
+    const statusArea = document.getElementById('status-area');
+    const statusMessage = document.getElementById('status-message');
+    const progressBar = document.getElementById('progress-bar');
+    const resultsTableBody = document.getElementById('results-table-body');
+    const errorMessageDiv = document.getElementById('error-message');
+    const fundSelectionError = document.getElementById('fund-selection-error');
+    const fundCheckboxes = document.querySelectorAll('.fund-checkbox');
+    const selectAllButton = document.getElementById('select-all-funds');
+    const deselectAllButton = document.getElementById('deselect-all-funds');
+
+    // Select/Deselect All Funds buttons
+    selectAllButton.addEventListener('click', () => {
+        fundCheckboxes.forEach(checkbox => checkbox.checked = true);
+    });
+
+    deselectAllButton.addEventListener('click', () => {
+        fundCheckboxes.forEach(checkbox => checkbox.checked = false);
+    });
+
+
+    form.addEventListener('submit', async function(event) {
+        event.preventDefault(); // Prevent traditional form submission
+
+        // Clear previous results and errors
+        statusArea.style.display = 'none';
+        resultsTableBody.innerHTML = '';
+        errorMessageDiv.style.display = 'none';
+        errorMessageDiv.textContent = '';
+        statusMessage.textContent = '';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        progressBar.classList.remove('bg-success', 'bg-danger');
+        fundSelectionError.classList.add('d-none');
+
+        // Get selected funds
+        const selectedFunds = Array.from(document.querySelectorAll('input[name="funds"]:checked'))
+                                 .map(cb => cb.value);
+
+        // Basic client-side validation
+        if (selectedFunds.length === 0) {
+            fundSelectionError.classList.remove('d-none');
+            return; // Stop submission
+        }
+
+        const daysBack = document.getElementById('daysBack').value;
+        const endDate = document.getElementById('endDate').value;
+
+        if (!endDate) {
+             errorMessageDiv.textContent = 'Please select an End Date.';
+             errorMessageDiv.style.display = 'block';
+            return; // Stop submission
+        }
+
+        // Show status area and indicate processing
+        statusArea.style.display = 'block';
+        statusMessage.textContent = 'Starting simulation...';
+        progressBar.classList.add('progress-bar-animated');
+        progressBar.classList.remove('bg-success', 'bg-danger');
+        progressBar.style.width = '5%'; // Initial small progress
+        progressBar.textContent = '5%';
+
+        try {
+            const response = await fetch('{{ url_for("api_bp.run_api_calls") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    days_back: parseInt(daysBack, 10),
+                    end_date: endDate,
+                    funds: selectedFunds
+                })
+            });
+
+            const result = await response.json();
+
+            // Stop animation
+             progressBar.classList.remove('progress-bar-animated');
+
+            if (response.ok && result.status === 'completed') {
+                statusMessage.textContent = result.message;
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+                progressBar.classList.add('bg-success');
+
+                // Populate results table
+                resultsTableBody.innerHTML = ''; // Clear any potential previous entries
+                if (result.summary && result.summary.length > 0) {
+                    result.summary.forEach(item => {
+                        const row = `<tr>
+                                        <td>${item.query_id}</td>
+                                        <td>${item.file_name}</td>
+                                        <td>${item.simulated_rows !== undefined ? item.simulated_rows : 'N/A'}</td>
+                                        <td>${item.simulated_lines !== undefined ? item.simulated_lines : 'N/A'}</td>
+                                        <td><span class="badge ${item.status.includes('OK') ? 'bg-success' : 'bg-warning'}">${item.status}</span></td>
+                                     </tr>`;
+                        resultsTableBody.innerHTML += row;
+                    });
+                } else {
+                    resultsTableBody.innerHTML = '<tr><td colspan="5">No summary data returned.</td></tr>';
+                }
+                 errorMessageDiv.style.display = 'none'; // Hide error div if successful
+
+            } else {
+                // Handle errors reported by the server (e.g., validation errors, file not found)
+                statusMessage.textContent = 'Simulation failed.';
+                progressBar.style.width = '100%';
+                progressBar.textContent = 'Error';
+                progressBar.classList.add('bg-danger');
+                errorMessageDiv.textContent = `Error: ${result.message || 'Unknown error'}`;
+                errorMessageDiv.style.display = 'block';
+            }
+        } catch (error) {
+            // Handle network errors or issues with the fetch itself
+            console.error("Fetch error:", error);
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.style.width = '100%';
+            progressBar.textContent = 'Error';
+            progressBar.classList.add('bg-danger');
+            statusMessage.textContent = 'An error occurred during the request.';
+            errorMessageDiv.textContent = 'Network error or server unreachable. Check console for details.';
+            errorMessageDiv.style.display = 'block';
+        }
+    });
+});
+</script>
+{% endblock %} 

@@ -93,6 +93,13 @@
         </div>
         {% endif %}
 
+        <!-- Add a link to the new API Data Retrieval page -->
+        <div class="mt-4 mb-4 p-3 border rounded bg-light">
+            <h5>Get Data via API (Simulated)</h5>
+            <p>Select funds and dates to simulate retrieving data from the Rex API.</p>
+            <a href="{{ url_for('api_bp.get_data_page') }}" class="btn btn-success btn-sm">Go to Get Data Page</a>
+        </div>
+
         <!-- Add a link to the new Securities page -->
         <div class="mt-4 p-3 border rounded bg-light">
             <h5>Securities Data Check</h5>

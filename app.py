@@ -43,17 +43,20 @@ def create_app():
     from views.metric_views import metric_bp
     from views.security_views import security_bp
     from views.fund_views import fund_bp
+    from views.api_views import api_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
     app.register_blueprint(security_bp)
     app.register_blueprint(fund_bp)
+    app.register_blueprint(api_bp)
 
     print("Registered Blueprints:")
     print(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
     print(f"- {metric_bp.name} (prefix: {metric_bp.url_prefix})")
     print(f"- {security_bp.name} (prefix: {security_bp.url_prefix})")
     print(f"- {fund_bp.name} (prefix: {fund_bp.url_prefix})")
+    print(f"- {api_bp.name} (prefix: {api_bp.url_prefix})")
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')
