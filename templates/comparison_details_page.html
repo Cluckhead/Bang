@@ -83,10 +83,57 @@
                 const chartData = JSON.parse(chartDataElement.textContent);
                 const ctx = comparisonChartCanvas.getContext('2d');
 
-                // Basic Chart.js setup - Adapt from existing timeSeriesChart.js if needed
+                // --- REVERTING TO SIMPLE CONFIG --- 
+                // Remove scriptable options for now
+                /*
+                // Define base colors (assuming these are the intended original colors)
+                const baseColors = [
+                    'rgba(13, 110, 253, 1)', // Bootstrap Blue (or COLOR_PALETTE[0])
+                    'rgba(220, 53, 69, 1)'  // Bootstrap Red (or COLOR_PALETTE[1])
+                ];
+                const gapColor = 'rgba(150, 150, 150, 0.7)'; // Semi-transparent gray for gaps
+
+                // Prepare datasets with scriptable borderColor
+                console.log("Preparing datasets with scriptable colors...");
+                const datasetsWithScriptableColors = chartData.datasets.map((dataset, index) => {
+                     console.log(`Mapping dataset index: ${index}`);
+                     return {
+                        ...dataset, // Keep original label, data, tension, spanGaps etc.
+                        borderColor: context => {
+                            // Check if drawing a line segment and context is valid
+                            if (context.type === 'segment' && context.p0 && context.p1) {
+                                // --- NEW APPROACH: Check the 'skip' property of the points (safely) --- 
+                                // Ensure p0 and p1 exist before accessing skip
+                                const p0skip = context.p0 ? context.p0.skip : false;
+                                const p1skip = context.p1 ? context.p1.skip : false;
+                                
+                                if (p0skip || p1skip) {
+                                     // --- DEBUG LOGGING START ---
+                                    // Log when gap is detected using the 'skip' property
+                                    console.log(`>>> Gap DETECTED (via skip): p0.skip=${p0skip}, p1.skip=${p1skip}, datasetIndex=${context.datasetIndex}. Applying gapColor.`);
+                                    // --- DEBUG LOGGING END ---
+                                    return gapColor;
+                                }
+                            }
+                            // Default color for non-gap segments, points, legend
+                            return baseColors[context.datasetIndex % baseColors.length];
+                        },
+                        // Ensure point colors match the line start/end unless hovered
+                        pointBorderColor: context => baseColors[context.datasetIndex % baseColors.length],
+                        pointBackgroundColor: context => baseColors[context.datasetIndex % baseColors.length],
+                    }
+                });
+                
+                console.log("Data prepared. Initializing Chart...");
+                */
+                // --- END REVERT --- 
+                
+                console.log("Initializing Chart with original data..."); // Log before init
+
                 new Chart(ctx, {
                     type: 'line',
-                    data: chartData, // Directly use the data structure from Python
+                    // Use the ORIGINAL datasets from Python/JSON
+                    data: chartData, 
                     options: {
                         responsive: true,
                         maintainAspectRatio: true, // Adjust as needed

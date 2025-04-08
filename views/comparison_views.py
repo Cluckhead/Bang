@@ -349,22 +349,28 @@ def details(security_id):
 
         # Prepare chart data
         security_data['Date_Str'] = security_data['Date'].dt.strftime('%Y-%m-%d')
+        
+        # Convert NaN to None using list comprehension after .tolist()
+        data_orig = security_data['Value_Orig'].tolist()
+        data_orig_processed = [None if pd.isna(x) else x for x in data_orig]
+        
+        data_new = security_data['Value_New'].tolist()
+        data_new_processed = [None if pd.isna(x) else x for x in data_new]
+        
         chart_data = {
             'labels': security_data['Date_Str'].tolist(),
             'datasets': [
                 {
                     'label': 'Original Spread (Sec_spread)',
-                    'data': security_data['Value_Orig'].where(pd.notnull(security_data['Value_Orig']), None).tolist(), # Handle NaN for JSON
+                    'data': data_orig_processed, # Use processed list
                     'borderColor': COLOR_PALETTE[0 % len(COLOR_PALETTE)],
-                    'tension': 0.1,
-                    'spanGaps': True # Connect lines across nulls if desired, or False
+                    'tension': 0.1
                 },
                 {
                     'label': 'New Spread (Sec_spreadSP)',
-                    'data': security_data['Value_New'].where(pd.notnull(security_data['Value_New']), None).tolist(), # Handle NaN for JSON
+                    'data': data_new_processed, # Use processed list
                     'borderColor': COLOR_PALETTE[1 % len(COLOR_PALETTE)],
-                    'tension': 0.1,
-                     'spanGaps': True
+                    'tension': 0.1
                 }
             ]
         }
