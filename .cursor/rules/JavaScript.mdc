@@ -1,5 +1,10 @@
 ---
 description: 
+globs: *.js,*.js
+alwaysApply: false
+---
+---
+description: 
 globs: 
 alwaysApply: false
 ---
