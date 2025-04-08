@@ -194,7 +194,7 @@ def calculate_comparison_stats(merged_df, static_data, id_col):
 
 @comparison_bp.route('/comparison/summary')
 def summary():
-    """Displays the comparison summary page."""
+    """Displays the comparison summary page with filtering and sorting."""
     try:
         # Capture the actual ID column name returned by the load function
         merged_data, static_data, static_cols, actual_id_col = load_comparison_data()
@@ -208,30 +208,113 @@ def summary():
 
         if summary_stats.empty and not merged_data.empty:
              log.warning("Calculation resulted in empty stats DataFrame, but merged data was present.")
-             # Return empty page or specific message?
+        
+        # --- Filtering ---
+        # Get active filters from query parameters (e.g., ?filter_Metric=Govt&filter_Currency=USD)
+        active_filters = {k.replace('filter_', ''): v 
+                          for k, v in request.args.items() 
+                          if k.startswith('filter_') and v} # Only keep non-empty filters
+        
+        # Apply filters if any are active
+        filtered_stats = summary_stats.copy()
+        if active_filters:
+            log.info(f"Applying filters: {active_filters}")
+            for col, value in active_filters.items():
+                if col in filtered_stats.columns:
+                    # Ensure we handle potential type mismatches (e.g., filtering numeric columns)
+                    try:
+                        # Attempt to convert filter value to column type if numeric, otherwise use string comparison
+                        if pd.api.types.is_numeric_dtype(filtered_stats[col]):
+                             # Handle potential conversion errors if value is not numeric
+                            try:
+                                value_converted = pd.to_numeric(value)
+                                filtered_stats = filtered_stats[filtered_stats[col] == value_converted]
+                            except ValueError:
+                                log.warning(f"Could not convert filter value '{value}' to numeric for column '{col}'. Skipping filter.")
+                                # Optionally keep all rows if conversion fails, or filter for string match?
+                                # For now, we skip this specific filter if conversion fails.
+                        else:
+                             # String comparison (case-insensitive)
+                             filtered_stats = filtered_stats[filtered_stats[col].astype(str).str.contains(value, case=False, na=False)]
+                    except Exception as filter_err:
+                        log.error(f"Error applying filter for column '{col}' with value '{value}': {filter_err}")
+                else:
+                    log.warning(f"Filter column '{col}' not found in summary statistics.")
+            log.info(f"Stats shape after filtering: {filtered_stats.shape}")
 
-        # TODO: Add filtering logic similar to security_views.py
-        # TODO: Add sorting logic
+        # --- Sorting ---
+        # Get sort parameters from query (default to Change_Correlation descending)
+        sort_by = request.args.get('sort_by', 'Change_Correlation')
+        sort_order = request.args.get('sort_order', 'desc')
+        ascending = sort_order == 'asc'
 
-        # Convert NaNs to None for JSON serialization if needed, or handle in template
-        summary_stats = summary_stats.where(pd.notnull(summary_stats), None)
+        # Validate sort_by column
+        if sort_by not in filtered_stats.columns:
+            log.warning(f"Invalid sort column '{sort_by}'. Defaulting to 'Change_Correlation'.")
+            sort_by = 'Change_Correlation'
+            # Ensure default column exists, otherwise use ID col
+            if sort_by not in filtered_stats.columns and actual_id_col in filtered_stats.columns:
+                 sort_by = actual_id_col
+
+
+        # Apply sorting if the column exists
+        if sort_by in filtered_stats.columns:
+             log.info(f"Sorting by '{sort_by}' ({'ascending' if ascending else 'descending'})")
+             # Handle NaNs: put them last regardless of sort order
+             na_position = 'last' 
+             sorted_stats = filtered_stats.sort_values(by=sort_by, ascending=ascending, na_position=na_position)
+        else:
+             log.warning(f"Sort column '{sort_by}' not found after filtering. Skipping sort.")
+             sorted_stats = filtered_stats # Keep the filtered but unsorted data
+
+        # --- Prepare Data for Template ---
+        
+        # Generate filter options FROM THE ORIGINAL UNFILTERED DATA static columns
+        filter_options = {}
+        if not summary_stats.empty:
+             # Use static_cols identified during loading for filter options
+             for col in static_cols:
+                 if col in summary_stats.columns and col != actual_id_col: # Exclude ID col from filters typically
+                     # Get unique, non-null, sorted values
+                     options = sorted([str(v) for v in summary_stats[col].dropna().unique()])
+                     if options: # Only add filter if there are options
+                         filter_options[col] = options
+
+        # Convert NaNs to None for template rendering
+        sorted_stats = sorted_stats.where(pd.notnull(sorted_stats), None)
         
         # Prepare data for template
-        table_data = summary_stats.to_dict(orient='records')
+        table_data = sorted_stats.to_dict(orient='records')
         
-        # Get unique filter options if implementing filters
-        filter_options = {}
-        # Ensure filters use the actual ID column name if filtering by ID
-        # for col in static_cols:
-        #    filter_options[col] = sorted(summary_stats[col].astype(str).unique().tolist())
+        # Determine visible columns (adjust as needed)
+        # Start with ID, Name (if different), core stats, then static cols
+        visible_columns = [actual_id_col]
+        if 'Security Name' in sorted_stats.columns and actual_id_col != 'Security Name':
+             visible_columns.append('Security Name')
+        visible_columns.extend([
+            'Level_Correlation', 'Change_Correlation', 'Mean_Abs_Diff', 
+            'Max_Abs_Diff', 'Same_Date_Range', 'NaN_Count_Orig', 
+            'NaN_Count_New', 'Total_Points'
+        ])
+        # Add static columns that are NOT the ID or Name (if shown separately)
+        for col in static_cols:
+             if col not in visible_columns:
+                  visible_columns.append(col)
+        
+        # Filter visible_columns to only include those actually present in the final df
+        visible_columns = [col for col in visible_columns if col in sorted_stats.columns]
 
-        # Pass the actual ID column name to the template for linking if needed
+
+        log.info(f"Rendering comparison summary with {len(table_data)} rows.")
         return render_template('comparison_page.html',
                                table_data=table_data,
-                               columns=summary_stats.columns.tolist(), # Pass column names
+                               # Pass the ordered list of columns to display
+                               columns_to_display=visible_columns, 
                                filter_options=filter_options,
-                               static_cols=static_cols,
-                               id_column_name=actual_id_col) # Pass actual ID col name
+                               active_filters=active_filters, # Pass current filters back to template
+                               id_column_name=actual_id_col, # Pass actual ID col name
+                               current_sort_by=sort_by,
+                               current_sort_order=sort_order)
 
     except Exception as e:
         log.exception("Error generating comparison summary page.")

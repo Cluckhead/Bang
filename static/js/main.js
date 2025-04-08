@@ -59,6 +59,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // console.log("Securities table not found, skipping table features initialization.");
     }
 
+    // --- Comparison Summary Page (Filterable & Sortable Table) ---
+    const comparisonTable = document.getElementById('comparison-table');
+    if (comparisonTable) {
+        console.log("Comparison page table detected. Initializing sorter.");
+        // Note: Filters are handled server-side via form submission for this table
+        initTableSorter('comparison-table'); // Enable client-side sorting
+    }
+
     // --- Security Details Page (Single Chart) ---
     const securityChartCanvas = document.getElementById('primarySecurityChart');
     const securityJsonDataElement = document.getElementById('chartJsonData');
