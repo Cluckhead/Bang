@@ -52,9 +52,17 @@ if not logger.handlers:
 DATA_FOLDER = 'Data'
 
 def _is_date_like(column_name):
-    """Check if a column name looks like a date (e.g., YYYY-MM-DD)."""
-    # Regex to match YYYY-MM-DD format
-    return bool(re.match(r'^\d{4}-\d{2}-\d{2}$', str(column_name)))
+    """Check if a column name looks like a common date format.
+
+    Recognizes formats like YYYY-MM-DD, YYYY/MM/DD, MM/DD/YYYY, M/D/YYYY, YYYYMMDD.
+    """
+    col_str = str(column_name)
+    # Regex to match common date patterns
+    # - YYYY[-/]MM[-/]DD
+    # - MM[-/]DD[-/]YYYY (allows 1-2 digits for M, D and 2 or 4 for Y)
+    # - YYYYMMDD
+    pattern = r'^(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/](\d{4}|\d{2})|\d{8})$'
+    return bool(re.match(pattern, col_str))
 
 def load_and_process_security_data(filename):
     """Loads security data, identifies static/date columns, and melts to long format.
@@ -84,7 +92,7 @@ def load_and_process_security_data(filename):
         # Assume first column is the Security ID
         id_col = all_cols[0]
         
-        # Identify static and date columns dynamically
+        # Identify static and date columns dynamically using the updated _is_date_like
         static_cols = []
         date_cols = []
         for col in all_cols[1:]: # Skip the ID column
@@ -94,8 +102,8 @@ def load_and_process_security_data(filename):
                 static_cols.append(col) # Already stripped
 
         if not date_cols:
-            logger.error(f"No date-like columns found in '{filename}' (expected format like YYYY-MM-DD). Cannot process as security time series.")
-            raise ValueError("No date-like columns found (expected format YYYY-MM-DD).")
+            logger.error(f"No date-like columns found in '{filename}' using flexible patterns. Cannot process as security time series.")
+            raise ValueError("No date-like columns found using flexible patterns.")
         if not id_col:
              # This case should technically not be reachable if all_cols is not empty
              logger.error(f"Could not identify the Security ID column (expected first column) in '{filename}'.")
@@ -131,19 +139,32 @@ def load_and_process_security_data(filename):
 
         # Process Date and Value columns
         # Coerce errors: invalid date formats will become NaT
-        df_long['Date'] = pd.to_datetime(df_long['Date_Str'], format='%Y-%m-%d', errors='coerce')
+        df_long['Date'] = pd.to_datetime(df_long['Date_Str'], errors='coerce')
+        
+        # Check how many dates failed to parse after trying inference
+        failed_date_parse_count = df_long['Date'].isna().sum()
+        original_date_str_count = len(df_long['Date_Str'])
+        if failed_date_parse_count > 0:
+             logger.warning(f"Could not parse {failed_date_parse_count} out of {original_date_str_count} date strings in '{filename}' using pandas format inference.")
+             # Keep only successfully parsed dates before proceeding
+             df_long = df_long.dropna(subset=['Date']) 
+             if df_long.empty:
+                  logger.error(f"No dates could be parsed successfully in '{filename}'. Aborting processing for this file.")
+                  return pd.DataFrame(), [] # Return empty as no valid date data
+
         # Coerce errors: non-numeric values will become NaN
         df_long['Value'] = pd.to_numeric(df_long['Value'], errors='coerce')
 
-        # Drop rows where date conversion failed or value is missing after conversion or ID is missing
+        # Drop rows where value is missing after conversion or ID is missing
+        # Date NaNs were handled above
         initial_rows = len(df_long)
-        df_long.dropna(subset=['Date', 'Value', id_col], inplace=True)
+        df_long.dropna(subset=['Value', id_col], inplace=True)
         rows_dropped = initial_rows - len(df_long)
         if rows_dropped > 0:
-             logger.warning(f"Dropped {rows_dropped} rows from '{filename}' due to missing/invalid Dates, Values, or Security IDs after melting/conversion.")
+             logger.warning(f"Dropped {rows_dropped} rows from '{filename}' due to missing Values or Security IDs after melting/conversion (excluding date parse failures handled separately).")
         
         if df_long.empty:
-             logger.warning(f"DataFrame for '{filename}' is empty after melting, date/value conversion, and NaN drop. No data to process.")
+             logger.warning(f"DataFrame for '{filename}' is empty after melting, value conversion, and NaN drop. No data to process.")
              # Return empty df, list as per function spec
              return pd.DataFrame(), static_cols
 

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Spread Comparison Summary{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Spread Comparison: Original (sec_spread) vs. New (sec_spreadSP)</h1>
+    <p class="text-muted">Comparing credit spreads between the two datasets. Click on a Security ID/Name to see details.</p>
+
+    {# TODO: Add Filters similar to securities_page.html if needed #}
+    {# Example Filter Row (requires filter_options and JS) #}
+    {# <div class="row mb-3">
+        {% for col, options in filter_options.items() %}
+        <div class="col-md-3">
+            <label for="filter-{{ col }}" class="form-label">{{ col }}</label>
+            <select id="filter-{{ col }}" class="form-select form-select-sm security-filter-select" data-column-name="{{ col }}">
+                <option value="">All</option>
+                {% for option in options %}
+                <option value="{{ option }}">{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endfor %}
+    </div> #}
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover table-sm" id="comparison-table">
+            <thead>
+                <tr>
+                    {# Make headers sortable if JS is added #}
+                    <th>{{ id_column_name }}</th> {# Use the actual ID column name #}
+                    {# Add Security Name explicitly if it's DIFFERENT from ID and needed #}
+                    {% if id_column_name != 'Security Name' and 'Security Name' in columns %}
+                        <th>Security Name</th>
+                    {% endif %}
+                    <th>Level Corr.</th>
+                    <th>Change Corr.</th>
+                    <th>Mean Abs Diff</th>
+                    <th>Max Abs Diff</th>
+                    <th>Same Dates?</th>
+                    <th>NaNs Orig</th>
+                    <th>NaNs New</th>
+                    <th>Total Points</th>
+                    {# Add other relevant columns from stats if needed #}
+                    {# Example: 
+                    <th>Max Orig</th>
+                    <th>Min Orig</th>
+                    <th>Max New</th>
+                    <th>Min New</th> 
+                    <th>Start Date Orig</th>
+                    <th>End Date Orig</th>
+                    <th>Start Date New</th>
+                    <th>End Date New</th>
+                    #} 
+                </tr>
+            </thead>
+            <tbody id="comparison-table-body">
+                {% set id_col = id_column_name %} {# Store for easier access in loop #}
+                {% for row in table_data %}
+                {# Add conditional formatting/highlighting if desired #}
+                <tr>
+                    {# Link using the actual ID column name #}
+                    <td><a href="{{ url_for('comparison_bp.details', security_id=row[id_col]) }}">{{ row[id_col] }}</a></td>
+                    {# Display Security Name if it's different from ID #}
+                    {% if id_col != 'Security Name' and 'Security Name' in row %}
+                        <td>{{ row.get('Security Name', 'N/A') }}</td>
+                    {% endif %}
+                    <td>{{ "%.3f"|format(row.Level_Correlation) if row.Level_Correlation is not none else 'N/A' }}</td>
+                    <td>{{ "%.3f"|format(row.Change_Correlation) if row.Change_Correlation is not none else 'N/A' }}</td>
+                    <td>{{ "%.2f"|format(row.Mean_Abs_Diff) if row.Mean_Abs_Diff is not none else 'N/A' }}</td>
+                    <td>{{ "%.2f"|format(row.Max_Abs_Diff) if row.Max_Abs_Diff is not none else 'N/A' }}</td>
+                    <td>{{ 'Yes' if row.Same_Date_Range else 'No' }}</td>
+                    <td>{{ row.NaN_Count_Orig }}</td>
+                    <td>{{ row.NaN_Count_New }}</td>
+                    <td>{{ row.Total_Points }}</td>
+                     {# Render other columns if added #}
+                </tr>
+                {% else %}
+                <tr>
+                    {# Adjust colspan based on whether Security Name is shown separately #}
+                    <td colspan="{{ 10 if id_col == 'Security Name' or 'Security Name' not in columns else 11 }}" class="text-center">No comparison data available.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{# Add link to specific JS for sorting/filtering if implemented #}
+{# <script src="{{ url_for('static', filename='js/comparisonTableFilter.js') }}"></script> #}
+{% endblock %} 
