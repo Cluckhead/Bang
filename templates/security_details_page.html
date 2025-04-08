@@ -70,7 +70,7 @@
                             position: 'left',
                             title: {
                                 display: true,
-                                text: '{{ metric_name }} Value' // Use the metric name dynamically
+                                text: {{ metric_name|tojson }} + ' Value' // Use the metric name dynamically with tojson filter
                             }
                         },
                         y1: { // Secondary Y-axis (for Price)
