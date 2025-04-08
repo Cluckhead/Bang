@@ -2,6 +2,11 @@
 
 {% block title %}Security Data Check{% endblock %}
 
+{% block head_extra %}
+  {# Link the new CSS file #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -55,8 +60,11 @@
         <table class="table table-striped table-hover table-sm small" id="securities-table">
             <thead class="table-light">
                 <tr>
+                    {# Add sortable class and data-column attribute to each header #}
                     {% for col_name in column_order %}
-                        <th>{{ col_name }}</th>
+                        <th class="sortable" data-column-name="{{ col_name }}">
+                            {{ col_name }} <span class="sort-indicator"></span> {# Placeholder for sort arrow #}
+                        </th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -67,7 +75,8 @@
                     {% set row_class = 'table-danger' if abs_z_score >= 3 else ('table-warning' if abs_z_score >= 2 else '') %}
                     <tr class="{{ row_class }}">
                         {% for col_name in column_order %}
-                            <td>
+                            {# Add data-value attribute for easier sorting, especially for formatted numbers #}
+                            <td data-value="{{ row[col_name] if row[col_name] is not none else '' }}">
                                 {# Check if this is the ID column #}
                                 {% if col_name == id_col_name %}
                                     {# Construct the link - Requires a new route #}

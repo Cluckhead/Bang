@@ -241,8 +241,15 @@ def security_details_page(metric_name, security_id):
         # 2. Extract historical data for the specific security using the DECODED ID
         security_data = df_long.xs(decoded_security_id, level=actual_id_col_name).sort_index().copy()
 
+        # Filter to include only business days (Mon-Fri)
+        if isinstance(security_data.index, pd.DatetimeIndex):
+            security_data = security_data[security_data.index.dayofweek < 5]
+        else:
+            print(f"Warning: Index for primary metric data ({metric_name}) for {decoded_security_id} is not DatetimeIndex, skipping business day filter.")
+
         if security_data.empty:
-            return f"Error: No historical data found for Security ID '{decoded_security_id}' in file '{filename}'.", 404
+            # Check if empty *after* filtering too
+            return f"Error: No historical data found for Security ID '{decoded_security_id}' in file '{filename}' (or only weekend data).", 404
 
         # Extract static dimension values for display
         static_info = {}
@@ -252,7 +259,51 @@ def security_details_page(metric_name, security_id):
                 if col in first_row.index:
                     static_info[col] = first_row[col]
 
-        # 3. Prepare data for Chart.js
+        # 3. Load Price and Duration data (if files exist)
+        price_data = pd.DataFrame()
+        duration_data = pd.DataFrame()
+
+        # Load Price Data
+        try:
+            price_df_long, _ = load_and_process_security_data(price_filename)
+            if price_df_long is not None and not price_df_long.empty:
+                price_id_col = price_df_long.index.names[1]
+                if decoded_security_id in price_df_long.index.get_level_values(price_id_col):
+                    price_data = price_df_long.xs(decoded_security_id, level=price_id_col)[['Value']].sort_index().copy()
+                    price_data.rename(columns={'Value': 'Price'}, inplace=True)
+                    # Filter price data to business days
+                    if isinstance(price_data.index, pd.DatetimeIndex):
+                        price_data = price_data[price_data.index.dayofweek < 5]
+                    else:
+                        print(f"Warning: Index for price data for {decoded_security_id} is not DatetimeIndex, skipping business day filter.")
+
+        except FileNotFoundError:
+            print(f"Price file '{price_filename}' not found. Price chart will not be available.")
+        except Exception as e:
+            print(f"Error loading price data for {decoded_security_id}: {e}")
+            traceback.print_exc()
+
+        # Load Duration Data
+        try:
+            duration_df_long, _ = load_and_process_security_data(duration_filename)
+            if duration_df_long is not None and not duration_df_long.empty:
+                duration_id_col = duration_df_long.index.names[1]
+                if decoded_security_id in duration_df_long.index.get_level_values(duration_id_col):
+                    duration_data = duration_df_long.xs(decoded_security_id, level=duration_id_col)[['Value']].sort_index().copy()
+                    duration_data.rename(columns={'Value': 'Duration'}, inplace=True)
+                    # Filter duration data to business days
+                    if isinstance(duration_data.index, pd.DatetimeIndex):
+                        duration_data = duration_data[duration_data.index.dayofweek < 5]
+                    else:
+                        print(f"Warning: Index for duration data for {decoded_security_id} is not DatetimeIndex, skipping business day filter.")
+
+        except FileNotFoundError:
+            print(f"Duration file '{duration_filename}' not found. Duration chart will not be available.")
+        except Exception as e:
+            print(f"Error loading duration data for {decoded_security_id}: {e}")
+            traceback.print_exc()
+
+        # 4. Prepare data for the primary chart
         labels = security_data.index.strftime('%Y-%m-%d').tolist()
         # Initialize datasets list for the primary chart
         primary_datasets = [{

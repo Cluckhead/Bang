@@ -90,6 +90,12 @@ def metric_page(metric_name):
             # Use .copy() to avoid potential warnings
             fund_hist_data = df.xs(fund_code, level=1).sort_index().copy()
 
+            # Filter to include only business days (Mon-Fri)
+            if isinstance(fund_hist_data.index, pd.DatetimeIndex):
+                fund_hist_data = fund_hist_data[fund_hist_data.index.dayofweek < 5]
+            else:
+                print(f"Warning: Index for {fund_code} in {metric_name} is not DatetimeIndex, skipping business day filter.")
+
             # Retrieve the calculated latest metrics (flattened row) for this fund
             fund_latest_metrics_row = latest_metrics.loc[fund_code]
 

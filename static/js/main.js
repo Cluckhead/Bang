@@ -19,106 +19,80 @@
 // This modular approach ensures that initialization code only runs when the corresponding HTML elements are present.
 
 // static/js/main.js
-// Application entry point
+// Purpose: Main entry point for client-side JavaScript. Initializes modules based on page content.
 
 import { renderChartsAndTables, renderSingleSecurityChart } from './modules/ui/chartRenderer.js';
 import { initSecurityTableFilter } from './modules/ui/securityTableFilter.js';
+import { initTableSorter } from './modules/ui/tableSorter.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM fully loaded and parsed");
 
-    // --- Try to Initialize Charts (for metric pages) ---
+    // --- Metric Page (Multiple Charts) ---    
     const chartDataElement = document.getElementById('chartData');
-    if (chartDataElement) {
-        console.log("Chart data element found. Attempting chart rendering...")
+    const chartsArea = document.getElementById('chartsArea');
+
+    if (chartDataElement && chartsArea) {
+        console.log("Metric page detected. Initializing charts.");
         try {
-            const chartsData = JSON.parse(chartDataElement.textContent);
-            console.log("Parsed Chart Data:", chartsData);
-
-            const chartsArea = document.getElementById('chartsArea');
-            if (!chartsArea) {
-                console.error('Charts area element not found!');
+            const chartData = JSON.parse(chartDataElement.textContent);
+            if (chartData) {
+                renderChartsAndTables(chartData, chartsArea);
             } else {
-                const metricNameElement = document.querySelector('h1');
-                const metricName = metricNameElement ? metricNameElement.textContent.replace(' Check', '') : 'Metric';
-                // Safely get latest date - might need adjustment based on actual structure
-                const latestDateElement = document.querySelector('main p strong');
-                const latestDate = latestDateElement ? latestDateElement.textContent : 'N/A';
-
-                let fundColNamesList = [];
-                let benchmarkColName = 'Benchmark Value'; // Default
-                const fundCodes = Object.keys(chartsData);
-
-                if (fundCodes.length > 0) {
-                    const firstFundCode = fundCodes[0];
-                    const firstFundData = chartsData[firstFundCode];
-                    if (firstFundData && firstFundData.fund_column_names) {
-                        fundColNamesList = firstFundData.fund_column_names;
-                    }
-                    // Adjust benchmark name finding if structure differs
-                    if (firstFundData && firstFundData.benchmark_column_name) {
-                        benchmarkColName = firstFundData.benchmark_column_name;
-                    } else if (firstFundData && firstFundData.datasets && firstFundData.datasets.length > 0) {
-                         // Fallback: try to get from datasets if key is missing
-                         const benchmarkDataset = firstFundData.datasets.find(ds => ds.label && ds.label.toLowerCase().includes('benchmark'));
-                         if (benchmarkDataset) benchmarkColName = benchmarkDataset.label;
-                    }
-                }
-                console.log("Fund Columns:", fundColNamesList);
-                console.log("Benchmark Column:", benchmarkColName);
-
-                renderChartsAndTables(chartsArea, chartsData, metricName, latestDate, fundColNamesList, benchmarkColName);
+                console.warn('Chart data is empty or invalid.');
             }
-
         } catch (error) {
             console.error('Error parsing chart data or rendering charts:', error);
-            const chartsArea = document.getElementById('chartsArea');
-            if (chartsArea) {
-                chartsArea.innerHTML = '<p class="text-danger">Error loading chart data.</p>';
-            }
+            chartsArea.innerHTML = '<div class="alert alert-danger">Error loading chart data.</div>';
         }
     } else {
-        console.log("Chart data element not found (Expected on non-metric pages).");
-        // No return here - allow script to continue
+        // console.log("Chart data element or charts area not found, skipping multi-chart rendering.");
     }
 
-    // --- Try to Initialize Security Table Filter (for securities page) ---
-    const tableElement = document.getElementById('securities-table'); 
-    console.log("Checking for securities table element:", tableElement); 
-    if (tableElement) { 
-        console.log("Securities table element found. Initializing filter...");
-        initSecurityTableFilter();
+    // --- Securities Summary Page (Filterable & Sortable Table) ---
+    const securitiesTable = document.getElementById('securities-table');
+    if (securitiesTable) {
+        console.log("Securities page table detected. Initializing filters and sorter.");
+        initSecurityTableFilter('securities-table');
+        initTableSorter('securities-table');
     } else {
-        console.log("Securities table element NOT found (Expected on non-securities pages).");
+        // console.log("Securities table not found, skipping table features initialization.");
     }
-    
-    // --- Try to Initialize Single Security Chart (for security details page) ---
-    const singleChartCanvas = document.getElementById('securityChart');
-    const singleChartDataElement = document.getElementById('chartJsonData');
-    console.log("Checking for single security chart canvas:", singleChartCanvas);
-    console.log("Checking for single security chart data:", singleChartDataElement);
-    
-    if (singleChartCanvas && singleChartDataElement) {
-        console.log("Single security chart elements found. Initializing chart...");
+
+    // --- Security Details Page (Single Chart) ---
+    const securityChartCanvas = document.getElementById('primarySecurityChart');
+    const securityJsonDataElement = document.getElementById('chartJsonData');
+
+    if (securityChartCanvas && securityJsonDataElement) {
+        console.log("Security details page detected. Initializing single chart.");
         try {
-            const chartData = JSON.parse(singleChartDataElement.textContent);
-            // Extract securityId and metricName - might need to pass these differently or get from URL/DOM
-            const pageTitle = document.title;
-            let securityId = 'Unknown';
-            let metricName = 'Unknown';
-            const titleMatch = pageTitle.match(/Security Details: (.*?) - (.*)/);
-            if (titleMatch && titleMatch.length >= 3) {
-                 securityId = titleMatch[1];
-                 metricName = titleMatch[2];
+            const securityChartData = JSON.parse(securityJsonDataElement.textContent);
+            if (securityChartData && securityChartData.primary && securityChartData.primary.labels && securityChartData.primary.datasets) {
+                renderSingleSecurityChart(
+                    securityChartCanvas.id,
+                    securityChartData.primary.labels,
+                    securityChartData.primary.datasets,
+                    securityChartData.security_id + ' - ' + securityChartData.metric_name
+                );
+                
+                const durationChartCanvas = document.getElementById('durationSecurityChart');
+                if(durationChartCanvas && securityChartData.duration && securityChartData.duration.labels && securityChartData.duration.datasets) {
+                    renderSingleSecurityChart(
+                        durationChartCanvas.id,
+                        securityChartData.duration.labels,
+                        securityChartData.duration.datasets,
+                        securityChartData.security_id + ' - Duration'
+                    );
+                }
+
+            } else {
+                console.warn('Security chart JSON data is incomplete or invalid.', securityChartData);
             }
-            
-            renderSingleSecurityChart(singleChartCanvas.id, chartData, securityId, metricName);
         } catch (error) {
-            console.error('Error parsing or rendering single security chart:', error);
-            singleChartCanvas.parentElement.innerHTML = '<p class="text-danger">Error loading chart.</p>';
+            console.error('Error parsing security chart data or rendering chart:', error);
         }
     } else {
-         console.log("Single security chart elements NOT found (Expected on other pages).");
+       // console.log("Security chart canvas or JSON data element not found, skipping single chart rendering.");
     }
 
     // Add any other global initializations here
