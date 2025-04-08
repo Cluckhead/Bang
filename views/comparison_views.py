@@ -322,7 +322,7 @@ def summary():
         return f"An error occurred: {e}", 500
 
 
-@comparison_bp.route('/comparison/details/<security_id>')
+@comparison_bp.route('/comparison/details/<path:security_id>')
 def details(security_id):
     """Displays the comparison details page for a single security."""
     try:
