@@ -125,7 +125,8 @@ def get_data_file_statuses(data_folder):
                 'filename': filename,
                 'exists': False,
                 'last_modified': 'N/A',
-                'latest_data_date': 'N/A'
+                'latest_data_date': 'N/A',
+                'funds_included': 'N/A' # Initialize new key
             }
 
             if os.path.exists(file_path):
@@ -206,8 +207,44 @@ def get_data_file_statuses(data_folder):
                             status_info['latest_data_date'] = 'No Date Column Found/Parsed'
                             current_app.logger.warning(f"[{filename}] Could not find a suitable date column.") 
 
+                        # --- Add Fund Code Extraction --- 
+                        code_col = None
+                        # FIX: Search for 'code' OR 'fund code' (case-insensitive)
+                        code_candidates = ['code', 'fund code'] 
+                        found_code_col_name = None
+                        for candidate in code_candidates:
+                             matches = [c for c in df.columns if c.strip().lower() == candidate]
+                             if matches:
+                                 found_code_col_name = matches[0] # Use the actual column name found
+                                 break # Stop searching once found
+                        
+                        if found_code_col_name:
+                            code_col = found_code_col_name # Assign the found name to code_col
+                            current_app.logger.info(f"[{filename}] Found Code column: '{code_col}'")
+                            if not df.empty and code_col in df:
+                                try:
+                                    unique_funds = sorted([str(f) for f in df[code_col].unique() if pd.notna(f)])
+                                    if unique_funds:
+                                        if len(unique_funds) <= 5:
+                                            status_info['funds_included'] = ', '.join(unique_funds)
+                                        else:
+                                            status_info['funds_included'] = ', '.join(unique_funds[:5]) + f' ... ({len(unique_funds)} total)'
+                                        current_app.logger.info(f"[{filename}] Found funds: {status_info['funds_included']}")
+                                    else:
+                                        status_info['funds_included'] = 'No Codes Found'
+                                except Exception as fund_err:
+                                     current_app.logger.error(f"[{filename}] Error extracting funds from column '{code_col}': {fund_err}")
+                                     status_info['funds_included'] = 'Error Extracting Funds'
+                            else:
+                                 status_info['funds_included'] = 'Code Column Empty?' # Should be covered by EmptyDataError usually
+                        else:
+                            status_info['funds_included'] = 'Code Column Missing'
+                            current_app.logger.warning(f"[{filename}] Code column ('Code' or 'Fund Code') not found.")
+                        # --- End Fund Code Extraction ---
+
                     except pd.errors.EmptyDataError:
                          status_info['latest_data_date'] = 'File is Empty'
+                         status_info['funds_included'] = 'File is Empty' # Also set for funds
                          current_app.logger.warning(f"CSV file is empty: {file_path}")
                     except Exception as read_err:
                         status_info['latest_data_date'] = 'Read Error'
@@ -222,7 +259,7 @@ def get_data_file_statuses(data_folder):
     except Exception as e:
         current_app.logger.error(f"Failed to process QueryMap.csv for file statuses: {e}", exc_info=True)
         # Optionally return a status indicating the map couldn't be processed
-        return [{'filename': 'QueryMap Error', 'exists': False, 'last_modified': str(e), 'latest_data_date': ''}]
+        return [{'filename': 'QueryMap Error', 'exists': False, 'last_modified': str(e), 'latest_data_date': '', 'funds_included': ''}]
 
 
     return statuses

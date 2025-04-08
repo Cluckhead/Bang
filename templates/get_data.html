@@ -18,6 +18,7 @@
                         <th>File Name</th>
                         <th>Latest Data Date (in file)</th>
                         <th>File Last Modified</th>
+                        <th>Funds Included</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -34,6 +35,13 @@
                         <td>
                              {% if status.exists %}
                                 {{ status.last_modified }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                             {% if status.exists %}
+                                {{ status.funds_included }}
                             {% else %}
                                 <span class="text-muted">N/A</span>
                             {% endif %}
