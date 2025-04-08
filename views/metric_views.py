@@ -48,18 +48,18 @@ def metric_page(metric_name):
     # Prepend 'ts_' to get the actual filename base
     metric_filename_base = f"ts_{metric_name}"
     filename = f"{metric_filename_base}.csv"
+    fund_code = 'N/A' # For logging
 
-    fund_code = 'N/A' # Initialize for potential use in exception handling
     try:
         print(f"Loading data for display metric '{metric_name}' from file '{filename}'...")
-        # Load data using the filename with the prefix
         df, fund_cols, benchmark_col = load_and_process_data(filename)
         latest_date_overall = df.index.get_level_values(0).max()
+        latest_date_str = latest_date_overall.strftime('%Y-%m-%d') # Use ISO format for JS
 
-        # Calculate metrics (function doesn't need display name)
+        print(f"Calculating latest metrics for {metric_name}...")
         latest_metrics = calculate_latest_metrics(df, fund_cols, benchmark_col)
 
-        # Determine missing funds based on ANY NaN Change Z-score
+        print(f"Identifying missing funds for {metric_name}...")
         # Construct the list of all possible Change Z-Score columns
         all_cols_for_z = []
         if benchmark_col: # Check if benchmark_col is not None
@@ -84,10 +84,15 @@ def metric_page(metric_name):
              missing_latest = latest_metrics[latest_metrics[z_score_cols].isna().any(axis=1)]
 
         # --- Prepare data for JavaScript --- 
-        charts_data_for_js = {}
+        print(f"Preparing data structure for JavaScript for {metric_name}...")
+        funds_data_for_js = {}
+        # Iterate through sorted fund codes from latest_metrics
         for fund_code in latest_metrics.index:
             # Retrieve historical data for the specific fund (needed for charts)
-            # Use .copy() to avoid potential warnings
+            if not df.index.get_level_values(1).isin([fund_code]).any():
+                print(f"Warning: Fund code {fund_code} not found in DataFrame index level 1 for {metric_name}. Skipping.")
+                continue # Skip if fund code somehow isn't in the original DF index
+
             fund_hist_data = df.xs(fund_code, level=1).sort_index().copy()
 
             # Filter to include only business days (Mon-Fri)
@@ -97,6 +102,10 @@ def metric_page(metric_name):
                 print(f"Warning: Index for {fund_code} in {metric_name} is not DatetimeIndex, skipping business day filter.")
 
             # Retrieve the calculated latest metrics (flattened row) for this fund
+            if fund_code not in latest_metrics.index:
+                 print(f"Warning: Fund code {fund_code} not found in latest_metrics index for {metric_name}. Skipping.")
+                 continue # Skip if fund code not in calculated metrics
+                 
             fund_latest_metrics_row = latest_metrics.loc[fund_code]
 
             # Check if this fund was flagged as missing (based on Z-score or fallback)
@@ -108,9 +117,9 @@ def metric_page(metric_name):
 
             # Create datasets for the chart (raw values)
             # Add benchmark dataset
-            if benchmark_col in fund_hist_data.columns:
-                # Replace NaN with 0 for JSON compatibility
-                bench_values = fund_hist_data[benchmark_col].round(3).fillna(0).tolist()
+            if benchmark_col and benchmark_col in fund_hist_data.columns:
+                # Replace NaN/Inf with None for JSON compatibility (JS handles null)
+                bench_values = fund_hist_data[benchmark_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
                 datasets.append({
                     'label': benchmark_col,
                     'data': bench_values,
@@ -120,8 +129,8 @@ def metric_page(metric_name):
             # Add dataset for each fund column
             for i, fund_col in enumerate(fund_cols):
                  if fund_col in fund_hist_data.columns:
-                    # Replace NaN with 0 for JSON compatibility
-                    fund_values = fund_hist_data[fund_col].round(3).fillna(0).tolist()
+                    # Replace NaN/Inf with None for JSON compatibility (JS handles null)
+                    fund_values = fund_hist_data[fund_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
                     color = COLOR_PALETTE[i % len(COLOR_PALETTE)]
                     datasets.append({
                         'label': fund_col,
@@ -130,27 +139,39 @@ def metric_page(metric_name):
                         'tension': 0.1
                     })
 
-            # Convert metrics row to dictionary, replacing NaN with 0
-            fund_latest_metrics_dict = fund_latest_metrics_row.round(3).fillna(0).to_dict()
+            # Convert metrics row to dictionary, replacing NaN/Inf with None
+            fund_latest_metrics_dict = fund_latest_metrics_row.round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).to_dict()
 
-            # Assemble data for JS
-            charts_data_for_js[fund_code] = {
+            # Assemble data for JS for this fund
+            funds_data_for_js[fund_code] = {
                 'labels': labels,
                 'datasets': datasets,
                 'metrics': fund_latest_metrics_dict,
-                'is_missing_latest': is_missing_latest,
-                'fund_column_names': fund_cols,
-                'benchmark_column_name': benchmark_col
+                'is_missing_latest': is_missing_latest
+                # Removed redundant column names from here
             }
-
-        # Render the template, passing the *display name* (metric_name) for the title
+        
+        # --- Create the final payload for JSON ---    
+        json_payload = {
+            "metadata": {
+                "metric_name": metric_name,
+                "latest_date": latest_date_str, 
+                "fund_col_names": fund_cols, # The list of original fund column names
+                "benchmark_col_name": benchmark_col # The standard benchmark name or None
+            },
+            "funds": funds_data_for_js # The dictionary containing data per fund
+        }
+        print(f"Finished preparing data for {metric_name}. Payload keys: {list(json_payload.keys())}")
+        
+        # Render the template, passing the *entire payload* as JSON
         return render_template('metric_page_js.html',
-                               metric_name=metric_name, # Pass display name for title
-                               charts_data_json=jsonify(charts_data_for_js).get_data(as_text=True),
-                               latest_date=latest_date_overall.strftime('%d/%m/%Y'),
-                               missing_funds=missing_latest,
-                               fund_col_names = fund_cols,
-                               benchmark_col_name = benchmark_col)
+                               metric_name=metric_name, # Keep for page title
+                               # Pass the complete payload as JSON
+                               charts_data_json=jsonify(json_payload).get_data(as_text=True),
+                               # Keep latest_date for display in template header (DD/MM/YYYY format)
+                               latest_date=latest_date_overall.strftime('%d/%m/%Y'), 
+                               missing_funds=missing_latest)
+                               # Removed redundant fund/benchmark names passed separately
 
     except FileNotFoundError:
         # Use the display name in the error message for user clarity

@@ -18,27 +18,47 @@ import { formatNumber } from '../utils/helpers.js';
  * @param {string} benchmarkColName - Name of the benchmark value column.
  */
 export function renderChartsAndTables(container, chartsData, metricName, latestDate, fundColNames, benchmarkColName) {
+    console.log("[chartRenderer] Rendering charts and tables for metric:", metricName, "Latest Date:", latestDate);
+    console.log("[chartRenderer] Received Data:", JSON.parse(JSON.stringify(chartsData))); // Deep copy for logging
+    console.log("[chartRenderer] Fund Column Names:", fundColNames);
+    console.log("[chartRenderer] Benchmark Column Name:", benchmarkColName);
+    
     container.innerHTML = ''; // Clear previous content
 
-    if (Object.keys(chartsData).length === 0) {
+    if (!chartsData || Object.keys(chartsData).length === 0) {
+        console.warn("[chartRenderer] No data available for metric:", metricName);
         container.innerHTML = '<p>No data available for this metric.</p>';
         return;
     }
 
     // Iterate through each fund's data (which is already sorted by max Change Z-score)
     for (const [fundCode, data] of Object.entries(chartsData)) {
+        console.log(`[chartRenderer] Processing fund: ${fundCode}`);
         const metrics = data.metrics; // This is now the flattened metrics object
-        const fundColumns = data.fund_column_names; // Get passed fund columns
-        const benchmarkColumn = data.benchmark_column_name; // Get passed benchmark column
+        // --- Use passed-in names, not names derived from potentially incomplete 'data' object ---
+        const fundColumns = fundColNames; 
+        const benchmarkColumn = benchmarkColName;
+        console.log(`[chartRenderer] Fund ${fundCode} - Using Fund Columns:`, fundColumns);
+        console.log(`[chartRenderer] Fund ${fundCode} - Using Benchmark Column:`, benchmarkColumn);
+        console.log(`[chartRenderer] Fund ${fundCode} - Metrics Object:`, metrics);
+        console.log(`[chartRenderer] Fund ${fundCode} - Full Data Object:`, JSON.parse(JSON.stringify(data))); // Deep copy
         
         // Find the maximum absolute *Change Z-Score* across all original columns for this fund
         let maxAbsZScore = 0;
         let zScoreForTitle = null; // Use the Z-score corresponding to the max absolute value
         if (metrics) {
-            const colsToCheck = [benchmarkColumn, ...fundColumns];
+            // Combine benchmark (if exists) and fund columns for checking Z-scores
+            const colsToCheck = [];
+            if (benchmarkColumn) colsToCheck.push(benchmarkColumn);
+            if (fundColumns && Array.isArray(fundColumns)) colsToCheck.push(...fundColumns);
+            
+            console.log(`[chartRenderer] Fund ${fundCode} - Columns to check for Z-Score:`, colsToCheck);
+
             colsToCheck.forEach(colName => {
+                if (!colName) return; // Skip null/empty column names
                 const zScoreKey = `${colName} Change Z-Score`; 
                 const zScore = metrics[zScoreKey];
+                // console.log(`[chartRenderer] Fund ${fundCode} - Checking Z-Score for column '${colName}' (key: '${zScoreKey}'):`, zScore);
                  if (zScore !== null && typeof zScore !== 'undefined' && !isNaN(zScore)) {
                      const absZ = Math.abs(zScore);
                      if (absZ > maxAbsZScore) {
@@ -47,6 +67,9 @@ export function renderChartsAndTables(container, chartsData, metricName, latestD
                      }
                  }
             });
+            console.log(`[chartRenderer] Fund ${fundCode} - Max Abs Z-Score found: ${maxAbsZScore}, Specific Z-Score for title: ${zScoreForTitle}`);
+        } else {
+            console.warn(`[chartRenderer] Fund ${fundCode} - Metrics object is missing or null.`);
         }
 
         // Determine CSS class based on the maximum Z-score for highlighting the whole section
@@ -56,6 +79,7 @@ export function renderChartsAndTables(container, chartsData, metricName, latestD
         } else if (maxAbsZScore > 2) {
             zClass = 'high-z';
         }
+        console.log(`[chartRenderer] Fund ${fundCode} - Assigned Z-Class: '${zClass}'`);
 
         // Create wrapper div
         const wrapper = document.createElement('div');
@@ -64,10 +88,12 @@ export function renderChartsAndTables(container, chartsData, metricName, latestD
 
         // Add Duration Details Link (if applicable)
         if (metricName === 'Duration') {
+            console.log(`[chartRenderer] Fund ${fundCode} - Adding Duration details link.`);
             const linkDiv = document.createElement('div');
             linkDiv.className = 'mb-2 text-right'; // Add some margin below
             const link = document.createElement('a');
-            link.href = `/fund/duration_details/${fundCode}`; // Construct the URL with the /fund prefix
+            // Use template literal correctly for URL generation
+            link.href = `/fund_duration_details/${fundCode}`; // Corrected URL path
             link.className = 'btn btn-info btn-sm';
             link.textContent = `View Security Duration Changes for ${fundCode} →`;
             linkDiv.appendChild(link);
@@ -79,28 +105,44 @@ export function renderChartsAndTables(container, chartsData, metricName, latestD
         canvas.id = `chart-${fundCode}`;
         canvas.className = 'chart-canvas';
         wrapper.appendChild(canvas);
+        console.log(`[chartRenderer] Fund ${fundCode} - Created canvas with id: ${canvas.id}`);
 
         // Create Metrics Table using the *rewritten* function
-        // Pass the specific fund/benchmark names from the data object
+        // Pass the specific fund/benchmark names from the *passed-in arguments*
+        console.log(`[chartRenderer] Fund ${fundCode} - Calling createMetricsTable with:`, metrics, latestDate, fundColumns, benchmarkColumn, zClass);
         const table = createMetricsTable(metrics, latestDate, fundColumns, benchmarkColumn, zClass);
         wrapper.appendChild(table);
+        console.log(`[chartRenderer] Fund ${fundCode} - Appended metrics table.`);
 
         container.appendChild(wrapper);
+        console.log(`[chartRenderer] Fund ${fundCode} - Appended wrapper to container.`);
 
         // Render Chart
+        // Use setTimeout to ensure the canvas is in the DOM and sized before drawing
         setTimeout(() => {
+            console.log(`[chartRenderer] Fund ${fundCode} - Preparing to render chart in setTimeout.`);
              if (canvas.getContext('2d')) {
+                 console.log(`[chartRenderer] Fund ${fundCode} - Canvas context obtained. Calling createTimeSeriesChart with:`, {
+                    canvasId: canvas.id,
+                    data: JSON.parse(JSON.stringify(data)), // Log deep copy
+                    metricName: metricName,
+                    fundCode: fundCode,
+                    zScoreForTitle: zScoreForTitle,
+                    is_missing_latest: data.is_missing_latest
+                 });
                  // Pass zScoreForTitle (which is the max abs Change Z-Score across columns)
                  createTimeSeriesChart(canvas.id, data, metricName, fundCode, zScoreForTitle, data.is_missing_latest);
+                 console.log(`[chartRenderer] Fund ${fundCode} - createTimeSeriesChart call finished.`);
             } else {
-                console.error(`Could not get 2D context for canvas ${canvas.id}`);
+                console.error(`[chartRenderer] Fund ${fundCode} - Could not get 2D context for canvas ${canvas.id}`);
                 const errorP = document.createElement('p');
                 errorP.textContent = 'Error rendering chart.';
                 errorP.className = 'text-danger';
-                canvas.parentNode.replaceChild(errorP, canvas);
+                canvas.parentNode.replaceChild(errorP, canvas); // Replace canvas with error message
             }
         }, 0); 
     }
+    console.log("[chartRenderer] Finished rendering all charts and tables.");
 }
 
 /**
@@ -108,11 +150,12 @@ export function renderChartsAndTables(container, chartsData, metricName, latestD
  * @param {object | null} metrics - Flattened metrics object from Flask for a specific fund code.
  * @param {string} latestDate - The latest date string.
  * @param {string[]} fundColNames - List of fund value column names for this metric.
- * @param {string} benchmarkColName - Name of the benchmark value column for this metric.
+ * @param {string | null} benchmarkColName - Name of the benchmark value column for this metric (can be null).
  * @param {string} zClass - CSS class based on max Z-score (used for table highlight).
  * @returns {HTMLTableElement} The created table element.
  */
 function createMetricsTable(metrics, latestDate, fundColNames, benchmarkColName, zClass) {
+    console.log("[createMetricsTable] Creating table. Metrics:", metrics, "Latest Date:", latestDate, "Funds:", fundColNames, "Bench:", benchmarkColName, "zClass:", zClass);
     const table = document.createElement('table');
     // Apply overall highlight based on max Z across columns
     table.className = `table table-sm table-bordered metrics-table ${zClass}`;
@@ -133,6 +176,7 @@ function createMetricsTable(metrics, latestDate, fundColNames, benchmarkColName,
     const tbody = table.createTBody();
 
     if (!metrics) {
+        console.warn("[createMetricsTable] Metrics object is null or undefined.");
         const row = tbody.insertRow();
         const cell = row.insertCell();
         cell.colSpan = 7; // Match new header count
@@ -141,11 +185,19 @@ function createMetricsTable(metrics, latestDate, fundColNames, benchmarkColName,
     }
 
     // Combine benchmark and fund columns for iteration
-    const allColumns = [benchmarkColName, ...fundColNames];
+    const allColumns = [];
+    if (benchmarkColName) allColumns.push(benchmarkColName);
+    if (fundColNames && Array.isArray(fundColNames)) allColumns.push(...fundColNames);
+    
+    console.log("[createMetricsTable] Columns to create rows for:", allColumns);
 
     // Create one row per original column
     allColumns.forEach(colName => {
-        if (!colName) return; // Skip if column name is somehow empty
+        if (!colName) {
+            console.warn("[createMetricsTable] Skipping null/empty column name.");
+            return; // Skip if column name is somehow empty
+        }
+        console.log(`[createMetricsTable] Creating row for column: ${colName}`);
 
         // Define the keys to access the flattened metrics object
         const latestValKey = `${colName} Latest Value`;
@@ -160,6 +212,7 @@ function createMetricsTable(metrics, latestDate, fundColNames, benchmarkColName,
         // Determine cell class for Z-score highlighting on this specific row
         const zScoreValue = metrics[zScoreKey];
         let zScoreClass = '';
+        // console.log(`[createMetricsTable] Column ${colName} - Z-Score Value: ${zScoreValue}`);
         if (zScoreValue !== null && typeof zScoreValue !== 'undefined' && !isNaN(zScoreValue)) {
              const absZ = Math.abs(zScoreValue);
              if (absZ > 3) { zScoreClass = 'very-high-z'; }
@@ -176,8 +229,10 @@ function createMetricsTable(metrics, latestDate, fundColNames, benchmarkColName,
             <td>${formatNumber(metrics[minKey])}</td>
             <td class="${zScoreClass}">${formatNumber(metrics[zScoreKey])}</td> 
         `; // Apply Z-score class only to the Z-score cell
+        // console.log(`[createMetricsTable] Row HTML for ${colName}:`, row.innerHTML);
     });
 
+    console.log("[createMetricsTable] Finished creating table.");
     return table;
 } 
 

@@ -35,15 +35,32 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chartDataElement && chartsArea) {
         console.log("Metric page detected. Initializing charts.");
         try {
-            const chartData = JSON.parse(chartDataElement.textContent);
-            if (chartData) {
-                renderChartsAndTables(chartData, chartsArea);
+            const chartDataJson = chartDataElement.textContent;
+            const fullChartData = JSON.parse(chartDataJson);
+            console.log('Parsed full chart data from JSON:', JSON.parse(JSON.stringify(fullChartData)));
+            
+            if (fullChartData && fullChartData.metadata && fullChartData.funds && Object.keys(fullChartData.funds).length > 0) {
+                const metadata = fullChartData.metadata;
+                const fundsData = fullChartData.funds; 
+                
+                console.log("Extracted Metadata:", metadata);
+                console.log("Extracted Funds Data:", fundsData);
+
+                renderChartsAndTables(
+                    chartsArea,
+                    fundsData,
+                    metadata.metric_name,
+                    metadata.latest_date,
+                    metadata.fund_col_names,
+                    metadata.benchmark_col_name
+                );
             } else {
-                console.warn('Chart data is empty or invalid.');
+                console.error('Parsed chart data is missing expected structure (metadata/funds) or funds object is empty:', fullChartData);
+                chartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid data structure received from backend. Check console.</div>';
             }
-        } catch (error) {
-            console.error('Error parsing chart data or rendering charts:', error);
-            chartsArea.innerHTML = '<div class="alert alert-danger">Error loading chart data.</div>';
+        } catch (e) {
+            console.error('Error parsing chart data JSON or calling renderer:', e);
+            chartsArea.innerHTML = '<div class="alert alert-danger">Error loading chart data. Please check console for details.</div>';
         }
     } else {
         // console.log("Chart data element or charts area not found, skipping multi-chart rendering.");

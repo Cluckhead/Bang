@@ -4,7 +4,11 @@
 # set appropriate data types, and prepare the data in a pandas DataFrame format
 # suitable for further analysis and processing within the application.
 # data_loader.py
-# This file contains functions for loading and preparing the data from CSV files.
+# This file is responsible for loading and preprocessing data from time-series CSV files (typically prefixed with `ts_`).
+# It includes functions to dynamically identify essential columns (Date, Code, Benchmark)
+# based on patterns, handle potential naming variations, parse dates (handling 'YYYY-MM-DD' and 'DD/MM/YYYY'),
+# standardize column names, set appropriate data types, and prepare the data in a pandas DataFrame format
+# suitable for further analysis within the application. It includes robust error handling and logging.
 
 import pandas as pd
 import os
@@ -73,9 +77,9 @@ def load_and_process_data(
     # benchmark_col: str = DEFAULT_BENCHMARK_COL,
     # other_fund_cols: Optional[List[str]] = None, # Keep for potential future explicit override, but primary logic is dynamic
     data_folder: str = DATA_FOLDER
-) -> Tuple[pd.DataFrame, List[str], str]:
+) -> Tuple[pd.DataFrame, List[str], Optional[str]]: # Changed return type hint for benchmark_col
     """Loads a CSV file, dynamically identifies date, code, and benchmark columns,
-    renames them to standard names ('Date', 'Code', 'Benchmark'), parses dates,
+    renames them to standard names ('Date', 'Code', 'Benchmark'), parses dates (trying YYYY-MM-DD then DD/MM/YYYY),
     sets index, identifies original fund column names, and ensures numeric types for value columns.
 
     Args:
@@ -83,14 +87,14 @@ def load_and_process_data(
         data_folder (str): The path to the folder containing the data files. Defaults to DATA_FOLDER.
 
     Returns:
-        Tuple[pd.DataFrame, List[str], str]:
+        Tuple[pd.DataFrame, List[str], Optional[str]]:
                Processed DataFrame indexed by the standardized 'Date' and 'Code' columns,
                list of original fund column names found in the file,
-               the standardized benchmark column name ('Benchmark').
+               the standardized benchmark column name ('Benchmark') if present, otherwise None.
 
     Raises:
         ValueError: If required columns (Date, Code) cannot be uniquely identified,
-                    or if no value columns are found (and no benchmark).
+                    if date parsing fails completely, or if no value columns are found (and no benchmark).
         FileNotFoundError: If the specified file does not exist.
     """
     filepath = os.path.join(data_folder, filename)
@@ -100,7 +104,6 @@ def load_and_process_data(
 
     try:
         # Read only the header first to get column names accurately
-        # Added on_bad_lines='skip' for robustness
         header_df = pd.read_csv(filepath, nrows=0, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip')
         original_cols = [col.strip() for col in header_df.columns.tolist()] # Strip whitespace immediately
         logger.info(f"Original columns found in '{filename}': {original_cols}")
@@ -122,9 +125,9 @@ def load_and_process_data(
         # Fund columns are everything EXCEPT the identified date and code columns.
         # Benchmark is also excluded IF it was found.
         excluded_cols_for_funds = {actual_date_col, actual_code_col}
-        if benchmark_col_present:
+        if benchmark_col_present and actual_benchmark_col: # Check actual_benchmark_col is not None
             excluded_cols_for_funds.add(actual_benchmark_col)
-            
+
         # Identify columns that are not date, code, or benchmark (if present)
         original_fund_val_col_names = [col for col in original_cols if col not in excluded_cols_for_funds]
 
@@ -138,33 +141,69 @@ def load_and_process_data(
 
 
         # --- Read the full CSV ---
-        # Specify date parsing for the dynamically identified date column
-        # Expecting YYYY-MM-DD format, let pandas infer.
-        # Added on_bad_lines='skip' for robustness
-        df = pd.read_csv(filepath, parse_dates=[actual_date_col], encoding='utf-8', encoding_errors='replace', on_bad_lines='skip') # Removed dayfirst=True
+        # Read WITHOUT parsing dates initially, handle it manually later for flexibility
+        df = pd.read_csv(filepath, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip', dtype={actual_date_col: str}) # Read date col as string
         df.columns = df.columns.str.strip() # Ensure columns are stripped again after full read
 
-        # --- Rename columns to standard names ---
+        # --- Rename columns to standard names BEFORE date parsing ---
         rename_map = {
             actual_date_col: STD_DATE_COL,
             actual_code_col: STD_CODE_COL
         }
-        if benchmark_col_present:
+        if benchmark_col_present and actual_benchmark_col:
             rename_map[actual_benchmark_col] = STD_BENCHMARK_COL
-        
-        df.rename(columns=rename_map, inplace=True)
-        logger.info(f"Renamed columns in '{filename}' to standard names: {list(rename_map.values())}")
 
+        df.rename(columns=rename_map, inplace=True)
+        logger.info(f"Renamed columns in '{filename}' to standard names: {list(rename_map.keys())} -> {list(rename_map.values())}")
+
+
+        # --- Robust Date Parsing ---
+        date_series = df[STD_DATE_COL]
+        parsed_dates = pd.to_datetime(date_series, format='%Y-%m-%d', errors='coerce')
+        # Check if the first format failed for all entries (common if format is wrong)
+        if parsed_dates.isnull().all():
+            logger.info(f"Date format '%Y-%m-%d' failed for all entries in {filename}. Trying '%d/%m/%Y'.")
+            parsed_dates = pd.to_datetime(date_series, format='%d/%m/%Y', errors='coerce')
+            # Check if the second format also failed
+            if parsed_dates.isnull().all():
+                logger.error(f"Could not parse dates in column '{STD_DATE_COL}' (original: '{actual_date_col}') using either YYYY-MM-DD or DD/MM/YYYY format in file {filename}.")
+                raise ValueError(f"Date parsing failed for file {filename}.")
+            else:
+                logger.info(f"Successfully parsed dates using format '%d/%m/%Y' for {filename}.")
+        else:
+             logger.info(f"Successfully parsed dates using format '%Y-%m-%d' for {filename}.")
+
+        # Assign the successfully parsed dates back to the DataFrame
+        df[STD_DATE_COL] = parsed_dates
+        # Drop rows where date parsing failed completely (became NaT)
+        original_row_count = len(df)
+        df.dropna(subset=[STD_DATE_COL], inplace=True)
+        rows_dropped = original_row_count - len(df)
+        if rows_dropped > 0:
+            logger.warning(f"Dropped {rows_dropped} rows from {filename} due to failed date parsing.")
 
         # --- Set Index using standard names ---
-        df.set_index([STD_DATE_COL, STD_CODE_COL], inplace=True)
+        if df.empty:
+            logger.warning(f"DataFrame became empty after dropping rows with unparseable dates in {filename}.")
+            # Return an empty DataFrame matching the expected structure but log the issue
+            final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present else None
+            # Need to define columns if df is empty, based on expected output structure
+            expected_cols = [STD_DATE_COL, STD_CODE_COL] + original_fund_val_col_names
+            if final_benchmark_col_name:
+                expected_cols.append(final_benchmark_col_name)
+            # Create an empty df with the right index and columns
+            empty_index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=[STD_DATE_COL, STD_CODE_COL])
+            return pd.DataFrame(index=empty_index, columns=[col for col in expected_cols if col not in [STD_DATE_COL, STD_CODE_COL]]), original_fund_val_col_names, final_benchmark_col_name
+        else:
+            df.set_index([STD_DATE_COL, STD_CODE_COL], inplace=True)
+
 
         # --- Convert value columns to numeric ---
         # Use original fund names and the standard benchmark name (if present)
         value_cols_to_convert = original_fund_val_col_names[:] # Make a copy
         if benchmark_col_present:
              # Use the RENAMED benchmark column name for conversion
-            value_cols_to_convert.append(STD_BENCHMARK_COL) 
+            value_cols_to_convert.append(STD_BENCHMARK_COL)
 
         if not value_cols_to_convert:
             # This case implies only date/code columns were found, which should be caught earlier, but safeguard.
@@ -179,7 +218,7 @@ def load_and_process_data(
 
         # Use apply with pd.to_numeric for robust conversion (errors='coerce' is crucial)
         df[valid_cols_for_conversion] = df[valid_cols_for_conversion].apply(pd.to_numeric, errors='coerce')
-        
+
         # Check for NaNs after conversion
         nan_check_cols = [col for col in valid_cols_for_conversion if col in df.columns] # Re-check existence just in case
         if nan_check_cols and df[nan_check_cols].isnull().all().all():
