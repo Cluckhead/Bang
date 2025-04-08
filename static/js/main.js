@@ -21,23 +21,23 @@
 // static/js/main.js
 // Purpose: Main entry point for client-side JavaScript. Initializes modules based on page content.
 
-import { renderChartsAndTables, renderSingleSecurityChart } from './modules/ui/chartRenderer.js';
+import { renderChartsAndTables, renderSingleSecurityChart, renderFundCharts } from './modules/ui/chartRenderer.js';
 import { initSecurityTableFilter } from './modules/ui/securityTableFilter.js';
 import { initTableSorter } from './modules/ui/tableSorter.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM fully loaded and parsed");
 
-    // --- Metric Page (Multiple Charts) ---    
-    const chartDataElement = document.getElementById('chartData');
-    const chartsArea = document.getElementById('chartsArea');
+    // --- Metric Page (Multiple Charts per Metric) ---    
+    const metricChartDataElement = document.getElementById('chartData');
+    const metricChartsArea = document.getElementById('chartsArea');
 
-    if (chartDataElement && chartsArea) {
+    if (metricChartDataElement && metricChartsArea) {
         console.log("Metric page detected. Initializing charts.");
         try {
-            const chartDataJson = chartDataElement.textContent;
+            const chartDataJson = metricChartDataElement.textContent;
             const fullChartData = JSON.parse(chartDataJson);
-            console.log('Parsed full chart data from JSON:', JSON.parse(JSON.stringify(fullChartData)));
+            console.log('Parsed metric chart data:', JSON.parse(JSON.stringify(fullChartData)));
             
             if (fullChartData && fullChartData.metadata && fullChartData.funds && Object.keys(fullChartData.funds).length > 0) {
                 const metadata = fullChartData.metadata;
@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log("Extracted Funds Data:", fundsData);
 
                 renderChartsAndTables(
-                    chartsArea,
+                    metricChartsArea,
                     fundsData,
                     metadata.metric_name,
                     metadata.latest_date,
@@ -55,15 +55,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     metadata.benchmark_col_name
                 );
             } else {
-                console.error('Parsed chart data is missing expected structure (metadata/funds) or funds object is empty:', fullChartData);
-                chartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid data structure received from backend. Check console.</div>';
+                console.error('Parsed metric chart data is missing expected structure:', fullChartData);
+                metricChartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid data structure.</div>';
             }
         } catch (e) {
-            console.error('Error parsing chart data JSON or calling renderer:', e);
-            chartsArea.innerHTML = '<div class="alert alert-danger">Error loading chart data. Please check console for details.</div>';
+            console.error('Error processing metric chart data:', e);
+            metricChartsArea.innerHTML = '<div class="alert alert-danger">Error loading chart data. Check console.</div>';
         }
-    } else {
-        // console.log("Chart data element or charts area not found, skipping multi-chart rendering.");
+    }
+
+    // --- Fund Detail Page (Multiple Charts per Fund) ---    
+    const fundChartDataElement = document.getElementById('fundChartData');
+    const fundChartsArea = document.getElementById('fundChartsArea');
+
+    if (fundChartDataElement && fundChartsArea) {
+        console.log("Fund detail page detected. Initializing charts.");
+        try {
+            const fundChartDataJson = fundChartDataElement.textContent;
+            const allChartData = JSON.parse(fundChartDataJson);
+            console.log('Parsed fund chart data:', JSON.parse(JSON.stringify(allChartData)));
+
+            if (Array.isArray(allChartData) && allChartData.length > 0) {
+                renderFundCharts(fundChartsArea, allChartData);
+            } else if (Array.isArray(allChartData) && allChartData.length === 0) {
+                console.log("No chart data provided for this fund.");
+                // Message is already shown by the template
+            } else {
+                 console.error('Parsed fund chart data is not an array or is invalid:', allChartData);
+                fundChartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid chart data received.</div>';
+            }
+        } catch (e) {
+            console.error('Error processing fund chart data:', e);
+            fundChartsArea.innerHTML = '<div class="alert alert-danger">Error loading fund charts. Check console.</div>';
+        }
     }
 
     // --- Securities Summary Page (Filterable & Sortable Table) ---

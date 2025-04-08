@@ -60,7 +60,7 @@
                 <tbody>
                     {% for fund_code, row in summary_data.iterrows() %}
                     <tr>
-                        <td>{{ fund_code }}</td>
+                        <td><a href="{{ url_for('fund.fund_detail', fund_code=fund_code) }}" title="View all metrics for {{ fund_code }}">{{ fund_code }}</a></td>
                         {# Iterate through the same new list for data access #}
                         {% for full_metric_name in summary_metrics %}
                             {% set z_score = row[full_metric_name] %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Fund Details: {{ fund_code }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Fund Details: {{ fund_code }}</h1>
+
+    {% if message %}
+        <div class="alert alert-info" role="alert">
+            {{ message }}
+        </div>
+    {% endif %}
+
+    {% if chart_data_json and chart_data_json != '[]' %}
+        <!-- Embed JSON data for JavaScript -->
+        <script id="fundChartData" type="application/json">
+            {{ chart_data_json | safe }}
+        </script>
+
+        <!-- Area where charts will be rendered by JavaScript -->
+        <div id="fundChartsArea" class="row row-cols-1 row-cols-lg-2 g-4">
+            <!-- Charts will be dynamically inserted here -->
+        </div>
+    {% elif not message %}
+         <div class="alert alert-warning" role="alert">
+            No chart data available to display for this fund.
+        </div>
+    {% endif %}
+
+     <div class="mt-4">
+        <a href="{{ url_for('main.index') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Chart.js is already included in base.html if needed by main.js -->
+{% endblock %} 

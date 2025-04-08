@@ -321,3 +321,87 @@ export function renderSingleSecurityChart(canvasId, chartData, securityId, metri
         ctx.parentElement.innerHTML = '<p class="text-danger">Error rendering chart.</p>';
     }
 } 
+
+/**
+ * Renders multiple time series charts into the specified container for the fund detail page.
+ * Iterates through metrics for a single fund.
+ * @param {HTMLElement} container - The parent element to render into (e.g., #fundChartsArea).
+ * @param {Array<object>} allChartData - An array where each object contains data for one metric's chart.
+ *                                       Expected structure: [{ metricName: '...', labels: [...], datasets: [...] }, ...]
+ */
+export function renderFundCharts(container, allChartData) {
+    console.log("[chartRenderer] Rendering charts for fund detail page.");
+    console.log("[chartRenderer] Received Data:", JSON.parse(JSON.stringify(allChartData))); // Deep copy for logging
+    
+    container.innerHTML = ''; // Clear previous content
+
+    if (!allChartData || !Array.isArray(allChartData) || allChartData.length === 0) {
+        console.warn("[chartRenderer] No chart data provided for the fund page.");
+        // Message should be handled by the template, but log it here.
+        return;
+    }
+
+    // Iterate through each metric's chart data
+    allChartData.forEach((metricData, index) => {
+        if (!metricData || !metricData.metricName || !metricData.labels || !metricData.datasets) {
+            console.warn(`[chartRenderer] Skipping chart at index ${index} due to missing data:`, metricData);
+            return;
+        }
+
+        const metricName = metricData.metricName;
+        const safeMetricName = metricName.replace(/[^a-zA-Z0-9]/g, '-') || 'metric'; // Create a CSS-safe ID part
+        console.log(`[chartRenderer] Processing metric: ${metricName}`);
+
+        // Create wrapper div for each chart (using Bootstrap columns for layout)
+        const wrapper = document.createElement('div');
+        // Uses the col classes defined in the template's fundChartsArea (row-cols-1 row-cols-lg-2)
+        wrapper.className = `chart-container-wrapper fund-chart-item`; 
+        wrapper.id = `fund-chart-wrapper-${safeMetricName}-${index}`;
+
+        // Create Chart Canvas
+        const canvas = document.createElement('canvas');
+        // Ensure unique ID for each canvas
+        canvas.id = `fund-chart-${safeMetricName}-${index}`; 
+        canvas.className = 'chart-canvas';
+        wrapper.appendChild(canvas);
+        console.log(`[chartRenderer] Created canvas with id: ${canvas.id} for metric: ${metricName}`);
+
+        // Append the wrapper to the main container
+        container.appendChild(wrapper);
+        console.log(`[chartRenderer] Appended wrapper for ${metricName} to container.`);
+
+        // Render Chart using the existing time series chart function
+        // Use setTimeout to ensure the canvas is in the DOM and sized
+        setTimeout(() => {
+            console.log(`[chartRenderer] Preparing to render chart for metric: ${metricName} in setTimeout.`);
+             if (canvas.getContext('2d')) {
+                 console.log(`[chartRenderer] Canvas context obtained. Calling createTimeSeriesChart with:`, {
+                    canvasId: canvas.id,
+                    data: JSON.parse(JSON.stringify(metricData)), // Log deep copy
+                    titlePrefix: metricName, // Use metric name as the main title part
+                    fundCodeOrSecurityId: null, // Not needed for title here
+                    zScoreForTitle: null, // No specific Z-score for the whole page/chart
+                    is_missing_latest: null // Not applicable here
+                 });
+                 
+                 createTimeSeriesChart(
+                     canvas.id,         // The unique canvas ID
+                     metricData,        // Data object with labels and datasets
+                     metricName,        // Title prefix (e.g., "Yield")
+                     null,              // fundCodeOrSecurityId (not needed for title)
+                     null,              // zScoreForTitle (not applicable)
+                     null               // is_missing_latest (not applicable)
+                 );
+                 console.log(`[chartRenderer] createTimeSeriesChart call finished for metric: ${metricName}.`);
+            } else {
+                console.error(`[chartRenderer] Could not get 2D context for canvas ${canvas.id} (Metric: ${metricName})`);
+                const errorP = document.createElement('p');
+                errorP.textContent = `Error rendering chart for ${metricName}.`;
+                errorP.className = 'text-danger';
+                canvas.parentNode.replaceChild(errorP, canvas); // Replace canvas with error message
+            }
+        }, 0); 
+    });
+
+    console.log("[chartRenderer] Finished rendering all fund charts.");
+} 
