@@ -385,209 +385,369 @@ def run_api_calls():
         if not {'QueryID', 'FileName'}.issubset(query_map_df.columns):
             return jsonify({"status": "error", "message": "QueryMap.csv missing required columns (QueryID, FileName)."}), 500
 
-        # --- Loop through Queries and Simulate API Calls ---
-        # Note: This is synchronous. For real, long-running API calls,
-        # use a task queue (e.g., Celery) and WebSockets/polling for progress.
-        results_summary = []
-        total_queries = len(query_map_df)
-        completed_queries = 0
+        # Sort queries: ts_*, pre_*, others
+        def sort_key(query):
+            filename = query.get('FileName', '').lower()
+            if filename.startswith('ts_'):
+                return 0
+            elif filename.startswith('pre_'):
+                return 1
+            else:
+                # Keep original order for non-ts/pre files relative to each other
+                # Or assign a consistent rank if needed (e.g., based on original index)
+                return 2 # All others get rank 2 for now
+        
+        # Add original index to preserve relative order for non-ts/pre files
+        queries_with_indices = list(enumerate(query_map_df.to_dict('records')))
+        
+        def sort_key_with_index(item):
+            index, query = item
+            filename = query.get('FileName', '').lower()
+            if filename.startswith('ts_'):
+                return (0, index) # Sort by ts_ first, then original index
+            elif filename.startswith('pre_'):
+                return (1, index) # Sort by pre_ next, then original index
+            else:
+                return (2, index) # Others last, sorted by original index
 
-        for index, row in query_map_df.iterrows():
-            query_id = row['QueryID']
-            file_name = row['FileName']
+        queries_with_indices.sort(key=sort_key_with_index)
+        # Extract the sorted queries list
+        queries = [item[1] for item in queries_with_indices]
+        
+        current_app.logger.info(f"Processing order after sorting: {[q.get('FileName', 'N/A') for q in queries]}")
+
+        results_summary = []
+        total_queries = len(queries)
+        completed_queries = 0
+        all_ts_files_succeeded = True # Flag to track success of ts_ files
+
+        # Loop through sorted queries
+        for query_info in queries:
+            # Extract query details safely
+            query_id = query_info.get('QueryID')
+            file_name = query_info.get('FileName')
+            # Make sure QueryID and FileName exist
+            if not query_id or not file_name:
+                 current_app.logger.warning(f"Skipping entry due to missing QueryID or FileName: {query_info}")
+                 # Add a summary entry indicating the skip?
+                 summary = {
+                    "query_id": query_id or "N/A", "file_name": file_name or "N/A",
+                    "status": "Skipped (Missing QueryID/FileName)",
+                    "actual_rows": 0, "lines_in_file": 0, "save_action": "N/A", "validation_status": "Not Run"
+                 }
+                 results_summary.append(summary)
+                 # Don't increment completed_queries if it fundamentally couldn't run
+                 continue 
+
             output_path = os.path.join(data_folder, file_name)
 
-            # --- Initialize summary dictionary here ---
+            # Initialize summary for this query (moved after basic validation)
             summary = {
                 "query_id": query_id,
                 "file_name": file_name,
-                "fund_code": ", ".join(selected_funds), # Or potentially filter based on query_id if needed
-                "simulated_rows": None,
-                "simulated_lines": None,
-                "actual_rows": None,
-                "actual_lines": None,
-                "status": "Pending",
+                "status": "Pending", # Initial status
+                "actual_rows": 0,
+                "lines_in_file": 0, # Will be updated if file exists after save
                 "save_action": "N/A",
                 "validation_status": "Not Run"
             }
-            # ------------------------------------------
 
-            # Reset status variables for each query (kept for compatibility if needed elsewhere, but summary holds most info now)
-            status = "Unknown Error"
-            rows_returned = 0
-            lines_in_file = 0
-            actual_df = None # This seems redundant if df_new is used, consider removing later
+            # Determine file type
+            file_type = 'other'
+            if file_name.lower().startswith('ts_'):
+                file_type = 'ts'
+            elif file_name.lower().startswith('pre_'):
+                file_type = 'pre'
 
+            current_app.logger.info(f"--- Starting Process for QueryID: {query_id}, File: {file_name} (Type: {file_type}) ---")
+
+            # Skip pre_ files if any ts_ file failed
+            if file_type == 'pre' and not all_ts_files_succeeded:
+                current_app.logger.warning(f"[{file_name}] Skipping pre_ file because a previous ts_ file failed processing.")
+                summary['status'] = 'Skipped (Previous TS Failure)'
+                summary['validation_status'] = 'Not Run'
+                summary['save_action'] = 'Skipped'
+                results_summary.append(summary)
+                completed_queries += 1 # It was processed (by skipping)
+                continue # Move to the next query
+
+            # --- Existing try block for processing a single query ---
             try:
                 if USE_REAL_TQS_API:
                     # --- Real API Call, Validation, and Save Logic ---
-                    current_app.logger.info(f"--- Starting Real API Process for QueryID: {query_id}, File: {file_name} ---")
                     df_new = None
-                    df_to_save = None
-                    # save_action is already in summary
-                    # save_action = 'No Action' # Default
+                    df_to_save = None # Will hold the final DF to be saved
 
                     try:
-                        # 1. Fetch Real Data
+                        # 1. Fetch Real Data (Common step)
                         df_new = _fetch_real_tqs_data(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
 
-                        if df_new is not None and not df_new.empty:
+                        # --- Handle fetch result ---
+                        if df_new is None:
+                            current_app.logger.warning(f"[{file_name}] No data returned from API call for QueryID {query_id}.")
+                            summary['status'] = 'Warning - No data returned from API'
+                            summary['validation_status'] = 'Skipped (API Returned None)'
+                            if file_type == 'ts': all_ts_files_succeeded = False # Mark failure for ts_ files
+                        
+                        elif df_new.empty:
+                            current_app.logger.warning(f"[{file_name}] Empty DataFrame returned from API call for QueryID {query_id}.")
+                            summary['status'] = 'Warning - Empty data returned from API'
+                            summary['validation_status'] = 'Skipped (API Returned Empty)'
+                            # An empty dataframe is still data, proceed to save/overwrite logic below
+                            df_to_save = df_new # Allow overwriting with empty data if needed
+                        
+                        else: # Data fetched successfully (and not empty)
                             current_app.logger.info(f"[{file_name}] Fetched {len(df_new)} new rows.")
-                            summary['actual_rows'] = len(df_new) # Store initial fetched count
+                            summary['actual_rows'] = len(df_new)
+                            df_to_save = df_new # Prepare to save this new data (might be modified below)
 
-                            # 2. Identify Key Columns in New Data
-                            date_col_new, fund_col_new = _find_key_columns(df_new, f"{file_name} (New)")
-                            if not date_col_new or not fund_col_new:
-                                 raise ValueError(f"Could not find essential date/fund columns in fetched data for {file_name}. Cannot proceed with save.")
-
-                            df_to_save = df_new # Start with new data as the base for saving
-
-                            # 3. Handle Existing File
-                            if os.path.exists(output_path):
-                                current_app.logger.info(f"[{file_name}] File exists. Reading existing data.")
+                        # --- Type-Specific Processing (only if df_new is not None) ---
+                        if df_new is not None: # Includes empty DataFrame case
+                            
+                            # == TS File Processing ==
+                            if file_type == 'ts':
+                                current_app.logger.info(f"[{file_name}] Processing as ts_ file.")
                                 try:
-                                    df_existing = pd.read_csv(output_path, low_memory=False)
-
-                                    if not df_existing.empty:
-                                        # Identify key columns in existing data
-                                        date_col_existing, fund_col_existing = _find_key_columns(df_existing, f"{file_name} (Existing)")
-
-                                        # Ensure columns match for comparison/merge (using names found in new data as reference)
-                                        if date_col_existing == date_col_new and fund_col_existing == fund_col_new:
-                                            date_col = date_col_new # Use consistent names
-                                            fund_col = fund_col_new
-
-                                            # 3a. Compare Date Ranges (Basic Check & Log)
-                                            try:
-                                                existing_dates = pd.to_datetime(df_existing[date_col], errors='coerce').dropna()
-                                                new_dates = pd.to_datetime(df_new[date_col], errors='coerce').dropna()
-                                                if not existing_dates.empty and not new_dates.empty:
-                                                    if existing_dates.min() != new_dates.min() or existing_dates.max() != new_dates.max():
-                                                        current_app.logger.warning(f"[{file_name}] Date range mismatch! "
-                                                                                   f"Existing: {existing_dates.min().strftime('%Y-%m-%d')} to {existing_dates.max().strftime('%Y-%m-%d')}, "
-                                                                                   f"New: {new_dates.min().strftime('%Y-%m-%d')} to {new_dates.max().strftime('%Y-%m-%d')}. "
-                                                                                   f"Proceeding with merge/overwrite based on fund codes.")
-                                            except Exception as date_comp_err:
-                                                current_app.logger.warning(f"[{file_name}] Error during date comparison: {date_comp_err}. Proceeding cautiously.")
-
-                                            # 3b. Combine Data (Append/Overwrite)
-                                            current_app.logger.info(f"[{file_name}] Combining new data for funds/IDs {df_new[fund_col].unique()} with existing data.")
-                                            funds_in_new_data = df_new[fund_col].unique()
-
-                                            # Ensure fund columns have compatible types for filtering (e.g., both strings)
-                                            try:
-                                                df_existing[fund_col] = df_existing[fund_col].astype(str)
-                                                funds_in_new_data = [str(f) for f in funds_in_new_data] # Convert new funds list to string
-                                            except Exception as type_err:
-                                                 current_app.logger.warning(f"[{file_name}] Potential type mismatch in fund column '{fund_col}' during filtering: {type_err}. Filtering might be incomplete.")
-
-
-                                            # Keep existing data ONLY for funds NOT in the new data
-                                            df_existing_filtered = df_existing[~df_existing[fund_col].isin(funds_in_new_data)]
-                                            current_app.logger.info(f"[{file_name}] Kept {len(df_existing_filtered)} rows from existing file (other funds).")
-
-
-                                            # Concatenate the filtered old data with ALL of the new data
-                                            df_combined = pd.concat([df_existing_filtered, df_new], ignore_index=True)
-
-                                            # Optional: Sort the combined data
-                                            try:
-                                                df_combined = df_combined.sort_values(by=[date_col, fund_col])
-                                            except Exception as sort_err:
-                                                 current_app.logger.warning(f"[{file_name}] Could not sort combined data: {sort_err}")
-
-
-                                            df_to_save = df_combined # This is the final dataframe to save
-                                            summary['save_action'] = 'Combined (Append/Overwrite)'
-                                            current_app.logger.info(f"[{file_name}] Prepared combined data ({len(df_to_save)} rows).")
-
-                                        else:
-                                            current_app.logger.warning(f"[{file_name}] Key columns mismatch between existing ({date_col_existing}, {fund_col_existing}) and new ({date_col_new}, {fund_col_new}). Overwriting entire file with new data.")
-                                            df_to_save = df_new # Fallback to overwrite
-                                            summary['save_action'] = 'Overwritten (Column Mismatch)'
+                                    # 2. Identify Key Columns in New Data (TS specific)
+                                    if not df_new.empty: # Only check non-empty DFs
+                                        date_col_new, fund_col_new = _find_key_columns(df_new, f"{file_name} (New TS Data)")
+                                        if not date_col_new or not fund_col_new:
+                                            err_msg = f"Could not find essential date/fund columns in fetched ts_ data for {file_name}. Cannot proceed."
+                                            current_app.logger.error(f"[{file_name}] {err_msg}")
+                                            raise ValueError(err_msg) # Caught below
                                     else:
-                                        current_app.logger.warning(f"[{file_name}] Existing file is empty. Overwriting with new data.")
-                                        df_to_save = df_new # Overwrite empty file
-                                        summary['save_action'] = 'Overwritten (Existing Empty)'
+                                        date_col_new, fund_col_new = None, None # Cannot find cols in empty df
+                                        current_app.logger.info(f"[{file_name}] Skipping key column check for empty TS data.")
 
-                                except pd.errors.EmptyDataError:
-                                    current_app.logger.warning(f"[{file_name}] Existing file is empty (EmptyDataError). Overwriting with new data.")
-                                    df_to_save = df_new
-                                    summary['save_action'] = 'Overwritten (Existing Empty)'
-                                except Exception as read_err:
-                                    current_app.logger.error(f"[{file_name}] Error reading existing file: {read_err}. Overwriting with new data.", exc_info=True)
-                                    df_to_save = df_new # Fallback to overwrite on read error
-                            else:
-                                current_app.logger.info(f"[{file_name}] File does not exist. Creating new file.")
-                                df_to_save = df_new # Save the new data directly
-                                summary['save_action'] = 'Created'
+                                    # 3. Handle Existing File (TS specific - merge/append logic)
+                                    if os.path.exists(output_path):
+                                        current_app.logger.info(f"[{file_name}] TS file exists. Reading existing data for merge/append.")
+                                        try:
+                                            df_existing = pd.read_csv(output_path, low_memory=False)
+                                            if not df_existing.empty:
+                                                # --- Existing TS merge/append logic ---
+                                                if date_col_new and fund_col_new: # Requires new data cols to be found
+                                                    date_col_existing, fund_col_existing = _find_key_columns(df_existing, f"{file_name} (Existing TS)")
+                                                    if date_col_existing == date_col_new and fund_col_existing == fund_col_new:
+                                                        date_col = date_col_new # Use consistent names
+                                                        fund_col = fund_col_new
+                                                        
+                                                        # Date range comparison (optional check)
+                                                        # ... (keep existing date comparison logic if desired) ...
 
-                            # 4. Save the Final DataFrame
-                            if df_to_save is not None and not df_to_save.empty:
+                                                        # Combine Data (Append/Overwrite) logic
+                                                        current_app.logger.info(f"[{file_name}] Combining new data for funds/IDs {df_new[fund_col].unique()} with existing data.")
+                                                        funds_in_new_data = df_new[fund_col].unique()
+
+                                                        # Ensure fund columns have compatible types (e.g., strings)
+                                                        try:
+                                                            df_existing[fund_col] = df_existing[fund_col].astype(str)
+                                                            df_new[fund_col] = df_new[fund_col].astype(str) # Ensure new is also str
+                                                            funds_in_new_data = [str(f) for f in funds_in_new_data]
+                                                        except Exception as type_err:
+                                                             current_app.logger.warning(f"[{file_name}] Potential type mismatch in fund column \'{fund_col}\' during filtering: {type_err}. Filtering might be incomplete.")
+                                                        
+                                                        df_existing_filtered = df_existing[~df_existing[fund_col].isin(funds_in_new_data)]
+                                                        current_app.logger.info(f"[{file_name}] Kept {len(df_existing_filtered)} rows from existing file (other funds).")
+
+                                                        # Concatenate
+                                                        df_combined = pd.concat([df_existing_filtered, df_new], ignore_index=True)
+
+                                                        # Optional Sort
+                                                        try:
+                                                            df_combined = df_combined.sort_values(by=[date_col, fund_col])
+                                                        except Exception as sort_err:
+                                                             current_app.logger.warning(f"[{file_name}] Could not sort combined data: {sort_err}")
+
+                                                        df_to_save = df_combined # Update the df to save
+                                                        summary['save_action'] = 'Combined (Append/Overwrite)'
+                                                        current_app.logger.info(f"[{file_name}] Prepared combined data ({len(df_to_save)} rows).")
+                                                    
+                                                    else: # Key columns mismatch
+                                                        current_app.logger.warning(f"[{file_name}] Key columns mismatch between existing ({date_col_existing}, {fund_col_existing}) and new ({date_col_new}, {fund_col_new}). Overwriting entire file.")
+                                                        # df_to_save is already df_new
+                                                        summary['save_action'] = 'Overwritten (Column Mismatch)'
+                                                else: # Cannot proceed with merge if new cols weren't found (e.g., new data was empty)
+                                                    current_app.logger.warning(f"[{file_name}] Cannot merge TS data as key columns were not identified in new data. Overwriting.")
+                                                    # df_to_save is already df_new
+                                                    summary['save_action'] = 'Overwritten (Merge Skipped)'
+
+                                            else: # Existing file is empty
+                                                current_app.logger.warning(f"[{file_name}] Existing TS file is empty. Overwriting.")
+                                                # df_to_save is already df_new
+                                                summary['save_action'] = 'Overwritten (Existing Empty)'
+                                        
+                                        except pd.errors.EmptyDataError:
+                                            current_app.logger.warning(f"[{file_name}] Existing TS file is empty (EmptyDataError). Overwriting.")
+                                            # df_to_save is already df_new
+                                            summary['save_action'] = 'Overwritten (Existing Empty)'
+                                        except Exception as read_err:
+                                            current_app.logger.error(f"[{file_name}] Error reading existing TS file: {read_err}. Overwriting.", exc_info=True)
+                                            # df_to_save is already df_new
+                                            summary['save_action'] = 'Overwritten (Read Error)'
+                                            all_ts_files_succeeded = False # Failed to read existing TS file properly
+                                    else: # No existing file
+                                        current_app.logger.info(f"[{file_name}] TS file does not exist. Creating new file.")
+                                        # df_to_save is already df_new
+                                        summary['save_action'] = 'Created'
+
+                                except ValueError as ve: # Catch _find_key_columns error
+                                    current_app.logger.error(f"[{file_name}] TS validation failed: {ve}")
+                                    summary['status'] = f'Error - TS Validation Failed: {ve}'
+                                    summary['validation_status'] = 'Failed (Missing Columns)'
+                                    all_ts_files_succeeded = False # TS validation failed
+                                    df_to_save = None # Don't save if validation fails
+
+                            # == PRE File Processing ==
+                            elif file_type == 'pre':
+                                current_app.logger.info(f"[{file_name}] Processing as pre_ file (checking column count).")
+                                # df_to_save is already df_new (or empty df)
+
+                                if os.path.exists(output_path):
+                                    try:
+                                        # Check column count consistency (only if new data is not empty)
+                                        if not df_new.empty:
+                                            existing_header_df = pd.read_csv(output_path, nrows=0, low_memory=False) # Read only header
+                                            existing_cols = existing_header_df.columns.tolist()
+                                            new_cols = df_new.columns.tolist()
+
+                                            if len(existing_cols) != len(new_cols) or set(existing_cols) != set(new_cols):
+                                                current_app.logger.warning(f"[{file_name}] Column count/names mismatch between existing pre_ file ({len(existing_cols)} cols: {existing_cols}) and new data ({len(new_cols)} cols: {new_cols}). Overwriting.")
+                                                summary['save_action'] = 'Overwritten (Column Mismatch)'
+                                            else:
+                                                current_app.logger.info(f"[{file_name}] Existing pre_ file found with matching columns. Overwriting.")
+                                                summary['save_action'] = 'Overwritten'
+                                        else: # New data is empty, just overwrite
+                                            current_app.logger.info(f"[{file_name}] New data for pre_ file is empty. Overwriting existing file.")
+                                            summary['save_action'] = 'Overwritten (New Data Empty)'
+
+                                    except pd.errors.EmptyDataError:
+                                         current_app.logger.warning(f"[{file_name}] Existing pre_ file is empty (EmptyDataError). Overwriting.")
+                                         summary['save_action'] = 'Overwritten (Existing Empty)'
+                                    except Exception as read_err:
+                                         current_app.logger.error(f"[{file_name}] Error reading existing pre_ file header: {read_err}. Overwriting.", exc_info=True)
+                                         summary['save_action'] = 'Overwritten (Read Error)'
+                                else: # No existing pre_ file
+                                    current_app.logger.info(f"[{file_name}] Pre_ file does not exist. Creating new file.")
+                                    summary['save_action'] = 'Created'
+                                # Note: df_to_save remains df_new for pre_ files; we always overwrite.
+
+                            # == Other File Processing ==
+                            else: # Handle other files (e.g., sec_*)
+                                # For now, treat 'other' files like 'pre_' files (overwrite, check column counts)
+                                # This avoids the date/fund column check which might fail for sec_* files too
+                                current_app.logger.info(f"[{file_name}] Processing as 'other' file type (using column count check).")
+                                # df_to_save is already df_new (or empty df)
+
+                                if os.path.exists(output_path):
+                                    try:
+                                        if not df_new.empty:
+                                            existing_header_df = pd.read_csv(output_path, nrows=0, low_memory=False)
+                                            existing_cols = existing_header_df.columns.tolist()
+                                            new_cols = df_new.columns.tolist()
+                                            if len(existing_cols) != len(new_cols) or set(existing_cols) != set(new_cols):
+                                                current_app.logger.warning(f"[{file_name}] Column count/names mismatch for 'other' file. Overwriting.")
+                                                summary['save_action'] = 'Overwritten (Column Mismatch)'
+                                            else:
+                                                current_app.logger.info(f"[{file_name}] Existing 'other' file found with matching columns. Overwriting.")
+                                                summary['save_action'] = 'Overwritten'
+                                        else:
+                                            current_app.logger.info(f"[{file_name}] New data for 'other' file is empty. Overwriting existing file.")
+                                            summary['save_action'] = 'Overwritten (New Data Empty)'
+                                    except pd.errors.EmptyDataError:
+                                         current_app.logger.warning(f"[{file_name}] Existing 'other' file is empty (EmptyDataError). Overwriting.")
+                                         summary['save_action'] = 'Overwritten (Existing Empty)'
+                                    except Exception as read_err:
+                                         current_app.logger.error(f"[{file_name}] Error reading existing 'other' file header: {read_err}. Overwriting.", exc_info=True)
+                                         summary['save_action'] = 'Overwritten (Read Error)'
+                                else:
+                                    current_app.logger.info(f"[{file_name}] 'Other' file does not exist. Creating new file.")
+                                    summary['save_action'] = 'Created'
+
+
+                            # 4. Save the Final DataFrame (Common step, if df_to_save is valid)
+                            if df_to_save is not None: # Allow saving empty dataframe to overwrite/create
                                 current_app.logger.info(f"[{file_name}] Attempting to save {len(df_to_save)} rows to {output_path} (Action: {summary['save_action']})")
-                                # --- Add comment about file format awareness ---
-                                if not file_name.startswith('ts_'):
-                                    current_app.logger.warning(f"[{file_name}] Saving non-'ts_' file. Ensure format is compatible with downstream processes (e.g., sec_*, pre_*).")
+                                # ... existing warning log ...
                                 try:
                                     df_to_save.to_csv(output_path, index=False, header=True)
                                     current_app.logger.info(f"[{file_name}] Successfully saved data to {output_path}")
-                                    summary['status'] = f'OK - Data Saved'
+                                    summary['status'] = 'OK - Data Saved'
+                                    
+                                    # Update lines_in_file count after successful save
+                                    try:
+                                         with open(output_path, 'r', encoding='utf-8') as f:
+                                              summary['lines_in_file'] = sum(1 for line in f)
+                                    except Exception:
+                                         summary['lines_in_file'] = 'N/A' # Or df_to_save + 1?
+
+                                    # Validation step (consider if validate_data needs adjustment for pre_/other files)
                                     summary['validation_status'] = validate_data(df_to_save, file_name)
-                                    current_app.logger.info(f"[{file_name}] Validation status: {summary['validation_status']}")
+                                    current_app.logger.info(f"[{file_name}] Validation status: {summary['validation_status']})")
+                                    # If validation fails for a TS file, should it mark all_ts_files_succeeded = False? Maybe.
+                                    # if file_type == 'ts' and 'Error' in summary['validation_status']:
+                                    #    all_ts_files_succeeded = False
+                                    #    current_app.logger.warning(f"[{file_name}] TS file validation failed, marking overall TS process as failed.")
 
                                 except Exception as write_err:
                                     current_app.logger.error(f"[{file_name}] Error writing final data to {output_path}: {write_err}", exc_info=True)
                                     summary['status'] = f'Error - Failed to save file: {write_err}'
-                                    summary['validation_status'] = 'Validation Error'
-                            else:
-                                 current_app.logger.warning(f"[{file_name}] No data available to save after processing.")
-                                 summary['status'] = 'Warning - No data to save'
-                                 summary['validation_status'] = 'Skipped (No Data)'
+                                    summary['validation_status'] = 'Failed (Save Error)'
+                                    if file_type == 'ts': all_ts_files_succeeded = False # Save failed for ts_ file
 
-                        elif df_new is None:
-                            current_app.logger.warning(f"[{file_name}] No data returned from API call for QueryID {query_id}.")
-                            summary['status'] = 'Warning - No data returned from API'
-                            summary['validation_status'] = 'Skipped (API Returned None)'
-                        else: # df_new is empty
-                             current_app.logger.warning(f"[{file_name}] Empty DataFrame returned from API call for QueryID {query_id}.")
-                             summary['status'] = 'Warning - Empty data returned from API'
-                             summary['validation_status'] = 'Skipped (API Returned Empty)'
+                            # This case handles if df_new was None initially, or if df_to_save was set to None due to TS validation error
+                            elif df_new is None: 
+                                pass # Status already set when df_new was None
+                            elif df_to_save is None and file_type == 'ts':
+                                pass # Status already set from TS validation error
+                            else: # Should not happen? Log if it does.
+                                 current_app.logger.error(f"[{file_name}] Reached unexpected state where df_to_save is None but no prior error logged.")
+                                 summary['status'] = 'Error - Internal Logic Error (df_to_save is None)'
 
 
-                    except Exception as proc_err:
+                    except Exception as proc_err: # Catch errors during the fetch/process stage for one file
                         current_app.logger.error(f"Error processing real data for QueryID {query_id}, File {file_name}: {proc_err}", exc_info=True)
                         summary['status'] = f'Error - Processing failed: {proc_err}'
                         summary['validation_status'] = 'Failed (Processing Error)'
+                        if file_type == 'ts': all_ts_files_succeeded = False # Processing failed for ts_ file
 
-                else:
-                    # --- Simulate API Call --- 
-                    simulated_rows = _simulate_and_print_tqs_call(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
-                    rows_returned = simulated_rows
-                    lines_in_file = simulated_rows + 1 if simulated_rows > 0 else 0
-                    status = "Simulated OK"
+                else: # Simulate API Call (keep existing)
+                    # ... existing simulation logic ...
+                    # status = "Simulated OK" # Update summary status if needed
+                    summary['status'] = "Simulated OK" 
+                    summary['actual_rows'] = _simulate_and_print_tqs_call(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
+                    summary['lines_in_file'] = summary['actual_rows'] + 1 if summary['actual_rows'] > 0 else 0
 
-            except Exception as e:
-                 # Catch unexpected errors during the processing of a single query
-                 current_app.logger.error(f"Unexpected error processing QueryID {query_id} ({file_name}): {e}", exc_info=True)
-                 status = f"Processing Error: {e}"
-                 rows_returned = 0
-                 lines_in_file = 0
+
+            except Exception as outer_err: # Catch unexpected errors during the processing of a single query's try block
+                 current_app.logger.error(f"Unexpected outer error processing QueryID {query_id} ({file_name}): {outer_err}", exc_info=True)
+                 # Ensure status reflects the outer error if not already set
+                 if summary['status'] == 'Pending' or summary['status'].startswith('Warning'):
+                      summary['status'] = f"Outer Processing Error: {outer_err}"
+                 # Mark TS as failed if outer error occurs
+                 if file_type == 'ts': all_ts_files_succeeded = False 
 
             # Append results for this query
-            results_summary.append(summary) # Append the updated summary dictionary
+            results_summary.append(summary)
             completed_queries += 1
-            
-            # Pause between real API calls
-            if USE_REAL_TQS_API:
-                print(f"Pausing for 3 seconds before next real API call...") # Optional status message
+
+            # Pause between real API calls (keep existing)
+            if USE_REAL_TQS_API and completed_queries < total_queries: # Avoid pause after last call
+                print(f"Pausing for 3 seconds before next real API call ({completed_queries}/{total_queries})...") # Optional status message
                 time.sleep(3) 
 
-        # After loop
+        # After loop (keep existing)
         mode_message = "SIMULATED mode" if not USE_REAL_TQS_API else "REAL API mode"
-        completion_message = f"Processed {completed_queries}/{total_queries} API calls ({mode_message})."
+        final_status = "completed"
+        if USE_REAL_TQS_API and not all_ts_files_succeeded:
+             completion_message = f"Processed {completed_queries}/{total_queries} API calls ({mode_message}). WARNING: One or more ts_ files failed processing."
+             final_status = "completed_with_errors"
+        else:
+             completion_message = f"Processed {completed_queries}/{total_queries} API calls ({mode_message})."
+
 
         return jsonify({
-            "status": "completed",
+            "status": final_status, # Provide more info on completion status
             "message": completion_message,
             "summary": results_summary
         })
