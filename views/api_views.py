@@ -1,5 +1,7 @@
 '''
-Defines the Flask Blueprint for handling API data retrieval requests.
+Defines the Flask Blueprint for handling API data retrieval requests, including simulation,
+fetching real data, saving data (with options for merging or overwriting),
+and rerunning specific API calls.
 '''
 import os
 import pandas as pd
@@ -361,6 +363,7 @@ def run_api_calls():
         days_back = int(data.get('days_back', 30)) # Default to 30 days if not provided
         end_date_str = data.get('end_date')
         selected_funds = data.get('funds', [])
+        overwrite_mode = data.get('overwrite_mode', False) # Get the new overwrite flag
 
         if not end_date_str:
             # Should have been validated client-side, but handle defensively
@@ -421,6 +424,10 @@ def run_api_calls():
         completed_queries = 0
         all_ts_files_succeeded = True # Flag to track success of ts_ files
 
+        # Determine mode for logging/messaging
+        current_mode_desc = "SIMULATED mode" if not USE_REAL_TQS_API else ("REAL API mode (Overwrite Enabled)" if overwrite_mode else "REAL API mode (Merge/Append)")
+        current_app.logger.info(f"--- Starting /run_api_calls in {current_mode_desc} ---")
+
         # Loop through sorted queries
         for query_info in queries:
             # Extract query details safely
@@ -433,7 +440,9 @@ def run_api_calls():
                  summary = {
                     "query_id": query_id or "N/A", "file_name": file_name or "N/A",
                     "status": "Skipped (Missing QueryID/FileName)",
-                    "actual_rows": 0, "lines_in_file": 0, "save_action": "N/A", "validation_status": "Not Run"
+                    "simulated_rows": None, "simulated_lines": None,
+                    "actual_rows": None, "actual_lines": None,
+                    "save_action": "N/A", "validation_status": "Not Run"
                  }
                  results_summary.append(summary)
                  # Don't increment completed_queries if it fundamentally couldn't run
@@ -446,8 +455,10 @@ def run_api_calls():
                 "query_id": query_id,
                 "file_name": file_name,
                 "status": "Pending", # Initial status
-                "actual_rows": 0,
-                "lines_in_file": 0, # Will be updated if file exists after save
+                "simulated_rows": None, # Initialize keys
+                "simulated_lines": None,
+                "actual_rows": None,
+                "actual_lines": None,
                 "save_action": "N/A",
                 "validation_status": "Not Run"
             }
@@ -477,6 +488,7 @@ def run_api_calls():
                     # --- Real API Call, Validation, and Save Logic ---
                     df_new = None
                     df_to_save = None # Will hold the final DF to be saved
+                    force_overwrite = overwrite_mode # Use the flag passed from frontend
 
                     try:
                         # 1. Fetch Real Data (Common step)
@@ -492,9 +504,11 @@ def run_api_calls():
                         elif df_new.empty:
                             current_app.logger.warning(f"[{file_name}] Empty DataFrame returned from API call for QueryID {query_id}.")
                             summary['status'] = 'Warning - Empty data returned from API'
-                            summary['validation_status'] = 'Skipped (API Returned Empty)'
+                            # Don't skip validation if empty, allow saving empty file
+                            summary['validation_status'] = 'OK (Empty Data)'
                             # An empty dataframe is still data, proceed to save/overwrite logic below
                             df_to_save = df_new # Allow overwriting with empty data if needed
+                            summary['actual_rows'] = 0 # Explicitly set 0 rows
                         
                         else: # Data fetched successfully (and not empty)
                             current_app.logger.info(f"[{file_name}] Fetched {len(df_new)} new rows.")
@@ -506,7 +520,7 @@ def run_api_calls():
                             
                             # == TS File Processing ==
                             if file_type == 'ts':
-                                current_app.logger.info(f"[{file_name}] Processing as ts_ file.")
+                                current_app.logger.info(f"[{file_name}] Processing as ts_ file (Overwrite Mode: {force_overwrite}).")
                                 try:
                                     # 2. Identify Key Columns in New Data (TS specific)
                                     if not df_new.empty: # Only check non-empty DFs
@@ -520,7 +534,14 @@ def run_api_calls():
                                         current_app.logger.info(f"[{file_name}] Skipping key column check for empty TS data.")
 
                                     # 3. Handle Existing File (TS specific - merge/append logic)
-                                    if os.path.exists(output_path):
+                                    if force_overwrite:
+                                        current_app.logger.info(f"[{file_name}] Overwrite Mode enabled. Skipping check for existing file.")
+                                        if os.path.exists(output_path):
+                                            summary['save_action'] = 'Overwritten (User Request)'
+                                        else:
+                                            summary['save_action'] = 'Created (Overwrite Mode)'
+                                        # df_to_save is already df_new
+                                    elif os.path.exists(output_path):
                                         current_app.logger.info(f"[{file_name}] TS file exists. Reading existing data for merge/append.")
                                         try:
                                             df_existing = pd.read_csv(output_path, low_memory=False)
@@ -586,8 +607,8 @@ def run_api_calls():
                                             # df_to_save is already df_new
                                             summary['save_action'] = 'Overwritten (Read Error)'
                                             all_ts_files_succeeded = False # Failed to read existing TS file properly
-                                    else: # No existing file
-                                        current_app.logger.info(f"[{file_name}] TS file does not exist. Creating new file.")
+                                    else: # No existing file (and not forcing overwrite)
+                                        current_app.logger.info(f"[{file_name}] TS file does not exist (or overwrite mode is on and file was absent). Creating new file.")
                                         # df_to_save is already df_new
                                         summary['save_action'] = 'Created'
 
@@ -601,7 +622,7 @@ def run_api_calls():
                             # == PRE File Processing ==
                             elif file_type == 'pre':
                                 current_app.logger.info(f"[{file_name}] Processing as pre_ file (checking column count).")
-                                # df_to_save is already df_new (or empty df)
+                                # df_to_save is already df_new (or empty df) - Always overwritten
 
                                 if os.path.exists(output_path):
                                     try:
@@ -611,9 +632,13 @@ def run_api_calls():
                                             existing_cols = existing_header_df.columns.tolist()
                                             new_cols = df_new.columns.tolist()
 
-                                            if len(existing_cols) != len(new_cols) or set(existing_cols) != set(new_cols):
-                                                current_app.logger.warning(f"[{file_name}] Column count/names mismatch between existing pre_ file ({len(existing_cols)} cols: {existing_cols}) and new data ({len(new_cols)} cols: {new_cols}). Overwriting.")
-                                                summary['save_action'] = 'Overwritten (Column Mismatch)'
+                                            if force_overwrite or len(existing_cols) != len(new_cols) or set(existing_cols) != set(new_cols):
+                                                if force_overwrite:
+                                                    current_app.logger.info(f"[{file_name}] Overwriting pre_ file as requested by user.")
+                                                    summary['save_action'] = 'Overwritten (User Request)'
+                                                else:
+                                                    current_app.logger.warning(f"[{file_name}] Column count/names mismatch between existing pre_ file ({len(existing_cols)} cols: {existing_cols}) and new data ({len(new_cols)} cols: {new_cols}). Overwriting.")
+                                                    summary['save_action'] = 'Overwritten (Column Mismatch)'
                                             else:
                                                 current_app.logger.info(f"[{file_name}] Existing pre_ file found with matching columns. Overwriting.")
                                                 summary['save_action'] = 'Overwritten'
@@ -630,7 +655,7 @@ def run_api_calls():
                                 else: # No existing pre_ file
                                     current_app.logger.info(f"[{file_name}] Pre_ file does not exist. Creating new file.")
                                     summary['save_action'] = 'Created'
-                                # Note: df_to_save remains df_new for pre_ files; we always overwrite.
+                                # Note: df_to_save remains df_new for pre_ files.
 
                             # == Other File Processing ==
                             else: # Handle other files (e.g., sec_*)
@@ -645,9 +670,13 @@ def run_api_calls():
                                             existing_header_df = pd.read_csv(output_path, nrows=0, low_memory=False)
                                             existing_cols = existing_header_df.columns.tolist()
                                             new_cols = df_new.columns.tolist()
-                                            if len(existing_cols) != len(new_cols) or set(existing_cols) != set(new_cols):
-                                                current_app.logger.warning(f"[{file_name}] Column count/names mismatch for 'other' file. Overwriting.")
-                                                summary['save_action'] = 'Overwritten (Column Mismatch)'
+                                            if force_overwrite or len(existing_cols) != len(new_cols) or set(existing_cols) != set(new_cols):
+                                                if force_overwrite:
+                                                    current_app.logger.info(f"[{file_name}] Overwriting 'other' file as requested by user.")
+                                                    summary['save_action'] = 'Overwritten (User Request)'
+                                                else:
+                                                    current_app.logger.warning(f"[{file_name}] Column count/names mismatch for 'other' file. Overwriting.")
+                                                    summary['save_action'] = 'Overwritten (Column Mismatch)'
                                             else:
                                                 current_app.logger.info(f"[{file_name}] Existing 'other' file found with matching columns. Overwriting.")
                                                 summary['save_action'] = 'Overwritten'
@@ -677,9 +706,10 @@ def run_api_calls():
                                     # Update lines_in_file count after successful save
                                     try:
                                          with open(output_path, 'r', encoding='utf-8') as f:
-                                              summary['lines_in_file'] = sum(1 for line in f)
+                                              # Store in actual_lines as this is real API mode
+                                              summary['actual_lines'] = sum(1 for line in f)
                                     except Exception:
-                                         summary['lines_in_file'] = 'N/A' # Or df_to_save + 1?
+                                         summary['actual_lines'] = 'N/A' # Or len(df_to_save)+1?
 
                                     # Validation step (consider if validate_data needs adjustment for pre_/other files)
                                     summary['validation_status'] = validate_data(df_to_save, file_name)
@@ -714,9 +744,12 @@ def run_api_calls():
                 else: # Simulate API Call (keep existing)
                     # ... existing simulation logic ...
                     # status = "Simulated OK" # Update summary status if needed
-                    summary['status'] = "Simulated OK" 
-                    summary['actual_rows'] = _simulate_and_print_tqs_call(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
-                    summary['lines_in_file'] = summary['actual_rows'] + 1 if summary['actual_rows'] > 0 else 0
+                    simulated_rows = _simulate_and_print_tqs_call(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
+                    summary['status'] = "Simulated OK"
+                    summary['simulated_rows'] = simulated_rows
+                    summary['simulated_lines'] = simulated_rows + 1 if simulated_rows > 0 else 0
+                    summary['actual_rows'] = None # Ensure actual keys are None in sim mode
+                    summary['actual_lines'] = None
 
 
             except Exception as outer_err: # Catch unexpected errors during the processing of a single query's try block
@@ -737,10 +770,10 @@ def run_api_calls():
                 time.sleep(3) 
 
         # After loop (keep existing)
-        mode_message = "SIMULATED mode" if not USE_REAL_TQS_API else "REAL API mode"
+        mode_message = "SIMULATED mode" if not USE_REAL_TQS_API else ("REAL API mode (Overwrite Enabled)" if overwrite_mode else "REAL API mode (Merge/Append)")
         final_status = "completed"
         if USE_REAL_TQS_API and not all_ts_files_succeeded:
-             completion_message = f"Processed {completed_queries}/{total_queries} API calls ({mode_message}). WARNING: One or more ts_ files failed processing."
+             completion_message = f"Processed {completed_queries}/{total_queries} API calls ({mode_message}). WARNING: One or more ts_ files failed processing or validation."
              final_status = "completed_with_errors"
         else:
              completion_message = f"Processed {completed_queries}/{total_queries} API calls ({mode_message})."
@@ -775,6 +808,7 @@ def rerun_api_call():
         days_back = int(data.get('days_back', 30))
         end_date_str = data.get('end_date')
         selected_funds = data.get('funds', []) # Get the list of funds
+        overwrite_mode = data.get('overwrite_mode', False) # Get the new overwrite flag
 
         # --- Basic Input Validation ---
         if not query_id:
@@ -820,6 +854,8 @@ def rerun_api_call():
         rows_returned = 0
         lines_in_file = 0
         actual_df = None
+        simulated_rows = None # Initialize simulation keys too
+        simulated_lines = None
 
         try:
             if USE_REAL_TQS_API:
@@ -879,23 +915,11 @@ def rerun_api_call():
         result_data = {
             "status": status,
              # Provide consistent keys for the frontend to update the table
-            "simulated_rows": rows_returned if not USE_REAL_TQS_API else None,
-            "actual_rows": rows_returned if USE_REAL_TQS_API else None,
-            "simulated_lines": lines_in_file if not USE_REAL_TQS_API else None,
-            "actual_lines": lines_in_file if USE_REAL_TQS_API else None
+            "simulated_rows": simulated_rows, # Value if simulated, None otherwise
+            "actual_rows": rows_returned if USE_REAL_TQS_API else None, # Value if real, None otherwise
+            "simulated_lines": simulated_lines, # Value if simulated, None otherwise
+            "actual_lines": lines_in_file if USE_REAL_TQS_API else None # Value if real, None otherwise
         }
-        # The frontend needs the keys it expects based on the JS update logic
-        # Adjusting keys slightly to match JS expectations more directly if needed:
-        if not USE_REAL_TQS_API:
-            result_data["simulated_rows"] = rows_returned
-            result_data["simulated_lines"] = lines_in_file
-        else:
-            # If using real API, maybe the frontend expects these keys regardless?
-            # Let's send both sets of keys, JS can pick based on mode if necessary,
-            # or we assume JS handles based on the status string.
-            # The current JS logic seems to look for simulated_rows/lines explicitly.
-            # Let's stick to the original separation for clarity.
-             pass # Keep actual_rows/lines separate
 
         return jsonify(result_data)
 
