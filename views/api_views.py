@@ -397,11 +397,26 @@ def run_api_calls():
             file_name = row['FileName']
             output_path = os.path.join(data_folder, file_name)
 
-            # Reset status variables for each query
+            # --- Initialize summary dictionary here ---
+            summary = {
+                "query_id": query_id,
+                "file_name": file_name,
+                "fund_code": ", ".join(selected_funds), # Or potentially filter based on query_id if needed
+                "simulated_rows": None,
+                "simulated_lines": None,
+                "actual_rows": None,
+                "actual_lines": None,
+                "status": "Pending",
+                "save_action": "N/A",
+                "validation_status": "Not Run"
+            }
+            # ------------------------------------------
+
+            # Reset status variables for each query (kept for compatibility if needed elsewhere, but summary holds most info now)
             status = "Unknown Error"
             rows_returned = 0
             lines_in_file = 0
-            actual_df = None
+            actual_df = None # This seems redundant if df_new is used, consider removing later
 
             try:
                 if USE_REAL_TQS_API:
@@ -409,7 +424,8 @@ def run_api_calls():
                     current_app.logger.info(f"--- Starting Real API Process for QueryID: {query_id}, File: {file_name} ---")
                     df_new = None
                     df_to_save = None
-                    save_action = 'No Action' # Default
+                    # save_action is already in summary
+                    # save_action = 'No Action' # Default
 
                     try:
                         # 1. Fetch Real Data
@@ -482,33 +498,33 @@ def run_api_calls():
 
 
                                             df_to_save = df_combined # This is the final dataframe to save
-                                            save_action = 'Combined (Append/Overwrite)'
+                                            summary['save_action'] = 'Combined (Append/Overwrite)'
                                             current_app.logger.info(f"[{file_name}] Prepared combined data ({len(df_to_save)} rows).")
 
                                         else:
                                             current_app.logger.warning(f"[{file_name}] Key columns mismatch between existing ({date_col_existing}, {fund_col_existing}) and new ({date_col_new}, {fund_col_new}). Overwriting entire file with new data.")
                                             df_to_save = df_new # Fallback to overwrite
-                                            save_action = 'Overwritten (Column Mismatch)'
+                                            summary['save_action'] = 'Overwritten (Column Mismatch)'
                                     else:
                                         current_app.logger.warning(f"[{file_name}] Existing file is empty. Overwriting with new data.")
                                         df_to_save = df_new # Overwrite empty file
-                                        save_action = 'Overwritten (Existing Empty)'
+                                        summary['save_action'] = 'Overwritten (Existing Empty)'
 
                                 except pd.errors.EmptyDataError:
                                     current_app.logger.warning(f"[{file_name}] Existing file is empty (EmptyDataError). Overwriting with new data.")
                                     df_to_save = df_new
-                                    save_action = 'Overwritten (Existing Empty)'
+                                    summary['save_action'] = 'Overwritten (Existing Empty)'
                                 except Exception as read_err:
                                     current_app.logger.error(f"[{file_name}] Error reading existing file: {read_err}. Overwriting with new data.", exc_info=True)
                                     df_to_save = df_new # Fallback to overwrite on read error
                             else:
                                 current_app.logger.info(f"[{file_name}] File does not exist. Creating new file.")
                                 df_to_save = df_new # Save the new data directly
-                                save_action = 'Created'
+                                summary['save_action'] = 'Created'
 
                             # 4. Save the Final DataFrame
                             if df_to_save is not None and not df_to_save.empty:
-                                current_app.logger.info(f"[{file_name}] Attempting to save {len(df_to_save)} rows to {output_path} (Action: {save_action})")
+                                current_app.logger.info(f"[{file_name}] Attempting to save {len(df_to_save)} rows to {output_path} (Action: {summary['save_action']})")
                                 # --- Add comment about file format awareness ---
                                 if not file_name.startswith('ts_'):
                                     current_app.logger.warning(f"[{file_name}] Saving non-'ts_' file. Ensure format is compatible with downstream processes (e.g., sec_*, pre_*).")
@@ -516,41 +532,32 @@ def run_api_calls():
                                     df_to_save.to_csv(output_path, index=False, header=True)
                                     current_app.logger.info(f"[{file_name}] Successfully saved data to {output_path}")
                                     summary['status'] = f'OK - Data Saved'
-                                    summary['save_action'] = save_action
-                                    summary['actual_rows'] = len(df_to_save) # Update row count to final saved count
-
-                                    # 5. Validate Saved Data (Optional but recommended)
-                                    try:
-                                         validation_results = validate_data(df_to_save, file_name) # Validate the final saved data
-                                         summary['validation_status'] = validation_results.get('status', 'Validation Error')
-                                         current_app.logger.info(f"[{file_name}] Validation status: {summary['validation_status']}")
-                                    except Exception as val_err:
-                                         summary['validation_status'] = f'Validation Error: {val_err}'
-                                         current_app.logger.error(f"[{file_name}] Error during post-save validation: {val_err}", exc_info=True)
+                                    summary['validation_status'] = validate_data(df_to_save, file_name)
+                                    current_app.logger.info(f"[{file_name}] Validation status: {summary['validation_status']}")
 
                                 except Exception as write_err:
                                     current_app.logger.error(f"[{file_name}] Error writing final data to {output_path}: {write_err}", exc_info=True)
                                     summary['status'] = f'Error - Failed to save file: {write_err}'
-                                    summary['save_action'] = 'Save Failed'
+                                    summary['validation_status'] = 'Validation Error'
                             else:
                                  current_app.logger.warning(f"[{file_name}] No data available to save after processing.")
                                  summary['status'] = 'Warning - No data to save'
-                                 summary['save_action'] = 'Skipped (No Data)'
+                                 summary['validation_status'] = 'Skipped (No Data)'
 
                         elif df_new is None:
                             current_app.logger.warning(f"[{file_name}] No data returned from API call for QueryID {query_id}.")
                             summary['status'] = 'Warning - No data returned from API'
-                            summary['save_action'] = 'Skipped (API Returned None)'
+                            summary['validation_status'] = 'Skipped (API Returned None)'
                         else: # df_new is empty
                              current_app.logger.warning(f"[{file_name}] Empty DataFrame returned from API call for QueryID {query_id}.")
                              summary['status'] = 'Warning - Empty data returned from API'
-                             summary['save_action'] = 'Skipped (API Returned Empty)'
+                             summary['validation_status'] = 'Skipped (API Returned Empty)'
 
 
                     except Exception as proc_err:
                         current_app.logger.error(f"Error processing real data for QueryID {query_id}, File {file_name}: {proc_err}", exc_info=True)
                         summary['status'] = f'Error - Processing failed: {proc_err}'
-                        summary['save_action'] = 'Failed (Processing Error)'
+                        summary['validation_status'] = 'Failed (Processing Error)'
 
                 else:
                     # --- Simulate API Call --- 
@@ -567,15 +574,7 @@ def run_api_calls():
                  lines_in_file = 0
 
             # Append results for this query
-            results_summary.append({
-                "query_id": query_id,
-                "file_name": file_name,
-                "simulated_rows": rows_returned if not USE_REAL_TQS_API else None, # Only show simulated if simulating
-                "actual_rows": rows_returned if USE_REAL_TQS_API else None, # Only show actual if using API
-                "simulated_lines": lines_in_file if not USE_REAL_TQS_API else None,
-                "actual_lines": lines_in_file if USE_REAL_TQS_API else None,
-                "status": status
-            })
+            results_summary.append(summary) # Append the updated summary dictionary
             completed_queries += 1
             
             # Pause between real API calls
