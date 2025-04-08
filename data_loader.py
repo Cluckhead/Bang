@@ -169,34 +169,32 @@ def load_and_process_data(
         # --- Robust Date Parsing ---
         logger.info(f"Starting date parsing for column '{STD_DATE_COL}' (original: '{actual_date_col}') in '{filename}'.") # DEBUG
         date_series = df[STD_DATE_COL]
-        logger.debug(f"Original date series head:\n{date_series.head()}") # Use DEBUG for potentially long series
+        logger.debug(f"Original date series head:\\n{date_series.head()}") # Use DEBUG for potentially long series
 
-        # Attempt 1: YYYY-MM-DD
-        logger.info(f"Attempting date parsing with format '%Y-%m-%d'...") # DEBUG
-        parsed_dates = pd.to_datetime(date_series, format='%Y-%m-%d', errors='coerce')
-        all_null_after_first_try = parsed_dates.isnull().all()
-        logger.info(f"Result of isnull().all() after first try ('%Y-%m-%d'): {all_null_after_first_try}") # DEBUG
+        # Let pandas infer the format. errors='coerce' will turn unparseable strings into NaT (Not a Time).
+        logger.info(f"Attempting date parsing using pandas format inference...") 
+        parsed_dates = pd.to_datetime(date_series, errors='coerce')
         
-        # Check if the first format failed for all entries (common if format is wrong)
-        if all_null_after_first_try:
-            logger.info(f"Date format '%Y-%m-%d' failed for all entries in {filename}. Trying '%d/%m/%Y'.")
-            # Attempt 2: DD/MM/YYYY
-            logger.info(f"Attempting date parsing with format '%d/%m/%Y'...") # DEBUG
-            parsed_dates = pd.to_datetime(date_series, format='%d/%m/%Y', errors='coerce')
-            all_null_after_second_try = parsed_dates.isnull().all()
-            logger.info(f"Result of isnull().all() after second try ('%d/%m/%Y'): {all_null_after_second_try}") # DEBUG
-            # Check if the second format also failed
-            if all_null_after_second_try:
-                logger.error(f"Could not parse dates in column '{STD_DATE_COL}' (original: '{actual_date_col}') using either YYYY-MM-DD or DD/MM/YYYY format in file {filename}.")
-                raise ValueError(f"Date parsing failed for file {filename}.")
-            else:
-                logger.info(f"Successfully parsed dates using format '%d/%m/%Y' for {filename}.")
+        # Check if parsing failed for all entries 
+        all_null_after_parsing = parsed_dates.isnull().all()
+        logger.info(f"Result of isnull().all() after pandas format inference: {all_null_after_parsing}") # DEBUG
+        
+        if all_null_after_parsing:
+            logger.error(f"Could not parse any dates in column '{STD_DATE_COL}' (original: '{actual_date_col}') using pandas format inference in file {filename}.")
+            raise ValueError(f"Date parsing failed for file {filename}. Could not infer format.")
         else:
-             logger.info(f"Successfully parsed dates using format '%Y-%m-%d' for {filename}.")
+            # Log how many were successfully parsed vs NaT
+            nat_count = parsed_dates.isnull().sum()
+            total_count = len(parsed_dates)
+            success_count = total_count - nat_count
+            logger.info(f"Successfully parsed {success_count}/{total_count} dates using pandas inference in {filename}. ({nat_count} resulted in NaT).")
+            if nat_count > 0:
+                 logger.warning(f"{nat_count} date values in '{STD_DATE_COL}' (original: '{actual_date_col}') from {filename} could not be parsed and resulted in NaT.")
+
 
         # Log count of NaNs before dropping
-        nat_count_before_drop = parsed_dates.isnull().sum()
-        logger.info(f"Number of NaT (unparseable) dates before dropping: {nat_count_before_drop} out of {len(parsed_dates)}") # DEBUG
+        # nat_count_before_drop = parsed_dates.isnull().sum() # Already calculated above as nat_count
+        logger.info(f"Number of NaT (unparseable) dates before dropping: {nat_count} out of {len(parsed_dates)}") # DEBUG
 
         # Assign the successfully parsed dates back to the DataFrame
         df[STD_DATE_COL] = parsed_dates
