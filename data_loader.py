@@ -109,12 +109,21 @@ def load_and_process_data(
         logger.info(f"Original columns found in '{filename}': {original_cols}")
 
         # --- Dynamically find required columns using patterns ---
-        # Use word boundaries (\b) to avoid partial matches like 'Benchmarking'
-        actual_date_col = _find_column(r'\bDate\b', original_cols, filename, 'Date')
-        actual_code_col = _find_column(r'\bCode\b', original_cols, filename, 'Code')
+        # Use word boundaries (\\b) to avoid partial matches like \'Benchmarking\'
+        # Updated pattern to match 'Position Date' or 'Date'
+        date_pattern = r'\b(Position\s*)?Date\b' # Store pattern for logging
+        logger.info(f"Attempting to find Date column in '{filename}' using pattern: '{date_pattern}'") # DEBUG
+        actual_date_col = _find_column(date_pattern, original_cols, filename, 'Date') 
+        logger.info(f"Found actual Date column: '{actual_date_col}'") # DEBUG
+        code_pattern = r'\bCode\b' # Store pattern for logging
+        logger.info(f"Attempting to find Code column in '{filename}' using pattern: '{code_pattern}'") # DEBUG
+        actual_code_col = _find_column(code_pattern, original_cols, filename, 'Code')
+        logger.info(f"Found actual Code column: '{actual_code_col}'") # DEBUG
         # Allow benchmark column to be optional - look for it, but don't fail if not found.
         try:
-            actual_benchmark_col = _find_column(r'\bBenchmark\b', original_cols, filename, 'Benchmark')
+            benchmark_pattern = r'\bBenchmark\b' # Store pattern for logging
+            logger.info(f"Attempting to find Benchmark column in '{filename}' using pattern: '{benchmark_pattern}'") # DEBUG
+            actual_benchmark_col = _find_column(benchmark_pattern, original_cols, filename, 'Benchmark')
             benchmark_col_present = True
         except ValueError:
             logger.warning(f"No Benchmark column found in '{filename}' matching pattern '\\bBenchmark\\b'. Proceeding without benchmark.")
@@ -158,20 +167,36 @@ def load_and_process_data(
 
 
         # --- Robust Date Parsing ---
+        logger.info(f"Starting date parsing for column '{STD_DATE_COL}' (original: '{actual_date_col}') in '{filename}'.") # DEBUG
         date_series = df[STD_DATE_COL]
+        logger.debug(f"Original date series head:\n{date_series.head()}") # Use DEBUG for potentially long series
+
+        # Attempt 1: YYYY-MM-DD
+        logger.info(f"Attempting date parsing with format '%Y-%m-%d'...") # DEBUG
         parsed_dates = pd.to_datetime(date_series, format='%Y-%m-%d', errors='coerce')
+        all_null_after_first_try = parsed_dates.isnull().all()
+        logger.info(f"Result of isnull().all() after first try ('%Y-%m-%d'): {all_null_after_first_try}") # DEBUG
+        
         # Check if the first format failed for all entries (common if format is wrong)
-        if parsed_dates.isnull().all():
+        if all_null_after_first_try:
             logger.info(f"Date format '%Y-%m-%d' failed for all entries in {filename}. Trying '%d/%m/%Y'.")
+            # Attempt 2: DD/MM/YYYY
+            logger.info(f"Attempting date parsing with format '%d/%m/%Y'...") # DEBUG
             parsed_dates = pd.to_datetime(date_series, format='%d/%m/%Y', errors='coerce')
+            all_null_after_second_try = parsed_dates.isnull().all()
+            logger.info(f"Result of isnull().all() after second try ('%d/%m/%Y'): {all_null_after_second_try}") # DEBUG
             # Check if the second format also failed
-            if parsed_dates.isnull().all():
+            if all_null_after_second_try:
                 logger.error(f"Could not parse dates in column '{STD_DATE_COL}' (original: '{actual_date_col}') using either YYYY-MM-DD or DD/MM/YYYY format in file {filename}.")
                 raise ValueError(f"Date parsing failed for file {filename}.")
             else:
                 logger.info(f"Successfully parsed dates using format '%d/%m/%Y' for {filename}.")
         else:
              logger.info(f"Successfully parsed dates using format '%Y-%m-%d' for {filename}.")
+
+        # Log count of NaNs before dropping
+        nat_count_before_drop = parsed_dates.isnull().sum()
+        logger.info(f"Number of NaT (unparseable) dates before dropping: {nat_count_before_drop} out of {len(parsed_dates)}") # DEBUG
 
         # Assign the successfully parsed dates back to the DataFrame
         df[STD_DATE_COL] = parsed_dates

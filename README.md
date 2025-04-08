@@ -103,11 +103,12 @@ graph TD
     *   Uses Python's `logging` module to report progress and errors. Warnings and errors are logged to `data_processing_errors.log` in the project root.
     *   Handles file not found errors gracefully.
     *   Uses `on_bad_lines='skip'` and `encoding_errors='replace'` when reading CSVs to handle malformed rows and encoding issues.
-    *   Performs data type conversion for value columns using `pd.to_numeric` with `errors='coerce'`, converting unparseable values to `NaN`. Logs a warning if all values in a column become `NaN`.
+    *   Performs data type conversion for value columns using `pd.to_numeric` with `errors='coerce'`, converting unparseable values to `NaN`. Logs a warning if all values in a column become `NaN`. Replaces `NaN`/`Inf` with `None` for JSON compatibility where needed.
     *   Dynamically finds required columns ('Date', 'Code') and optionally 'Benchmark', raising errors if they cannot be uniquely identified.
+    *   **Handles both `YYYY-MM-DD` and `DD/MM/YYYY` date formats when parsing the date column.**
 *   **Functions:**
     *   `_find_column(pattern, columns, filename, col_type)`: Helper to find a single column matching a regex pattern (case-insensitive).
-    *   `load_and_process_data(filename, data_folder)`: Loads a CSV, identifies key columns dynamically, renames them, parses dates, sets a MultiIndex (Date, Code), identifies original fund column names, ensures numeric types, and logs issues encountered.
+    *   `load_and_process_data(filename, data_folder)`: Loads a CSV, identifies key columns dynamically, renames them, parses dates (handling both common formats), sets a MultiIndex (Date, Code), identifies original fund column names, ensures numeric types, handles NaN/Inf, and logs issues encountered.
 
 ### `metric_calculator.py`
 *   **Purpose:** Provides functions for calculating various statistical metrics from the preprocessed time-series data. Key functionalities include calculating historical statistics (mean, max, min), latest values, period-over-period changes, and Z-scores for changes for both benchmark and fund columns. It operates on a pandas DataFrame indexed by Date and Fund Code.
@@ -250,7 +251,7 @@ graph LR
 ### `views/metric_views.py` (`metric_bp`)
 *   **Purpose:** Defines routes for displaying detailed views of specific time-series metrics (e.g., Yield, Duration).
 *   **Routes:**
-    *   `/metric/<metric_name>`: Renders `metric_page_js.html`. Takes a metric display name, loads the corresponding `ts_*.csv` file, calculates metrics for each fund, prepares data (including historical values) for charting, and passes it as JSON to the template for JavaScript rendering.
+    *   `/metric/<metric_name>`: Renders `metric_page_js.html`. Takes a metric display name, loads the corresponding `ts_*.csv` file, calculates metrics for each fund, prepares data (including historical values) for charting, and passes it as a **structured JSON payload** to the template for JavaScript rendering. The JSON includes a `metadata` key (metric name, latest date, column names) and a `funds` key (fund-specific data: labels, datasets, calculated metrics). Replaces NaN/Inf with `None` in the JSON data.
 
 ### `views/security_views.py` (`security_bp`)
 *   **Purpose:** Defines routes related to displaying security-level data checks.
@@ -357,15 +358,15 @@ graph TD
 
 *   **`main.js`:** The main entry point. Runs on DOMContentLoaded.
     *   Imports functions from modules.
-    *   Checks for specific element IDs (`chartData`, `securities-table`, `securityChart`) to determine which page context it's in.
-    *   If `#chartData` (on `metric_page_js.html`) exists, parses the embedded JSON and calls `renderChartsAndTables` from `chartRenderer.js`.
+    *   Checks for specific element IDs (`chartData`, `securities-table`, `primarySecurityChart`) to determine which page context it's in.
+    *   If `#chartData` (on `metric_page_js.html`) exists, **parses the embedded structured JSON (metadata and funds data)** and calls `renderChartsAndTables` from `chartRenderer.js` **with all necessary arguments**.
     *   If `#securities-table` (on `securities_page.html`) exists, calls `initSecurityTableFilter` from `securityTableFilter.js`.
-    *   If `#securityChart` and `#chartJsonData` (on `security_details_page.html`) exist, parses JSON and calls `renderSingleSecurityChart` from `chartRenderer.js`.
+    *   If `#primarySecurityChart` and `#chartJsonData` (on `security_details_page.html`) exist, parses JSON and calls `renderSingleSecurityChart` from `chartRenderer.js`.
     *   Linked from: `base.html`.
 
 *   **`modules/ui/chartRenderer.js`:** Handles creating the DOM elements (tables, chart canvases) and rendering charts for metric pages and single security pages.
-    *   `renderChartsAndTables(...)`: Iterates through fund data passed from `main.js`, creates wrapper divs, canvas elements, metric tables (using `createMetricsTable`), and calls `createTimeSeriesChart` for each fund. Applies highlighting based on Z-scores. Handles the link to `fund_duration_details.html` if the metric is 'Duration'.
-    *   `createMetricsTable(...)`: Helper function to generate the HTML table structure for displaying calculated metrics below each chart on the metric page.
+    *   `renderChartsAndTables(...)`: **Accepts metadata (metric name, date, columns) and fund data as arguments.** Iterates through fund data, creates wrapper divs, canvas elements, metric tables (using `createMetricsTable`), and calls `createTimeSeriesChart` for each fund. Applies highlighting based on Z-scores. Handles the link to `fund_duration_details.html` if the metric is 'Duration' **(link path corrected)**.
+    *   `createMetricsTable(...)`: Helper function to generate the HTML table structure for displaying calculated metrics below each chart on the metric page. **Uses passed-in column names.**
     *   `renderSingleSecurityChart(...)`: Creates a single time-series chart on the security details page using Chart.js and the provided data.
     *   Imports: `createTimeSeriesChart`, `formatNumber`.
 
