@@ -314,6 +314,44 @@ def get_data_page():
     return render_template('get_data.html', funds=funds, default_end_date=default_end_date, data_file_statuses=data_file_statuses)
 
 
+# --- Helper function to find key columns ---
+def _find_key_columns(df, filename):
+    """Attempts to find the date and fund/identifier columns."""
+    date_col = None
+    fund_col = None
+
+    # Date column candidates (add more if needed)
+    date_candidates = ['Date', 'date', 'AsOfDate', 'ASOFDATE', 'Effective Date', 'Trade Date', 'Position Date']
+    # Fund/ID column candidates
+    fund_candidates = ['Code', 'Fund Code', 'Fundcode', 'security id', 'SecurityID', 'Security Name'] # Broadened list
+
+    found_cols = df.columns.str.strip().str.lower()
+
+    for candidate in date_candidates:
+        if candidate.lower() in found_cols:
+            # Find the original casing
+            original_cols = [col for col in df.columns if col.strip().lower() == candidate.lower()]
+            if original_cols:
+                date_col = original_cols[0]
+                current_app.logger.info(f"[{filename}] Found date column: '{date_col}'")
+                break
+
+    for candidate in fund_candidates:
+        if candidate.lower() in found_cols:
+            # Find the original casing
+            original_cols = [col for col in df.columns if col.strip().lower() == candidate.lower()]
+            if original_cols:
+                fund_col = original_cols[0]
+                current_app.logger.info(f"[{filename}] Found fund/ID column: '{fund_col}'")
+                break
+
+    if not date_col:
+        current_app.logger.warning(f"[{filename}] Could not reliably identify a date column from candidates: {date_candidates}")
+    if not fund_col:
+        current_app.logger.warning(f"[{filename}] Could not reliably identify a fund/ID column from candidates: {fund_candidates}")
+
+    return date_col, fund_col
+
 @api_bp.route('/run_api_calls', methods=['POST'])
 def run_api_calls():
     '''Handles the form submission to trigger API calls (real or simulated).'''
@@ -367,52 +405,152 @@ def run_api_calls():
 
             try:
                 if USE_REAL_TQS_API:
-                    # --- Real API Call, Validation, and Save --- 
-                    actual_df = _fetch_real_tqs_data(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
+                    # --- Real API Call, Validation, and Save Logic ---
+                    current_app.logger.info(f"--- Starting Real API Process for QueryID: {query_id}, File: {file_name} ---")
+                    df_new = None
+                    df_to_save = None
+                    save_action = 'No Action' # Default
 
-                    if actual_df is not None and isinstance(actual_df, pd.DataFrame):
-                        rows_returned = len(actual_df)
-                        if actual_df.empty:
-                             current_app.logger.info(f"API returned empty DataFrame for {query_id} ({file_name}). Treating as valid, saving empty file.")
-                             status = "Saved OK (Empty)"
-                             # Proceed to save the empty DataFrame
-                        else: 
-                             # Validate the non-empty DataFrame structure
-                            is_valid, validation_errors = validate_data(actual_df, file_name)
-                            if not is_valid:
-                                current_app.logger.warning(f"Data validation failed for {file_name}: {validation_errors}")
-                                status = f"Validation Failed: {'; '.join(validation_errors)}"
-                                lines_in_file = 0 # Don't save invalid data
-                            # else: Validation passed (implicit)
-                            
-                        # Save the DataFrame to CSV (only if validation passed or df was empty)
-                        # This block is reached if df is empty OR if df is not empty and is_valid is True
-                        if status.startswith("Validation Failed") is False: # Check if validation passed or df was empty
-                            try:
-                                os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                                actual_df.to_csv(output_path, index=False)
-                                current_app.logger.info(f"Successfully saved data to {output_path}")
-                                lines_in_file = rows_returned + 1 # +1 for header
-                                # Update status only if it wasn't set to Saved OK (Empty) already
-                                if status != "Saved OK (Empty)": 
-                                    status = "Saved OK" 
-                            except Exception as e:
-                                current_app.logger.error(f"Error saving DataFrame to {output_path}: {e}", exc_info=True)
-                                status = f"Save Error: {e}"
-                                lines_in_file = 0 # Save failed
-                    
-                    elif actual_df is None:
-                        # _fetch_real_tqs_data returned None (API call failed, returned None explicitly, or TQS not imported)
-                        current_app.logger.warning(f"Real API call/fetch for {query_id} ({file_name}) returned None.")
-                        status = "No Data / API Error / TQS Missing"
-                        rows_returned = 0
-                        lines_in_file = 0
-                    else:
-                        # _fetch_real_tqs_data returned something unexpected (not DataFrame, not None)
-                        current_app.logger.error(f"Real API fetch for {query_id} ({file_name}) returned unexpected type: {type(actual_df)}.")
-                        status = "API Returned Invalid Type"
-                        rows_returned = 0
-                        lines_in_file = 0
+                    try:
+                        # 1. Fetch Real Data
+                        df_new = _fetch_real_tqs_data(query_id, selected_funds, start_date_tqs_str, end_date_tqs_str)
+
+                        if df_new is not None and not df_new.empty:
+                            current_app.logger.info(f"[{file_name}] Fetched {len(df_new)} new rows.")
+                            summary['actual_rows'] = len(df_new) # Store initial fetched count
+
+                            # 2. Identify Key Columns in New Data
+                            date_col_new, fund_col_new = _find_key_columns(df_new, f"{file_name} (New)")
+                            if not date_col_new or not fund_col_new:
+                                 raise ValueError(f"Could not find essential date/fund columns in fetched data for {file_name}. Cannot proceed with save.")
+
+                            df_to_save = df_new # Start with new data as the base for saving
+
+                            # 3. Handle Existing File
+                            if os.path.exists(output_path):
+                                current_app.logger.info(f"[{file_name}] File exists. Reading existing data.")
+                                try:
+                                    df_existing = pd.read_csv(output_path, low_memory=False)
+
+                                    if not df_existing.empty:
+                                        # Identify key columns in existing data
+                                        date_col_existing, fund_col_existing = _find_key_columns(df_existing, f"{file_name} (Existing)")
+
+                                        # Ensure columns match for comparison/merge (using names found in new data as reference)
+                                        if date_col_existing == date_col_new and fund_col_existing == fund_col_new:
+                                            date_col = date_col_new # Use consistent names
+                                            fund_col = fund_col_new
+
+                                            # 3a. Compare Date Ranges (Basic Check & Log)
+                                            try:
+                                                existing_dates = pd.to_datetime(df_existing[date_col], errors='coerce').dropna()
+                                                new_dates = pd.to_datetime(df_new[date_col], errors='coerce').dropna()
+                                                if not existing_dates.empty and not new_dates.empty:
+                                                    if existing_dates.min() != new_dates.min() or existing_dates.max() != new_dates.max():
+                                                        current_app.logger.warning(f"[{file_name}] Date range mismatch! "
+                                                                                   f"Existing: {existing_dates.min().strftime('%Y-%m-%d')} to {existing_dates.max().strftime('%Y-%m-%d')}, "
+                                                                                   f"New: {new_dates.min().strftime('%Y-%m-%d')} to {new_dates.max().strftime('%Y-%m-%d')}. "
+                                                                                   f"Proceeding with merge/overwrite based on fund codes.")
+                                            except Exception as date_comp_err:
+                                                current_app.logger.warning(f"[{file_name}] Error during date comparison: {date_comp_err}. Proceeding cautiously.")
+
+                                            # 3b. Combine Data (Append/Overwrite)
+                                            current_app.logger.info(f"[{file_name}] Combining new data for funds/IDs {df_new[fund_col].unique()} with existing data.")
+                                            funds_in_new_data = df_new[fund_col].unique()
+
+                                            # Ensure fund columns have compatible types for filtering (e.g., both strings)
+                                            try:
+                                                df_existing[fund_col] = df_existing[fund_col].astype(str)
+                                                funds_in_new_data = [str(f) for f in funds_in_new_data] # Convert new funds list to string
+                                            except Exception as type_err:
+                                                 current_app.logger.warning(f"[{file_name}] Potential type mismatch in fund column '{fund_col}' during filtering: {type_err}. Filtering might be incomplete.")
+
+
+                                            # Keep existing data ONLY for funds NOT in the new data
+                                            df_existing_filtered = df_existing[~df_existing[fund_col].isin(funds_in_new_data)]
+                                            current_app.logger.info(f"[{file_name}] Kept {len(df_existing_filtered)} rows from existing file (other funds).")
+
+
+                                            # Concatenate the filtered old data with ALL of the new data
+                                            df_combined = pd.concat([df_existing_filtered, df_new], ignore_index=True)
+
+                                            # Optional: Sort the combined data
+                                            try:
+                                                df_combined = df_combined.sort_values(by=[date_col, fund_col])
+                                            except Exception as sort_err:
+                                                 current_app.logger.warning(f"[{file_name}] Could not sort combined data: {sort_err}")
+
+
+                                            df_to_save = df_combined # This is the final dataframe to save
+                                            save_action = 'Combined (Append/Overwrite)'
+                                            current_app.logger.info(f"[{file_name}] Prepared combined data ({len(df_to_save)} rows).")
+
+                                        else:
+                                            current_app.logger.warning(f"[{file_name}] Key columns mismatch between existing ({date_col_existing}, {fund_col_existing}) and new ({date_col_new}, {fund_col_new}). Overwriting entire file with new data.")
+                                            df_to_save = df_new # Fallback to overwrite
+                                            save_action = 'Overwritten (Column Mismatch)'
+                                    else:
+                                        current_app.logger.warning(f"[{file_name}] Existing file is empty. Overwriting with new data.")
+                                        df_to_save = df_new # Overwrite empty file
+                                        save_action = 'Overwritten (Existing Empty)'
+
+                                except pd.errors.EmptyDataError:
+                                    current_app.logger.warning(f"[{file_name}] Existing file is empty (EmptyDataError). Overwriting with new data.")
+                                    df_to_save = df_new
+                                    save_action = 'Overwritten (Existing Empty)'
+                                except Exception as read_err:
+                                    current_app.logger.error(f"[{file_name}] Error reading existing file: {read_err}. Overwriting with new data.", exc_info=True)
+                                    df_to_save = df_new # Fallback to overwrite on read error
+                            else:
+                                current_app.logger.info(f"[{file_name}] File does not exist. Creating new file.")
+                                df_to_save = df_new # Save the new data directly
+                                save_action = 'Created'
+
+                            # 4. Save the Final DataFrame
+                            if df_to_save is not None and not df_to_save.empty:
+                                current_app.logger.info(f"[{file_name}] Attempting to save {len(df_to_save)} rows to {output_path} (Action: {save_action})")
+                                # --- Add comment about file format awareness ---
+                                if not file_name.startswith('ts_'):
+                                    current_app.logger.warning(f"[{file_name}] Saving non-'ts_' file. Ensure format is compatible with downstream processes (e.g., sec_*, pre_*).")
+                                try:
+                                    df_to_save.to_csv(output_path, index=False, header=True)
+                                    current_app.logger.info(f"[{file_name}] Successfully saved data to {output_path}")
+                                    summary['status'] = f'OK - Data Saved'
+                                    summary['save_action'] = save_action
+                                    summary['actual_rows'] = len(df_to_save) # Update row count to final saved count
+
+                                    # 5. Validate Saved Data (Optional but recommended)
+                                    try:
+                                         validation_results = validate_data(df_to_save, file_name) # Validate the final saved data
+                                         summary['validation_status'] = validation_results.get('status', 'Validation Error')
+                                         current_app.logger.info(f"[{file_name}] Validation status: {summary['validation_status']}")
+                                    except Exception as val_err:
+                                         summary['validation_status'] = f'Validation Error: {val_err}'
+                                         current_app.logger.error(f"[{file_name}] Error during post-save validation: {val_err}", exc_info=True)
+
+                                except Exception as write_err:
+                                    current_app.logger.error(f"[{file_name}] Error writing final data to {output_path}: {write_err}", exc_info=True)
+                                    summary['status'] = f'Error - Failed to save file: {write_err}'
+                                    summary['save_action'] = 'Save Failed'
+                            else:
+                                 current_app.logger.warning(f"[{file_name}] No data available to save after processing.")
+                                 summary['status'] = 'Warning - No data to save'
+                                 summary['save_action'] = 'Skipped (No Data)'
+
+                        elif df_new is None:
+                            current_app.logger.warning(f"[{file_name}] No data returned from API call for QueryID {query_id}.")
+                            summary['status'] = 'Warning - No data returned from API'
+                            summary['save_action'] = 'Skipped (API Returned None)'
+                        else: # df_new is empty
+                             current_app.logger.warning(f"[{file_name}] Empty DataFrame returned from API call for QueryID {query_id}.")
+                             summary['status'] = 'Warning - Empty data returned from API'
+                             summary['save_action'] = 'Skipped (API Returned Empty)'
+
+
+                    except Exception as proc_err:
+                        current_app.logger.error(f"Error processing real data for QueryID {query_id}, File {file_name}: {proc_err}", exc_info=True)
+                        summary['status'] = f'Error - Processing failed: {proc_err}'
+                        summary['save_action'] = 'Failed (Processing Error)'
 
                 else:
                     # --- Simulate API Call --- 
