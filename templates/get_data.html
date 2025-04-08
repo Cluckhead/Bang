@@ -4,6 +4,51 @@
 
 {% block content %}
 <div class="container mt-4">
+
+    {# --- Display Data File Statuses --- #}
+    <div class="card mb-4">
+        <div class="card-header">
+            Current Data File Status
+        </div>
+        <div class="card-body">
+            {% if data_file_statuses %}
+            <table class="table table-sm table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>File Name</th>
+                        <th>Latest Data Date (in file)</th>
+                        <th>File Last Modified</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for status in data_file_statuses %}
+                    <tr>
+                        <td>{{ status.filename }}</td>
+                        <td>
+                            {% if status.exists %}
+                                {{ status.latest_data_date }}
+                            {% else %}
+                                <span class="text-muted">File Not Found</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                             {% if status.exists %}
+                                {{ status.last_modified }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted">Could not retrieve data file statuses. Check QueryMap.csv or server logs.</p>
+            {% endif %}
+        </div>
+    </div>
+    {# --- End Display Data File Statuses --- #}
+
     <h2>Get Data via Simulated API (Rex)</h2>
     <p>Select funds and date range to simulate retrieving data using the Rex API.</p>
     <p>The simulated API calls will be printed in the terminal where the Flask app is running.</p>

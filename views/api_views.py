@@ -98,6 +98,90 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
         return None
 
 
+# --- Helper Function to Get File Statuses ---
+def get_data_file_statuses(data_folder):
+    """
+    Scans the data folder based on QueryMap.csv and returns status for each file.
+    """
+    statuses = []
+    query_map_path = os.path.join(data_folder, 'QueryMap.csv')
+
+    if not os.path.exists(query_map_path):
+        current_app.logger.warning(f"QueryMap.csv not found at {query_map_path} for status check.")
+        return statuses # Return empty list if map is missing
+
+    try:
+        query_map_df = pd.read_csv(query_map_path)
+        if 'FileName' not in query_map_df.columns:
+             current_app.logger.warning(f"QueryMap.csv at {query_map_path} is missing 'FileName' column.")
+             return statuses
+
+        date_column_candidates = ['Date', 'date', 'AsOfDate', 'ASOFDATE', 'Effective Date', 'Trade Date'] # Add more candidates if needed
+
+        for index, row in query_map_df.iterrows():
+            filename = row['FileName']
+            file_path = os.path.join(data_folder, filename)
+            status_info = {
+                'filename': filename,
+                'exists': False,
+                'last_modified': 'N/A',
+                'latest_data_date': 'N/A'
+            }
+
+            if os.path.exists(file_path):
+                status_info['exists'] = True
+                try:
+                    # Get file modification time
+                    mod_timestamp = os.path.getmtime(file_path)
+                    status_info['last_modified'] = datetime.datetime.fromtimestamp(mod_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+                    # Try to read the CSV and find the latest date
+                    try:
+                        df = pd.read_csv(file_path, low_memory=False) # low_memory=False can help with mixed types
+                        latest_date_found = None
+
+                        for col_name in date_column_candidates:
+                            if col_name in df.columns:
+                                try:
+                                    # Attempt conversion, coercing errors
+                                    dates = pd.to_datetime(df[col_name], errors='coerce')
+                                    # Drop NaT values resulting from coercion errors
+                                    valid_dates = dates.dropna()
+                                    if not valid_dates.empty:
+                                        latest_date_found = valid_dates.max()
+                                        status_info['latest_data_date'] = latest_date_found.strftime('%Y-%m-%d')
+                                        break # Found a valid date column, stop searching
+                                except Exception as date_parse_err:
+                                     current_app.logger.warning(f"Could not parse date column '{col_name}' in {filename}: {date_parse_err}")
+                                     continue # Try next candidate column
+
+                        if latest_date_found is None:
+                            status_info['latest_data_date'] = 'No Date Column Found/Parsed'
+
+
+                    except pd.errors.EmptyDataError:
+                         status_info['latest_data_date'] = 'File is Empty'
+                         current_app.logger.warning(f"CSV file is empty: {file_path}")
+                    except Exception as read_err:
+                        status_info['latest_data_date'] = 'Read Error'
+                        current_app.logger.error(f"Error reading CSV {file_path} for status check: {read_err}", exc_info=True)
+
+                except Exception as file_err:
+                     current_app.logger.error(f"Error accessing file properties for {file_path}: {file_err}", exc_info=True)
+                     status_info['last_modified'] = 'Error Accessing File'
+
+            statuses.append(status_info)
+
+    except Exception as e:
+        current_app.logger.error(f"Failed to process QueryMap.csv for file statuses: {e}", exc_info=True)
+        # Optionally return a status indicating the map couldn't be processed
+        return [{'filename': 'QueryMap Error', 'exists': False, 'last_modified': str(e), 'latest_data_date': ''}]
+
+
+    return statuses
+# --- End Helper Function ---
+
+
 @api_bp.route('/get_data')
 def get_data_page():
     '''Renders the page for users to select parameters for API data retrieval.'''
@@ -134,12 +218,16 @@ def get_data_page():
         # Calculate default end date (previous business day)
         default_end_date = (datetime.datetime.today() - BDay(1)).strftime('%Y-%m-%d')
 
+        # --- Get Data File Statuses ---
+        data_file_statuses = get_data_file_statuses(data_folder)
+        # --- End Get Data File Statuses ---
+
     except Exception as e:
         current_app.logger.error(f"Error preparing get_data page: {e}", exc_info=True)
         # Provide a user-friendly error message, specific details are logged
         return f"An error occurred while preparing the data retrieval page: {e}", 500
 
-    return render_template('get_data.html', funds=funds, default_end_date=default_end_date)
+    return render_template('get_data.html', funds=funds, default_end_date=default_end_date, data_file_statuses=data_file_statuses)
 
 
 @api_bp.route('/run_api_calls', methods=['POST'])
