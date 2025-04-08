@@ -286,7 +286,7 @@ graph LR
 These files define the structure and presentation of the web pages using HTML and Jinja2 templating.
 
 *   **`base.html`:** The main layout template. Includes the common structure (doctype, head, Bootstrap CSS/JS, navbar, main content block, script block). Other templates extend this base. Linked JS: `static/js/main.js`.
-*   **`index.html`:** The dashboard page. Extends `base.html`. Displays links to metric detail pages and a summary table of the latest 'Change Z-Scores' across all funds and time-series metrics.
+*   **`index.html`:** The dashboard page. Extends `base.html`. Displays links to metric detail pages and a summary table of the latest 'Change Z-Scores' across all funds and time-series metrics. Includes links to the Securities Check page and the Get Data API simulation page.
 *   **`metric_page_js.html`:** The detail page for a specific time-series metric. Extends `base.html`. Displays the metric name, latest date, and warnings for missing data. Contains a `<script id="chartData">` tag where Flask embeds JSON data. An empty `<div id="chartsArea">` serves as the container where `main.js` (via `chartRenderer.js`) dynamically renders tables and charts for each fund code. Requires `Chart.js`.
 *   **`securities_page.html`:** Displays the table of security-level checks. Extends `base.html`. 
     *   Includes a search bar to filter securities by name (submits via GET).
@@ -297,6 +297,12 @@ These files define the structure and presentation of the web pages using HTML an
 *   **`fund_duration_details.html`:** Shows the security duration changes for a specific fund. Extends `base.html`. Displays a table (`<table id="fund-duration-table">`) listing securities held by the fund, sorted by their 1-day duration change. Security names link to their detail pages.
 *   **`metric_page.html`:** (Potentially older/alternative version) Similar to `metric_page_js.html` but seems designed for server-side rendering of charts (e.g., using a library like `mpld3` or passing chart HTML directly) rather than client-side rendering with JavaScript.
 *   **`exclusions_page.html`**: The UI for managing security exclusions. Extends `base.html`. Displays the current list of exclusions with their details (SecurityID, AddDate, EndDate, Comment) and a 'Remove' button for each. Also includes a form to add new exclusions, featuring a filterable dropdown for selecting securities and inputs for End Date (optional) and Comment (required).
+*   **`get_data.html`:** The page for simulating API data retrieval. 
+    *   Displays a **"Current Data File Status" table** at the top, showing each file listed in `QueryMap.csv`, its last modified time, the *latest* date found within the file (checking common date columns like 'Date', 'Position Date' and formats like YYYY-MM-DD, DD/MM/YYYY), and a list of the fund codes found (checking columns like 'Code', 'Fund Code').
+    *   Provides a form to select funds and a date range for simulating API calls.
+    *   Includes an area to display the status and results of the simulation.
+*   **`comparison_summary_page.html`:** Displays a summary table comparing original and new data (e.g., sec_spread vs. sec_spreadSP), showing differences and allowing filtering.
+*   **`comparison_details_page.html`:** Shows a detailed side-by-side chart comparing original and new time-series data for a single security.
 
 ## JavaScript Files (`static/js/`)
 
