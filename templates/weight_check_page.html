@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Weight Check (100% Target){% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h1 class="mb-4">Weight Check (100% Target)</h1>
+    <p>The following tables show weights from <code>{{ fund_filename }}</code> and <code>{{ bench_filename }}</code>. Cells highlighted in <span class="text-danger fw-bold">red</span> indicate weights that are not exactly 100.00%.</p>
+
+    {% macro render_weight_table(title, filename, data, date_headers) %}
+        <h2 class="mt-4">{{ title }} <small class="text-muted fs-6">({{ filename }})</small></h2>
+        {% if data %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm table-hover weight-check-table">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Fund Code</th>
+                            {% for date in date_headers %}
+                                <th class="text-center">{{ date }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fund_code, date_values in data.items()|sort %}
+                            <tr>
+                                <td class="fw-bold">{{ fund_code }}</td>
+                                {% for date in date_headers %}
+                                    {% set cell_data = date_values.get(date) %}
+                                    {% if cell_data %}
+                                        {% set value_str = cell_data.value_str %}
+                                        {% set is_100 = cell_data.is_100 %}
+                                        <td class="text-center {{ 'table-danger' if not is_100 }}">
+                                            {{ value_str }}
+                                        </td>
+                                    {% else %}
+                                        <td class="text-center text-muted">-</td> {# Data missing for this date #}
+                                    {% endif %}
+                                {% endfor %}
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="{{ date_headers|length + 1 }}" class="text-center">No data found in {{ filename }}.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-warning" role="alert">
+                Could not load or process data from <code>{{ filename }}</code>. Check server logs.
+            </div>
+        {% endif %}
+    {% endmacro %}
+
+    {{ render_weight_table("Fund Weights", fund_filename, fund_data, date_headers) }}
+    {{ render_weight_table("Benchmark Weights", bench_filename, bench_data, date_headers) }}
+
+</div>
+
+<style>
+/* Optional: Adjust table layout for wide tables */
+.weight-check-table th,
+.weight-check-table td {
+    white-space: nowrap; /* Prevent wrapping in cells */
+    font-size: 0.85rem; /* Slightly smaller font */
+    padding: 0.3rem 0.5rem; /* Adjust padding */
+}
+.weight-check-table th:first-child,
+.weight-check-table td:first-child {
+    position: sticky;
+    left: 0;
+    background-color: #f8f9fa; /* Light background for sticky column */
+    z-index: 1;
+}
+.weight-check-table thead th {
+    position: sticky;
+    top: 0; /* Stick headers to top */
+    background-color: #e9ecef;
+    z-index: 2;
+}
+</style>
+
+{% endblock %} 

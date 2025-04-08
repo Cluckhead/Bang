@@ -53,9 +53,8 @@ def create_app():
     from views.fund_views import fund_bp
     from views.api_views import api_bp
     from views.exclusion_views import exclusion_bp
-    # --- Add import for the new comparison blueprint ---
     from views.comparison_views import comparison_bp
-    # --- End import ---
+    from views.weight_views import weight_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
@@ -63,9 +62,8 @@ def create_app():
     app.register_blueprint(fund_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(exclusion_bp)
-    # --- Register the new comparison blueprint ---
     app.register_blueprint(comparison_bp)
-    # --- End registration ---
+    app.register_blueprint(weight_bp)
 
     print("Registered Blueprints:")
     print(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
@@ -74,9 +72,8 @@ def create_app():
     print(f"- {fund_bp.name} (prefix: {fund_bp.url_prefix})")
     print(f"- {api_bp.name} (prefix: {api_bp.url_prefix})")
     print(f"- {exclusion_bp.name} (prefix: {exclusion_bp.url_prefix})")
-    # --- Print registration info for the new blueprint ---
     print(f"- {comparison_bp.name} (prefix: {comparison_bp.url_prefix})")
-    # --- End print ---
+    print(f"- {weight_bp.name} (prefix: {weight_bp.url_prefix})")
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')
