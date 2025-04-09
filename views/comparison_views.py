@@ -269,58 +269,78 @@ def summary():
                     filter_options[col] = unique_vals
         final_filter_options = dict(sorted(filter_options.items()))
 
-        # --- Filtering ---        
+        # --- Apply Filtering ---
         filtered_stats = summary_stats.copy()
         if active_filters:
             log.info(f"Applying filters: {active_filters}")
             for col, value in active_filters.items():
-                if col in filtered_stats.columns:
+                if col in filtered_stats.columns and value:
+                    # Handle potential type mismatches if filtering on numeric/boolean
                     try:
-                         # Use string comparison for simplicity, ensure Series is string type
-                         filtered_stats = filtered_stats[filtered_stats[col].astype(str).str.contains(str(value), case=False, na=False)]
-                    except Exception as filter_err:
-                        log.error(f"Error applying filter for column '{col}' with value '{value}': {filter_err}")
-                else:
-                    log.warning(f"Filter column '{col}' not found.")
+                        # Attempt direct comparison first
+                        if filtered_stats[col].dtype == 'boolean':
+                             filtered_stats = filtered_stats[filtered_stats[col] == (value.lower() == 'true')]
+                        # Add more specific type handling if needed (e.g., numeric ranges)
+                        else:
+                             filtered_stats = filtered_stats[filtered_stats[col].astype(str).str.contains(value, case=False, na=False)] # Case-insensitive string contains
+                    except Exception as e:
+                        log.warning(f"Could not apply filter on column '{col}' with value '{value}'. Error: {e}")
+                        # Optionally skip this filter or handle differently
             log.info(f"Stats shape after filtering: {filtered_stats.shape}")
+        else:
+             log.info("No active filters.")
 
-        # --- Handle Empty After Filtering ---
-        if filtered_stats.empty:
-             log.info("No data matches the specified filters.")
-             message = "No securities found matching the current criteria."
-             if active_filters:
-                  message += f" Active filters: {active_filters}."
+
+        # --- Apply Sorting ---
+        if sort_by in filtered_stats.columns:
+            log.info(f"Sorting by '{sort_by}' {sort_order}")
+            # Ensure numeric columns are sorted numerically, handle NaNs
+            if pd.api.types.is_numeric_dtype(filtered_stats[sort_by]):
+                 filtered_stats = filtered_stats.sort_values(by=sort_by, ascending=ascending, na_position='last')
+            else:
+                 # Attempt string sort for non-numeric, case-insensitive might be desired
+                 filtered_stats = filtered_stats.sort_values(by=sort_by, ascending=ascending, na_position='last', key=lambda col: col.astype(str).str.lower())
+
+        else:
+            log.warning(f"Sort column '{sort_by}' not found in filtered data. Skipping sort.")
+            sort_by = actual_id_col # Fallback sort? Or remove sort indicator in template?
+            sort_order = 'asc'
+            ascending = True
+
+
+        # --- Define Columns to Display ---
+        # Identify fund columns (case-insensitive check) within static columns
+        fund_cols = sorted([col for col in static_cols if 'fund' in col.lower() and col != actual_id_col])
+        # Identify other static columns (excluding ID and fund columns)
+        other_static_cols = sorted([col for col in static_cols if col != actual_id_col and col not in fund_cols])
+        # Identify calculated columns to display (excluding helper/raw date/count columns)
+        calculated_cols = sorted([col for col in summary_stats.columns
+                                 if col not in static_cols and col != actual_id_col and
+                                 col not in ['Start_Date_Orig', 'End_Date_Orig', 'Start_Date_New', 'End_Date_New',
+                                              'NaN_Count_Orig', 'NaN_Count_New', 'Total_Points',
+                                              'Overall_Start_Date', 'Overall_End_Date']]) # Exclude helper/raw date columns
+
+        # Assemble the final list: ID, Other Static, Calculated, Fund Columns
+        columns_to_display = [actual_id_col] + other_static_cols + calculated_cols + fund_cols
+        log.debug(f"Columns to display: {columns_to_display}")
+
+
+        # --- Pagination ---
+        total_items = len(filtered_stats)
+        if total_items == 0:
+             log.info("No data remaining after filtering.")
+             # Render with message if filtering resulted in empty set
              return render_template('comparison_page.html',
                                     table_data=[],
-                                    columns_to_display=[], # Or pass original cols?
+                                    columns_to_display=columns_to_display, # Still pass columns for header
                                     id_column_name=actual_id_col,
-                                    filter_options=final_filter_options,
+                                    filter_options=filter_options,
                                     active_filters=active_filters,
                                     current_sort_by=sort_by,
                                     current_sort_order=sort_order,
                                     pagination=None,
-                                    message=message)
+                                    message="No data matches the current filters.")
 
-        # --- Sorting ---
-        if sort_by in filtered_stats.columns:
-            log.info(f"Sorting by '{sort_by}' ({sort_order})")
-            try:
-                 filtered_stats.sort_values(by=sort_by, ascending=ascending, inplace=True, na_position='last', key=lambda col: col.astype(str).str.lower() if col.dtype == 'object' else col)
-            except Exception as sort_err:
-                 log.error(f"Error sorting by '{sort_by}': {sort_err}. Falling back to ID sort.")
-                 sort_by = actual_id_col
-                 sort_order = 'asc'
-                 ascending = True
-                 filtered_stats.sort_values(by=actual_id_col, ascending=True, inplace=True, na_position='last')
-        else:
-            log.warning(f"Sort column '{sort_by}' not found. Defaulting to ID sort.")
-            sort_by = actual_id_col # Update sort_by to reflect actual sort
-            sort_order = 'asc'
-            ascending = True
-            filtered_stats.sort_values(by=actual_id_col, ascending=True, inplace=True, na_position='last')
-
-        # --- Pagination ---
-        total_items = len(filtered_stats)
         # Ensure PER_PAGE_COMPARISON is positive
         safe_per_page = max(1, PER_PAGE_COMPARISON)
         total_pages = math.ceil(total_items / safe_per_page)
@@ -338,11 +358,8 @@ def summary():
         paginated_stats = filtered_stats.iloc[start_index:end_index]
 
         # --- Prepare Data for Template ---
-        # Define columns to display (ensure ID column is first)
-        cols_to_show = [actual_id_col] + [col for col in static_cols if col in paginated_stats.columns and col != actual_id_col] + ['Level_Correlation', 'Change_Correlation', 'Mean_Abs_Diff', 'Max_Abs_Diff', 'Same_Date_Range'] # Add other desired stats
-        
         # Filter the DataFrame to only these columns AFTER pagination
-        paginated_stats = paginated_stats[[col for col in cols_to_show if col in paginated_stats.columns]]
+        paginated_stats = paginated_stats[[col for col in columns_to_display if col in paginated_stats.columns]]
 
         table_data_list = paginated_stats.to_dict(orient='records')
         # Replace NaN with None for template rendering
@@ -385,9 +402,9 @@ def summary():
     # --- Render Template ---
     return render_template('comparison_page.html',
                            table_data=table_data_list,
-                           columns_to_display=paginated_stats.columns.tolist(), # Use columns from final paginated DF
+                           columns_to_display=columns_to_display,
                            id_column_name=actual_id_col,
-                           filter_options=final_filter_options,
+                           filter_options=filter_options,
                            active_filters=active_filters,
                            current_sort_by=sort_by,
                            current_sort_order=sort_order,

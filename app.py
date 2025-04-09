@@ -4,8 +4,8 @@
 # - Creating the Flask application instance.
 # - Setting up basic configuration (like the secret key).
 # - Ensuring necessary folders (like the instance folder) exist.
-# - Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`) from the `views`
-#   directory, which contain the application's routes and view logic.
+# - Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`, `comparison_bp`, `duration_comparison_bp`, `spread_duration_comparison_bp`, `api_bp`, `weight_bp`) from the `views`
+#   directory, which contain the application\'s routes and view logic.
 # - Providing a conditional block (`if __name__ == '__main__':`) to run the development server
 #   when the script is executed directly.
 # This modular structure using factories and blueprints makes the application more organized and scalable.
@@ -55,6 +55,10 @@ def create_app():
     from views.exclusion_views import exclusion_bp
     from views.comparison_views import comparison_bp
     from views.weight_views import weight_bp
+    # --- Import new blueprints ---
+    from views.duration_comparison_views import duration_comparison_bp
+    from views.spread_duration_comparison_views import spread_duration_comparison_bp
+    # --- End import new blueprints ---
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
@@ -64,6 +68,10 @@ def create_app():
     app.register_blueprint(exclusion_bp)
     app.register_blueprint(comparison_bp)
     app.register_blueprint(weight_bp)
+    # --- Register new blueprints ---
+    app.register_blueprint(duration_comparison_bp)
+    app.register_blueprint(spread_duration_comparison_bp)
+    # --- End register new blueprints ---
 
     print("Registered Blueprints:")
     print(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
@@ -74,6 +82,10 @@ def create_app():
     print(f"- {exclusion_bp.name} (prefix: {exclusion_bp.url_prefix})")
     print(f"- {comparison_bp.name} (prefix: {comparison_bp.url_prefix})")
     print(f"- {weight_bp.name} (prefix: {weight_bp.url_prefix})")
+    # --- Print new blueprints ---
+    print(f"- {duration_comparison_bp.name} (prefix: {duration_comparison_bp.url_prefix})")
+    print(f"- {spread_duration_comparison_bp.name} (prefix: {spread_duration_comparison_bp.url_prefix})")
+    # --- End print new blueprints ---
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')

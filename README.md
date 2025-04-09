@@ -9,8 +9,12 @@ This application provides a web interface to load, process, and check financial 
     *   **Performance:** Uses server-side pagination, filtering (search, dropdowns), and sorting for improved performance with large datasets.
 *   **Fund-Specific Views:** Analyze data aggregated or filtered by specific funds (e.g., Fund Duration Details, General Fund Overview).
 *   **Security Exclusions:** Maintain a list of securities to temporarily exclude from the main Security Summary page (`/security/summary`). Exclusions can have start/end dates and comments.
-*   **Data Comparison:** Compare two spread files (`sec_spread.csv` vs `sec_spreadSP.csv`) with summary statistics and side-by-side detail charts.
-    *   **Performance:** Uses server-side pagination, filtering, and sorting for the summary view.
+*   **Data Comparison:**
+    *   Compare two spread files (`sec_spread.csv` vs `sec_spreadSP.csv`) via `/comparison/summary`.
+    *   Compare two duration files (`sec_duration.csv` vs `sec_durationSP.csv`) via `/duration_comparison/summary`.
+    *   Compare two spread duration files (`sec_Spread duration.csv` vs `sec_Spread durationSP.csv`) via `/spread_duration_comparison/summary`.
+    *   All comparison pages include summary statistics and side-by-side detail charts.
+    *   **Performance:** Uses server-side pagination, filtering, and sorting for summary views.
 *   **Data Simulation & Management:**
     *   Simulate API calls to fetch data via the `/get_data` page.
     *   Run a data cleanup process via a button on the `/get_data` page.
@@ -40,6 +44,8 @@ graph TD
     D --> D6(comparison_views.py);
     D --> D7(weight_views.py);
     D --> D8(api_views.py);
+    D --> D9(duration_comparison_views.py);
+    D --> D10(spread_duration_comparison_views.py);
 
     E --> E1(base.html);
     E --> E2(index.html);
@@ -49,17 +55,21 @@ graph TD
     E --> E6(fund_duration_details.html);
     E --> E7(exclusions_page.html);
     E --> E8(get_data.html);
-    E --> E9(comparison_page.html); # Renamed from comparison_summary_page
+    E --> E9(comparison_page.html);
     E --> E10(comparison_details_page.html);
     E --> E11(fund_detail_page.html);
     E --> E12(weight_check.html);
+    E --> E13(duration_comparison_page.html);
+    E --> E14(duration_comparison_details_page.html);
+    E --> E15(spread_duration_comparison_page.html);
+    E --> E16(spread_duration_comparison_details_page.html);
 
     F --> F1(js);
     F1 --> F1a(main.js);
     F1 --> F1b(modules);
     F1b --> F1b1(ui);
     F1b1 --> F1b1a(chartRenderer.js);
-    F1b1 --> F1b1b(securityTableFilter.js); # Note: No longer used for filtering
+    F1b1 --> F1b1b(securityTableFilter.js);
     F1b1 --> F1b1c(tableSorter.js);
     F1b --> F1b2(utils);
     F1b2 --> F1b2a(helpers.js);
@@ -103,7 +113,7 @@ graph TD
     *   Creating the Flask application instance.
     *   Setting up basic configuration (like the secret key).
     *   Ensuring necessary folders (like the instance folder) exist.
-    *   Registering all Blueprints (e.g., `main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`, `comparison_bp`, `api_bp`, `weight_bp`) from the `views` directory.
+    *   Registering all Blueprints (e.g., `main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`, `comparison_bp`, `duration_comparison_bp`, `spread_duration_comparison_bp`, `api_bp`, `weight_bp`) from the `views` directory.
     *   Includes an endpoint (`/run-cleanup`) to trigger the `process_data.py` script.
     *   Providing a conditional block (`if __name__ == '__main__':`) to run the development server.
 *   **Functions:**
@@ -212,6 +222,26 @@ These modules contain the Flask Blueprints defining the application's routes.
         *   Passes paginated data and metadata to the template.
     *   `/comparison/details/<path:security_id>`: Renders `comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
 
+### `views/duration_comparison_views.py` (`duration_comparison_bp`)
+*   **Purpose:** Comparing two duration files (`sec_duration.csv` vs. `sec_durationSP.csv`).
+*   **Routes:**
+    *   `/duration_comparison/summary`: Renders `duration_comparison_page.html`.
+        *   Handles server-side pagination, filtering (static columns), and sorting.
+        *   Loads both files, calculates comparison statistics.
+        *   Applies filters, sorts data, and selects the current page.
+        *   Passes paginated data and metadata to the template.
+    *   `/duration_comparison/details/<path:security_id>`: Renders `duration_comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
+
+### `views/spread_duration_comparison_views.py` (`spread_duration_comparison_bp`)
+*   **Purpose:** Comparing two spread duration files (`sec_Spread duration.csv` vs. `sec_Spread durationSP.csv`).
+*   **Routes:**
+    *   `/spread_duration_comparison/summary`: Renders `spread_duration_comparison_page.html`.
+        *   Handles server-side pagination, filtering (static columns), and sorting.
+        *   Loads both files, calculates comparison statistics.
+        *   Applies filters, sorts data, and selects the current page.
+        *   Passes paginated data and metadata to the template.
+    *   `/spread_duration_comparison/details/<path:security_id>`: Renders `spread_duration_comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
+
 ### `views/api_views.py` (`api_bp`)
 *   **Purpose:** Handling the API simulation page interactions.
 *   **Routes:**
@@ -235,9 +265,13 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`exclusions_page.html`:** UI for managing security exclusions.
 *   **`get_data.html`:** UI for API simulation. Includes data status table, fund selection, date inputs, status/results area, and buttons for simulation, overwrite, and cleanup.
 *   **`comparison_page.html`:** Comparison summary table. Includes filter form, sortable headers, table body, and pagination controls.
-*   **`comparison_details_page.html`:** Side-by-side chart comparison for a single security.
+*   **`comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread).
 *   **`fund_detail_page.html`:** Displays multiple charts for different metrics for a single fund.
 *   **`weight_check.html`:** Placeholder page for weight checks.
+*   **`duration_comparison_page.html`:** Comparison summary table for Duration.
+*   **`duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Duration).
+*   **`spread_duration_comparison_page.html`:** Comparison summary table for Spread Duration.
+*   **`spread_duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread Duration).
 
 ## JavaScript Files (`static/js/`)
 
