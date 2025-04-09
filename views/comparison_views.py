@@ -247,15 +247,24 @@ def summary():
         for col in potential_filter_cols:
             if col in summary_stats.columns:
                 unique_vals = summary_stats[col].dropna().unique().tolist()
-                # Basic type check and sort if possible
+                # Basic type check and sort if possible - Improved Robust Sorting Key
                 try:
-                    # Attempt numeric sort first, then string
-                    unique_vals = sorted(unique_vals, key=lambda x: float(x) if isinstance(x, (int, float, str)) and x.replace('.', '', 1).isdigit() else float('inf'))
-                except (ValueError, TypeError):
+                    unique_vals = sorted(unique_vals, key=lambda x: \
+                        (0, float(x)) if isinstance(x, bool) else \
+                        (0, x) if isinstance(x, (int, float)) else \
+                        (0, float(x)) if isinstance(x, str) and x.replace('.', '', 1).lstrip('-').isdigit() else \
+                        (1, x) if isinstance(x, str) else \
+                        (2, x) # Fallback for other types
+                    )
+                except TypeError as e:
+                    # If sorting fails (e.g., comparing incompatible types not caught by key),
+                    # fall back to string sorting as a last resort.
+                    log.warning(f"Type error during sorting unique values for column '{col}': {e}. Falling back to string sort.")
                     try:
-                         unique_vals = sorted(str(x) for x in unique_vals) # Sort as strings
-                    except TypeError:
-                        pass # Cannot sort mixed types easily
+                         unique_vals = sorted(str(x) for x in unique_vals)
+                    except Exception as final_sort_err:
+                        log.error(f"Final string sort failed for column '{col}': {final_sort_err}")
+                        # Keep original unsorted list if all else fails
                 if unique_vals:
                     filter_options[col] = unique_vals
         final_filter_options = dict(sorted(filter_options.items()))
