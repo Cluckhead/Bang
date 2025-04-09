@@ -3,9 +3,11 @@
 # period-over-period changes, and Z-scores for changes for both benchmark and fund columns.
 # It operates on a pandas DataFrame indexed by Date and Fund Code, producing a summary DataFrame
 # containing these metrics for each fund, often sorted by the most significant recent changes (Z-scores).
+# It now supports calculating metrics for both a primary and an optional secondary DataFrame.
 
 # metric_calculator.py
 # This file contains functions for calculating metrics from the processed data.
+# Updated to handle primary and optional secondary data sources.
 
 import pandas as pd
 import numpy as np
@@ -53,7 +55,8 @@ def _calculate_column_stats(
     col_series: pd.Series,
     col_change_series: pd.Series,
     latest_date: pd.Timestamp,
-    col_name: str
+    col_name: str,
+    prefix: str = "" # Optional prefix for metric names (e.g., "S&P " )
 ) -> Dict[str, Any]:
     """Helper function to calculate stats for a single column series.
 
@@ -65,6 +68,7 @@ def _calculate_column_stats(
         col_change_series (pd.Series): The historical changes for the column.
         latest_date (pd.Timestamp): The overall latest date in the dataset.
         col_name (str): The name of the column being processed.
+        prefix (str): A prefix to add to the metric names in the output dictionary.
 
     Returns:
         Dict[str, Any]: A dictionary containing the calculated metrics for this column.
@@ -73,9 +77,9 @@ def _calculate_column_stats(
 
     # Calculate base historical stats for the column level
     # Pandas functions like mean, max, min typically handle NaNs by skipping them.
-    metrics[f'{col_name} Mean'] = col_series.mean()
-    metrics[f'{col_name} Max'] = col_series.max()
-    metrics[f'{col_name} Min'] = col_series.min()
+    metrics[f'{prefix}{col_name} Mean'] = col_series.mean()
+    metrics[f'{prefix}{col_name} Max'] = col_series.max()
+    metrics[f'{prefix}{col_name} Min'] = col_series.min()
 
     # Calculate stats for the column change
     change_mean = col_change_series.mean()
@@ -88,8 +92,8 @@ def _calculate_column_stats(
         # Use .get() for change series to handle potential index mismatch (though unlikely if derived correctly)
         latest_change = col_change_series.get(latest_date, np.nan)
 
-        metrics[f'{col_name} Latest Value'] = latest_value
-        metrics[f'{col_name} Change'] = latest_change
+        metrics[f'{prefix}{col_name} Latest Value'] = latest_value
+        metrics[f'{prefix}{col_name} Change'] = latest_change
 
         # Calculate Change Z-Score: (latest_change - change_mean) / change_std
         change_z_score = np.nan # Default to NaN
@@ -101,175 +105,252 @@ def _calculate_column_stats(
                  change_z_score = 0.0 # No deviation
              else:
                  change_z_score = np.inf if latest_change > change_mean else -np.inf # Infinite deviation
-             logger.debug(f"Standard deviation of change for '{col_name}' is zero. Z-score set to {change_z_score}.")
+             logger.debug(f"Standard deviation of change for '{prefix}{col_name}' is zero. Z-score set to {change_z_score}.")
         else:
             # Log if Z-score calculation couldn't be performed due to NaNs
             if not (pd.notna(latest_change) and pd.notna(change_mean) and pd.notna(change_std)):
-                 logger.debug(f"Cannot calculate Z-score for '{col_name}' due to NaN inputs (latest_change={latest_change}, change_mean={change_mean}, change_std={change_std})")
+                 logger.debug(f"Cannot calculate Z-score for '{prefix}{col_name}' due to NaN inputs (latest_change={latest_change}, change_mean={change_mean}, change_std={change_std})")
 
-        metrics[f'{col_name} Change Z-Score'] = change_z_score
+        metrics[f'{prefix}{col_name} Change Z-Score'] = change_z_score
 
     else:
         # Data for the latest date is missing for this specific column/fund
-        logger.debug(f"Latest date {latest_date} not found for column '{col_name}'. Setting latest metrics to NaN.")
-        metrics[f'{col_name} Latest Value'] = np.nan
-        metrics[f'{col_name} Change'] = np.nan
-        metrics[f'{col_name} Change Z-Score'] = np.nan
+        logger.debug(f"Latest date {latest_date} not found for column '{prefix}{col_name}'. Setting latest metrics to NaN.")
+        metrics[f'{prefix}{col_name} Latest Value'] = np.nan
+        metrics[f'{prefix}{col_name} Change'] = np.nan
+        metrics[f'{prefix}{col_name} Change Z-Score'] = np.nan
 
     return metrics
 
-def calculate_latest_metrics(
+def _process_dataframe_metrics(
     df: pd.DataFrame,
+    fund_codes: pd.Index,
     fund_cols: List[str],
-    benchmark_col: Optional[str] # Allow benchmark_col to be None
-) -> pd.DataFrame:
-    """Calculates latest metrics for each individual column (benchmark and funds) per fund code.
-
-    For each fund code and for each relevant column (benchmark and funds),
-    it calculates: Latest Value, Change, Mean, Max, Min, and Change Z-Score.
+    benchmark_col: Optional[str],
+    latest_date: pd.Timestamp,
+    metric_prefix: str = ""
+) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
+    """Processes a single DataFrame (primary or secondary) to calculate metrics.
 
     Args:
-        df (pd.DataFrame): Processed DataFrame indexed by Date (level 0) and Fund Code (level 1).
-                           Assumes date index is sorted ascendingly within each fund code.
-        fund_cols (List[str]): List of fund value column names (original names from loader).
-        benchmark_col (Optional[str]): Name of the *standardized* benchmark value column ('Benchmark'), or None if not present.
+        df (pd.DataFrame): The DataFrame to process (already sorted by date index).
+        fund_codes (pd.Index): Unique fund codes from the combined data.
+        fund_cols (List[str]): List of original fund value column names for this df.
+        benchmark_col (Optional[str]): Standardized benchmark column name for this df, if present.
+        latest_date (pd.Timestamp): The latest date across combined data.
+        metric_prefix (str): Prefix to add to metric names (e.g., "S&P ").
 
     Returns:
-        pd.DataFrame: Flattened metrics indexed by Fund Code.
-                      Columns are named like '{col_name} Latest Value', '{col_name} Change', etc.
-                      (Note: Uses original fund column names and standardized benchmark name in output cols).
-                      The DataFrame is sorted by the maximum absolute 'Change Z-Score' found
-                      across all columns for each fund, in descending order.
-                      Funds with no Z-scores (e.g., due to missing data or zero std dev)
-                      are placed at the end.
+        Tuple[List[Dict[str, Any]], Dict[str, float]]:
+            - List of metric dictionaries, one per fund.
+            - Dictionary mapping fund code to its max absolute change Z-score for sorting.
     """
     if df is None or df.empty:
-        logger.warning("Input DataFrame is None or empty. Cannot calculate metrics.")
-        return pd.DataFrame()
-    
-    if df.index.nlevels != 2:
-        logger.error("Input DataFrame must have a MultiIndex with 2 levels (Date, Fund Code).")
-        # Consider raising ValueError or returning empty DataFrame? Let's return empty for resilience.
-        return pd.DataFrame()
-
-    # Ensure the date level is sorted for correct .diff() calculation
-    try:
-        df_sorted = df.sort_index(level=0)
-        latest_date = df_sorted.index.get_level_values(0).max()
-        fund_codes = df_sorted.index.get_level_values(1).unique()
-    except Exception as e:
-         logger.error(f"Error preparing DataFrame for metric calculation (sorting/indexing): {e}", exc_info=True)
-         return pd.DataFrame()
+        logger.warning(f"Input DataFrame for prefix '{metric_prefix}' is None or empty. Returning empty results.")
+        return [], {}
 
     # Determine which columns to actually process based on presence in df
     cols_to_process = []
-    output_col_name_map = {} # Map processed col name (potentially std) to output name (original/std)
-    
-    if benchmark_col and benchmark_col in df_sorted.columns:
-        cols_to_process.append(benchmark_col) # Use the standardized name for processing
-        output_col_name_map[benchmark_col] = benchmark_col # Output name is the same std name
+    output_col_name_map = {} # Map processed col name to output name (original/std)
+
+    if benchmark_col and benchmark_col in df.columns:
+        cols_to_process.append(benchmark_col)
+        output_col_name_map[benchmark_col] = benchmark_col
     elif benchmark_col:
-        logger.warning(f"Specified benchmark column '{benchmark_col}' not found in DataFrame columns: {df_sorted.columns.tolist()}")
-        
-    # Use the *original* fund column names provided by the loader
+        logger.warning(f"Specified {metric_prefix}benchmark column '{benchmark_col}' not found in DataFrame columns: {df.columns.tolist()}")
+
     for f_col in fund_cols:
-        if f_col in df_sorted.columns:
+        if f_col in df.columns:
             cols_to_process.append(f_col)
-            output_col_name_map[f_col] = f_col # Output name is the original fund name
+            output_col_name_map[f_col] = f_col
         else:
-            logger.warning(f"Specified fund column '{f_col}' not found in DataFrame columns: {df_sorted.columns.tolist()}")
+            logger.warning(f"Specified {metric_prefix}fund column '{f_col}' not found in DataFrame columns: {df.columns.tolist()}")
 
     if not cols_to_process:
-        logger.error("No valid columns (benchmark or funds) found in the DataFrame to calculate metrics for.")
-        return pd.DataFrame()
+        logger.error(f"No valid columns (benchmark or funds) found in the {metric_prefix}DataFrame to calculate metrics for.")
+        return [], {}
 
-    logger.info(f"Calculating metrics for columns: {cols_to_process}")
+    logger.info(f"Calculating {metric_prefix}metrics for columns: {cols_to_process}")
 
-    all_metrics_list = []
-    # Store the maximum absolute change z-score *per fund* across all its columns for sorting purposes
-    max_abs_change_z_scores: Dict[str, float] = {}
+    fund_metrics_list = []
+    max_abs_z_scores: Dict[str, float] = {}
 
     for fund_code in fund_codes:
+        fund_specific_metrics: Dict[str, Any] = {'Fund Code': fund_code} # Initialize with Fund Code
+        current_fund_max_abs_z: float = -1.0
+
         try:
-            # Extract historical data for the specific fund code
-            # .xs drops the level, providing a DataFrame indexed by Date
-            # Use .loc to avoid potential KeyError if fund_code doesn't exist
-            if fund_code not in df_sorted.index.get_level_values(1):
-                 logger.warning(f"Fund code '{fund_code}' not found in DataFrame index level 1. Skipping.")
-                 continue
-            # Select only columns we intend to process to avoid carrying unused data
-            fund_data_hist = df_sorted.loc[(slice(None), fund_code), cols_to_process]
-            # After .loc, the index might still be MultiIndex if only one fund exists, reset to Date
+            # Check if fund exists in this specific dataframe
+            if fund_code not in df.index.get_level_values(1):
+                logger.debug(f"Fund code '{fund_code}' not found in {metric_prefix}DataFrame. Adding empty metrics.")
+                # Add NaN placeholders for all expected metrics for this source
+                for col_name_proc in cols_to_process:
+                    output_name = output_col_name_map[col_name_proc]
+                    fund_specific_metrics[f'{metric_prefix}{output_name} Mean'] = np.nan
+                    fund_specific_metrics[f'{metric_prefix}{output_name} Max'] = np.nan
+                    fund_specific_metrics[f'{metric_prefix}{output_name} Min'] = np.nan
+                    fund_specific_metrics[f'{metric_prefix}{output_name} Latest Value'] = np.nan
+                    fund_specific_metrics[f'{metric_prefix}{output_name} Change'] = np.nan
+                    fund_specific_metrics[f'{metric_prefix}{output_name} Change Z-Score'] = np.nan
+                fund_metrics_list.append(fund_specific_metrics)
+                max_abs_z_scores[fund_code] = np.nan # No Z-score if fund not present
+                continue # Move to the next fund code
+
+            # Extract data for the fund
+            fund_data_hist = df.loc[(slice(None), fund_code), cols_to_process]
             fund_data_hist = fund_data_hist.reset_index(level=1, drop=True).sort_index()
 
-        except Exception as e: # Catch broader errors during data extraction
-            logger.error(f"Error extracting data for fund code '{fund_code}': {e}", exc_info=True)
-            continue
+            for col_name in cols_to_process:
+                if col_name not in fund_data_hist.columns:
+                    logger.warning(f"Column '{col_name}' unexpectedly not found for fund '{fund_code}' in {metric_prefix}DF. Skipping metrics.")
+                    continue
 
-        # Initialize metrics for this fund
-        fund_metrics: Dict[str, Any] = {'Fund Code': fund_code}
-        current_fund_max_abs_z: float = -1.0 # Use -1 to handle cases where all Zs are NaN or non-positive
+                col_hist = fund_data_hist[col_name]
+                col_change_hist = pd.Series(index=col_hist.index, dtype=np.float64)
+                if not col_hist.dropna().empty and len(col_hist.dropna()) > 1:
+                    col_change_hist = col_hist.diff()
+                else:
+                    logger.debug(f"Cannot calculate difference for {metric_prefix}column '{col_name}', fund '{fund_code}' due to insufficient data.")
 
-        for col_name in cols_to_process:
-            # This check should be redundant now due to filtering `cols_to_process` above, but keep as safeguard
-            if col_name not in fund_data_hist.columns:
-                logger.warning(f"Column '{col_name}' unexpectedly not found for fund '{fund_code}' after filtering. Skipping metrics.")
-                continue
+                # Calculate stats for this specific column
+                output_name = output_col_name_map[col_name]
+                col_stats = _calculate_column_stats(col_hist, col_change_hist, latest_date, output_name, prefix=metric_prefix)
+                fund_specific_metrics.update(col_stats)
 
-            # Get the specific column's historical data and calculate its difference
-            col_hist = fund_data_hist[col_name]
-            # Calculate diff only if series is not empty and has more than one non-NaN value
-            col_change_hist = pd.Series(index=col_hist.index, dtype=np.float64) # Initialize with NaNs
-            if not col_hist.dropna().empty and len(col_hist.dropna()) > 1:
-                 col_change_hist = col_hist.diff()
-            else:
-                 logger.debug(f"Cannot calculate difference for column '{col_name}', fund '{fund_code}' due to insufficient data.")
-                 
+                # Update the fund's max absolute Z-score *for this source*
+                col_z_score = col_stats.get(f'{metric_prefix}{output_name} Change Z-Score', np.nan)
+                compare_z_score = col_z_score
+                if np.isinf(compare_z_score):
+                    compare_z_score = 1e9 * np.sign(compare_z_score)
+                if pd.notna(compare_z_score):
+                    current_fund_max_abs_z = max(current_fund_max_abs_z, abs(compare_z_score))
 
-            # Calculate stats for this specific column
-            # Use the mapped output name for the metric dictionary keys
-            output_name = output_col_name_map[col_name]
-            col_stats = _calculate_column_stats(col_hist, col_change_hist, latest_date, output_name)
-            fund_metrics.update(col_stats)
+            fund_metrics_list.append(fund_specific_metrics)
+            max_abs_z_scores[fund_code] = current_fund_max_abs_z if current_fund_max_abs_z >= 0 else np.nan
 
-            # Update the fund's overall max absolute Z-score if this column's Z-score is valid and larger
-            col_z_score = col_stats.get(f'{output_name} Change Z-Score', np.nan)
-            # Replace inf/-inf with a large number for sorting comparison, but keep original in metrics
-            compare_z_score = col_z_score
-            if np.isinf(compare_z_score):
-                compare_z_score = 1e9 * np.sign(compare_z_score) # Large number with correct sign
-                
-            if pd.notna(compare_z_score):
-                current_fund_max_abs_z = max(current_fund_max_abs_z, abs(compare_z_score))
+        except Exception as e:
+            logger.error(f"Error processing {metric_prefix}metrics for fund code '{fund_code}': {e}", exc_info=True)
+            # Add placeholder with NaNs if error occurs mid-fund processing
+            if 'Fund Code' not in fund_specific_metrics: # Ensure Fund Code is there
+                fund_specific_metrics['Fund Code'] = fund_code
+            # Add NaN placeholders for potentially missing metrics
+            for col_name_proc in cols_to_process:
+                output_name = output_col_name_map[col_name_proc]
+                if f'{metric_prefix}{output_name} Mean' not in fund_specific_metrics: fund_specific_metrics[f'{metric_prefix}{output_name} Mean'] = np.nan
+                if f'{metric_prefix}{output_name} Max' not in fund_specific_metrics: fund_specific_metrics[f'{metric_prefix}{output_name} Max'] = np.nan
+                # ... (add for all metrics) ...
+                if f'{metric_prefix}{output_name} Change Z-Score' not in fund_specific_metrics: fund_specific_metrics[f'{metric_prefix}{output_name} Change Z-Score'] = np.nan
 
-        # Store the calculated metrics dictionary for this fund
-        all_metrics_list.append(fund_metrics)
-        # Store the max abs change Z-score found for this fund across all its columns
-        # Use the potentially modified value (inf replaced) for sorting
-        max_abs_change_z_scores[fund_code] = current_fund_max_abs_z if current_fund_max_abs_z >= 0 else np.nan
+            fund_metrics_list.append(fund_specific_metrics)
+            max_abs_z_scores[fund_code] = np.nan # Mark as NaN for sorting if error occurred
 
-    # --- Post-processing --- 
-    if not all_metrics_list:
-        logger.warning("No funds were processed successfully. Returning empty DataFrame.")
+    return fund_metrics_list, max_abs_z_scores
+
+def calculate_latest_metrics(
+    primary_df: Optional[pd.DataFrame],
+    primary_fund_cols: Optional[List[str]],
+    primary_benchmark_col: Optional[str],
+    secondary_df: Optional[pd.DataFrame] = None,
+    secondary_fund_cols: Optional[List[str]] = None,
+    secondary_benchmark_col: Optional[str] = None,
+    secondary_prefix: str = "S&P " # Prefix for secondary metrics
+) -> pd.DataFrame:
+    """Calculates latest metrics for primary and optional secondary data.
+
+    Merges metrics from both sources based on Fund Code.
+    Sorts the final DataFrame by the maximum absolute Z-score from the *primary* source.
+
+    Args:
+        primary_df (Optional[pd.DataFrame]): Primary processed DataFrame.
+        primary_fund_cols (Optional[List[str]]): List of primary fund value column names.
+        primary_benchmark_col (Optional[str]): Standardized primary benchmark column name.
+        secondary_df (Optional[pd.DataFrame]): Secondary processed DataFrame. Defaults to None.
+        secondary_fund_cols (Optional[List[str]]): List of secondary fund value column names. Defaults to None.
+        secondary_benchmark_col (Optional[str]): Standardized secondary benchmark column name. Defaults to None.
+        secondary_prefix (str): Prefix for secondary metric columns. Defaults to "S&P ".
+
+    Returns:
+        pd.DataFrame: Combined metrics indexed by Fund Code, sorted by primary max abs Z-score.
+                      Returns an empty DataFrame if primary data is missing or processing fails critically.
+    """
+    if primary_df is None or primary_df.empty or primary_fund_cols is None:
+        logger.warning("Primary DataFrame or fund columns are missing. Cannot calculate metrics.")
         return pd.DataFrame()
 
-    # Create DataFrame from the list of metric dictionaries
-    try:
-        latest_metrics_df = pd.DataFrame(all_metrics_list).set_index('Fund Code')
-    except Exception as e:
-         logger.error(f"Error creating final metrics DataFrame: {e}", exc_info=True)
-         return pd.DataFrame()
+    if primary_df.index.nlevels != 2:
+        logger.error("Primary DataFrame must have a MultiIndex with 2 levels (Date, Fund Code).")
+        return pd.DataFrame()
 
-    # Sort the DataFrame based on the calculated max absolute Z-scores
-    # Create a Series from the max_abs_change_z_scores dict, align its index with the DataFrame
-    # then sort the DataFrame based on the values of this series.
-    try:
-        sort_series = pd.Series(max_abs_change_z_scores).reindex(latest_metrics_df.index)
-        # Sort descending, NaNs go last
-        latest_metrics_df_sorted = latest_metrics_df.reindex(sort_series.sort_values(ascending=False, na_position='last').index)
-    except Exception as e:
-        logger.error(f"Error sorting metrics DataFrame: {e}", exc_info=True)
-        latest_metrics_df_sorted = latest_metrics_df # Return unsorted if sorting fails
+    # Combine fund codes and find the overall latest date
+    all_dfs = [df for df in [primary_df, secondary_df] if df is not None and not df.empty]
+    if not all_dfs:
+        logger.warning("No valid DataFrames provided. Cannot calculate metrics.")
+        return pd.DataFrame()
 
-    logger.info(f"Successfully calculated metrics for {len(latest_metrics_df_sorted)} funds.")
-    return latest_metrics_df_sorted 
+    try:
+        combined_index = pd.concat(all_dfs).index
+        latest_date = combined_index.get_level_values(0).max()
+        fund_codes = combined_index.get_level_values(1).unique()
+        # Ensure DataFrames are sorted by date index for diff calculation
+        primary_df_sorted = primary_df.sort_index(level=0)
+        secondary_df_sorted = secondary_df.sort_index(level=0) if secondary_df is not None else None
+
+    except Exception as e:
+        logger.error(f"Error preparing combined data for metric calculation: {e}", exc_info=True)
+        return pd.DataFrame()
+
+    # --- Calculate Metrics for Primary Data --- #
+    primary_metrics_list, primary_max_abs_z = _process_dataframe_metrics(
+        primary_df_sorted,
+        fund_codes, # Use combined fund codes
+        primary_fund_cols,
+        primary_benchmark_col,
+        latest_date,
+        metric_prefix="" # No prefix for primary
+    )
+
+    # --- Calculate Metrics for Secondary Data (if present) --- #
+    secondary_metrics_list = []
+    if secondary_df_sorted is not None and secondary_fund_cols is not None:
+        logger.info(f"Processing secondary data with prefix: '{secondary_prefix}'")
+        secondary_metrics_list, _ = _process_dataframe_metrics(
+            secondary_df_sorted,
+            fund_codes, # Use combined fund codes
+            secondary_fund_cols,
+            secondary_benchmark_col,
+            latest_date,
+            metric_prefix=secondary_prefix
+        )
+    else:
+        logger.info("No valid secondary data provided or fund columns missing, skipping secondary metrics.")
+
+    # --- Combine Metrics --- #
+    if not primary_metrics_list:
+        logger.warning("Primary metric calculation resulted in empty list. Returning empty DataFrame.")
+        return pd.DataFrame()
+
+    # Convert lists of dicts to DataFrames
+    primary_metrics_df = pd.DataFrame(primary_metrics_list).set_index('Fund Code')
+
+    if secondary_metrics_list:
+        secondary_metrics_df = pd.DataFrame(secondary_metrics_list).set_index('Fund Code')
+        # Merge based on Fund Code index, keeping all funds (outer merge)
+        combined_metrics_df = primary_metrics_df.merge(
+            secondary_metrics_df, left_index=True, right_index=True, how='outer'
+        )
+    else:
+        combined_metrics_df = primary_metrics_df
+
+    # --- Sort Results --- #
+    # Add the primary max abs Z-score as a temporary column for sorting
+    # Use .get() on the dictionary to handle funds potentially missing from primary results
+    combined_metrics_df['_sort_z'] = combined_metrics_df.index.map(lambda fc: primary_max_abs_z.get(fc, np.nan))
+
+    # Sort by the temporary Z-score column (descending), put NaNs last
+    combined_metrics_df_sorted = combined_metrics_df.sort_values(by='_sort_z', ascending=False, na_position='last')
+
+    # Drop the temporary sorting column
+    combined_metrics_df_sorted = combined_metrics_df_sorted.drop(columns=['_sort_z'])
+
+    logger.info(f"Successfully calculated and combined metrics. Final shape: {combined_metrics_df_sorted.shape}")
+    return combined_metrics_df_sorted 

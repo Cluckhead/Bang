@@ -13,7 +13,11 @@
                     <div class="card-body d-flex flex-column">
                         <h5 class="card-title">{{ metric }}</h5>
                         <p class="card-text flex-grow-1">View details for {{ metric }}.</p>
-                        <a href="{{ url_for('metric.metric_page', metric_name=metric) }}" class="btn btn-primary metric-link">View Details</a>
+                        {# Generate the URL using url_for #}
+                        {% set metric_url = url_for('metric.metric_page', metric_name=metric) %}
+                        <a href="{{ metric_url }}" class="btn btn-primary metric-link">View Details</a>
+                        {# Debug: Display the generated URL #}
+                        <span class="text-muted small mt-1">Debug URL: {{ metric_url }}</span>
                     </div>
                 </div>
             </div>

@@ -55,7 +55,8 @@ def index():
 
         try:
             print(f"Processing {filename}...")
-            df, fund_cols, benchmark_col = load_and_process_data(filename)
+            # Unpack all 6 values, but only use the primary ones for the dashboard summary
+            df, fund_cols, benchmark_col, _sec_df, _sec_fund_cols, _sec_bench_col = load_and_process_data(filename)
 
             # Skip if no benchmark AND no fund columns identified
             if not benchmark_col and not fund_cols:

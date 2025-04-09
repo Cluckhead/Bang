@@ -107,10 +107,12 @@ export function createTimeSeriesChart(canvasId, chartData, metricName, fundCode,
         
         // Attempt to create the new chart
         console.log(`[createTimeSeriesChart] Attempting to create new Chart on canvas ${canvasId}`);
-        new Chart(ctx, config);
+        const chartInstance = new Chart(ctx, config); // Store the instance
         
         // Log success *after* instantiation
         console.log(`[createTimeSeriesChart] Successfully created chart for "${chartTitle}" on ${canvasId}`);
+        
+        return chartInstance; // Return the created chart instance
 
     } catch (error) {
         // Log any error during chart instantiation

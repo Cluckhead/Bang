@@ -30,6 +30,14 @@
         <p>Latest Data Date: <strong>{{ latest_date }}</strong></p>
         <p>Charts sorted by the maximum absolute <strong>Change Z-Score</strong> across all columns for the fund (most deviation first).</p>
 
+        <!-- Toggle Switch for S&P Data -->
+        <div id="sp-toggle-container" class="form-group" style="display: none;"> <!-- Initially hidden, JS will show if needed -->
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="toggleSpData">
+                <label class="form-check-label" for="toggleSpData">Show S&P Comparison Data</label>
+            </div>
+        </div>
+        <!-- End Toggle Switch -->
+
         {% if not missing_funds.empty %}
             <div class="alert alert-warning" role="alert">
                 <strong>Warning:</strong> The following funds are missing data for the latest date ({{ latest_date }}):

@@ -3,12 +3,14 @@
 # based on patterns, handle potential naming variations, parse dates, standardize column names,
 # set appropriate data types, and prepare the data in a pandas DataFrame format
 # suitable for further analysis and processing within the application.
+# It also supports loading a secondary file (e.g., prefixed with 'sp_') for comparison.
 # data_loader.py
 # This file is responsible for loading and preprocessing data from time-series CSV files (typically prefixed with `ts_`).
 # It includes functions to dynamically identify essential columns (Date, Code, Benchmark)
 # based on patterns, handle potential naming variations, parse dates (handling 'YYYY-MM-DD' and 'DD/MM/YYYY'),
 # standardize column names, set appropriate data types, and prepare the data in a pandas DataFrame format
 # suitable for further analysis within the application. It includes robust error handling and logging.
+# It now also supports loading and processing a secondary comparison file (e.g., sp_*.csv).
 
 import pandas as pd
 import os
@@ -54,210 +56,310 @@ STD_DATE_COL = 'Date'
 STD_CODE_COL = 'Code'
 STD_BENCHMARK_COL = 'Benchmark'
 
-def _find_column(pattern: str, columns: List[str], filename: str, col_type: str) -> str:
+def _find_column(pattern: str, columns: List[str], filename_for_logging: str, col_type: str) -> str:
     """Helper function to find a single column matching a pattern (case-insensitive)."""
     matches = [col for col in columns if re.search(pattern, col, re.IGNORECASE)]
     if len(matches) == 1:
-        logger.info(f"Found {col_type} column in '{filename}': '{matches[0]}'")
+        logger.info(f"Found {col_type} column in '{filename_for_logging}': '{matches[0]}'")
         return matches[0]
     elif len(matches) > 1:
         # Log error before raising
-        logger.error(f"Multiple possible {col_type} columns found in '{filename}' matching pattern '{pattern}': {matches}. Please ensure unique column names.")
-        raise ValueError(f"Multiple possible {col_type} columns found in '{filename}' matching pattern '{pattern}': {matches}. Please ensure unique column names.")
+        logger.error(f"Multiple possible {col_type} columns found in '{filename_for_logging}' matching pattern '{pattern}': {matches}. Please ensure unique column names.")
+        raise ValueError(f"Multiple possible {col_type} columns found in '{filename_for_logging}' matching pattern '{pattern}': {matches}. Please ensure unique column names.")
     else:
          # Log error before raising
-        logger.error(f"No {col_type} column found in '{filename}' matching pattern '{pattern}'. Found columns: {columns}")
-        raise ValueError(f"No {col_type} column found in '{filename}' matching pattern '{pattern}'. Found columns: {columns}")
+        logger.error(f"No {col_type} column found in '{filename_for_logging}' matching pattern '{pattern}'. Found columns: {columns}")
+        raise ValueError(f"No {col_type} column found in '{filename_for_logging}' matching pattern '{pattern}'. Found columns: {columns}")
 
-def load_and_process_data(
-    filename: str,
-    # Remove default args for specific names as they are now dynamically found
-    # date_col: str = DEFAULT_DATE_COL,
-    # code_col: str = DEFAULT_CODE_COL,
-    # benchmark_col: str = DEFAULT_BENCHMARK_COL,
-    # other_fund_cols: Optional[List[str]] = None, # Keep for potential future explicit override, but primary logic is dynamic
-    data_folder: str = DATA_FOLDER
-) -> Tuple[pd.DataFrame, List[str], Optional[str]]: # Changed return type hint for benchmark_col
-    """Loads a CSV file, dynamically identifies date, code, and benchmark columns,
-    renames them to standard names ('Date', 'Code', 'Benchmark'), parses dates (trying YYYY-MM-DD then DD/MM/YYYY),
-    sets index, identifies original fund column names, and ensures numeric types for value columns.
+def _create_empty_dataframe(original_fund_val_col_names: List[str], benchmark_col_present: bool) -> pd.DataFrame:
+    """Creates an empty DataFrame with the expected structure."""
+    final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present else None
+    expected_cols = [STD_DATE_COL, STD_CODE_COL] + original_fund_val_col_names
+    if final_benchmark_col_name:
+        expected_cols.append(final_benchmark_col_name)
+    # Create an empty df with the right index and columns
+    empty_index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=[STD_DATE_COL, STD_CODE_COL])
+    value_cols = [col for col in expected_cols if col not in [STD_DATE_COL, STD_CODE_COL]]
+    return pd.DataFrame(index=empty_index, columns=value_cols)
 
-    Args:
-        filename (str): The name of the CSV file within the data folder.
-        data_folder (str): The path to the folder containing the data files. Defaults to DATA_FOLDER.
+def _process_single_file(
+    filepath: str,
+    filename_for_logging: str
+) -> Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
+    """Internal helper to load and process a single CSV file.
+
+    Handles finding columns, parsing dates, renaming, indexing, and type conversion.
+    Returns None if the file is not found or critical processing steps fail.
 
     Returns:
-        Tuple[pd.DataFrame, List[str], Optional[str]]:
-               Processed DataFrame indexed by the standardized 'Date' and 'Code' columns,
-               list of original fund column names found in the file,
-               the standardized benchmark column name ('Benchmark') if present, otherwise None.
-
-    Raises:
-        ValueError: If required columns (Date, Code) cannot be uniquely identified,
-                    if date parsing fails completely, or if no value columns are found (and no benchmark).
-        FileNotFoundError: If the specified file does not exist.
+        Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
+               Processed DataFrame, list of original fund value column names,
+               and the standardized benchmark column name if present, otherwise None.
+               Returns None if processing fails critically.
     """
-    filepath = os.path.join(data_folder, filename)
     if not os.path.exists(filepath):
-        logger.error(f"File not found: {filepath}")
-        raise FileNotFoundError(f"File not found: {filepath}")
+        logger.warning(f"File not found, skipping: {filepath}")
+        return None # Return None if file doesn't exist
 
     try:
-        # Read only the header first to get column names accurately
+        # Read only the header first
         header_df = pd.read_csv(filepath, nrows=0, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip')
-        original_cols = [col.strip() for col in header_df.columns.tolist()] # Strip whitespace immediately
-        logger.info(f"Original columns found in '{filename}': {original_cols}")
+        original_cols = [col.strip() for col in header_df.columns.tolist()]
+        logger.info(f"Processing file: '{filename_for_logging}'. Original columns: {original_cols}")
 
-        # --- Dynamically find required columns using patterns ---
-        # Use word boundaries (\\b) to avoid partial matches like \'Benchmarking\'
-        # Updated pattern to match 'Position Date' or 'Date'
-        date_pattern = r'\b(Position\s*)?Date\b' # Store pattern for logging
-        logger.info(f"Attempting to find Date column in '{filename}' using pattern: '{date_pattern}'") # DEBUG
-        actual_date_col = _find_column(date_pattern, original_cols, filename, 'Date') 
-        logger.info(f"Found actual Date column: '{actual_date_col}'") # DEBUG
-        code_pattern = r'\bCode\b' # Store pattern for logging
-        logger.info(f"Attempting to find Code column in '{filename}' using pattern: '{code_pattern}'") # DEBUG
-        actual_code_col = _find_column(code_pattern, original_cols, filename, 'Code')
-        logger.info(f"Found actual Code column: '{actual_code_col}'") # DEBUG
-        # Allow benchmark column to be optional - look for it, but don't fail if not found.
+        # Dynamically find required columns
+        date_pattern = r'\b(Position\s*)?Date\b'
+        actual_date_col = _find_column(date_pattern, original_cols, filename_for_logging, 'Date')
+        code_pattern = r'\b(Fund\s*)?Code\b' # Allow 'Fund Code' or 'Code'
+        actual_code_col = _find_column(code_pattern, original_cols, filename_for_logging, 'Code')
+
+        benchmark_col_present = False
+        actual_benchmark_col = None
         try:
-            # Use word boundaries (\b) to avoid partial matches
-            # OLD: benchmark_pattern = r'\bBenchmark\b'
-            benchmark_pattern = r'\bBench\b' # UPDATED: Look for 'Bench' instead of 'Benchmark'
-            logger.info(f"Attempting to find Benchmark column in '{filename}' using pattern: '{benchmark_pattern}'")
-            actual_benchmark_col = _find_column(benchmark_pattern, original_cols, filename, 'Benchmark')
+            benchmark_pattern = r'\b(Benchmark|Bench)\b' # Allow 'Benchmark' or 'Bench'
+            actual_benchmark_col = _find_column(benchmark_pattern, original_cols, filename_for_logging, 'Benchmark')
             benchmark_col_present = True
         except ValueError:
-            logger.warning(f"No Benchmark column found in '{filename}' matching pattern '{benchmark_pattern}'. Proceeding without benchmark.")
-            actual_benchmark_col = None # Indicate benchmark is not present
-            benchmark_col_present = False
+            logger.info(f"No Benchmark column found in '{filename_for_logging}' matching pattern. Proceeding without benchmark.")
 
-        # --- Identify original fund value columns ---
-        # Fund columns are everything EXCEPT the identified date and code columns.
-        # Benchmark is also excluded IF it was found.
+        # Identify original fund value columns
         excluded_cols_for_funds = {actual_date_col, actual_code_col}
-        if benchmark_col_present and actual_benchmark_col: # Check actual_benchmark_col is not None
+        if benchmark_col_present and actual_benchmark_col:
             excluded_cols_for_funds.add(actual_benchmark_col)
-
-        # Identify columns that are not date, code, or benchmark (if present)
         original_fund_val_col_names = [col for col in original_cols if col not in excluded_cols_for_funds]
 
         if not original_fund_val_col_names and not benchmark_col_present:
-             logger.error(f"No fund value columns and no benchmark column identified in '{filename}'. Cannot process.")
-             raise ValueError(f"No fund value columns and no benchmark column identified in '{filename}'. Cannot process.")
-        elif not original_fund_val_col_names:
-             logger.warning(f"No specific fund value columns identified in '{filename}' besides the benchmark column.")
-        else:
-            logger.info(f"Identified Fund columns in '{filename}': {original_fund_val_col_names}")
+             logger.error(f"No fund value columns and no benchmark column identified in '{filename_for_logging}'. Cannot process.")
+             return None # Cannot proceed
 
+        # Read the full CSV
+        df = pd.read_csv(filepath, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip', dtype={actual_date_col: str})
+        df.columns = df.columns.str.strip()
 
-        # --- Read the full CSV ---
-        # Read WITHOUT parsing dates initially, handle it manually later for flexibility
-        df = pd.read_csv(filepath, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip', dtype={actual_date_col: str}) # Read date col as string
-        df.columns = df.columns.str.strip() # Ensure columns are stripped again after full read
-
-        # --- Rename columns to standard names BEFORE date parsing ---
+        # Rename columns
         rename_map = {
             actual_date_col: STD_DATE_COL,
             actual_code_col: STD_CODE_COL
         }
         if benchmark_col_present and actual_benchmark_col:
             rename_map[actual_benchmark_col] = STD_BENCHMARK_COL
-
         df.rename(columns=rename_map, inplace=True)
-        logger.info(f"Renamed columns in '{filename}' to standard names: {list(rename_map.keys())} -> {list(rename_map.values())}")
+        logger.info(f"Renamed columns in '{filename_for_logging}': {list(rename_map.keys())} -> {list(rename_map.values())}")
 
-
-        # --- Robust Date Parsing ---
-        logger.info(f"Starting date parsing for column '{STD_DATE_COL}' (original: '{actual_date_col}') in '{filename}'.") # DEBUG
+        # Robust Date Parsing
         date_series = df[STD_DATE_COL]
-        logger.debug(f"Original date series head:\\n{date_series.head()}") # Use DEBUG for potentially long series
+        parsed_dates = pd.to_datetime(date_series, errors='coerce', dayfirst=None, yearfirst=None) # Let pandas infer
 
-        # Let pandas infer the format. errors='coerce' will turn unparseable strings into NaT (Not a Time).
-        logger.info(f"Attempting date parsing using pandas format inference...") 
-        parsed_dates = pd.to_datetime(date_series, errors='coerce')
-        
-        # Check if parsing failed for all entries 
-        all_null_after_parsing = parsed_dates.isnull().all()
-        logger.info(f"Result of isnull().all() after pandas format inference: {all_null_after_parsing}") # DEBUG
-        
-        if all_null_after_parsing:
-            logger.error(f"Could not parse any dates in column '{STD_DATE_COL}' (original: '{actual_date_col}') using pandas format inference in file {filename}.")
-            raise ValueError(f"Date parsing failed for file {filename}. Could not infer format.")
-        else:
-            # Log how many were successfully parsed vs NaT
-            nat_count = parsed_dates.isnull().sum()
-            total_count = len(parsed_dates)
-            success_count = total_count - nat_count
-            logger.info(f"Successfully parsed {success_count}/{total_count} dates using pandas inference in {filename}. ({nat_count} resulted in NaT).")
-            if nat_count > 0:
-                 logger.warning(f"{nat_count} date values in '{STD_DATE_COL}' (original: '{actual_date_col}') from {filename} could not be parsed and resulted in NaT.")
+        # Check if all parsing failed
+        if parsed_dates.isnull().all() and len(date_series) > 0:
+             # Try again with dayfirst=True if initial inference failed
+            logger.warning(f"Initial date parsing failed for {filename_for_logging}. Trying with dayfirst=True.")
+            parsed_dates = pd.to_datetime(date_series, errors='coerce', dayfirst=True)
+            if parsed_dates.isnull().all() and len(date_series) > 0:
+                logger.error(f"Could not parse any dates in column '{STD_DATE_COL}' (original: '{actual_date_col}') in file {filename_for_logging} even with dayfirst=True.")
+                return None # Cannot proceed without valid dates
 
+        nat_count = parsed_dates.isnull().sum()
+        total_count = len(parsed_dates)
+        success_count = total_count - nat_count
+        logger.info(f"Parsed {success_count}/{total_count} dates in {filename_for_logging}. ({nat_count} resulted in NaT).")
+        if nat_count > 0:
+             logger.warning(f"{nat_count} date values in '{STD_DATE_COL}' from {filename_for_logging} became NaT.")
 
-        # Log count of NaNs before dropping
-        # nat_count_before_drop = parsed_dates.isnull().sum() # Already calculated above as nat_count
-        logger.info(f"Number of NaT (unparseable) dates before dropping: {nat_count} out of {len(parsed_dates)}") # DEBUG
-
-        # Assign the successfully parsed dates back to the DataFrame
         df[STD_DATE_COL] = parsed_dates
-        # Drop rows where date parsing failed completely (became NaT)
         original_row_count = len(df)
         df.dropna(subset=[STD_DATE_COL], inplace=True)
         rows_dropped = original_row_count - len(df)
         if rows_dropped > 0:
-            logger.warning(f"Dropped {rows_dropped} rows from {filename} due to failed date parsing.")
+            logger.warning(f"Dropped {rows_dropped} rows from {filename_for_logging} due to failed date parsing.")
 
-        # --- Set Index using standard names ---
+        # Set Index
         if df.empty:
-            logger.warning(f"DataFrame became empty after dropping rows with unparseable dates in {filename}.")
-            # Return an empty DataFrame matching the expected structure but log the issue
-            final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present else None
-            # Need to define columns if df is empty, based on expected output structure
-            expected_cols = [STD_DATE_COL, STD_CODE_COL] + original_fund_val_col_names
-            if final_benchmark_col_name:
-                expected_cols.append(final_benchmark_col_name)
-            # Create an empty df with the right index and columns
-            empty_index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=[STD_DATE_COL, STD_CODE_COL])
-            return pd.DataFrame(index=empty_index, columns=[col for col in expected_cols if col not in [STD_DATE_COL, STD_CODE_COL]]), original_fund_val_col_names, final_benchmark_col_name
-        else:
-            df.set_index([STD_DATE_COL, STD_CODE_COL], inplace=True)
+            logger.warning(f"DataFrame became empty after dropping rows with unparseable dates in {filename_for_logging}.")
+            # Return empty structure but indicate success in file processing up to this point
+            empty_df = _create_empty_dataframe(original_fund_val_col_names, benchmark_col_present)
+            final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
+            return empty_df, original_fund_val_col_names, final_bm_col
 
+        df.set_index([STD_DATE_COL, STD_CODE_COL], inplace=True)
 
-        # --- Convert value columns to numeric ---
-        # Use original fund names and the standard benchmark name (if present)
-        value_cols_to_convert = original_fund_val_col_names[:] # Make a copy
+        # Convert value columns to numeric
+        value_cols_to_convert = original_fund_val_col_names[:]
         if benchmark_col_present:
-             # Use the RENAMED benchmark column name for conversion
             value_cols_to_convert.append(STD_BENCHMARK_COL)
 
-        if not value_cols_to_convert:
-            # This case implies only date/code columns were found, which should be caught earlier, but safeguard.
-            logger.error(f"No valid fund or benchmark value columns found to convert in {filename} after processing.")
-            raise ValueError(f"No valid fund or benchmark value columns found to convert in {filename} after processing.")
-
-        # Ensure the columns actually exist in the DataFrame after renaming before converting
         valid_cols_for_conversion = [col for col in value_cols_to_convert if col in df.columns]
         if not valid_cols_for_conversion:
-             logger.error(f"None of the identified value columns ({value_cols_to_convert}) exist in the DataFrame after renaming. Columns: {df.columns.tolist()}")
-             raise ValueError(f"None of the identified value columns ({value_cols_to_convert}) exist in the DataFrame after renaming. Columns: {df.columns.tolist()}")
+             logger.error(f"No valid fund or benchmark value columns found to convert in {filename_for_logging} after processing.")
+             # Return partially processed DF but log error
+             final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
+             return df, original_fund_val_col_names, final_bm_col # Return what we have
 
-        # Use apply with pd.to_numeric for robust conversion (errors='coerce' is crucial)
         df[valid_cols_for_conversion] = df[valid_cols_for_conversion].apply(pd.to_numeric, errors='coerce')
-
-        # Check for NaNs after conversion
-        nan_check_cols = [col for col in valid_cols_for_conversion if col in df.columns] # Re-check existence just in case
+        nan_check_cols = [col for col in valid_cols_for_conversion if col in df.columns]
         if nan_check_cols and df[nan_check_cols].isnull().all().all():
-            logger.warning(f"All values in value columns {nan_check_cols} became NaN after conversion in file {filename}. Check data types.")
+            logger.warning(f"All values in value columns {nan_check_cols} became NaN after conversion in file {filename_for_logging}. Check data types.")
 
-        # Return the DataFrame, the ORIGINAL fund column names, and the STANDARD benchmark name
-        # Return STD_BENCHMARK_COL if benchmark was present, else None
+
         final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present else None
-        logger.info(f"Successfully loaded and processed '{filename}'. Identified Original Funds: {original_fund_val_col_names}, Standard Benchmark Name Used: {final_benchmark_col_name}")
+        logger.info(f"Successfully processed file: '{filename_for_logging}'. Index: {df.index.names}. Columns: {df.columns.tolist()}")
         return df, original_fund_val_col_names, final_benchmark_col_name
 
+    except FileNotFoundError:
+        logger.error(f"File not found during processing: {filepath}")
+        return None # Handled above, but belt-and-suspenders
+    except ValueError as e:
+        logger.error(f"Value error processing {filename_for_logging}: {e}")
+        return None # Return None on critical errors like missing columns
     except Exception as e:
-        # Log the error with traceback information to file and console
-        logger.error(f"Error processing file {filepath}: {e}", exc_info=True)
-        # Re-raise the exception to be handled by the calling code (e.g., in app.py or script runner)
-        # The calling code should decide whether to skip the file or halt execution.
-        raise 
+        logger.exception(f"Unexpected error processing {filename_for_logging}: {e}") # Log full traceback
+        return None # Return None on unexpected errors
+
+# Simplified return type: focus on the dataframes and metadata needed downstream
+LoadResult = Tuple[
+    Optional[pd.DataFrame],      # Primary DataFrame
+    Optional[List[str]],         # Primary original value columns
+    Optional[str],               # Primary benchmark column name (standardized)
+    Optional[pd.DataFrame],      # Secondary DataFrame
+    Optional[List[str]],         # Secondary original value columns
+    Optional[str]                # Secondary benchmark column name (standardized)
+]
+
+def load_and_process_data(
+    primary_filename: str,
+    secondary_filename: Optional[str] = None,
+    data_folder: str = DATA_FOLDER
+) -> LoadResult:
+    """Loads and processes a primary CSV file and optionally a secondary CSV file.
+
+    Uses the internal _process_single_file helper for processing each file.
+
+    Args:
+        primary_filename (str): The name of the primary CSV file.
+        secondary_filename (Optional[str]): The name of the secondary CSV file. Defaults to None.
+        data_folder (str): The path to the folder containing the data files. Defaults to DATA_FOLDER.
+
+    Returns:
+        LoadResult: A tuple containing the processed DataFrames and metadata for
+                    primary and (optionally) secondary files. Elements corresponding
+                    to a file will be None if the file doesn't exist or processing fails.
+    """
+    primary_filepath = os.path.join(data_folder, primary_filename)
+    logger.info(f"--- Starting data load for primary: {primary_filename} ---")
+    primary_result = _process_single_file(primary_filepath, primary_filename)
+
+    primary_df = None
+    primary_original_val_cols = None
+    primary_benchmark_col = None
+    if primary_result:
+        primary_df, primary_original_val_cols, primary_benchmark_col = primary_result
+        logger.info(f"Primary file '{primary_filename}' loaded. Shape: {primary_df.shape if primary_df is not None else 'None'}")
+    else:
+        logger.error(f"Failed to process primary file: {primary_filename}")
+        # Still return structure, but with Nones for primary
+        primary_df = _create_empty_dataframe([], False) # Provide minimal empty DF
+        primary_original_val_cols = []
+        primary_benchmark_col = None
+
+
+    secondary_df = None
+    secondary_original_val_cols = None
+    secondary_benchmark_col = None
+
+    if secondary_filename:
+        secondary_filepath = os.path.join(data_folder, secondary_filename)
+        logger.info(f"--- Checking for secondary file: {secondary_filename} ---")
+        if os.path.exists(secondary_filepath):
+            logger.info(f"Secondary file found. Processing: {secondary_filename}")
+            secondary_result = _process_single_file(secondary_filepath, secondary_filename)
+            if secondary_result:
+                secondary_df, secondary_original_val_cols, secondary_benchmark_col = secondary_result
+                logger.info(f"Secondary file '{secondary_filename}' loaded. Shape: {secondary_df.shape if secondary_df is not None else 'None'}")
+            else:
+                 logger.warning(f"Failed to process secondary file: {secondary_filename}. Proceeding without it.")
+                 # Keep secondary parts as None if processing fails
+        else:
+            logger.info(f"Secondary file not found: {secondary_filename}. Proceeding with primary only.")
+    else:
+        logger.info("No secondary filename provided.")
+
+    return (
+        primary_df, primary_original_val_cols, primary_benchmark_col,
+        secondary_df, secondary_original_val_cols, secondary_benchmark_col
+    )
+
+# Example Usage (optional, for testing)
+# if __name__ == '__main__':
+#     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
+#     logger.info("Running data_loader directly for testing...")
+#
+#     # Test case 1: Primary file only (exists)
+#     print("\n--- Test Case 1: Primary Only (ts_Duration.csv) ---")
+#     try:
+#         pri_df, pri_ovc, pri_bc, sec_df, sec_ovc, sec_bc = load_and_process_data('ts_Duration.csv')
+#         if pri_df is not None:
+#             print(f"Primary loaded successfully. Shape: {pri_df.shape}")
+#             print(f"Primary Orig Val Cols: {pri_ovc}")
+#             print(f"Primary Bench Col: {pri_bc}")
+#             print(pri_df.head())
+#         else:
+#             print("Primary loading failed.")
+#         print(f"Secondary DF is None: {sec_df is None}")
+#
+#     except Exception as e:
+#         print(f"Error in Test Case 1: {e}")
+#
+#     # Test case 2: Primary and Secondary (both exist)
+#     print("\n--- Test Case 2: Primary (ts_Duration.csv) and Secondary (sp_ts_Duration.csv) ---")
+#     # Ensure you have a 'sp_ts_Duration.csv' file in 'Data/' for this test
+#     secondary_test_file = 'sp_ts_Duration.csv'
+#     if not os.path.exists(os.path.join(DATA_FOLDER, secondary_test_file)):
+#         print(f"WARNING: Secondary test file '{secondary_test_file}' not found. Skipping Test Case 2.")
+#     else:
+#         try:
+#             pri_df, pri_ovc, pri_bc, sec_df, sec_ovc, sec_bc = load_and_process_data('ts_Duration.csv', secondary_filename=secondary_test_file)
+#             if pri_df is not None:
+#                 print(f"Primary loaded successfully. Shape: {pri_df.shape}")
+#                 print(f"Primary Orig Val Cols: {pri_ovc}")
+#                 print(f"Primary Bench Col: {pri_bc}")
+#             else:
+#                 print("Primary loading failed.")
+#
+#             if sec_df is not None:
+#                 print(f"Secondary loaded successfully. Shape: {sec_df.shape}")
+#                 print(f"Secondary Orig Val Cols: {sec_ovc}")
+#                 print(f"Secondary Bench Col: {sec_bc}")
+#                 print(sec_df.head())
+#             else:
+#                 print("Secondary loading failed or file not found.")
+#
+#         except Exception as e:
+#             print(f"Error in Test Case 2: {e}")
+#
+#     # Test case 3: Primary exists, Secondary does not
+#     print("\n--- Test Case 3: Primary (ts_Duration.csv) and Secondary (non_existent.csv) ---")
+#     try:
+#         pri_df, pri_ovc, pri_bc, sec_df, sec_ovc, sec_bc = load_and_process_data('ts_Duration.csv', secondary_filename='non_existent.csv')
+#         if pri_df is not None:
+#             print(f"Primary loaded successfully. Shape: {pri_df.shape}")
+#         else:
+#             print("Primary loading failed.")
+#         print(f"Secondary DF is None: {sec_df is None}")
+#         print(f"Secondary Orig Val Cols is None: {sec_ovc is None}")
+#         print(f"Secondary Bench Col is None: {sec_bc is None}")
+#
+#     except Exception as e:
+#         print(f"Error in Test Case 3: {e}")
+#
+#     # Test case 4: Primary does not exist
+#     print("\n--- Test Case 4: Primary (bad_file.csv) ---")
+#     try:
+#         pri_df, pri_ovc, pri_bc, sec_df, sec_ovc, sec_bc = load_and_process_data('bad_file.csv')
+#         print(f"Primary DF is not None: {pri_df is not None}") # Should be True, but df will be empty
+#         print(f"Primary DF shape: {pri_df.shape if pri_df is not None else 'None'}")
+#         print(f"Primary Orig Val Cols: {pri_ovc}")
+#         print(f"Primary Bench Col: {pri_bc}")
+#         print(f"Secondary DF is None: {sec_df is None}")
+#
+#     except Exception as e:
+#         print(f"Error in Test Case 4: {e}") 

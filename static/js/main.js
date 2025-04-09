@@ -36,27 +36,21 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Metric page detected. Initializing charts.");
         try {
             const chartDataJson = metricChartDataElement.textContent;
+            console.log("Raw JSON string from script tag:", chartDataJson);
             const fullChartData = JSON.parse(chartDataJson);
-            console.log('Parsed metric chart data:', JSON.parse(JSON.stringify(fullChartData)));
-            
-            if (fullChartData && fullChartData.metadata && fullChartData.funds && Object.keys(fullChartData.funds).length > 0) {
-                const metadata = fullChartData.metadata;
-                const fundsData = fullChartData.funds; 
-                
-                console.log("Extracted Metadata:", metadata);
-                console.log("Extracted Funds Data:", fundsData);
+            console.log('Parsed fullChartData object:', fullChartData);
+            console.log('Checking fullChartData.metadata:', fullChartData ? fullChartData.metadata : 'fullChartData is null/undefined');
+            console.log('Checking fullChartData.funds:', fullChartData ? fullChartData.funds : 'fullChartData is null/undefined');
 
+            if (fullChartData && fullChartData.metadata && fullChartData.funds && Object.keys(fullChartData.funds).length > 0) {
+                console.log("Conditional check passed. Calling renderChartsAndTables...");
                 renderChartsAndTables(
                     metricChartsArea,
-                    fundsData,
-                    metadata.metric_name,
-                    metadata.latest_date,
-                    metadata.fund_col_names,
-                    metadata.benchmark_col_name
+                    fullChartData
                 );
             } else {
-                console.error('Parsed metric chart data is missing expected structure:', fullChartData);
-                metricChartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid data structure.</div>';
+                console.error('Parsed metric chart data is missing expected structure or funds are empty:', fullChartData);
+                metricChartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid data structure or no fund data.</div>';
             }
         } catch (e) {
             console.error('Error processing metric chart data:', e);
