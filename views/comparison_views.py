@@ -312,11 +312,19 @@ def summary():
 
         # --- Pagination ---
         total_items = len(filtered_stats)
-        total_pages = math.ceil(total_items / PER_PAGE_COMPARISON)
+        # Ensure PER_PAGE_COMPARISON is positive
+        safe_per_page = max(1, PER_PAGE_COMPARISON)
+        total_pages = math.ceil(total_items / safe_per_page)
+        total_pages = max(1, total_pages) # Ensure at least 1 page
         page = max(1, min(page, total_pages)) # Ensure page is within valid range
-        start_index = (page - 1) * PER_PAGE_COMPARISON
-        end_index = start_index + PER_PAGE_COMPARISON
-        log.info(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Per page={PER_PAGE_COMPARISON}")
+        start_index = (page - 1) * safe_per_page
+        end_index = start_index + safe_per_page
+        log.info(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Per page={safe_per_page}")
+        
+        # Calculate display page numbers
+        page_window = 2
+        start_page_display = max(1, page - page_window)
+        end_page_display = min(total_pages, page + page_window)
         
         paginated_stats = filtered_stats.iloc[start_index:end_index]
 
@@ -337,13 +345,15 @@ def summary():
         # Create pagination context
         pagination_context = {
             'page': page,
-            'per_page': PER_PAGE_COMPARISON,
+            'per_page': safe_per_page,
             'total_pages': total_pages,
             'total_items': total_items,
             'has_prev': page > 1,
             'has_next': page < total_pages,
             'prev_num': page - 1,
             'next_num': page + 1,
+            'start_page_display': start_page_display, # Pass calculated start page
+            'end_page_display': end_page_display,     # Pass calculated end page
             # Function to generate URLs for pagination links, preserving state
             'url_for_page': lambda p: url_for('comparison_bp.summary', 
                                               page=p, 

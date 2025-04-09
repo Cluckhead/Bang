@@ -122,9 +122,9 @@
                     <a class="page-link" href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" aria-label="Previous">&laquo;</a>
                 </li>
 
-                {# Page Number Links (using same logic as securities page) #}
-                 {% set start_page = (pagination.page - 2) | max(1) %}
-                 {% set end_page = (pagination.page + 2) | min(pagination.total_pages) %}
+                {# Page Number Links (using context variables calculated in view) #}
+                 {% set start_page = pagination.start_page_display %}
+                 {% set end_page = pagination.end_page_display %}
                  
                  {% if start_page > 1 %}
                      <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(1) }}">1</a></li>

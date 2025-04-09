@@ -199,12 +199,20 @@ def securities_page():
 
         # --- Pagination ---
         total_items = len(combined_metrics_df)
-        total_pages = math.ceil(total_items / PER_PAGE)
-        page = max(1, min(page, total_pages)) # Ensure page is within valid range
-        start_index = (page - 1) * PER_PAGE
-        end_index = start_index + PER_PAGE
+        # Ensure PER_PAGE is positive to avoid division by zero or negative pages
+        safe_per_page = max(1, PER_PAGE)
+        total_pages = math.ceil(total_items / safe_per_page)
+        total_pages = max(1, total_pages) # Ensure at least 1 page, even if total_items is 0
+        page = max(1, min(page, total_pages)) # Ensure page is within valid range [1, total_pages]
+        start_index = (page - 1) * safe_per_page
+        end_index = start_index + safe_per_page
         
-        print(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Per page={PER_PAGE}")
+        print(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Per page={safe_per_page}")
+        
+        # Calculate page numbers to display in pagination controls (e.g., show 2 pages before and after current)
+        page_window = 2 # Number of pages to show before/after current page
+        start_page_display = max(1, page - page_window)
+        end_page_display = min(total_pages, page + page_window)
         
         paginated_df = combined_metrics_df.iloc[start_index:end_index]
 
@@ -234,13 +242,15 @@ def securities_page():
         # Create pagination context for the template
         pagination_context = {
             'page': page,
-            'per_page': PER_PAGE,
+            'per_page': safe_per_page,
             'total_pages': total_pages,
             'total_items': total_items,
             'has_prev': page > 1,
             'has_next': page < total_pages,
             'prev_num': page - 1,
             'next_num': page + 1,
+            'start_page_display': start_page_display, # Pass calculated start page
+            'end_page_display': end_page_display,     # Pass calculated end page
             # Function to generate URLs for pagination links, preserving state
             'url_for_page': lambda p: url_for('security.securities_page', 
                                               page=p, 
