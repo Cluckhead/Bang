@@ -3,29 +3,35 @@
 {% block title %}Spread Comparison Summary{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container-fluid mt-4"> {# Use container-fluid for wider view #}
     <h1>Spread Comparison: Original (sec_spread) vs. New (sec_spreadSP)</h1>
-    <p class="text-muted">Comparing credit spreads between the two datasets. Click on a Security ID/Name to see details. Use filters or click column headers to sort.</p>
+    <p class="text-muted">Comparing credit spreads between the two datasets. Click on a Security ID/Name to see details. Use filters or click column headers to sort. Pagination applied.</p>
+
+    {# Display message if any #}
+    {% if message %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
 
     {# --- Filter Form --- #}
     {% if filter_options %}
     <form method="GET" action="{{ url_for('comparison_bp.summary') }}" class="mb-3 p-3 border rounded bg-light" id="filter-form">
         <h5>Filters</h5>
-        <div class="row">
+        <div class="row g-2 align-items-end">
             {% for column, options in filter_options.items() %}
-            <div class="col-md-3 mb-2">
+            <div class="col-md-2 mb-2">
                 <label for="filter-{{ column }}" class="form-label">{{ column }}</label>
-                <select id="filter-{{ column }}" name="filter_{{ column }}" class="form-select form-select-sm comparison-filter-select" data-column="{{ column }}"> 
+                <select id="filter-{{ column }}" name="filter_{{ column }}" class="form-select form-select-sm">
                     <option value="">All</option>
                     {% for option in options %}
-                    <option value="{{ option }}" {% if active_filters.get(column) == option %}selected{% endif %}>{{ option }}</option>
+                    <option value="{{ option }}" {% if active_filters.get(column) == option|string %}selected{% endif %}>{{ option }}</option>
                     {% endfor %}
                 </select>
             </div>
             {% endfor %}
-        </div>
-        <div class="row">
-            <div class="col-12 mt-2">
+            <div class="col-md-auto">
                 <button type="submit" class="btn btn-primary btn-sm">Apply Filters</button>
                 {# Add a clear button only if filters are active #}
                 {% if active_filters %}
@@ -33,7 +39,7 @@
                 {% endif %}
             </div>
         </div>
-        {# Hidden fields to preserve current sort order when applying filters #}
+        {# Hidden fields to preserve current sort order when applying filters - page is implicitly reset #}
         <input type="hidden" name="sort_by" value="{{ current_sort_by }}">
         <input type="hidden" name="sort_order" value="{{ current_sort_order }}">
     </form>
@@ -41,30 +47,35 @@
 
     {# --- Data Table --- #}
     <div class="table-responsive">
-        <table class="table table-striped table-hover table-sm" id="comparison-table">
-            <thead>
+        <table class="table table-striped table-hover table-sm caption-top" id="comparison-table">
+             {# Add table caption for summary #}
+             {% if pagination %}
+             <caption class="pb-1">
+                 Displaying {{ table_data|length }} of {{ pagination.total_items }} total securities.
+                 (Page {{ pagination.page }} of {{ pagination.total_pages }})
+             </caption>
+             {% endif %}
+            <thead class="table-light sticky-top">
                 <tr>
-                    {% set base_url = url_for('comparison_bp.summary', **request.args) %}
                     {# Loop through the columns passed from the view #}
                     {% for col_name in columns_to_display %}
                         {% set is_sort_col = (col_name == current_sort_by) %}
                         {% set next_sort_order = 'asc' if is_sort_col and current_sort_order == 'desc' else 'desc' %}
-                        {# Build filter query string part #}
-                        {% set filter_params = {} %}
-                        {% for f_key, f_val in active_filters.items() %}
-                             {% set _ = filter_params.update({'filter_' ~ f_key: f_val}) %}
-                        {% endfor %}
-                        {# Generate URL for this header, including current filters and new sort parameters #}
-                        {% set sort_url = url_for('comparison_bp.summary', sort_by=col_name, sort_order=next_sort_order, **filter_params) %}
+                        {# Base arguments, including current filters #}
+                        {% set sort_args = request.args.to_dict() %}
+                        {% set _ = sort_args.pop('page', None) %}
+                        {% set _ = sort_args.update({'sort_by': col_name, 'sort_order': next_sort_order}) %}
+                        
+                        {# Generate URL for this header #}
+                        {% set sort_url = url_for('comparison_bp.summary', **sort_args) %}
                         
                         {# Add classes for styling and JS #}
                         <th class="sortable {{ 'sorted-' + current_sort_order if is_sort_col else '' }}" 
                             data-column-name="{{ col_name }}">
-                            <a href="{{ sort_url }}">
-                                {# Map internal names to user-friendly names if needed #}
+                            <a href="{{ sort_url }}" class="text-decoration-none text-dark">
                                 {{ col_name.replace('_', ' ') | title }} 
                                 {% if is_sort_col %}
-                                    <span class="sort-indicator">{{ '▲' if current_sort_order == 'asc' else '▼' }}</span>
+                                    <span class="sort-indicator ms-1">{{ '▲' if current_sort_order == 'asc' else '▼' }}</span>
                                 {% endif %}
                             </a>
                         </th>
@@ -79,7 +90,7 @@
                     {% for col_name in columns_to_display %}
                         <td>
                             {% if col_name == id_col %}
-                                <a href="{{ url_for('comparison_bp.details', security_id=row[id_col]) }}">{{ row[id_col] }}</a>
+                                <a href="{{ url_for('comparison_bp.details', security_id=row[id_col]|urlencode) }}">{{ row[id_col] }}</a>
                             {% elif col_name in ['Level_Correlation', 'Change_Correlation'] and row[col_name] is not none %}
                                 {{ "%.3f"|format(row[col_name]) }}
                             {% elif col_name in ['Mean_Abs_Diff', 'Max_Abs_Diff'] and row[col_name] is not none %}
@@ -87,36 +98,67 @@
                             {% elif col_name == 'Same_Date_Range' %}
                                 {{ 'Yes' if row[col_name] else 'No' }}
                             {% elif row[col_name] is number %}
-                                {{ row[col_name] }} {# Display other numbers directly or format as needed #}
+                                {{ row[col_name]|round(3) }} {# General numeric formatting #}
                             {% else %}
-                                {{ row[col_name] if row[col_name] is not none else 'N/A' }} {# Display strings or N/A #}
+                                {{ row[col_name] if row[col_name] is not none else '' }} {# Display strings or empty #}
                             {% endif %}
                         </td>
                     {% endfor %}
                 </tr>
                 {% else %}
-                <tr>
-                    <td colspan="{{ columns_to_display|length }}" class="text-center">No comparison data available matching the current filters.</td>
-                </tr>
+                {# This message is now shown above if filtered_stats is empty #}
+                {# <tr> <td colspan="{{ columns_to_display|length }}" class="text-center">No comparison data available matching the current filters.</td> </tr> #}
                 {% endfor %}
             </tbody>
         </table>
     </div>
+
+    {# --- Pagination Controls --- #}
+    {% if pagination and pagination.total_pages > 1 %}
+        <nav aria-label="Comparison data navigation">
+            <ul class="pagination pagination-sm justify-content-center">
+                {# Previous Page Link #}
+                <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                    <a class="page-link" href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" aria-label="Previous">&laquo;</a>
+                </li>
+
+                {# Page Number Links (using same logic as securities page) #}
+                 {% set start_page = (pagination.page - 2) | max(1) %}
+                 {% set end_page = (pagination.page + 2) | min(pagination.total_pages) %}
+                 
+                 {% if start_page > 1 %}
+                     <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(1) }}">1</a></li>
+                     {% if start_page > 2 %}
+                         <li class="page-item disabled"><span class="page-link">...</span></li>
+                     {% endif %}
+                 {% endif %}
+
+                 {% for p in range(start_page, end_page + 1) %}
+                    <li class="page-item {{ 'active' if p == pagination.page }}">
+                        <a class="page-link" href="{{ pagination.url_for_page(p) }}">{{ p }}</a>
+                    </li>
+                {% endfor %}
+
+                 {% if end_page < pagination.total_pages %}
+                     {% if end_page < pagination.total_pages - 1 %}
+                         <li class="page-item disabled"><span class="page-link">...</span></li>
+                     {% endif %}
+                     <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(pagination.total_pages) }}">{{ pagination.total_pages }}</a></li>
+                 {% endif %}
+
+                {# Next Page Link #}
+                <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                    <a class="page-link" href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" aria-label="Next">&raquo;</a>
+                </li>
+            </ul>
+        </nav>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
-{# Reference the shared table sorter if it handles this pattern #}
-{# Or add specific JS for this page if needed #}
-{# Ensure tableSorter.js is loaded via base.html or explicitly here #}
-{# <script type="module" src="{{ url_for('static', filename='js/modules/ui/tableSorter.js') }}"></script> #} 
-{# No specific JS needed for server-side filtering/sorting initially, but can add client-side enhancement #}
-{# Example: Add client-side sorting after initial load (optional) #}
-{# <script type="module">
-    import { initTableSorter } from '{{ url_for("static", filename="js/modules/ui/tableSorter.js") }}';
-    document.addEventListener('DOMContentLoaded', () => {
-        initTableSorter('comparison-table'); // Enable client-side sorting on the table
-    });
-</script> #}
+{# Client-side sorting can still be enabled via tableSorter.js if desired, #}
+{# but core pagination/filtering/sorting is server-side. #}
+{# Ensure tableSorter.js is loaded via base.html if you keep initTableSorter in main.js #}
 {% endblock %} 

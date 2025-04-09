@@ -90,10 +90,10 @@ export function renderChartsAndTables(container, chartsData, metricName, latestD
         if (metricName === 'Duration') {
             console.log(`[chartRenderer] Fund ${fundCode} - Adding Duration details link.`);
             const linkDiv = document.createElement('div');
-            linkDiv.className = 'mb-2 text-right'; // Add some margin below
+            linkDiv.className = 'mb-2 text-end'; // Bootstrap 5 class for text alignment
             const link = document.createElement('a');
-            // Use template literal correctly for URL generation
-            link.href = `/fund_duration_details/${fundCode}`; // Corrected URL path
+            // CORRECTED: Add the /fund/ prefix to the URL path
+            link.href = `/fund/duration_details/${fundCode}`; 
             link.className = 'btn btn-info btn-sm';
             link.textContent = `View Security Duration Changes for ${fundCode} →`;
             linkDiv.appendChild(link);

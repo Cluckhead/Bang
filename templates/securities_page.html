@@ -11,62 +11,95 @@ main.js:29 DOM fully loaded and parsed
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container-fluid mt-4"> {# Use container-fluid for wider tables #}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Security Data Check</h2>
-        {# Add button to navigate to the exclusions page #}
         <a href="{{ url_for('exclusion_bp.manage_exclusions') }}" class="btn btn-outline-secondary btn-sm">Manage Exclusions</a>
     </div>
-    <p>Potential data issues based on the latest daily change Z-score for each security and metric.</p>
+    <p class="text-muted">Potential data issues based on the latest daily change Z-score. Filters and sorting are applied server-side.</p>
     
     {% if message %}
-    <div class="alert alert-warning" role="alert">
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
         {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
     {% endif %}
 
-    {# Search Form #}
-    <form method="GET" action="{{ url_for('security.securities_page') }}" class="mb-3">
-        <div class="input-group">
-            <input type="text" name="search_term" class="form-control" placeholder="Search by Security Name..." value="{{ search_term or '' }}">
-            <button class="btn btn-outline-secondary" type="submit">Search</button>
-            {# Optional: Add a clear button #}
-            {% if search_term %}
-                <a href="{{ url_for('security.securities_page') }}" class="btn btn-outline-danger">Clear</a>
+    {# --- Search and Filter Form --- #}
+    {# Combined into one form submitting GET requests #}
+    <form method="GET" action="{{ url_for('security.securities_page') }}" class="mb-3 p-3 border rounded bg-light" id="filter-form">
+        <div class="row g-2 align-items-end">
+            {# Search Box #}
+            <div class="col-md-4">
+                <label for="search_term" class="form-label">Search by {{ id_col_name }}</label>
+                <input type="text" name="search_term" id="search_term" class="form-control form-control-sm" placeholder="Enter search term..." value="{{ search_term or '' }}">
+            </div>
+            
+            {# Dynamic Filters #}
+            {% if filter_options %}
+                {% for column, options in filter_options.items() %}
+                <div class="col-md-2">
+                    <label for="filter-{{ column|replace(' ', '_') }}" class="form-label">{{ column }}</label>
+                    <select id="filter-{{ column|replace(' ', '_') }}" name="filter_{{ column }}" class="form-select form-select-sm">
+                        <option value="">All</option>
+                        {% for option in options %}
+                        <option value="{{ option }}" {% if active_filters.get(column) == option|string %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
             {% endif %}
+
+            {# Buttons #}
+            <div class="col-md-auto">
+                <button class="btn btn-primary btn-sm" type="submit">Apply Filters</button>
+                {# Clear button redirects to the base URL without filters/search #}
+                 {% if search_term or active_filters %}
+                    <a href="{{ url_for('security.securities_page') }}" class="btn btn-secondary btn-sm">Clear All</a>
+                {% endif %}
+            </div>
         </div>
+        {# Hidden fields to preserve pagination/sorting state if needed (though typically sorting/filtering resets page to 1) #}
+        {# <input type="hidden" name="sort_by" value="{{ current_sort_by }}"> #}
+        {# <input type="hidden" name="sort_order" value="{{ current_sort_order }}"> #}
     </form>
 
-    {# Filter Section - Basic implementation without JS interactivity for now #}
-    {% if filter_options %}
-    <div class="mb-3 p-3 border rounded bg-light">
-        <h5>Filters</h5>
-        <div class="row">
-            {% for column, options in filter_options.items() %}
-            <div class="col-md-3 mb-2">
-                <label for="filter-{{ column|replace(' ', '_') }}" class="form-label">{{ column }}</label>
-                <select id="filter-{{ column|replace(' ', '_') }}" class="form-select form-select-sm security-filter-select" data-column="{{ column }}"> 
-                    <option value="">All</option>
-                    {% for option in options %}
-                    <option value="{{ option }}">{{ option }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
 
-    {# Data Table Section #}
+    {# --- Data Table Section --- #}
     {% if securities_data %}
     <div class="table-responsive">
-        <table class="table table-striped table-hover table-sm small" id="securities-table">
-            <thead class="table-light">
+        <table class="table table-striped table-hover table-sm small caption-top" id="securities-table">
+            {# Add table caption for summary #}
+            {% if pagination %}
+            <caption class="pb-1">
+                Displaying {{ securities_data|length }} of {{ pagination.total_items }} total securities. 
+                (Page {{ pagination.page }} of {{ pagination.total_pages }})
+            </caption>
+            {% endif %}
+            <thead class="table-light sticky-top"> {# Make header sticky #}
                 <tr>
-                    {# Add sortable class and data-column attribute to each header #}
+                    {# Generate sortable headers #}
                     {% for col_name in column_order %}
-                        <th class="sortable" data-column-name="{{ col_name }}">
-                            {{ col_name }} <span class="sort-indicator"></span> {# Placeholder for sort arrow #}
+                        {% set is_sort_col = (col_name == current_sort_by or (col_name == 'Change Z-Score' and current_sort_by is none)) %}
+                        {# Determine next sort order: flip if current column, default to asc otherwise #}
+                        {% set next_sort_order = 'asc' if is_sort_col and current_sort_order == 'desc' else 'desc' %}
+                        {# Base arguments, including current search and filters #}
+                        {% set sort_args = request.args.to_dict() %}
+                        {% set _ = sort_args.pop('page', None) %}
+                        {% set _ = sort_args.update({'sort_by': col_name, 'sort_order': next_sort_order}) %}
+                        
+                        {# Construct the URL for the sort link #}
+                        {% set sort_url = url_for('security.securities_page', **sort_args) %}
+                        
+                        {# Add classes for styling and potential JS hooks #}
+                        <th class="sortable {{ 'sorted-' + current_sort_order if is_sort_col else '' }}" 
+                            data-column-name="{{ col_name }}">
+                            <a href="{{ sort_url }}" class="text-decoration-none text-dark">
+                                {{ col_name }} 
+                                {% if is_sort_col %}
+                                    <span class="sort-indicator ms-1">{{ '▲' if current_sort_order == 'asc' else '▼' }}</span>
+                                {% endif %}
+                            </a>
                         </th>
                     {% endfor %}
                 </tr>
@@ -74,25 +107,25 @@ main.js:29 DOM fully loaded and parsed
             <tbody id="securities-table-body">
                 {% for row in securities_data %}
                     {% set z_score = row['Change Z-Score'] %}
-                    {% set abs_z_score = z_score|abs if z_score is not none else 0 %}
+                    {% set abs_z_score = z_score|abs if z_score is not none else 0 %} {# Calculate here #}
                     {% set row_class = 'table-danger' if abs_z_score >= 3 else ('table-warning' if abs_z_score >= 2 else '') %}
                     <tr class="{{ row_class }}">
                         {% for col_name in column_order %}
-                            {# Add data-value attribute for easier sorting, especially for formatted numbers #}
-                            <td data-value="{{ row[col_name] if row[col_name] is not none else '' }}">
-                                {# Check if this is the ID column #}
+                            <td>
+                                {# Link for ID column #}
                                 {% if col_name == id_col_name %}
-                                    {# Construct the link - Requires a new route #}
-                                    {# Since this page only shows Spread data now, hardcode metric_name #}
                                     <a href="{{ url_for('security.security_details_page', metric_name='Spread', security_id=row[col_name]|urlencode) }}">
                                         {{ row[col_name] }}
                                     </a>
+                                {# Formatting for numeric columns #}
                                 {% elif col_name == 'Change Z-Score' and row[col_name] is not none %}
                                     {{ "%.2f"|format(row[col_name]) }}
                                 {% elif row[col_name] is number %}
-                                    {{ "%.3f"|format(row[col_name]) }}
+                                    {# Consider if specific formatting is needed for other numbers #}
+                                    {{ row[col_name]|round(3) }}
+                                {# Display other values (string, None) #}
                                 {% else %}
-                                    {{ row[col_name] if row[col_name] is not none else '' }}
+                                    {{ row[col_name] if row[col_name] is not none else '' }} {# Display empty for None #}
                                 {% endif %}
                             </td>
                         {% endfor %}
@@ -101,11 +134,65 @@ main.js:29 DOM fully loaded and parsed
             </tbody>
         </table>
     </div>
+
+    {# --- Pagination Controls --- #}
+    {% if pagination and pagination.total_pages > 1 %}
+        <nav aria-label="Security data navigation">
+            <ul class="pagination pagination-sm justify-content-center">
+                {# Previous Page Link #}
+                <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                    <a class="page-link" href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+
+                {# Page Number Links (simplified example) #}
+                {# TODO: Implement more sophisticated page number display (e.g., first, last, ellipsis) #}
+                 {% set start_page = (pagination.page - 2) | max(1) %}
+                 {% set end_page = (pagination.page + 2) | min(pagination.total_pages) %}
+                 
+                 {% if start_page > 1 %}
+                     <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(1) }}">1</a></li>
+                     {% if start_page > 2 %}
+                         <li class="page-item disabled"><span class="page-link">...</span></li>
+                     {% endif %}
+                 {% endif %}
+
+                 {% for p in range(start_page, end_page + 1) %}
+                    <li class="page-item {{ 'active' if p == pagination.page }}">
+                        <a class="page-link" href="{{ pagination.url_for_page(p) }}">{{ p }}</a>
+                    </li>
+                {% endfor %}
+
+                 {% if end_page < pagination.total_pages %}
+                     {% if end_page < pagination.total_pages - 1 %}
+                         <li class="page-item disabled"><span class="page-link">...</span></li>
+                     {% endif %}
+                     <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(pagination.total_pages) }}">{{ pagination.total_pages }}</a></li>
+                 {% endif %}
+
+                {# Next Page Link #}
+                <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                    <a class="page-link" href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    {% endif %}
+
+    {# Handle case where filters resulted in no data (message displayed above) #}
     {% elif not message %}
-     <div class="alert alert-info" role="alert">
-        No security metrics data to display.
+     <div class="alert alert-info mt-3" role="alert">
+        No security metrics data is currently available or matches the selected criteria.
     </div>
     {% endif %}
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{# Remove client-side filter script block - All filtering/sorting is server-side #}
+{# Optional: Add JS for minor enhancements like highlighting sort column, but core logic is server-side #}
 {% endblock %} 

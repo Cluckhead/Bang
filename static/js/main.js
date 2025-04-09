@@ -93,9 +93,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Securities Summary Page (Filterable & Sortable Table) ---
     const securitiesTable = document.getElementById('securities-table');
     if (securitiesTable) {
-        console.log("Securities page table detected. Initializing filters and sorter.");
-        initSecurityTableFilter('securities-table');
-        initTableSorter('securities-table');
+        console.log("Securities page table detected. Initializing client-side sorter (filtering is server-side).");
+        // initSecurityTableFilter('securities-table'); // REMOVED: Filtering is now server-side
+        initTableSorter('securities-table'); // Keep client-side sorting for instant feedback after load
     } else {
         // console.log("Securities table not found, skipping table features initialization.");
     }

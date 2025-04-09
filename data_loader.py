@@ -121,12 +121,14 @@ def load_and_process_data(
         logger.info(f"Found actual Code column: '{actual_code_col}'") # DEBUG
         # Allow benchmark column to be optional - look for it, but don't fail if not found.
         try:
-            benchmark_pattern = r'\bBenchmark\b' # Store pattern for logging
-            logger.info(f"Attempting to find Benchmark column in '{filename}' using pattern: '{benchmark_pattern}'") # DEBUG
+            # Use word boundaries (\b) to avoid partial matches
+            # OLD: benchmark_pattern = r'\bBenchmark\b'
+            benchmark_pattern = r'\bBench\b' # UPDATED: Look for 'Bench' instead of 'Benchmark'
+            logger.info(f"Attempting to find Benchmark column in '{filename}' using pattern: '{benchmark_pattern}'")
             actual_benchmark_col = _find_column(benchmark_pattern, original_cols, filename, 'Benchmark')
             benchmark_col_present = True
         except ValueError:
-            logger.warning(f"No Benchmark column found in '{filename}' matching pattern '\\bBenchmark\\b'. Proceeding without benchmark.")
+            logger.warning(f"No Benchmark column found in '{filename}' matching pattern '{benchmark_pattern}'. Proceeding without benchmark.")
             actual_benchmark_col = None # Indicate benchmark is not present
             benchmark_col_present = False
 
