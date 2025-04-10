@@ -1,0 +1,114 @@
+{# templates/curve_details.html #}
+{% extends "base.html" %}
+
+{% block title %}Yield Curve Details - {{ currency }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>Yield Curve Details: <strong>{{ currency }}</strong></h1>
+        <a href="{{ url_for('curve_bp.curve_summary') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Back to Summary
+        </a>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <label for="dateSelector" class="form-label">Select Date:</label>
+            <select id="dateSelector" class="form-select">
+                {% if available_dates %}
+                    {% for date_str in available_dates %}
+                        <option value="{{ date_str }}" {% if date_str == selected_date %}selected{% endif %}>
+                            {{ date_str }}
+                        </option>
+                    {% endfor %}
+                {% else %}
+                    <option value="">No dates available</option>
+                {% endif %}
+            </select>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header">
+            Yield Curve for {{ selected_date }}
+        </div>
+        <div class="card-body">
+            {% if chart_data and chart_data.labels %}
+                <canvas id="yieldCurveChart" style="max-height: 400px;"></canvas>
+            {% else %}
+                <div class="alert alert-warning" role="alert">
+                    No data available to display the chart for {{ currency }} on {{ selected_date }}.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base.html #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script> {# Include Chart.js #}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const chartData = {{ chart_data | tojson | safe }};
+    const ctx = document.getElementById('yieldCurveChart');
+
+    if (ctx && chartData && chartData.labels && chartData.labels.length > 0) {
+        console.log("Rendering chart with data:", chartData);
+        new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Term (Days)'
+                        },
+                        type: 'linear', // Use linear scale for days
+                        position: 'bottom'
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Yield Value'
+                        },
+                        beginAtZero: false // Yields can be negative
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    title: {
+                         display: true,
+                         text: `{{ currency }} Yield Curve (${chartData.datasets[0].label.split('(')[1]}` // Extract date from label
+                    }
+                }
+            }
+        });
+    } else {
+         console.log("Chart canvas not found or no chart data available.");
+    }
+
+    // Date selector change handler
+    const dateSelector = document.getElementById('dateSelector');
+    if (dateSelector) {
+        dateSelector.addEventListener('change', function() {
+            const selectedDate = this.value;
+            if (selectedDate) {
+                // Construct the new URL with the selected date as a query parameter
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('date', selectedDate);
+                window.location.href = currentUrl.toString(); // Reload page with new date
+            }
+        });
+    }
+});
+</script>
+{% endblock %} 

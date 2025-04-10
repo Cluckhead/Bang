@@ -10,6 +10,7 @@ This application provides a web interface to load, process, and check financial 
 *   **Fund-Specific Views:** Analyze data aggregated or filtered by specific funds (e.g., Fund Duration Details, General Fund Overview).
 *   **Security Exclusions:** Maintain a list of securities to temporarily exclude from the main Security Summary page (`/security/summary`). Exclusions can have start/end dates and comments.
 *   **Weight Check:** Load fund (`w_Funds.csv`) and benchmark (`w_Bench.csv`) weight files and display them side-by-side, highlighting any daily weights that are not exactly 100% via `/weights/check`.
+*   **Yield Curve Analysis:** Load yield curve data (`curves.csv`), check for potential inconsistencies (e.g., monotonicity, anomalous daily changes) and display curve charts per currency via `/curve/summary` and `/curve/details/<currency>`.
 *   **Data Comparison:**
     *   Compare two spread files (`sec_spread.csv` vs `sec_spreadSP.csv`) via `/comparison/summary`.
     *   Compare two duration files (`sec_duration.csv` vs `sec_durationSP.csv`) via `/duration_comparison/summary`.
@@ -36,6 +37,7 @@ graph TD
     C --> C2(metric_calculator.py);
     C --> C3(security_processing.py);
     C --> C4(process_data.py);
+    C --> C5(curve_processing.py);
 
     D --> D1(main_views.py);
     D --> D2(metric_views.py);
@@ -47,6 +49,7 @@ graph TD
     D --> D8(api_views.py);
     D --> D9(duration_comparison_views.py);
     D --> D10(spread_duration_comparison_views.py);
+    D --> D11(curve_views.py);
 
     E --> E1(base.html);
     E --> E2(index.html);
@@ -64,6 +67,8 @@ graph TD
     E --> E14(duration_comparison_details_page.html);
     E --> E15(spread_duration_comparison_page.html);
     E --> E16(spread_duration_comparison_details_page.html);
+    E --> E17(curve_summary.html);
+    E --> E18(curve_details.html);
 
     F --> F1(js);
     F1 --> F1a(main.js);
@@ -86,6 +91,7 @@ graph TD
     G --> G7(FundList.csv);
     G --> G8(w_Funds.csv);
     G --> G9(w_Bench.csv);
+    G --> G10(curves.csv);
 
     H --> H1(config.py);
     H --> H2(utils.py);
@@ -109,6 +115,7 @@ graph TD
 *   `Dates.csv`: May exist for specific configurations or helper data.
 *   `w_Funds.csv`: Wide format file containing daily fund weights (expected to be 100%). Used by the Weight Check page.
 *   `w_Bench.csv`: Wide format file containing daily benchmark weights (expected to be 100%). Used by the Weight Check page.
+*   `curves.csv`: Contains yield curve data (Date, Currency Code, Term, Daily Value). Used by the Yield Curve Check feature.
 
 ## Python Files
 
@@ -179,6 +186,20 @@ graph TD
 *   **Functions:**
     *   `_is_date_like(column_name)`: Checks if a column name resembles `YYYY-MM-DD` or `DD/MM/YYYY` format.
     *   `parse_fund_list(fund_string)`: Parses a string like `'[FUND1,FUND2]'` into a list.
+
+### `curve_processing.py`
+*   **Purpose:** Handles loading, preprocessing, and analysis of yield curve data (`Data/curves.csv`).
+*   **Key Features:**
+    *   Loads data, parses dates.
+    *   Converts term strings (e.g., '7D', '1M') into an approximate number of days (`TermDays`) for plotting and sorting.
+    *   Checks for basic curve inconsistencies on the latest date:
+        *   Monotonicity check (identifies significant downward slopes).
+        *   Compares the shape of the daily change profile against the previous day to find anomalous jumps for specific terms.
+*   **Functions:**
+    *   `_term_to_days(...)`: Converts term string to days.
+    *   `load_curve_data(...)`: Loads and preprocesses the `curves.csv` file.
+    *   `get_latest_curve_date(...)`: Finds the most recent date in the loaded data.
+    *   `check_curve_inconsistencies(...)`: Performs the inconsistency checks and returns a summary dictionary.
 
 ## View Modules (`views/`)
 
@@ -259,6 +280,12 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **Routes:**
     *   `/weights/check`: Renders `weight_check_page.html`. Loads data from `w_Funds.csv` and `w_Bench.csv`, processes percentage values, checks if they equal 100%, and passes the processed data to the template for display.
 
+### `views/curve_views.py` (`curve_bp`)
+*   **Purpose:** Handles the yield curve checking views.
+*   **Routes:**
+    *   `/curve/summary`: Renders `curve_summary.html`. Loads curve data, runs inconsistency checks using `curve_processing.check_curve_inconsistencies`, and displays a summary table for all currencies.
+    *   `/curve/details/<currency>`: Renders `curve_details.html`. Displays a line chart of the yield curve for the specified `currency` on a selected date. Includes a dropdown to select and view curves for previous dates.
+
 ## HTML Templates (`templates/`)
 
 *   **`base.html`:** Main layout, includes Bootstrap, navbar, common structure. All other templates extend this.
@@ -277,4 +304,6 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Duration).
 *   **`spread_duration_comparison_page.html`:** Comparison summary table for Spread Duration.
 *   **`spread_duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread Duration).
+*   **`curve_summary.html`:** Displays a summary table of the yield curve inconsistency checks for the latest date across all currencies.
+*   **`curve_details.html`:** Shows a line chart of the yield curve for a specific currency and provides a date selector to view historical curves. Includes JavaScript for Chart.js rendering.
 ``` 

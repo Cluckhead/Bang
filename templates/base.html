@@ -53,20 +53,26 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.index') }}">Time Series Dashboard</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('security.securities_page') }}">Securities Check</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownChecks" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Checks & Comparisons
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="navbarDropdownChecks">
+                            <li><a class="dropdown-item" href="{{ url_for('security.securities_page') }}">Securities Check</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('weight.weight_check') }}">Weight Check</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('curve_bp.curve_summary') }}">Yield Curve Check</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Comparisons</h6></li>
+                            <li><a class="dropdown-item" href="{{ url_for('comparison_bp.summary') }}">Spread vs SpreadSP</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('duration_comparison_bp.summary') }}">Duration vs DurationSP</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('spread_duration_comparison_bp.summary') }}">Spread Duration vs SP</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('comparison_bp.summary') }}">Spread Comparison</a>
+                        <a class="nav-link" href="{{ url_for('exclusion_bp.manage_exclusions') }}">Exclusions</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('duration_comparison_bp.summary') }}">Duration Comparison</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('spread_duration_comparison_bp.summary') }}">Spread Duration Comparison</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('weight.weight_check') }}">Weight Check</a>
+                        <a class="nav-link" href="{{ url_for('api_bp.get_data_page') }}">Data Management</a>
                     </li>
                 </ul>
             </div>

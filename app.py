@@ -42,11 +42,15 @@ def create_app():
     except OSError:
         pass # Already exists
 
+    # Configure logging
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s')
+
     # Serve static files (for JS, CSS, etc.)
     # Note: static_url_path defaults to /static, static_folder defaults to 'static' in root
     # No need to set app.static_folder = 'static' explicitly unless changing the folder name/path
 
-    # --- Register Blueprints --- 
+    # --- Register Blueprints ---
     from views.main_views import main_bp
     from views.metric_views import metric_bp
     from views.security_views import security_bp
@@ -59,6 +63,7 @@ def create_app():
     from views.duration_comparison_views import duration_comparison_bp
     from views.spread_duration_comparison_views import spread_duration_comparison_bp
     # --- End import new blueprints ---
+    from views.curve_views import curve_bp # Import the new blueprint
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
@@ -72,20 +77,22 @@ def create_app():
     app.register_blueprint(duration_comparison_bp)
     app.register_blueprint(spread_duration_comparison_bp)
     # --- End register new blueprints ---
+    app.register_blueprint(curve_bp) # Register the new blueprint
 
-    print("Registered Blueprints:")
-    print(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
-    print(f"- {metric_bp.name} (prefix: {metric_bp.url_prefix})")
-    print(f"- {security_bp.name} (prefix: {security_bp.url_prefix})")
-    print(f"- {fund_bp.name} (prefix: {fund_bp.url_prefix})")
-    print(f"- {api_bp.name} (prefix: {api_bp.url_prefix})")
-    print(f"- {exclusion_bp.name} (prefix: {exclusion_bp.url_prefix})")
-    print(f"- {comparison_bp.name} (prefix: {comparison_bp.url_prefix})")
-    print(f"- {weight_bp.name} (prefix: {weight_bp.url_prefix})")
+    app.logger.info("Registered Blueprints:")
+    app.logger.info(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
+    app.logger.info(f"- {metric_bp.name} (prefix: {metric_bp.url_prefix})")
+    app.logger.info(f"- {security_bp.name} (prefix: {security_bp.url_prefix})")
+    app.logger.info(f"- {fund_bp.name} (prefix: {fund_bp.url_prefix})")
+    app.logger.info(f"- {api_bp.name} (prefix: {api_bp.url_prefix})")
+    app.logger.info(f"- {exclusion_bp.name} (prefix: {exclusion_bp.url_prefix})")
+    app.logger.info(f"- {comparison_bp.name} (prefix: {comparison_bp.url_prefix})")
+    app.logger.info(f"- {weight_bp.name} (prefix: {weight_bp.url_prefix})")
     # --- Print new blueprints ---
     print(f"- {duration_comparison_bp.name} (prefix: {duration_comparison_bp.url_prefix})")
     print(f"- {spread_duration_comparison_bp.name} (prefix: {spread_duration_comparison_bp.url_prefix})")
     # --- End print new blueprints ---
+    app.logger.info(f"- {curve_bp.name} (prefix: {curve_bp.url_prefix})") # Log registration
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')
@@ -131,7 +138,7 @@ def create_app():
 
     return app
 
-# --- Application Execution --- 
+# --- Application Execution ---
 if __name__ == '__main__':
     app = create_app() # Create the app instance using the factory
-    app.run(debug=True) # Run in debug mode for development 
+    app.run(debug=True, host='0.0.0.0') # Run in debug mode for development, accessible on network 
