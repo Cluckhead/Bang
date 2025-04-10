@@ -93,7 +93,7 @@ def load_and_process_weight_data(filename):
 @weight_bp.route('/check')
 def weight_check():
     """Displays the weight check page."""
-    fund_filename = 'w_Fund.csv'
+    fund_filename = 'w_Funds.csv'
     bench_filename = 'w_Bench.csv'
 
     fund_data, fund_date_headers = load_and_process_weight_data(fund_filename)
