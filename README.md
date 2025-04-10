@@ -9,6 +9,7 @@ This application provides a web interface to load, process, and check financial 
     *   **Performance:** Uses server-side pagination, filtering (search, dropdowns), and sorting for improved performance with large datasets.
 *   **Fund-Specific Views:** Analyze data aggregated or filtered by specific funds (e.g., Fund Duration Details, General Fund Overview).
 *   **Security Exclusions:** Maintain a list of securities to temporarily exclude from the main Security Summary page (`/security/summary`). Exclusions can have start/end dates and comments.
+*   **Weight Check:** Load fund (`w_Funds.csv`) and benchmark (`w_Bench.csv`) weight files and display them side-by-side, highlighting any daily weights that are not exactly 100% via `/weights/check`.
 *   **Data Comparison:**
     *   Compare two spread files (`sec_spread.csv` vs `sec_spreadSP.csv`) via `/comparison/summary`.
     *   Compare two duration files (`sec_duration.csv` vs `sec_durationSP.csv`) via `/duration_comparison/summary`.
@@ -83,6 +84,8 @@ graph TD
     G --> G5(exclusions.csv);
     G --> G6(QueryMap.csv);
     G --> G7(FundList.csv);
+    G --> G8(w_Funds.csv);
+    G --> G9(w_Bench.csv);
 
     H --> H1(config.py);
     H --> H2(utils.py);
@@ -104,6 +107,8 @@ graph TD
 *   `QueryMap.csv`: Maps query IDs to filenames for the API simulation.
 *   `FundList.csv`: Contains fund codes and metadata used on the API simulation page.
 *   `Dates.csv`: May exist for specific configurations or helper data.
+*   `w_Funds.csv`: Wide format file containing daily fund weights (expected to be 100%). Used by the Weight Check page.
+*   `w_Bench.csv`: Wide format file containing daily benchmark weights (expected to be 100%). Used by the Weight Check page.
 
 ## Python Files
 
@@ -250,9 +255,9 @@ These modules contain the Flask Blueprints defining the application's routes.
     *   `/rerun-api-call`: Handles POST requests to rerun a single API call for a specific fund.
 
 ### `views/weight_views.py` (`weight_bp`)
-*   **Purpose:** Placeholder for weight checking functionality.
+*   **Purpose:** Handles the weight checking functionality.
 *   **Routes:**
-    *   `/weight/check`: Renders `weight_check.html` (currently basic).
+    *   `/weights/check`: Renders `weight_check_page.html`. Loads data from `w_Funds.csv` and `w_Bench.csv`, processes percentage values, checks if they equal 100%, and passes the processed data to the template for display.
 
 ## HTML Templates (`templates/`)
 
@@ -272,13 +277,4 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Duration).
 *   **`spread_duration_comparison_page.html`:** Comparison summary table for Spread Duration.
 *   **`spread_duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread Duration).
-
-## JavaScript Files (`static/js/`)
-
-*   **`main.js`:** Main entry point. Initializes modules based on page content (detects elements like `#chartData`, `#securities-table`, `#comparison-table`, etc.).
-*   **`modules/ui/chartRenderer.js`:** Handles creating DOM elements (tables, canvases) and rendering charts using Chart.js for metric pages, single security pages, and the fund detail page.
-*   **`modules/ui/securityTableFilter.js`:** **(Deprecated/Not Used)** Client-side filtering logic, now superseded by server-side filtering.
-*   **`modules/ui/tableSorter.js`:** Basic client-side table sorting (can be used for instant feedback after server-side load).
-*   **`modules/utils/helpers.js`:** Utility functions (e.g., `formatNumber`).
-*   **`modules/charts/timeSeriesChart.js`:** Configures and creates time-series line charts using Chart.js.
 ``` 

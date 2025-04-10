@@ -17,6 +17,7 @@ import pandas as pd
 import logging
 # Add datetime for date parsing and sorting
 from datetime import datetime
+import io
 
 # --- Logging Setup ---
 # Use the same log file as other data processing scripts
@@ -140,130 +141,187 @@ def process_csv_file(input_path, output_path, date_columns):
         df = pd.read_csv(input_path, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
         logger.info(f"Processing file: {input_path}")
 
+        # Log DataFrame info right after reading
+        logger.info(f"DataFrame info after read:")
+        # Use a buffer to capture df.info() output for logging
+        buf = io.StringIO()
+        df.info(verbose=True, buf=buf)
+        logger.info(buf.getvalue())
+
         if df.empty:
             logger.warning(f"Input file {input_path} is empty or contains only invalid lines. Skipping processing.")
             return
 
-        # --- Column Header Replacement Logic ---
+        # --- Column Header Replacement & Validation Logic ---
         original_cols = df.columns.tolist()
-        required_cols = ['Funds', 'Security Name'] # Core columns that should always exist
-        # Ensure required columns are actually in the dataframe before proceeding
-        if not all(col in original_cols for col in required_cols):
-             missing = [col for col in required_cols if col not in original_cols]
-             logger.error(f"Skipping {input_path}: Missing required columns: {missing}. Found columns: {original_cols}")
-             return
+
+        # Define core columns, allowing for 'Fund' or 'Funds'
+        fund_col_name = None
+        if 'Funds' in original_cols:
+            fund_col_name = 'Funds'
+        elif 'Fund' in original_cols:
+            fund_col_name = 'Fund'
+            logger.info(f"Found 'Fund' column in {input_path}. Will rename to 'Funds' for processing.")
+            # Rename the column IN PLACE for subsequent operations
+            df.rename(columns={'Fund': 'Funds'}, inplace=True)
+        else:
+            logger.error(f"Skipping {input_path}: Missing required fund column (neither 'Funds' nor 'Fund' found). Found columns: {original_cols}")
+            return
+
+        # Now define required cols using the standardized 'Funds' name
+        required_cols = ['Funds', 'Security Name']
+
+        # Check for 'Security Name' (already checked for fund column)
+        if 'Security Name' not in original_cols:
+            logger.error(f"Skipping {input_path}: Missing required column 'Security Name'. Found columns: {original_cols}")
+            return
+
+        logger.debug(f"Required columns {required_cols} confirmed present (or renamed) in {input_path}.")
 
         # Find the index after the last required column to start searching for placeholders
-        # This assumes required columns appear early and together, adjust if needed.
+        # Use the potentially renamed df.columns
+        current_df_cols = df.columns.tolist()
         last_required_idx = -1
         for req_col in required_cols:
             try:
-                last_required_idx = max(last_required_idx, original_cols.index(req_col))
-            except ValueError: # Should not happen due to check above, but safeguard
-                 logger.error(f"Required column '{req_col}' unexpectedly not found after initial check in {input_path}. Skipping.")
+                last_required_idx = max(last_required_idx, current_df_cols.index(req_col))
+            except ValueError: # Should not happen due to checks above, but safeguard
+                 logger.error(f"Required column '{req_col}' unexpectedly not found after initial check/rename in {input_path}. Skipping.")
                  return
 
         candidate_start_index = last_required_idx + 1
-        candidate_cols = original_cols[candidate_start_index:]
+        # Use current_df_cols which includes the renamed column if applicable
+        candidate_cols = current_df_cols[candidate_start_index:]
 
         # Decide on the final columns to use for processing
-        current_cols = original_cols # Default to original columns
+        current_cols = current_df_cols # Default to current (potentially renamed) columns
 
         # --- Enhanced Placeholder Detection ---
-        # Detect sequences like 'Col', 'Col.1', 'Col.2', ...
-        potential_placeholder_base = None
-        placeholder_start_index_in_candidates = -1
-        detected_sequence = []
+        # Detect sequences like 'Col', 'Col.1', 'Col.2', ... (Pandas default)
+        # AND sequences like 'Base', 'Base', 'Base', ... (Target for date replacement)
+        potential_placeholder_base_patternA = None # For Base, Base.1, ...
+        detected_sequence_patternA = []
+        start_index_patternA = -1
+
+        potential_placeholder_base_patternB = None # For Base, Base, Base, ...
+        detected_sequence_patternB = []
+        start_index_patternB = -1
+
+        is_patternB_dominant = False # Flag if Pattern B is found and should trigger date replacement
 
         if not candidate_cols:
-            logger.warning(f"File {input_path} has no columns after required columns '{required_cols}'. Cannot check for date placeholders.")
+            logger.warning(f"File {input_path} has no columns after required columns {required_cols}. Cannot check for date placeholders.")
         else:
-            # Iterate through candidate columns to find the *start* of the sequence
-            found_sequence = False
-            for start_idx in range(len(candidate_cols)):
-                # Potential base is the column at start_idx
-                current_potential_base = candidate_cols[start_idx]
+            # Check for Pattern B first: 'Base', 'Base', 'Base', ...
+            first_candidate = candidate_cols[0]
+            # Check if ALL candidate columns are identical to the first one
+            if all(col == first_candidate for col in candidate_cols):
+                potential_placeholder_base_patternB = first_candidate
+                detected_sequence_patternB = candidate_cols
+                start_index_patternB = 0 # Starts at the beginning of candidates
+                logger.info(f"Detected Pattern B: Repeated column name '{potential_placeholder_base_patternB}' for all {len(detected_sequence_patternB)} candidate columns.")
+                # If we find Pattern B covering *all* candidates, we prioritize it for date replacement check
+                is_patternB_dominant = True
+            else:
+                 logger.info(f"Candidate columns are not all identical (Pattern B check failed). First candidate: '{first_candidate}'. Candidates: {candidate_cols[:5]}...")
+                 # If Pattern B check fails, proceed to check for Pattern A ('Base', 'Base.1', ...)
+                 # Iterate through candidate columns to find the *start* of the sequence 'Base', 'Base.1', ...
+                 found_sequence_A = False
+                 for start_idx in range(len(candidate_cols)):
+                     current_potential_base = candidate_cols[start_idx]
+                     # Check if it's a potential base name (no '.' suffix)
+                     if '.' not in current_potential_base:
+                         logger.debug(f"Checking for Pattern A starting with '{current_potential_base}' at index {start_idx} in candidate columns.")
+                         temp_sequence = [current_potential_base]
+                         # Check subsequent columns for the pattern 'base.1', 'base.2', etc.
+                         for i in range(1, len(candidate_cols) - start_idx):
+                             expected_col = f"{current_potential_base}.{i}"
+                             actual_col_index = start_idx + i
+                             if candidate_cols[actual_col_index] == expected_col:
+                                 temp_sequence.append(candidate_cols[actual_col_index])
+                             else:
+                                 logger.debug(f"Pattern A sequence broken at index {actual_col_index}. Expected '{expected_col}', found '{candidate_cols[actual_col_index]}'.")
+                                 break # Stop checking for this base
 
-                # Check if it's a potential base name (no '.' suffix)
-                if '.' not in current_potential_base:
-                    logger.debug(f"Checking potential base '{current_potential_base}' at index {start_idx} in candidate columns.")
-                    # Found a potential start, now check for the sequence
-                    potential_placeholder_base = current_potential_base
-                    placeholder_start_index_in_candidates = start_idx
-                    detected_sequence = [potential_placeholder_base] # Start sequence with the base
+                         if len(temp_sequence) > 1: # Found Base, Base.1 at minimum
+                             potential_placeholder_base_patternA = current_potential_base
+                             detected_sequence_patternA = temp_sequence
+                             start_index_patternA = start_idx
+                             logger.info(f"Found Pattern A sequence starting with '{potential_placeholder_base_patternA}' at candidate index {start_index_patternA} with length {len(detected_sequence_patternA)}.")
+                             found_sequence_A = True
+                             break # Exit the outer loop for Pattern A search
+                         else:
+                             logger.debug(f"Only base '{current_potential_base}' found or Pattern A sequence too short. Continuing search.")
+                             # Continue loop to check next candidate as potential base
+                     else:
+                         logger.debug(f"Column '{current_potential_base}' at index {start_idx} has '.' suffix, skipping as potential Pattern A base.")
 
-                    # Check subsequent columns for the pattern 'base.1', 'base.2', etc.
-                    for i in range(1, len(candidate_cols) - start_idx):
-                        expected_col = f"{potential_placeholder_base}.{i}"
-                        actual_col_index = start_idx + i
-                        if candidate_cols[actual_col_index] == expected_col:
-                            detected_sequence.append(candidate_cols[actual_col_index])
-                        else:
-                            # Sequence broken
-                            logger.debug(f"Sequence broken at index {actual_col_index}. Expected '{expected_col}', found '{candidate_cols[actual_col_index]}'.")
-                            break # Stop checking for this base
-
-                    # Check if a sequence of at least length 2 (Base, Base.1) was found
-                    if len(detected_sequence) > 1:
-                        logger.info(f"Found sequence starting with '{potential_placeholder_base}' at candidate index {placeholder_start_index_in_candidates}.")
-                        found_sequence = True
-                        break # Exit the outer loop, we found our sequence
-                    else:
-                        # Only the base was found, or sequence broke immediately. Reset and continue searching.
-                        logger.debug(f"Only base '{potential_placeholder_base}' found or sequence too short. Continuing search.")
-                        potential_placeholder_base = None
-                        placeholder_start_index_in_candidates = -1
-                        detected_sequence = []
-                        # Continue the outer loop to check the next column as a potential base
-                else:
-                     logger.debug(f"Column '{current_potential_base}' at index {start_idx} has '.' suffix, skipping as potential base.")
-
-            if not found_sequence:
-                 logger.info(f"No placeholder sequence like 'Base', 'Base.1', ... found anywhere in candidate columns of {input_path}.")
-                 potential_placeholder_base = None # Ensure it's None if no sequence found
-                 detected_sequence = []
+                 if not found_sequence_A:
+                     logger.info(f"No Pattern A sequence ('Base', 'Base.1', ...) found in candidate columns of {input_path}.")
 
 
-        # --- Date Replacement Logic using Detected Sequence ---
+        # --- Date Replacement Logic using Detected Patterns ---
         if date_columns is None:
             logger.warning(f"Date information from {DATES_FILE_PATH} is unavailable. Cannot check or replace headers in {input_path}. Processing with original headers: {original_cols}")
-        elif potential_placeholder_base is not None and detected_sequence:
-            # A sequence like 'Base', 'Base.1', ... was detected
-            placeholder_count = len(detected_sequence)
-            original_placeholder_start_index = candidate_start_index + placeholder_start_index_in_candidates
-            logger.info(f"Detected placeholder sequence based on '{potential_placeholder_base}' with {placeholder_count} columns, starting at index {original_placeholder_start_index} in original columns.")
+        # --- Prioritize Pattern B for Date Replacement ---
+        elif is_patternB_dominant:
+             placeholder_count_B = len(detected_sequence_patternB)
+             original_placeholder_start_index_B = candidate_start_index + start_index_patternB # Should be last_required_idx + 1
+             logger.info(f"Processing based on detected Pattern B ('{potential_placeholder_base_patternB}' repeated {placeholder_count_B} times), starting at original index {original_placeholder_start_index_B}.")
 
-            # Compare count with loaded dates
-            if len(date_columns) == placeholder_count:
-                logger.info(f"Replacing {placeholder_count} placeholder columns starting with '{potential_placeholder_base}' with dates.")
-                # Construct new columns: Keep columns before sequence + dates + columns after sequence
-                cols_before = original_cols[:original_placeholder_start_index]
-                # Important: Calculate cols_after based on the *original* position and *count* of placeholders
-                cols_after = original_cols[original_placeholder_start_index + placeholder_count:]
-                new_columns = cols_before + date_columns + cols_after
+             if len(date_columns) == placeholder_count_B:
+                 logger.info(f"Replacing {placeholder_count_B} repeated '{potential_placeholder_base_patternB}' columns with dates.")
+                 # Use current_cols here to respect potential prior rename ('Fund' -> 'Funds')
+                 cols_before = current_cols[:original_placeholder_start_index_B]
+                 cols_after = current_cols[original_placeholder_start_index_B + placeholder_count_B:]
+                 new_columns = cols_before + date_columns + cols_after
+ 
+                 if len(new_columns) != len(current_cols): # Compare against current_cols length
+                     logger.error(f"Internal error (Pattern B): Column count mismatch after constructing new columns ({len(new_columns)} vs {len(current_cols)}). Reverting to original headers.")
+                     # Revert logic might need refinement, but for now, keep current_cols as is.
+                     # current_cols = original_cols # Reverting might lose the 'Fund'->'Funds' rename
+                 else:
+                     df.columns = new_columns
+                     current_cols = new_columns
+                     logger.info(f"Columns after Pattern B date replacement: {current_cols}")
+             else:
+                 logger.warning(f"Count mismatch for Pattern B in {input_path}: Found {placeholder_count_B} repeated '{potential_placeholder_base_patternB}' columns, but expected {len(date_columns)} dates. Skipping date replacement. Processing with original headers.")
+                 # current_cols remains potentially renamed cols
 
-                if len(new_columns) != len(original_cols):
-                    logger.error(f"Internal error: Column count mismatch after constructing new columns ({len(new_columns)} vs {len(original_cols)}). Columns before: {cols_before}, Dates: {date_columns}, Columns after: {cols_after}. Reverting to original headers.")
-                    current_cols = original_cols # Revert to original
-                else:
-                    df.columns = new_columns
-                    current_cols = new_columns # Use the new columns for further processing
-                    logger.info(f"Columns after replacement: {current_cols}")
-            else:
-                # Counts mismatch - log warning and proceed with original headers
-                logger.warning(f"Placeholder count mismatch in {input_path}: Found sequence based on '{potential_placeholder_base}' with {placeholder_count} columns, but expected {len(date_columns)} dates based on {DATES_FILE_PATH}. Skipping date replacement. Processing with original headers.")
-                # current_cols remains original_cols
-
+        # --- Handle Pattern A or No Pattern ---
+        # No Pattern B found, or it didn't match date count. Check Pattern A or if columns already match dates.
         else:
-            # No 'Base', 'Base.1', ... sequence found. Check if the candidate columns *already* match the date_columns.
-            logger.info(f"No placeholder sequence like 'Base', 'Base.1', ... detected in {input_path}. Checking if existing columns match dates.")
-            if candidate_cols == date_columns:
+             if potential_placeholder_base_patternA:
+                 # Pattern A ('Base', 'Base.1', ...) was found.
+                 placeholder_count_A = len(detected_sequence_patternA)
+                 original_placeholder_start_index_A = candidate_start_index + start_index_patternA
+                 logger.info(f"Detected Pattern A sequence based on '{potential_placeholder_base_patternA}' (length {placeholder_count_A}) starting at original index {original_placeholder_start_index_A}.")
+ 
+                 # --- Attempt Date Replacement for Pattern A if lengths match ---
+                 if len(date_columns) == placeholder_count_A:
+                     logger.info(f"Replacing {placeholder_count_A} Pattern A columns ('{potential_placeholder_base_patternA}', '{potential_placeholder_base_patternA}.1', ...) with dates.")
+                     # Use current_cols here to respect potential prior rename ('Fund' -> 'Funds')
+                     cols_before = current_cols[:original_placeholder_start_index_A]
+                     cols_after = current_cols[original_placeholder_start_index_A + placeholder_count_A:]
+                     new_columns = cols_before + date_columns + cols_after
+ 
+                     if len(new_columns) != len(current_cols): # Compare against current_cols length
+                         logger.error(f"Internal error (Pattern A): Column count mismatch after constructing new columns ({len(new_columns)} vs {len(current_cols)}). Reverting to original headers.")
+                         # Keep current_cols as is to avoid losing potential rename
+                         # current_cols = original_cols
+                     else:
+                         df.columns = new_columns
+                         current_cols = new_columns
+                         logger.info(f"Columns after Pattern A date replacement: {current_cols}")
+                 else:
+                     # Lengths don't match, log warning and proceed with original (Pattern A) headers
+                     logger.warning(f"Count mismatch for Pattern A in {input_path}: Found {placeholder_count_A} columns in sequence ('{potential_placeholder_base_patternA}', '{potential_placeholder_base_patternA}.1', ...), but expected {len(date_columns)} dates. Skipping date replacement. Processing with original headers.")
+                     # current_cols remains potentially renamed cols
+                 # --- End Date Replacement Logic for Pattern A ---
+
+             elif candidate_cols == date_columns:
+                 # No patterns found, but candidates already match dates
                  logger.info(f"Columns in {input_path} (after required ones) already match the expected dates. No replacement needed.")
-                 # current_cols is already original_cols, which are correct.
-            else:
-                 # Log the mismatch if they don't match dates either
-                 logger.warning(f"Columns in {input_path} do not match expected dates and no 'Base', 'Base.1', ... sequence found. Processing with original headers: {original_cols}")
-                 # current_cols remains original_cols
 
         # --- End Column Header Replacement Logic ---
 
@@ -276,14 +334,15 @@ def process_csv_file(input_path, output_path, date_columns):
         processed_rows = []
 
         # Convert 'Security Name' and 'Funds' to string first to handle potential non-string types causing issues later
+        # Use 'Funds' as it has been standardized by rename operation if necessary
         df['Security Name'] = df['Security Name'].astype(str)
         df['Funds'] = df['Funds'].astype(str)
 
         # Group by the primary identifier 'Security Name'
         # Convert 'Security Name' to string first to handle potential non-string types causing groupby issues
-        df['Security Name'] = df['Security Name'].astype(str)
+        # df['Security Name'] = df['Security Name'].astype(str) # Already done above
         # Ensure 'Funds' is also string for consistent processing later
-        df['Funds'] = df['Funds'].astype(str)
+        # df['Funds'] = df['Funds'].astype(str) # Already done above
 
         # Use the potentially renamed DataFrame for grouping
         grouped_by_sec = df.groupby('Security Name', sort=False, dropna=False)
@@ -350,6 +409,14 @@ def process_csv_file(input_path, output_path, date_columns):
             final_cols = [col for col in current_cols if col in output_df.columns]
             output_df = output_df[final_cols]
 
+        # Fill NaN values with 0 before saving
+        output_df = output_df.fillna(0)
+
+        # Log DataFrame info just before saving
+        logger.info(f"Output DataFrame info before save (after NaN fill):")
+        buf = io.StringIO()
+        output_df.info(verbose=True, buf=buf)
+        logger.info(buf.getvalue())
 
         # Write the processed data to the new CSV file
         # The Funds column now contains comma-separated strings, which pandas will quote if necessary.
