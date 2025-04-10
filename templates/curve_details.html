@@ -12,7 +12,8 @@
         </a>
     </div>
 
-    <div class="row mb-4">
+    {# Date and History Selection Row #}
+    <div class="row mb-3 align-items-end">
         <div class="col-md-4">
             <label for="dateSelector" class="form-label">Select Date:</label>
             <select id="dateSelector" class="form-select">
@@ -27,15 +28,26 @@
                 {% endif %}
             </select>
         </div>
+        <div class="col-md-4">
+            <label for="prevDaysSelector" class="form-label">Show Previous Days:</label>
+            <select id="prevDaysSelector" class="form-select">
+                {# Options for how many previous curves to show #}
+                <option value="0" {% if num_prev_days == 0 %}selected{% endif %}>0 (None)</option>
+                <option value="1" {% if num_prev_days == 1 %}selected{% endif %}>1</option>
+                <option value="3" {% if num_prev_days == 3 %}selected{% endif %}>3</option>
+                <option value="5" {% if num_prev_days == 5 %}selected{% endif %}>5</option>
+            </select>
+        </div>
     </div>
 
-    <div class="card shadow-sm">
+    {# Chart Card #}
+    <div class="card shadow-sm mb-4">
         <div class="card-header">
-            Yield Curve for {{ selected_date }}
+            Yield Curve for {{ selected_date }}{% if num_prev_days > 0 %} (with {{ num_prev_days }} previous day(s)){% endif %}
         </div>
         <div class="card-body">
-            {% if chart_data and chart_data.labels %}
-                <canvas id="yieldCurveChart" style="max-height: 400px;"></canvas>
+            {% if chart_data and chart_data.labels and chart_data.datasets %}
+                <canvas id="yieldCurveChart" style="height: 750px; width: 100%;"></canvas>
             {% else %}
                 <div class="alert alert-warning" role="alert">
                     No data available to display the chart for {{ currency }} on {{ selected_date }}.
@@ -43,7 +55,56 @@
             {% endif %}
         </div>
     </div>
-</div>
+
+    {# Data Table Card for Selected Date #}
+    {% if table_data %}
+    <div class="card shadow-sm">
+        <div class="card-header">
+            Data for {{ selected_date }} (Compared to Previous Day)
+        </div>
+        <div class="card-body">
+             <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Term</th>
+                            <th>Term (Months, Approx)</th>
+                            <th>Value</th>
+                            <th>Daily Change</th>
+                            <th>Deviation from Avg Shift</th>
+                            <th>Deviation Z-Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in table_data %}
+                            {# Apply conditional highlighting based on Z-score #}
+                            {% set z_score = row.DeviationZScore | default(0, true) %}
+                            {% set abs_z_score = z_score | abs %}
+                            {% set row_class = '' %}
+                            {% if abs_z_score > 3 %}
+                                {% set row_class = 'table-danger' %}
+                            {% elif abs_z_score > 2 %}
+                                {% set row_class = 'table-warning' %}
+                            {% endif %}
+                            <tr class="{{ row_class }}">
+                                <td>{{ row.Term }}</td>
+                                <td>{{ row.TermMonths }}</td>
+                                <td>{{ row.Value_Display | round(4) }}</td>
+                                {# Format new columns, handle NaN with default filter #}
+                                <td>{{ row.ValueChange | default('N/A', true) | round(4) }}</td>
+                                <td>{{ row.ChangeDeviation | default('N/A', true) | round(4) }}</td>
+                                <td>{{ z_score | default('N/A', true) | round(2) }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <small class="text-muted">Highlighting: Yellow if |Z-Score| > 2, Red if |Z-Score| > 3. Z-Score measures how many standard deviations a term's daily change deviated from the average daily change of the whole curve.</small>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div> {# End container #}
 {% endblock %}
 
 {% block scripts %}
@@ -54,60 +115,82 @@
 document.addEventListener('DOMContentLoaded', function() {
     const chartData = {{ chart_data | tojson | safe }};
     const ctx = document.getElementById('yieldCurveChart');
+    let yieldChart = null; // Reference to the chart instance
 
-    if (ctx && chartData && chartData.labels && chartData.labels.length > 0) {
-        console.log("Rendering chart with data:", chartData);
-        new Chart(ctx, {
-            type: 'line',
-            data: chartData,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Term (Days)'
+    function renderChart() {
+        if (yieldChart) {
+            yieldChart.destroy(); // Destroy previous chart instance if exists
+        }
+        if (ctx && chartData && chartData.labels && chartData.labels.length > 0 && chartData.datasets && chartData.datasets.length > 0) {
+            console.log("Rendering chart with data:", chartData);
+            yieldChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData, // Now contains multiple datasets
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Term (Months)' // Already updated
+                            },
+                            type: 'linear',
+                            position: 'bottom'
                         },
-                        type: 'linear', // Use linear scale for days
-                        position: 'bottom'
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Yield Value'
+                            },
+                            beginAtZero: false
+                        }
                     },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Yield Value'
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
                         },
-                        beginAtZero: false // Yields can be negative
-                    }
-                },
-                plugins: {
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    title: {
-                         display: true,
-                         text: `{{ currency }} Yield Curve (${chartData.datasets[0].label.split('(')[1]}` // Extract date from label
+                        title: {
+                             display: true,
+                             // Base title on the first dataset (selected date)
+                             text: chartData.datasets[0].label ?
+                                   `Yield Curves - ${chartData.datasets[0].label.split('(')[0].trim()}` :
+                                   'Yield Curve'
+                        },
+                        legend: {
+                            position: 'top',
+                        }
                     }
                 }
-            }
-        });
-    } else {
-         console.log("Chart canvas not found or no chart data available.");
+            });
+        } else {
+             console.log("Chart canvas not found or no chart data available.");
+        }
     }
 
-    // Date selector change handler
+    renderChart(); // Initial rendering
+
+    // Update URL and reload page when selectors change
     const dateSelector = document.getElementById('dateSelector');
+    const prevDaysSelector = document.getElementById('prevDaysSelector');
+
+    function updateUrlAndReload() {
+        const selectedDate = dateSelector.value;
+        const selectedPrevDays = prevDaysSelector.value;
+        if (selectedDate) {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('date', selectedDate);
+            currentUrl.searchParams.set('prev_days', selectedPrevDays);
+            window.location.href = currentUrl.toString();
+        }
+    }
+
     if (dateSelector) {
-        dateSelector.addEventListener('change', function() {
-            const selectedDate = this.value;
-            if (selectedDate) {
-                // Construct the new URL with the selected date as a query parameter
-                const currentUrl = new URL(window.location.href);
-                currentUrl.searchParams.set('date', selectedDate);
-                window.location.href = currentUrl.toString(); // Reload page with new date
-            }
-        });
+        dateSelector.addEventListener('change', updateUrlAndReload);
+    }
+    if (prevDaysSelector) {
+        prevDaysSelector.addEventListener('change', updateUrlAndReload);
     }
 });
 </script>

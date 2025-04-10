@@ -149,9 +149,10 @@ def check_curve_inconsistencies(df):
         available_dates = sorted(all_dates, reverse=True)
         previous_date = None
         if len(available_dates) > 1:
-            latest_date_index = available_dates.get_loc(latest_date) # Find index of latest_date
-            if latest_date_index + 1 < len(available_dates):
-                previous_date = available_dates[latest_date_index + 1]
+            # Use get_loc for robust index finding
+            latest_date_pos = available_dates.get_loc(latest_date)
+            if latest_date_pos + 1 < len(available_dates):
+                previous_date = available_dates[latest_date_pos + 1]
                 logger.info(f"Previous date found for comparison: {previous_date.strftime('%Y-%m-%d')}")
             else:
                 logger.info("Latest date is the only date available. Cannot compare change profile.")
@@ -159,113 +160,92 @@ def check_curve_inconsistencies(df):
             logger.info("Only one date available. Cannot compare change profile.")
     except Exception as e:
         logger.error(f"Error determining previous date: {e}", exc_info=True)
-        previous_date = None # Ensure it's None if error occurs
+        previous_date = None
 
     summary = {}
     currencies = df.index.get_level_values('Currency').unique()
     logger.debug(f"Checking currencies: {currencies.tolist()}")
 
-
     for currency in currencies:
         try:
-            # --- Get Latest Curve Data ---
-            # Use .loc with precise index slice, handle potential MultiIndex levels
-            idx_slice = pd.IndexSlice[currency, latest_date, :]
-            if idx_slice not in df.index:
-                logger.warning(f"No data found for {currency} on latest date {latest_date.strftime('%Y-%m-%d')}")
+            # --- Get Latest Curve Data (Safer Filtering) ---
+            logger.debug(f"Attempting to filter latest data for {currency} on {latest_date.strftime('%Y-%m-%d')}")
+            latest_mask = (df.index.get_level_values('Currency') == currency) & \
+                          (df.index.get_level_values('Date') == latest_date)
+            latest_curve_filtered = df[latest_mask]
+
+            if latest_curve_filtered.empty:
+                logger.warning(f"No latest data found for {currency} on {latest_date.strftime('%Y-%m-%d')} using boolean mask.")
                 summary.setdefault(currency, []).append("Missing latest data")
                 continue
 
-            latest_curve = df.loc[idx_slice].reset_index(level=['Currency', 'Date'], drop=True).sort_values('TermDays') # Drop outer levels, sort
-            if latest_curve.empty:
-                 logger.warning(f"Data for {currency} on {latest_date.strftime('%Y-%m-%d')} is empty after slicing.")
-                 continue
-
-            logger.debug(f"Processing {currency} on {latest_date.strftime('%Y-%m-%d')}, {len(latest_curve)} terms.")
-
+            latest_curve = latest_curve_filtered.reset_index().sort_values('TermDays')
+            logger.debug(f"Successfully filtered latest data for {currency}. Shape: {latest_curve.shape}")
 
             # --- Basic Check 1: Monotonicity ---
-            # Check for significant negative diffs *after* sorting by TermDays
-            diffs = latest_curve['Value'].diff() # Calculate difference between consecutive terms
-            # Identify large drops (e.g., more than 0.5 absolute yield drop between adjacent terms)
+            diffs = latest_curve['Value'].diff()
             large_drops = diffs[diffs < -0.5]
             if not large_drops.empty:
-                terms = latest_curve.loc[large_drops.index, 'Term'].tolist() # Get original Term names
+                terms = latest_curve.loc[large_drops.index, 'Term'].tolist()
                 issue_msg = f"Potential non-monotonic drop(s) < -0.5 between terms near: {terms} on {latest_date.strftime('%Y-%m-%d')}"
                 summary.setdefault(currency, []).append(issue_msg)
                 logger.warning(f"{currency}: {issue_msg}")
 
-
             # --- Check 2: Compare change shape with previous day ---
             if previous_date:
-                # --- Get Previous Curve Data ---
-                idx_slice_prev = pd.IndexSlice[currency, previous_date, :]
-                if idx_slice_prev not in df.index:
-                    logger.warning(f"No previous day data ({previous_date.strftime('%Y-%m-%d')}) found for {currency} to compare.")
+                logger.debug(f"Attempting to filter previous data for {currency} on {previous_date.strftime('%Y-%m-%d')}")
+                prev_mask = (df.index.get_level_values('Currency') == currency) & \
+                            (df.index.get_level_values('Date') == previous_date)
+                previous_curve_filtered = df[prev_mask]
+
+                if previous_curve_filtered.empty:
+                    logger.warning(f"No previous day data ({previous_date.strftime('%Y-%m-%d')}) found for {currency} using boolean mask.")
                     summary.setdefault(currency, []).append("Missing previous data for comparison")
-                    # Continue to next currency if previous day is missing
-                    # Alternatively, could just skip this check for the currency
-                    continue # Skip comparison check if no prev data
+                else:
+                    previous_curve = previous_curve_filtered.reset_index().sort_values('TermDays')
+                    logger.debug(f"Successfully filtered previous data for {currency}. Shape: {previous_curve.shape}")
 
+                    merged = pd.merge(
+                        latest_curve[['Term', 'TermDays', 'Value']],
+                        previous_curve[['Term', 'TermDays', 'Value']],
+                        on='TermDays',
+                        suffixes=('_latest', '_prev'),
+                        how='inner'
+                    )
 
-                previous_curve = df.loc[idx_slice_prev].reset_index(level=['Currency','Date'], drop=True).sort_values('TermDays')
-                if previous_curve.empty:
-                     logger.warning(f"Previous day data for {currency} on {previous_date.strftime('%Y-%m-%d')} is empty.")
-                     continue # Skip comparison if prev data empty
+                    if merged.empty:
+                        logger.warning(f"No common terms found between dates for {currency}.")
+                    else:
+                        merged['ValueChange'] = merged['Value_latest'] - merged['Value_prev']
+                        merged.sort_values('TermDays', inplace=True)
+                        merged['ChangeDiff'] = merged['ValueChange'].diff()
 
+                        change_diff_std = merged['ChangeDiff'].std()
+                        change_diff_mean = merged['ChangeDiff'].mean()
+                        threshold_std = np.nan_to_num(change_diff_mean + 3 * change_diff_std)
+                        threshold_abs = 0.2
+                        final_threshold = max(abs(threshold_std), threshold_abs)
+                        anomalous_jumps = merged[abs(merged['ChangeDiff'].fillna(0)) > final_threshold]
 
-                # --- Merge and Calculate Changes ---
-                merged = pd.merge(
-                    latest_curve.reset_index()[['Term', 'TermDays', 'Value']], # Keep original Term
-                    previous_curve.reset_index()[['Term', 'TermDays', 'Value']],
-                    on='TermDays', # Merge on the numeric representation
-                    suffixes=('_latest', '_prev'),
-                    how='inner' # Only compare terms present on both days
-                )
-                if merged.empty:
-                    logger.warning(f"No common terms found between {latest_date.strftime('%Y-%m-%d')} and {previous_date.strftime('%Y-%m-%d')} for {currency}.")
-                    continue
+                        if not anomalous_jumps.empty:
+                            anomalous_terms = anomalous_jumps['Term_latest'].tolist()
+                            issue_msg = f"Anomalous change profile jump vs {previous_date.strftime('%Y-%m-%d')} near terms: {anomalous_terms}"
+                            summary.setdefault(currency, []).append(issue_msg)
+                            logger.warning(f"{currency}: {issue_msg}")
 
-                merged['ValueChange'] = merged['Value_latest'] - merged['Value_prev']
-                merged.sort_values('TermDays', inplace=True)
-
-                # Calculate the difference in changes between adjacent terms (the 'shape' of the change)
-                merged['ChangeDiff'] = merged['ValueChange'].diff()
-
-                # Identify large jumps in the change profile
-                # Heuristic: Jumps significantly larger than typical jumps (e.g., > 3 std devs)
-                # Or jumps larger than an absolute threshold (e.g., 0.2 yield points)
-                change_diff_std = merged['ChangeDiff'].std()
-                change_diff_mean = merged['ChangeDiff'].mean() # Usually close to 0 if changes are smooth
-                # Use nan_to_num to handle cases with low variance / NaNs in std/mean
-                threshold_std = np.nan_to_num(change_diff_mean + 3 * change_diff_std)
-                threshold_abs = 0.2 # Minimum absolute jump to flag
-                final_threshold = max(abs(threshold_std), threshold_abs)
-
-                anomalous_jumps = merged[abs(merged['ChangeDiff'].fillna(0)) > final_threshold]
-
-                if not anomalous_jumps.empty:
-                    # Report original terms where anomalous jumps occurred
-                    # The jump occurs *after* the first term listed.
-                    anomalous_terms = anomalous_jumps['Term_latest'].tolist()
-                    issue_msg = f"Anomalous change profile jump vs {previous_date.strftime('%Y-%m-%d')} near terms: {anomalous_terms}"
-                    summary.setdefault(currency, []).append(issue_msg)
-                    logger.warning(f"{currency}: {issue_msg}")
-
-            # If no specific issues were found for the currency, mark as OK
             if currency not in summary:
-                 summary[currency] = ["OK"]
-                 logger.info(f"{currency}: Checks passed.")
+                summary[currency] = ["OK"]
+                logger.info(f"{currency}: Checks passed.")
 
-
+        except pd.errors.InvalidIndexError as e:
+            logger.error(f"InvalidIndexError processing curve for {currency}: {e}", exc_info=True)
+            summary.setdefault(currency, []).append(f"Processing error (InvalidIndexError)")
         except KeyError as e:
-             # This might happen if .loc slicing fails unexpectedly
-             logger.error(f"KeyError processing curve for {currency} (maybe missing date or currency level?): {e}", exc_info=True)
-             summary.setdefault(currency, []).append(f"Processing error (KeyError)")
+            logger.error(f"KeyError processing curve for {currency}: {e}", exc_info=True)
+            summary.setdefault(currency, []).append(f"Processing error (KeyError)")
         except Exception as e:
-             logger.error(f"Unexpected error processing curve for {currency}: {e}", exc_info=True)
-             summary.setdefault(currency, []).append(f"Processing error: {type(e).__name__}")
-
+            logger.error(f"Unexpected error processing curve for {currency}: {e}", exc_info=True)
+            summary.setdefault(currency, []).append(f"Processing error: {type(e).__name__}")
 
     logger.info("Finished inconsistency checks.")
     return summary
