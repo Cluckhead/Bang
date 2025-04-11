@@ -22,11 +22,14 @@ def _parse_percentage(value):
         logging.warning(f"Could not parse percentage value: {value}")
         return None # Indicate parsing failure
 
-def _is_iso_date_column(col_name):
-    """Checks if a column name matches YYYY-MM-DDTHH:MM:SS format."""
+def _is_date_like_column(col_name):
+    """Checks if a column name matches YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS format."""
     try:
-        # Attempt to parse using pandas, strict match needed
-        pd.to_datetime(col_name, format='%Y-%m-%dT%H:%M:%S', errors='raise')
+        # Attempt to parse using pandas with flexible inference first
+        # errors='raise' will fail if it's not recognizable as a date/datetime
+        pd.to_datetime(col_name, errors='raise')
+        # Optionally, add more specific format checks if needed, but `to_datetime` is quite good
+        # e.g., check if it matches common regex patterns if `to_datetime` is too broad
         return True
     except (ValueError, TypeError):
         return False
@@ -49,17 +52,23 @@ def load_and_process_weight_data(filename):
             return None, []
         
         # Identify date columns based on ISO format
-        date_cols_iso = [col for col in df.columns if _is_iso_date_column(col)]
-        if not date_cols_iso:
-            logging.warning(f"No date columns found in expected format in {filename}")
-            # Fallback: Try simple YYYY-MM-DD check? For now, let's stick to expected format.
+        date_cols = [col for col in df.columns if _is_date_like_column(col)]
+        if not date_cols:
+            logging.warning(f"No date-like columns found in {filename}")
             return None, []
 
         # Sort date columns chronologically
-        date_cols_sorted = sorted(date_cols_iso, key=lambda d: pd.to_datetime(d, format='%Y-%m-%dT%H:%M:%S'))
-        
-        # Simplify date headers for display (YYYY-MM-DD)
-        date_headers_display = [pd.to_datetime(d).strftime('%Y-%m-%d') for d in date_cols_sorted]
+        # Convert to datetime objects for reliable sorting
+        datetime_objs = [pd.to_datetime(d) for d in date_cols]
+        # Sort based on datetime objects
+        datetime_objs.sort()
+        # Convert back to display format (YYYY-MM-DD) after sorting
+        date_headers_display = [dt.strftime('%Y-%m-%d') for dt in datetime_objs]
+        # Get the original column names corresponding to the sorted display headers
+        # We need this to access the correct columns in the DataFrame later
+        # Create a map from display format back to original format
+        display_to_original_map = {pd.to_datetime(d).strftime('%Y-%m-%d'): d for d in date_cols}
+        original_date_cols_sorted = [display_to_original_map[d] for d in date_headers_display]
 
         processed_data = {}
         # Set index for easier access
@@ -67,8 +76,9 @@ def load_and_process_weight_data(filename):
 
         for fund_code in df.index:
             processed_data[fund_code] = {}
-            for date_col_iso, date_header_display in zip(date_cols_sorted, date_headers_display):
-                original_value_str = str(df.loc[fund_code, date_col_iso])
+            # Iterate using the sorted original column names and the sorted display headers
+            for original_date_col, display_date_header in zip(original_date_cols_sorted, date_headers_display):
+                original_value_str = str(df.loc[fund_code, original_date_col])
                 parsed_value_float = _parse_percentage(original_value_str)
                 
                 is_100 = False
@@ -76,7 +86,7 @@ def load_and_process_weight_data(filename):
                     # Check for exact equality with 100.0
                     is_100 = (parsed_value_float == 100.0)
                 
-                processed_data[fund_code][date_header_display] = {
+                processed_data[fund_code][display_date_header] = {
                     'value_str': original_value_str if not pd.isna(original_value_str) else 'N/A',
                     'is_100': is_100,
                     'parsed_value': parsed_value_float # Keep for potential future use/debugging

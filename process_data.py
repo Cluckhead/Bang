@@ -18,6 +18,8 @@ import logging
 # Add datetime for date parsing and sorting
 from datetime import datetime
 import io
+# Import the new weight processing function
+from weight_processing import process_weight_file
 
 # --- Logging Setup ---
 # Use the same log file as other data processing scripts
@@ -141,12 +143,12 @@ def process_csv_file(input_path, output_path, date_columns):
         df = pd.read_csv(input_path, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
         logger.info(f"Processing file: {input_path}")
 
-        # Log DataFrame info right after reading
-        logger.info(f"DataFrame info after read:")
-        # Use a buffer to capture df.info() output for logging
-        buf = io.StringIO()
-        df.info(verbose=True, buf=buf)
-        logger.info(buf.getvalue())
+        # Log DataFrame info right after reading (DEBUG level)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"DataFrame info after read for {input_path}:")
+            buf = io.StringIO()
+            df.info(verbose=True, buf=buf)
+            logger.debug(buf.getvalue())
 
         if df.empty:
             logger.warning(f"Input file {input_path} is empty or contains only invalid lines. Skipping processing.")
@@ -219,7 +221,7 @@ def process_csv_file(input_path, output_path, date_columns):
                 potential_placeholder_base_patternB = first_candidate
                 detected_sequence_patternB = candidate_cols
                 start_index_patternB = 0 # Starts at the beginning of candidates
-                logger.info(f"Detected Pattern B: Repeated column name '{potential_placeholder_base_patternB}' for all {len(detected_sequence_patternB)} candidate columns.")
+                logger.debug(f"Detected Pattern B: Repeated column name '{potential_placeholder_base_patternB}' for all {len(detected_sequence_patternB)} candidate columns.")
                 # If we find Pattern B covering *all* candidates, we prioritize it for date replacement check
                 is_patternB_dominant = True
             else:
@@ -247,7 +249,7 @@ def process_csv_file(input_path, output_path, date_columns):
                              potential_placeholder_base_patternA = current_potential_base
                              detected_sequence_patternA = temp_sequence
                              start_index_patternA = start_idx
-                             logger.info(f"Found Pattern A sequence starting with '{potential_placeholder_base_patternA}' at candidate index {start_index_patternA} with length {len(detected_sequence_patternA)}.")
+                             logger.debug(f"Found Pattern A sequence starting with '{potential_placeholder_base_patternA}' at candidate index {start_index_patternA} with length {len(detected_sequence_patternA)}.")
                              found_sequence_A = True
                              break # Exit the outer loop for Pattern A search
                          else:
@@ -295,7 +297,7 @@ def process_csv_file(input_path, output_path, date_columns):
                  # Pattern A ('Base', 'Base.1', ...) was found.
                  placeholder_count_A = len(detected_sequence_patternA)
                  original_placeholder_start_index_A = candidate_start_index + start_index_patternA
-                 logger.info(f"Detected Pattern A sequence based on '{potential_placeholder_base_patternA}' (length {placeholder_count_A}) starting at original index {original_placeholder_start_index_A}.")
+                 logger.debug(f"Detected Pattern A sequence based on '{potential_placeholder_base_patternA}' (length {placeholder_count_A}) starting at original index {original_placeholder_start_index_A}.")
  
                  # --- Attempt Date Replacement for Pattern A if lengths match ---
                  if len(date_columns) == placeholder_count_A:
@@ -312,7 +314,7 @@ def process_csv_file(input_path, output_path, date_columns):
                      else:
                          df.columns = new_columns
                          current_cols = new_columns
-                         logger.info(f"Columns after Pattern A date replacement: {current_cols}")
+                         logger.info(f"Columns after Pattern A date replacement using {len(date_columns)} dates for {input_path}.")
                  else:
                      # Lengths don't match, log warning and proceed with original (Pattern A) headers
                      logger.warning(f"Count mismatch for Pattern A in {input_path}: Found {placeholder_count_A} columns in sequence ('{potential_placeholder_base_patternA}', '{potential_placeholder_base_patternA}.1', ...), but expected {len(date_columns)} dates. Skipping date replacement. Processing with original headers.")
@@ -321,7 +323,7 @@ def process_csv_file(input_path, output_path, date_columns):
 
              elif candidate_cols == date_columns:
                  # No patterns found, but candidates already match dates
-                 logger.info(f"Columns in {input_path} (after required ones) already match the expected dates. No replacement needed.")
+                 logger.debug(f"Columns in {input_path} (after required ones) already match the expected dates. No replacement needed.")
 
         # --- End Column Header Replacement Logic ---
 
@@ -412,11 +414,12 @@ def process_csv_file(input_path, output_path, date_columns):
         # Fill NaN values with 0 before saving
         output_df = output_df.fillna(0)
 
-        # Log DataFrame info just before saving
-        logger.info(f"Output DataFrame info before save (after NaN fill):")
-        buf = io.StringIO()
-        output_df.info(verbose=True, buf=buf)
-        logger.info(buf.getvalue())
+        # Log DataFrame info just before saving (DEBUG level)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Output DataFrame info before save for {output_path} (after NaN fill):")
+            buf = io.StringIO()
+            output_df.info(verbose=True, buf=buf)
+            logger.debug(buf.getvalue())
 
         # Write the processed data to the new CSV file
         # The Funds column now contains comma-separated strings, which pandas will quote if necessary.
@@ -436,6 +439,8 @@ def process_csv_file(input_path, output_path, date_columns):
 def main():
     """
     Main function to find and process all 'pre_*.csv' files in the 'Data' directory.
+
+    Also processes weight files w_Funds.csv and w_Bench.csv for header replacement.
     """
     # --- Read Dates ---
     # Define the path to the dates file
@@ -447,7 +452,22 @@ def main():
     # Log message indicating status of date loading is handled within read_and_sort_dates.
     # --- End Read Dates ---
 
+    # Define input directory path
     input_dir = 'Data'
+
+    # --- Process Weight Files (Header Replacement) ---
+    # Call the new function if dates were successfully loaded
+    if date_columns:
+        logger.info("Attempting to process weight file headers...")
+        w_funds_path = os.path.join(input_dir, 'w_Funds.csv')
+        w_bench_path = os.path.join(input_dir, 'w_Bench.csv')
+        process_weight_file(w_funds_path, date_columns)
+        process_weight_file(w_bench_path, date_columns)
+        logger.info("Finished processing weight file headers.")
+    else:
+        logger.warning("Skipping weight file header processing because dates were not loaded.")
+    # --- End Process Weight Files ---
+
     input_prefix = 'pre_'
     # output_prefix = 'new_' #disabled
     output_prefix = ''

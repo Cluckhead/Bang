@@ -47,54 +47,89 @@
         const chartDataElement = document.getElementById('chartJsonData');
         const chartData = JSON.parse(chartDataElement.textContent);
 
+        // --- Helper function to replace 0 with null in a dataset's data array ---
+        const processDatasetData = (dataset) => {
+            if (dataset && dataset.data) {
+                dataset.data = dataset.data.map(value => (value === 0 ? null : value));
+            }
+            return dataset; // Return the processed dataset (or original if no data)
+        };
+
+        // --- Process datasets before creating charts ---
+        if (chartData.primary_datasets) {
+            chartData.primary_datasets = chartData.primary_datasets.map(processDatasetData);
+        }
+        if (chartData.duration_dataset) {
+            chartData.duration_dataset = processDatasetData(chartData.duration_dataset);
+        }
+
+
         // --- Render Primary Chart (Metric + Price) ---
         const primaryCtx = document.getElementById('primarySecurityChart').getContext('2d');
         if (chartData.primary_datasets && chartData.primary_datasets.length > 0) {
-            new Chart(primaryCtx, {
-                type: 'line',
-                data: {
-                    labels: chartData.labels,
-                    datasets: chartData.primary_datasets // Use the primary datasets array
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Date'
-                            }
-                        },
-                        y: { // Primary Y-axis (for the main metric)
-                            position: 'left',
-                            title: {
-                                display: true,
-                                text: {{ metric_name|tojson }} + ' Value' // Use the metric name dynamically with tojson filter
-                            }
-                        },
-                        y1: { // Secondary Y-axis (for Price)
-                            position: 'right',
-                            title: {
-                                display: true,
-                                text: 'Price'
-                            },
-                            grid: {
-                                drawOnChartArea: false, // only draw grid lines for the first Y axis
-                            },
-                        }
+            // Check if *any* primary dataset has actual data after processing
+            const hasPrimaryData = chartData.primary_datasets.some(dataset => 
+                dataset.data && dataset.data.some(value => value !== null)
+            );
+
+            if (hasPrimaryData) {
+                new Chart(primaryCtx, {
+                    type: 'line',
+                    data: {
+                        labels: chartData.labels,
+                        datasets: chartData.primary_datasets // Use the processed primary datasets
                     },
-                    plugins: {
-                        legend: {
-                            position: 'top',
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        spanGaps: true, // Ensure gaps are spanned correctly visually if desired, or set to false for explicit gaps
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Date'
+                                }
+                            },
+                            y: { // Primary Y-axis (for the main metric)
+                                position: 'left',
+                                title: {
+                                    display: true,
+                                    text: {{ metric_name|tojson }} + ' Value' // Use the metric name dynamically with tojson filter
+                                }
+                            },
+                            y1: { // Secondary Y-axis (for Price)
+                                position: 'right',
+                                title: {
+                                    display: true,
+                                    text: 'Price'
+                                },
+                                grid: {
+                                    drawOnChartArea: false, // only draw grid lines for the first Y axis
+                                },
+                                // Optional: Define behaviour for nulls if needed, though spanGaps usually handles line drawing
+                                // ticks: {
+                                //     callback: function(value, index, values) {
+                                //         // You could customize tick display here if needed
+                                //         return value; 
+                                //     }
+                                // }
+                            }
                         },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            }
                         }
                     }
-                }
-            });
+                });
+            } else {
+                console.log('No non-null data points found for any primary dataset.');
+                document.getElementById('primary-chart-container').innerHTML = '<p class="text-info">No data available for the primary chart metrics over the selected period.</p>';
+            }
         } else {
             console.error('No primary datasets found for the primary chart.');
             document.getElementById('primary-chart-container').innerHTML = '<p class="text-danger">Could not render primary chart: No data available.</p>';
@@ -103,19 +138,20 @@
         // --- Render Duration Chart ---
         const durationCtx = document.getElementById('durationSecurityChart').getContext('2d');
         if (chartData.duration_dataset) {
-             // Check if there's actual data in the duration dataset
+             // Check if there's actual data in the *processed* duration dataset
             const hasDurationData = chartData.duration_dataset.data && chartData.duration_dataset.data.some(value => value !== null);
-            
+
             if (hasDurationData) {
                 new Chart(durationCtx, {
                     type: 'line',
                     data: {
                         labels: chartData.labels,
-                        datasets: [chartData.duration_dataset] // Pass the single duration dataset in an array
+                        datasets: [chartData.duration_dataset] // Use the processed duration dataset
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        spanGaps: true, // Ensure gaps are spanned correctly visually if desired, or set to false for explicit gaps
                         scales: {
                             x: {
                                 title: {
@@ -129,6 +165,12 @@
                                     text: 'Duration Value'
                                 }
                             }
+                            // Optional: Define behaviour for nulls if needed
+                            // ticks: {
+                            //     callback: function(value, index, values) {
+                            //         return value; 
+                            //     }
+                            // }
                         },
                         plugins: {
                             legend: {
