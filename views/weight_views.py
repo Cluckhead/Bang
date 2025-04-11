@@ -83,8 +83,8 @@ def load_and_process_weight_data(filename):
                 
                 is_100 = False
                 if parsed_value_float is not None:
-                    # Check for exact equality with 100.0
-                    is_100 = (parsed_value_float == 100.0)
+                    # Check if the value is within the tolerance range [99.99, 100.01]
+                    is_100 = abs(parsed_value_float - 100.0) <= 0.01
                 
                 processed_data[fund_code][display_date_header] = {
                     'value_str': original_value_str if not pd.isna(original_value_str) else 'N/A',
