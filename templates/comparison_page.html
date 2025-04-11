@@ -90,7 +90,7 @@
                     {% for col_name in columns_to_display %}
                         <td>
                             {% if col_name == id_col %}
-                                <a href="{{ url_for('comparison_bp.details', security_id=row[id_col]|urlencode) }}">{{ row[id_col] }}</a>
+                                <a href="{{ url_for('comparison_bp.comparison_details', security_id=row[id_col]|urlencode) }}">{{ row[id_col] }}</a>
                             {% elif col_name in ['Level_Correlation', 'Change_Correlation'] and row[col_name] is not none %}
                                 {{ "%.3f"|format(row[col_name]) }}
                             {% elif col_name in ['Mean_Abs_Diff', 'Max_Abs_Diff'] and row[col_name] is not none %}

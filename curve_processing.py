@@ -60,7 +60,7 @@ def load_curve_data(file_path=os.path.join(DATA_FOLDER, 'curves.csv')):
         return pd.DataFrame() # Return empty DataFrame
 
     try:
-        df = pd.read_csv(file_path, parse_dates=['Date'], dayfirst=True) # Assuming DD/MM/YYYY
+        df = pd.read_csv(file_path, parse_dates=['Date'])
         logger.info(f"Successfully loaded {len(df)} rows from {file_path}")
     except Exception as e:
         logger.error(f"Error reading curve data CSV '{file_path}': {e}", exc_info=True)

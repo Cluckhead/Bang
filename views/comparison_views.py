@@ -413,11 +413,11 @@ def summary():
 
 
 @comparison_bp.route('/comparison/details/<path:security_id>')
-def details(security_id):
-    """Displays the comparison details page for a single security."""
+def comparison_details(security_id):
+    """Displays side-by-side historical charts for a specific security."""
+    log.info(f"Fetching comparison details for security: {security_id}")
     try:
         # Reload or filter the merged data for the specific security
-        # This might be inefficient - consider caching or passing data if possible
         merged_data, static_data, _, actual_id_col = load_comparison_data()
 
         if actual_id_col is None:

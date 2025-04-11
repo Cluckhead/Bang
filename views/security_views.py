@@ -284,16 +284,18 @@ def securities_page():
                            current_sort_order=sort_order,
                            message=None) # Clear any previous error message if successful
 
-@security_bp.route('/details/<metric_name>/<path:security_id>') # Corresponds to /security/details/..., use path converter
-def security_details_page(metric_name, security_id):
-    """Renders a page showing the time series chart for a specific security from a specific metric file."""
-    # Decode the security_id using standard library
-    decoded_security_id = unquote(security_id)
-    
+@security_bp.route('/security/details/<metric_name>/<path:security_id>')
+def security_details(metric_name, security_id):
+    """Displays historical charts for a specific security and metric."""
+    print(f"Fetching details for metric: {metric_name}, security: {security_id}") # Use print for consistency
+    # The security_id from the path converter is already decoded.
+    # decoded_security_id = unquote(security_id)
+
+    # Determine the file to load based on the metric name (case-insensitive)
     filename = f"sec_{metric_name}.csv"
     price_filename = "sec_Price.csv" # Define price filename
     duration_filename = "sec_Duration.csv" # Define duration filename
-    print(f"--- Requesting Security Details --- Metric: {metric_name}, Security ID (Encoded): {security_id}, Security ID (Decoded): {decoded_security_id}, File: {filename}")
+    print(f"--- Requesting Security Details --- Metric: {metric_name}, Security ID (Encoded): {security_id}, Security ID (Decoded): {security_id}, File: {filename}")
 
     try:
         # 1. Load and process the specific security data file (for the primary metric)
@@ -304,21 +306,21 @@ def security_details_page(metric_name, security_id):
 
         # Check if the requested security ID exists in the data using the DECODED ID
         actual_id_col_name = df_long.index.names[1]
-        if decoded_security_id not in df_long.index.get_level_values(actual_id_col_name):
-             return f"Error: Security ID '{decoded_security_id}' not found in file '{filename}'.", 404
+        if security_id not in df_long.index.get_level_values(actual_id_col_name):
+             return f"Error: Security ID '{security_id}' not found in file '{filename}'.", 404
 
         # 2. Extract historical data for the specific security using the DECODED ID
-        security_data = df_long.xs(decoded_security_id, level=actual_id_col_name).sort_index().copy()
+        security_data = df_long.xs(security_id, level=actual_id_col_name).sort_index().copy()
 
         # Filter to include only business days (Mon-Fri)
         if isinstance(security_data.index, pd.DatetimeIndex):
             security_data = security_data[security_data.index.dayofweek < 5]
         else:
-            print(f"Warning: Index for primary metric data ({metric_name}) for {decoded_security_id} is not DatetimeIndex, skipping business day filter.")
+            print(f"Warning: Index for primary metric data ({metric_name}) for {security_id} is not DatetimeIndex, skipping business day filter.")
 
         if security_data.empty:
             # Check if empty *after* filtering too
-            return f"Error: No historical data found for Security ID '{decoded_security_id}' in file '{filename}' (or only weekend data).", 404
+            return f"Error: No historical data found for Security ID '{security_id}' in file '{filename}' (or only weekend data).", 404
 
         # Extract static dimension values for display
         static_info = {}
@@ -337,19 +339,19 @@ def security_details_page(metric_name, security_id):
             price_df_long, _ = load_and_process_security_data(price_filename)
             if price_df_long is not None and not price_df_long.empty:
                 price_id_col = price_df_long.index.names[1]
-                if decoded_security_id in price_df_long.index.get_level_values(price_id_col):
-                    price_data = price_df_long.xs(decoded_security_id, level=price_id_col)[['Value']].sort_index().copy()
+                if security_id in price_df_long.index.get_level_values(price_id_col):
+                    price_data = price_df_long.xs(security_id, level=price_id_col)[['Value']].sort_index().copy()
                     price_data.rename(columns={'Value': 'Price'}, inplace=True)
                     # Filter price data to business days
                     if isinstance(price_data.index, pd.DatetimeIndex):
                         price_data = price_data[price_data.index.dayofweek < 5]
                     else:
-                        print(f"Warning: Index for price data for {decoded_security_id} is not DatetimeIndex, skipping business day filter.")
+                        print(f"Warning: Index for price data for {security_id} is not DatetimeIndex, skipping business day filter.")
 
         except FileNotFoundError:
             print(f"Price file '{price_filename}' not found. Price chart will not be available.")
         except Exception as e:
-            print(f"Error loading price data for {decoded_security_id}: {e}")
+            print(f"Error loading price data for {security_id}: {e}")
             traceback.print_exc()
 
         # Load Duration Data
@@ -357,26 +359,26 @@ def security_details_page(metric_name, security_id):
             duration_df_long, _ = load_and_process_security_data(duration_filename)
             if duration_df_long is not None and not duration_df_long.empty:
                 duration_id_col = duration_df_long.index.names[1]
-                if decoded_security_id in duration_df_long.index.get_level_values(duration_id_col):
-                    duration_data = duration_df_long.xs(decoded_security_id, level=duration_id_col)[['Value']].sort_index().copy()
+                if security_id in duration_df_long.index.get_level_values(duration_id_col):
+                    duration_data = duration_df_long.xs(security_id, level=duration_id_col)[['Value']].sort_index().copy()
                     duration_data.rename(columns={'Value': 'Duration'}, inplace=True)
                     # Filter duration data to business days
                     if isinstance(duration_data.index, pd.DatetimeIndex):
                         duration_data = duration_data[duration_data.index.dayofweek < 5]
                     else:
-                        print(f"Warning: Index for duration data for {decoded_security_id} is not DatetimeIndex, skipping business day filter.")
+                        print(f"Warning: Index for duration data for {security_id} is not DatetimeIndex, skipping business day filter.")
 
         except FileNotFoundError:
             print(f"Duration file '{duration_filename}' not found. Duration chart will not be available.")
         except Exception as e:
-            print(f"Error loading duration data for {decoded_security_id}: {e}")
+            print(f"Error loading duration data for {security_id}: {e}")
             traceback.print_exc()
 
         # 4. Prepare data for the primary chart
         labels = security_data.index.strftime('%Y-%m-%d').tolist()
         # Initialize datasets list for the primary chart
         primary_datasets = [{
-            'label': f'{decoded_security_id} - {metric_name} Value', # Use decoded ID in label
+            'label': f'{security_id} - {metric_name} Value', # Use decoded ID in label
             'data': security_data['Value'].round(3).fillna(np.nan).tolist(),
             'borderColor': COLOR_PALETTE[0], # Use first color
             'backgroundColor': COLOR_PALETTE[0] + '40',
@@ -395,19 +397,19 @@ def security_details_page(metric_name, security_id):
 
         # --- Attempt to load and add Price data to the primary chart ---
         try:
-            print(f"Attempting to load price data from {price_filename} for {decoded_security_id}...")
+            print(f"Attempting to load price data from {price_filename} for {security_id}...")
             price_df_long, _ = load_and_process_security_data(price_filename) # Ignore static cols from price file
 
             if price_df_long is not None and not price_df_long.empty:
                 price_actual_id_col = price_df_long.index.names[1] # Get ID column name from price file
-                if decoded_security_id in price_df_long.index.get_level_values(price_actual_id_col):
-                    price_data = price_df_long.xs(decoded_security_id, level=price_actual_id_col).sort_index().copy()
+                if security_id in price_df_long.index.get_level_values(price_actual_id_col):
+                    price_data = price_df_long.xs(security_id, level=price_actual_id_col).sort_index().copy()
                     # Reindex price data to align dates with the main metric data
                     price_data = price_data.reindex(security_data.index)
 
                     if not price_data.empty:
                         price_dataset = {
-                            'label': f'{decoded_security_id} - Price',
+                            'label': f'{security_id} - Price',
                             'data': price_data['Value'].round(3).fillna(np.nan).tolist(),
                             'borderColor': COLOR_PALETTE[1 % len(COLOR_PALETTE)], # Use second color
                             'backgroundColor': COLOR_PALETTE[1 % len(COLOR_PALETTE)] + '40',
@@ -418,32 +420,32 @@ def security_details_page(metric_name, security_id):
                         chart_data_for_js['primary_datasets'].append(price_dataset)
                         print("Successfully added Price data overlay to primary chart.")
                     else:
-                         print(f"Warning: Price data found for {decoded_security_id}, but was empty after aligning dates.")
+                         print(f"Warning: Price data found for {security_id}, but was empty after aligning dates.")
                 else:
-                     print(f"Warning: Security ID {decoded_security_id} not found in {price_filename}.")
+                     print(f"Warning: Security ID {security_id} not found in {price_filename}.")
             else:
                  print(f"Warning: Could not load or process {price_filename}.")
         except FileNotFoundError:
             print(f"Warning: Price data file '{price_filename}' not found. Skipping price overlay.")
         except Exception as e_price:
-            print(f"Warning: Error processing price data for {decoded_security_id} from {price_filename}: {e_price}")
+            print(f"Warning: Error processing price data for {security_id} from {price_filename}: {e_price}")
             traceback.print_exc() # Log the price processing error but continue
 
         # --- Attempt to load and add Duration data for the second chart ---
         try:
-            print(f"Attempting to load duration data from {duration_filename} for {decoded_security_id}...")
+            print(f"Attempting to load duration data from {duration_filename} for {security_id}...")
             duration_df_long, _ = load_and_process_security_data(duration_filename) # Ignore static cols
 
             if duration_df_long is not None and not duration_df_long.empty:
                 duration_actual_id_col = duration_df_long.index.names[1] # Get ID column name
-                if decoded_security_id in duration_df_long.index.get_level_values(duration_actual_id_col):
-                    duration_data = duration_df_long.xs(decoded_security_id, level=duration_actual_id_col).sort_index().copy()
+                if security_id in duration_df_long.index.get_level_values(duration_actual_id_col):
+                    duration_data = duration_df_long.xs(security_id, level=duration_actual_id_col).sort_index().copy()
                     # Reindex duration data to align dates with the main metric data
                     duration_data = duration_data.reindex(security_data.index)
 
                     if not duration_data.empty:
                         duration_dataset = {
-                            'label': f'{decoded_security_id} - Duration', # Use decoded ID
+                            'label': f'{security_id} - Duration', # Use decoded ID
                             'data': duration_data['Value'].round(3).fillna(np.nan).tolist(),
                             'borderColor': COLOR_PALETTE[2 % len(COLOR_PALETTE)], # Use third color
                             'backgroundColor': COLOR_PALETTE[2 % len(COLOR_PALETTE)] + '40',
@@ -454,21 +456,21 @@ def security_details_page(metric_name, security_id):
                         chart_data_for_js['duration_dataset'] = duration_dataset
                         print("Successfully prepared Duration data for separate chart.")
                     else:
-                         print(f"Warning: Duration data found for {decoded_security_id}, but was empty after aligning dates.")
+                         print(f"Warning: Duration data found for {security_id}, but was empty after aligning dates.")
                 else:
-                     print(f"Warning: Security ID {decoded_security_id} not found in {duration_filename}.")
+                     print(f"Warning: Security ID {security_id} not found in {duration_filename}.")
             else:
                  print(f"Warning: Could not load or process {duration_filename}.")
         except FileNotFoundError:
             print(f"Warning: Duration data file '{duration_filename}' not found. Skipping duration chart.")
         except Exception as e_duration:
-            print(f"Warning: Error processing duration data for {decoded_security_id} from {duration_filename}: {e_duration}")
+            print(f"Warning: Error processing duration data for {security_id} from {duration_filename}: {e_duration}")
             traceback.print_exc() # Log the duration processing error but continue
 
         # 4. Render the template
         return render_template('security_details_page.html',
                                metric_name=metric_name,
-                               security_id=decoded_security_id,
+                               security_id=security_id,
                                static_info=static_info,
                                chart_data_json=jsonify(chart_data_for_js).get_data(as_text=True),
                                latest_date=latest_date_overall.strftime('%d/%m/%Y'))
@@ -476,12 +478,12 @@ def security_details_page(metric_name, security_id):
     except FileNotFoundError:
         return f"Error: Data file '{filename}' not found.", 404
     except ValueError as ve:
-        print(f"Value Error processing security details for {metric_name}/{decoded_security_id}: {ve}")
-        return f"Error processing details for {decoded_security_id}: {ve}", 400
+        print(f"Value Error processing security details for {metric_name}/{security_id}: {ve}")
+        return f"Error processing details for {security_id}: {ve}", 400
     except Exception as e:
-        print(f"Error processing security details for {metric_name}/{decoded_security_id}: {e}")
+        print(f"Error processing security details for {metric_name}/{security_id}: {e}")
         traceback.print_exc()
-        return f"An error occurred processing details for {decoded_security_id}: {e}", 500 
+        return f"An error occurred processing details for {security_id}: {e}", 500 
 
 # Add a route for static asset discovery (like in metric_views)
 @security_bp.route('/static/<path:filename>')

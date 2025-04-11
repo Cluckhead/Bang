@@ -90,7 +90,7 @@
                     {% for col_name in columns_to_display %}
                         <td>
                             {% if col_name == id_col %}
-                                <a href="{{ url_for('spread_duration_comparison_bp.details', security_id=row[id_col]|urlencode) }}">{{ row[id_col] }}</a> {# Updated Detail URL #}
+                                <a href="{{ url_for('spread_duration_comparison_bp.spread_duration_comparison_details', security_id=row[id_col]|urlencode) }}">{{ row[id_col] }}</a> {# Updated Detail URL #}
                             {% elif col_name in ['Level_Correlation', 'Change_Correlation'] and row[col_name] is not none %}
                                 {# Attempt to format as float, handle potential errors gracefully #}
                                 {% set formatted_val = "%.3f"|format(row[col_name]|float) if row[col_name] is number else row[col_name] %}

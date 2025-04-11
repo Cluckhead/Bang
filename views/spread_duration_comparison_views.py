@@ -8,6 +8,7 @@ import pandas as pd
 import os
 import logging
 import math # Add math for pagination calculation
+from urllib.parse import unquote # Import unquote
 
 # Assuming security_processing and utils are in the parent directory or configured in PYTHONPATH
 try:
@@ -376,29 +377,55 @@ def summary():
         return f"An internal error occurred: {e}", 500
 
 
-@spread_duration_comparison_bp.route('/spread_duration_comparison/details/<path:security_id>') # Updated route
-def details(security_id):
-    """Displays detailed comparison charts for a single security's spread duration."""
-    log.info(f"--- Starting Spread Duration Comparison Details Request for Security ID: {security_id} ---")
+@spread_duration_comparison_bp.route('/spread_duration_comparison/details/<path:security_id>')
+def spread_duration_comparison_details(security_id):
+    """Displays side-by-side historical spread duration charts for a specific security."""
+    # --- Debugging: Log the received security ID --- START
+    log.info(f"--- Entering spread_duration_comparison_details ---")
+    log.info(f"Received security_id (raw from path): '{security_id}' (Type: {type(security_id)})")
+
+    # --- Explicitly Decode the ID --- START
+    try:
+        decoded_security_id = unquote(security_id)
+        log.info(f"Decoded security_id: '{decoded_security_id}' (Type: {type(decoded_security_id)})")
+    except Exception as e:
+        log.error(f"Error decoding security_id '{security_id}': {e}")
+        # Fallback or return error? Using original for now, but likely to fail.
+        decoded_security_id = security_id
+        log.warning("Proceeding with potentially undecoded security_id due to decoding error.")
+    # --- Explicitly Decode the ID --- END
+
+    log.info(f"Fetching spread duration comparison details for security: {decoded_security_id}") # Use decoded ID in log
+
     try:
         # Load the merged data again (could potentially cache this)
         # Specify filenames explicitly
         merged_df, _, common_static_cols, id_col_name = load_comparison_data(file1='sec_Spread duration.csv', file2='sec_Spread durationSP.csv')
 
         if id_col_name is None:
-             log.error(f"Failed to get ID column name for details view (Security: {security_id}).")
+             log.error(f"Failed to get ID column name for details view (Security: {decoded_security_id}).") # Use decoded ID
              return "Error loading spread duration comparison data: Could not determine ID column.", 500
         if merged_df.empty:
-            log.warning(f"Merged spread duration data is empty for details view (Security: {security_id}).")
-            return f"No merged spread duration data found for Security ID: {security_id}", 404
+            log.warning(f"Merged spread duration data is empty for details view (Security: {decoded_security_id}).") # Use decoded ID
+            return f"No merged spread duration data found for Security ID: {decoded_security_id}", 404 # Use decoded ID
 
-        # Filter data for the specific security using the correct ID column name
-        security_data = merged_df[merged_df[id_col_name] == security_id].copy() # Use .copy()
+        # --- Debugging: Log ID column and sample IDs from DataFrame --- START
+        log.info(f"Identified ID column name: '{id_col_name}'")
+        if id_col_name in merged_df.columns:
+             sample_ids = merged_df[id_col_name].unique()[:5] # Get first 5 unique IDs
+             log.info(f"Sample IDs from DataFrame column '{id_col_name}': {sample_ids}")
+             log.info(f"Data type of column '{id_col_name}': {merged_df[id_col_name].dtype}")
+        else:
+            log.warning(f"ID column '{id_col_name}' not found in merged_df columns for sampling.")
+        # --- Debugging: Log ID column and sample IDs from DataFrame --- END
+
+        # Filter data for the specific security using the DECODED ID and correct ID column name
+        security_data = merged_df[merged_df[id_col_name] == decoded_security_id].copy() # Use decoded_security_id
 
         if security_data.empty:
-            log.warning(f"No spread duration data found for the specific Security ID: {security_id}")
+            log.warning(f"No spread duration data found after filtering for the specific Security ID: {decoded_security_id}") # Use decoded ID
             # Consider checking if the ID exists in the original files?
-            return f"Spread Duration data not found for Security ID: {security_id}", 404
+            return f"Spread Duration data not found for Security ID: {decoded_security_id}", 404 # Use decoded ID
 
         # Get static info for this security (handle potential multiple rows if ID isn't unique, take first)
         static_info = security_data[[id_col_name] + common_static_cols].iloc[0].to_dict() if not security_data.empty else {}
@@ -444,19 +471,19 @@ def details(security_id):
                  elif 'Diff' in key and pd.notna(value):
                       stats_dict[key] = f"{value:.2f}" # Adjust formatting as needed
 
-        log.info(f"Successfully prepared data for spread duration details template (Security: {security_id})")
+        log.info(f"Successfully prepared data for spread duration details template (Security: {decoded_security_id})") # Use decoded ID
         return render_template('spread_duration_comparison_details_page.html', # Updated template
-                               security_id=security_id,
+                               security_id=decoded_security_id, # Pass decoded ID to template
                                static_info=static_info, # Pass static info
                                chart_data=chart_data,
                                stats_summary=stats_dict) # Pass calculated stats
 
     except FileNotFoundError as e:
-        log.error(f"Spread duration comparison file not found for details view: {e} (Security: {security_id})")
+        log.error(f"Spread duration comparison file not found for details view: {e} (Security: {decoded_security_id})") # Use decoded ID
         return f"Error: Required spread duration comparison file not found ({e.filename}). Check the Data folder.", 404
     except KeyError as e:
-         log.error(f"KeyError accessing data for security '{security_id}': {e}. ID column used: '{id_col_name}'")
-         return f"Error accessing data for security '{security_id}'. It might be missing required columns or have unexpected formatting.", 500
+         log.error(f"KeyError accessing data for security '{decoded_security_id}': {e}. ID column used: '{id_col_name}'") # Use decoded ID
+         return f"Error accessing data for security '{decoded_security_id}'. It might be missing required columns or have unexpected formatting.", 500 # Use decoded ID
     except Exception as e:
-        log.exception(f"An unexpected error occurred in the spread duration comparison details view for security '{security_id}'.") # Log full traceback
-        return f"An internal error occurred while processing details for security '{security_id}': {e}", 500 
+        log.exception(f"An unexpected error occurred in the spread duration comparison details view for security '{decoded_security_id}'.") # Use decoded ID
+        return f"An internal error occurred while processing details for security '{decoded_security_id}': {e}", 500 # Use decoded ID 

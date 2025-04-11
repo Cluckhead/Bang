@@ -114,7 +114,7 @@ main.js:29 DOM fully loaded and parsed
                             <td>
                                 {# Link for ID column #}
                                 {% if col_name == id_col_name %}
-                                    <a href="{{ url_for('security.security_details_page', metric_name='Spread', security_id=row[col_name]|urlencode) }}">
+                                    <a href="{{ url_for('security.security_details', metric_name='Spread', security_id=row[col_name]|urlencode) }}">
                                         {{ row[col_name] }}
                                     </a>
                                 {# Formatting for numeric columns #}

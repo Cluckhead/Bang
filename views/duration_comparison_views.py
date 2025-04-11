@@ -376,10 +376,10 @@ def summary():
         return f"An internal error occurred: {e}", 500
 
 
-@duration_comparison_bp.route('/duration_comparison/details/<path:security_id>') # Updated route
-def details(security_id):
-    """Displays detailed comparison charts for a single security's duration."""
-    log.info(f"--- Starting Duration Comparison Details Request for Security ID: {security_id} ---")
+@duration_comparison_bp.route('/duration_comparison/details/<path:security_id>')
+def duration_comparison_details(security_id):
+    """Displays side-by-side historical duration charts for a specific security."""
+    log.info(f"Fetching duration comparison details for security: {security_id}")
     try:
         # Load the merged data again (could potentially cache this)
         # Specify filenames explicitly

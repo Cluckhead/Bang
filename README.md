@@ -1,3 +1,9 @@
+**Important Note on Date Formats:**
+
+Throughout this application, date processing logic (especially when identifying date columns in input files) should be flexible. Aim to handle common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and `YYYY-MM-DDTHH:MM:SS` where appropriate, particularly during initial data loading and column identification steps. While pre-processing steps might standardize dates to `YYYY-MM-DD`, initial parsing should be robust.
+
+---
+
 # Simple Data Checker
 
 This application provides a web interface to load, process, and check financial data, primarily focusing on time-series metrics and security-level data. It helps identify potential data anomalies by calculating changes and Z-scores.
@@ -20,6 +26,7 @@ This application provides a web interface to load, process, and check financial 
 *   **Data Simulation & Management:**
     *   Simulate API calls to fetch data via the `/get_data` page.
     *   Run a data cleanup process via a button on the `/get_data` page.
+*   **Handling Special Characters in IDs:** Security IDs can contain special characters, including slashes (`/`). The application uses URL encoding in links and the `path` converter in Flask routes to handle these correctly.
 
 ## File Structure Overview
 
