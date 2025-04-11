@@ -26,7 +26,7 @@ This application provides a web interface to load, process, and check financial 
 *   **Data Simulation & Management:**
     *   Simulate API calls to fetch data via the `/get_data` page.
     *   Run a data cleanup process via a button on the `/get_data` page.
-*   **Handling Special Characters in IDs:** Security IDs can contain special characters, including slashes (`/`). The application uses URL encoding in links and the `path` converter in Flask routes to handle these correctly.
+*   **Handling Special Characters in IDs:** Security IDs can contain special characters, including slashes (`/`, `\\`), spaces, and symbols (`#`). The application uses the `urlencode` filter in templates to create safe URLs and the `<path:security_id>` converter in Flask routes to capture these IDs correctly. **Note:** Inside view functions receiving such IDs, especially when comparing against data (e.g., filtering a DataFrame), it may be necessary to explicitly decode the `security_id` variable using `urllib.parse.unquote(security_id)` to ensure it matches the format stored in the data source.
 
 ## File Structure Overview
 
