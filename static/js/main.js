@@ -21,12 +21,15 @@
 // static/js/main.js
 // Purpose: Main entry point for client-side JavaScript. Initializes modules based on page content.
 
-import { renderChartsAndTables, renderSingleSecurityChart, renderFundCharts } from './modules/ui/chartRenderer.js';
+import { renderChartsAndTables, renderSingleSecurityChart, renderFundCharts, toggleSecondaryDataVisibility } from './modules/ui/chartRenderer.js';
 import { initSecurityTableFilter } from './modules/ui/securityTableFilter.js';
 import { initTableSorter } from './modules/ui/tableSorter.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM fully loaded and parsed");
+
+    // --- Shared Elements --- 
+    const toggleSwitch = document.getElementById('toggleSpData'); // Find toggle switch globally
 
     // --- Metric Page (Multiple Charts per Metric) ---    
     const metricChartDataElement = document.getElementById('chartData');
@@ -39,15 +42,34 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Raw JSON string from script tag:", chartDataJson);
             const fullChartData = JSON.parse(chartDataJson);
             console.log('Parsed fullChartData object:', fullChartData);
-            console.log('Checking fullChartData.metadata:', fullChartData ? fullChartData.metadata : 'fullChartData is null/undefined');
+            // Metadata needed for toggle logic
+            const metadata = fullChartData ? fullChartData.metadata : null; 
+            console.log('Checking fullChartData.metadata:', metadata);
             console.log('Checking fullChartData.funds:', fullChartData ? fullChartData.funds : 'fullChartData is null/undefined');
 
-            if (fullChartData && fullChartData.metadata && fullChartData.funds && Object.keys(fullChartData.funds).length > 0) {
+            if (metadata && fullChartData.funds && Object.keys(fullChartData.funds).length > 0) {
                 console.log("Conditional check passed. Calling renderChartsAndTables...");
+                // Render charts and tables (this now just shows/hides the container)
                 renderChartsAndTables(
                     metricChartsArea,
                     fullChartData
                 );
+
+                // Now, attach the event listener if the toggle exists and data is available
+                if (toggleSwitch && metadata.secondary_data_available) {
+                     console.log("[main.js] Attaching toggle listener for Metric Page.");
+                    toggleSwitch.addEventListener('change', (event) => {
+                        const showSecondary = event.target.checked;
+                        console.log(`[main.js Metric Page Toggle] Toggle changed. Show Secondary: ${showSecondary}`);
+                        toggleSecondaryDataVisibility(showSecondary); // Call imported function
+                    });
+                } else if (toggleSwitch) {
+                     console.log("[main.js] Toggle exists, but secondary data not available for Metric Page.");
+                     toggleSwitch.disabled = true;
+                } else {
+                    console.log("[main.js] Toggle switch not found for Metric Page.");
+                }
+
             } else {
                 console.error('Parsed metric chart data is missing expected structure or funds are empty:', fullChartData);
                 metricChartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid data structure or no fund data.</div>';
@@ -69,11 +91,35 @@ document.addEventListener('DOMContentLoaded', () => {
             const allChartData = JSON.parse(fundChartDataJson);
             console.log('Parsed fund chart data:', JSON.parse(JSON.stringify(allChartData)));
 
-            if (Array.isArray(allChartData) && allChartData.length > 0) {
-                renderFundCharts(fundChartsArea, allChartData);
-            } else if (Array.isArray(allChartData) && allChartData.length === 0) {
-                console.log("No chart data provided for this fund.");
-                // Message is already shown by the template
+            // Check if any SP data is available *before* rendering
+            const anySpDataAvailable = allChartData.some(chartInfo => 
+                chartInfo.datasets && chartInfo.datasets.some(ds => ds.isSpData === true)
+            );
+
+            if (Array.isArray(allChartData)) { // Check if it's an array (even if empty)
+                // Render charts first
+                 renderFundCharts(fundChartsArea, allChartData);
+
+                // Setup toggle based on data availability
+                if (toggleSwitch) {
+                    if (anySpDataAvailable) {
+                         console.log("[main.js] Attaching toggle listener for Fund Detail Page.");
+                        toggleSwitch.disabled = false;
+                        toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data';
+                        toggleSwitch.addEventListener('change', (event) => {
+                            const showSecondary = event.target.checked;
+                            console.log(`[main.js Fund Detail Page Toggle] Toggle changed. Show SP: ${showSecondary}`);
+                            toggleSecondaryDataVisibility(showSecondary); // Call imported function
+                        });
+                    } else {
+                        console.log("[main.js] Fund Detail Page: No SP data available, disabling toggle.");
+                        toggleSwitch.disabled = true;
+                        toggleSwitch.checked = false;
+                        toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data (N/A)';
+                    }
+                } else {
+                    console.log("[main.js] Toggle switch not found for Fund Detail Page.");
+                }
             } else {
                  console.error('Parsed fund chart data is not an array or is invalid:', allChartData);
                 fundChartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid chart data received.</div>';

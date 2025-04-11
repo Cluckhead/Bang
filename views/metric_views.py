@@ -166,7 +166,8 @@ def metric_page(metric_name):
                         'data': bench_values,
                         'borderColor': 'black', 'backgroundColor': 'grey',
                         'borderDash': [5, 5], 'tension': 0.1,
-                        'source': 'primary'
+                        'source': 'primary',
+                        'isSpData': False
                     })
                 if pri_fund_cols:
                     for i, fund_col in enumerate(pri_fund_cols):
@@ -178,7 +179,8 @@ def metric_page(metric_name):
                                 'data': fund_values,
                                 'borderColor': color, 'backgroundColor': color + '40',
                                 'tension': 0.1,
-                                'source': 'primary'
+                                'source': 'primary',
+                                'isSpData': False
                             })
             else:
                 print(f"Warning: Fund {fund_code} not found in primary source for historical data.")
@@ -218,6 +220,7 @@ def metric_page(metric_name):
                         'backgroundColor': '#FFDAB9',
                         'borderDash': [2, 2], 'tension': 0.1,
                         'source': 'secondary',
+                        'isSpData': True,
                         'hidden': True
                     })
                 if sec_fund_cols:
@@ -240,6 +243,7 @@ def metric_page(metric_name):
                                 'borderDash': [2, 2],
                                 'tension': 0.1,
                                 'source': 'secondary',
+                                'isSpData': True,
                                 'hidden': True
                             })
             elif secondary_data_available:

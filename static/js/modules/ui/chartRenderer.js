@@ -47,25 +47,18 @@ export function renderChartsAndTables(container, payload) {
     const toggleContainer = document.getElementById('sp-toggle-container');
     const toggleSwitch = document.getElementById('toggleSpData');
 
-    if (toggleContainer && toggleSwitch) {
+    // Only control visibility of the container here
+    // Event listener will be attached by the caller (main.js)
+    if (toggleContainer) {
         if (secondaryDataAvailable) {
-            console.log("[chartRenderer] Secondary data available, showing toggle switch.");
-            toggleContainer.style.display = 'block'; // Show the toggle
-            // Remove previous listeners if any
-            toggleSwitch.replaceWith(toggleSwitch.cloneNode(true));
-            const newToggleSwitch = document.getElementById('toggleSpData'); // Get the new cloned element
-            // Add new listener
-            newToggleSwitch.addEventListener('change', (event) => {
-                const showSecondary = event.target.checked;
-                console.log(`[chartRenderer] Toggle changed. Show Secondary: ${showSecondary}`);
-                toggleSecondaryDataVisibility(showSecondary);
-            });
+            console.log("[chartRenderer] Secondary data available, ensuring toggle container is visible.");
+            toggleContainer.style.display = 'block'; // Show the toggle container
         } else {
-            console.log("[chartRenderer] Secondary data not available, hiding toggle switch.");
-            toggleContainer.style.display = 'none'; // Ensure toggle is hidden
+            console.log("[chartRenderer] Secondary data not available, ensuring toggle container is hidden.");
+            toggleContainer.style.display = 'none'; // Ensure toggle container is hidden
         }
     } else {
-        console.warn("[chartRenderer] Toggle switch container or input not found in the DOM.");
+        console.warn("[chartRenderer] Toggle switch container not found in the DOM.");
     }
 
     // --- Render Chart and Table for Each Fund --- 
