@@ -7,6 +7,7 @@ import traceback
 import logging # Added for logging
 import glob # Added for finding files
 import re # Added for extracting metric name
+import numpy as np
 
 # Import necessary functions from other modules
 from config import DATA_FOLDER
@@ -34,7 +35,7 @@ def fund_duration_details(fund_code):
         all_cols = [col.strip() for col in header_df.columns.tolist()]
 
         # Define ID column (specific to this file/route)
-        id_col_name = 'Security Name' # Assuming this remains the ID for this specific file
+        id_col_name = 'ISIN'
         if id_col_name not in all_cols:
             print(f"Error: Expected ID column '{id_col_name}' not found in {duration_filename}.")
             return f"Error: Required ID column '{id_col_name}' not found in '{duration_filename}'.", 500
@@ -45,6 +46,8 @@ def fund_duration_details(fund_code):
         for col in all_cols:
             if col == id_col_name:
                 continue # Skip the ID column
+            if col == 'Security Name':
+                continue # Skip the old ID column if it exists
             if _is_date_like(col): # Use the helper function from utils
                 date_cols.append(col)
             else:
@@ -96,8 +99,99 @@ def fund_duration_details(fund_code):
         mask = fund_lists.apply(lambda funds: fund_code in funds)
         filtered_df = df[mask].copy() # Use copy to avoid SettingWithCopyWarning
 
+        # --- Load and Process Weight Data (w_secs.csv) --- 
+        weights_filename = "w_secs.csv"
+        weights_filepath = os.path.join(DATA_FOLDER, weights_filename)
+        contribution_calculated = False # Flag to track if calculation was successful
+        new_contribution_cols = []
+
+        if not os.path.exists(weights_filepath):
+            print(f"Warning: Weight file '{weights_filename}' not found. Skipping duration contribution calculation.")
+        else:
+            try:
+                print(f"Loading weight file: {weights_filename}")
+                weights_df = pd.read_csv(weights_filepath, encoding='utf-8')
+                weights_df.columns = weights_df.columns.str.strip()
+
+                # Define expected columns in weights file
+                weight_id_col = 'Security Name'
+                weight_fund_col = 'Funds'
+
+                # Check if necessary columns exist in weights_df
+                # Convert the dates from duration file (YYYY-MM-DD) to the format in weights file (DD/MM/YYYY)
+                try:
+                    last_date_dt = pd.to_datetime(last_date_col, format='%Y-%m-%d')
+                    second_last_date_dt = pd.to_datetime(second_last_date_col, format='%Y-%m-%d')
+                    last_date_col_weights_fmt = last_date_dt.strftime('%d/%m/%Y')
+                    second_last_date_col_weights_fmt = second_last_date_dt.strftime('%d/%m/%Y')
+                    print(f"Looking for weight columns: {last_date_col_weights_fmt}, {second_last_date_col_weights_fmt}")
+                except ValueError:
+                     print(f"Error: Could not convert duration dates ({last_date_col}, {second_last_date_col}) to datetime objects for weight lookup. Skipping contribution.")
+                     last_date_col_weights_fmt = None # Ensure it skips if conversion fails
+
+                # Check using the formatted date strings
+                required_weight_cols = [weight_id_col, weight_fund_col]
+                if last_date_col_weights_fmt:
+                    required_weight_cols.extend([last_date_col_weights_fmt, second_last_date_col_weights_fmt])
+                else:
+                    # Skip if dates couldn't be formatted
+                    print(f"Skipping weight check due to date format conversion error.")
+                    all_cols_exist = False
+                
+                all_cols_exist = all(col in weights_df.columns for col in required_weight_cols)
+
+                if not all_cols_exist:
+                    missing_cols = [col for col in required_weight_cols if col not in weights_df.columns]
+                    print(f"Warning: Weight file '{weights_filename}' is missing required columns (needed: {required_weight_cols}, missing: {missing_cols}). Skipping contribution calculation.")
+                else:
+                    print(f"Filtering weights for fund: {fund_code}")
+                    # Filter weights by fund code (assuming direct match in 'Funds' column)
+                    fund_weights_df = weights_df[weights_df[weight_fund_col] == fund_code].copy()
+
+                    if fund_weights_df.empty:
+                        print(f"Warning: No weights found for fund '{fund_code}' in {weights_filename}. Contribution will be zero.")
+                        # Create empty df with correct columns to avoid merge errors later if we still want zero cols
+                        weights_to_merge = pd.DataFrame(columns=[weight_id_col, 'Weight Last Date', 'Weight Second Last Date'])
+                        weights_to_merge = weights_to_merge.astype({weight_id_col: 'object', 'Weight Last Date': 'float64', 'Weight Second Last Date': 'float64'})
+                    else:
+                         # Select and rename relevant weight columns using the CORRECT formatted date strings
+                        weights_to_merge = fund_weights_df[[weight_id_col, last_date_col_weights_fmt, second_last_date_col_weights_fmt]].copy()
+                        weights_to_merge.rename(columns={
+                            last_date_col_weights_fmt: 'Weight Last Date',
+                            second_last_date_col_weights_fmt: 'Weight Second Last Date'
+                        }, inplace=True)
+                        
+                         # Ensure weight columns are numeric
+                        weights_to_merge['Weight Last Date'] = pd.to_numeric(weights_to_merge['Weight Last Date'], errors='coerce')
+                        weights_to_merge['Weight Second Last Date'] = pd.to_numeric(weights_to_merge['Weight Second Last Date'], errors='coerce')
+
+                    # Merge weights with filtered duration data
+                    print(f"Merging duration data with weights on '{weight_id_col}'")
+                    filtered_df = pd.merge(filtered_df, weights_to_merge, on=weight_id_col, how='left')
+
+                    # Fill missing weights with 0 and calculate contribution
+                    filtered_df['Weight Last Date'].fillna(0, inplace=True)
+                    filtered_df['Weight Second Last Date'].fillna(0, inplace=True)
+
+                    contrib_last_col = 'Duration Contribution Last Date'
+                    contrib_second_last_col = 'Duration Contribution Second Last Date'
+                    contrib_change_col = 'Duration Contribution Change'
+
+                    filtered_df[contrib_last_col] = filtered_df[last_date_col] * filtered_df['Weight Last Date']
+                    filtered_df[contrib_second_last_col] = filtered_df[second_last_date_col] * filtered_df['Weight Second Last Date']
+                    filtered_df[contrib_change_col] = filtered_df[contrib_last_col] - filtered_df[contrib_second_last_col]
+
+                    contribution_calculated = True
+                    new_contribution_cols = [contrib_second_last_col, contrib_last_col, contrib_change_col]
+                    print("Duration contribution calculated successfully.")
+
+            except Exception as weight_err:
+                 print(f"Error processing weight file '{weights_filename}': {weight_err}. Skipping contribution calculation.")
+                 traceback.print_exc()
+        # --- End Weight Data Processing ---
+
         if filtered_df.empty:
-            print(f"No securities found for fund '{fund_code}' in {duration_filename}.")
+            print(f"No securities found for fund '{fund_code}' in {duration_filename} after initial filtering.")
             # Render a template indicating no data found for this fund
             return render_template('fund_duration_details.html',
                                    fund_code=fund_code,
@@ -106,26 +200,38 @@ def fund_duration_details(fund_code):
                                    id_col_name=None,
                                    message=f"No securities found held by fund '{fund_code}' in {duration_filename}.")
 
-        print(f"Found {len(filtered_df)} securities for fund '{fund_code}'. Calculating changes...")
+        print(f"Found {len(filtered_df)} securities for fund '{fund_code}'. Calculating duration changes...")
 
-        # 4. Calculate 1-day Change
+        # 4. Calculate 1-day Duration Change (already done if contribution wasn't skipped)
         change_col_name = '1 Day Duration Change'
-        filtered_df[change_col_name] = filtered_df[last_date_col] - filtered_df[second_last_date_col]
+        if change_col_name not in filtered_df.columns:
+            filtered_df[change_col_name] = filtered_df[last_date_col] - filtered_df[second_last_date_col]
 
-        # 5. Sort by Change (descending, NaN last)
+        # 5. Sort by Duration Change (descending, NaN last)
         filtered_df.sort_values(by=change_col_name, ascending=False, na_position='last', inplace=True)
         print(f"Sorted securities by {change_col_name}.")
 
         # 6. Prepare data for template
-        # Select columns for display - use the dynamically identified static_cols
-        # ID column is already defined as id_col_name
-        # Filter static_cols to ensure they exist in the filtered_df after operations
+        # Define base display columns
         existing_static_cols = [col for col in static_cols if col in filtered_df.columns]
+        if 'Security Name' in filtered_df.columns and 'Security Name' not in existing_static_cols:
+            existing_static_cols.insert(0, 'Security Name') # Add Security Name near the start
+
+        # Define column order, putting ISIN (the new id_col_name) first
         display_cols = [id_col_name] + existing_static_cols + [second_last_date_col, last_date_col, change_col_name]
+        
+        # Add contribution columns if they were calculated
+        if contribution_calculated:
+            display_cols.extend(new_contribution_cols)
+
         final_col_order = [col for col in display_cols if col in filtered_df.columns] # Ensure only existing columns are kept
 
-        securities_data_list = filtered_df[final_col_order].round(3).to_dict(orient='records')
-        # Handle potential NaN values for template rendering
+        # Round numeric columns before converting to dict
+        numeric_cols_in_final = filtered_df[final_col_order].select_dtypes(include=np.number).columns
+        filtered_df[numeric_cols_in_final] = filtered_df[numeric_cols_in_final].round(4) # Use more precision for contribution?
+
+        securities_data_list = filtered_df[final_col_order].to_dict(orient='records')
+        # Handle potential NaN/NaT values for template rendering
         for row in securities_data_list:
              for key, value in row.items():
                  if pd.isna(value):

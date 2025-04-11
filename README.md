@@ -239,8 +239,15 @@ These modules contain the Flask Blueprints defining the application's routes.
         *   Loads spread data (`sec_Spread.csv`), applies filters/search/exclusions.
         *   Calculates metrics, sorts data, and selects the current page.
         *   Passes paginated data and metadata to the template.
-        *   Security IDs link to the details page.
-    *   `/security/details/<metric_name>/<path:security_id>`: Renders `security_details_page.html`. Shows historical charts for a specific security and metric.
+        *   Security IDs (now ISINs) link to the details page.
+    *   `/security/details/<metric_name>/<path:security_id>`: Renders `security_details_page.html`.
+        *   Shows historical charts for a specific security (identified by ISIN via `security_id`).
+        *   Displays the requested base `metric_name` overlaid with Price (from `sec_Price.csv`).
+        *   Additionally displays separate charts for:
+            *   Duration (from `sec_Duration.csv`) overlaid with SP Duration (from `sec_DurationSP.csv`).
+            *   Spread Duration (from `sec_Spread duration.csv`) overlaid with SP Spread Duration (from `sec_Spread durationSP.csv`).
+            *   Spread (from `sec_Spread.csv`) overlaid with SP Spread (from `sec_SpreadSP.csv`).
+        *   SP data files are loaded if they exist.
 
 ### `views/fund_views.py` (`fund_bp`)
 *   **Purpose:** Fund-specific views.

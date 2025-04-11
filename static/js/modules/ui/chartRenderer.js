@@ -140,16 +140,16 @@ export function renderChartsAndTables(container, payload) {
             chartWrapper.className = `chart-container-wrapper chart-type-${chartType} col-lg-6`; 
             chartWrapper.id = `chart-wrapper-${chartId}`;
 
-            // Create Chart Canvas
-            const canvas = document.createElement('canvas');
+        // Create Chart Canvas
+        const canvas = document.createElement('canvas');
             canvas.id = `chart-${chartId}`;
-            canvas.className = 'chart-canvas';
+        canvas.className = 'chart-canvas';
             chartWrapper.appendChild(canvas);
 
             // Create Metrics Table (pass specific metrics and chart type)
-            const table = createMetricsTable(
+        const table = createMetricsTable(
                 chartMetrics,
-                latestDate,
+            latestDate,
                 chartType, // Pass chart type to determine columns
                 metadata // Pass full metadata for context
             );
@@ -158,10 +158,10 @@ export function renderChartsAndTables(container, payload) {
             // Append chartWrapper to the row, not the fundWrapper directly
             chartsRow.appendChild(chartWrapper); 
 
-            // --- Render Chart --- 
-            setTimeout(() => {
-                const chartCanvas = document.getElementById(canvas.id);
-                if (chartCanvas && chartCanvas.getContext('2d')) {
+        // --- Render Chart --- 
+        setTimeout(() => {
+            const chartCanvas = document.getElementById(canvas.id);
+             if (chartCanvas && chartCanvas.getContext('2d')) {
                     console.log(`[chartRenderer] Rendering chart for ${chartId}`);
                     
                     // Prepare chart data object for the charting function
@@ -181,24 +181,24 @@ export function renderChartsAndTables(container, payload) {
                         zScoreForChartTitle, // Pass main Z-score only to main chart
                         isMissingLatest // Still relevant at fund level
                     );
-                    if (chart) {
+                 if (chart) {
                         chartInstances[chartId] = chart; // Store chart instance with unique ID
                         console.log(`[chartRenderer] Stored chart instance for ${chartId}`);
-                    } else {
+                 } else {
                         console.error(`[chartRenderer] Failed to create chart instance for ${chartId}`);
-                    }
-                } else {
-                    console.error(`[chartRenderer] Could not get 2D context for canvas ${canvas.id}`);
-                    const errorP = document.createElement('p');
-                    errorP.textContent = 'Error rendering chart.';
-                    errorP.className = 'text-danger';
-                    if (chartCanvas && chartCanvas.parentNode) {
-                        chartCanvas.parentNode.replaceChild(errorP, chartCanvas);
+                 }
+            } else {
+                console.error(`[chartRenderer] Could not get 2D context for canvas ${canvas.id}`);
+                const errorP = document.createElement('p');
+                errorP.textContent = 'Error rendering chart.';
+                errorP.className = 'text-danger';
+                if (chartCanvas && chartCanvas.parentNode) {
+                    chartCanvas.parentNode.replaceChild(errorP, chartCanvas);
                     } else if (chartWrapper) {
                         chartWrapper.appendChild(errorP);
-                    }
                 }
-            }, 0); 
+            }
+        }, 0); 
         }); // End loop through charts for the fund
 
         // Append the row containing the charts to the main fund wrapper
@@ -224,18 +224,18 @@ export function toggleSecondaryDataVisibility(show) { // Make sure this is expor
         }
         let spDatasetToggled = false;
         try {
-            chart.data.datasets.forEach((dataset, index) => {
-                // Check the isSpData flag added from Python
-                if (dataset.isSpData === true) {
-                    // Use setDatasetVisibility for better control than just 'hidden' property
-                    chart.setDatasetVisibility(index, show);
+        chart.data.datasets.forEach((dataset, index) => {
+            // Check the isSpData flag added from Python
+            if (dataset.isSpData === true) {
+                // Use setDatasetVisibility for better control than just 'hidden' property
+                chart.setDatasetVisibility(index, show);
                     console.log(`[chartRenderer] Chart ${chart.canvas.id} (${chartId}) - Setting SP dataset ${index} ('${dataset.label}') visibility to ${show}`);
-                    spDatasetToggled = true;
-                }
-            });
-            // Only update if an SP dataset was actually toggled for this chart
-            if (spDatasetToggled) {
-                chart.update(); // Update the chart to reflect visibility changes
+                spDatasetToggled = true;
+            }
+        });
+        // Only update if an SP dataset was actually toggled for this chart
+        if (spDatasetToggled) {
+            chart.update(); // Update the chart to reflect visibility changes
                 console.log(`[chartRenderer] Updated chart ${chart.canvas.id} (${chartId})`);
             }
         } catch (error) {
@@ -305,7 +305,7 @@ function createMetricsTable(
     const addRow = (displayName, baseKey, isSecondary = false) => {
         const prefix = isSecondary ? secondaryPrefix : '';
         const fullBaseKey = prefix + baseKey;
-
+        
         // Check if *any* metric exists for this base key and prefix
         const latestValKey = `${fullBaseKey} Latest Value`;
         const changeKey = `${fullBaseKey} Change`;
@@ -327,7 +327,7 @@ function createMetricsTable(
                 const absZ = Math.abs(zScore);
                 if (absZ > 3) { zClass = 'very-high-z'; }
                 else if (absZ > 2) { zClass = 'high-z'; }
-            }
+        }
             row.className = zClass;
             
             row.insertCell().textContent = displayName;
@@ -376,7 +376,7 @@ function createMetricsTable(
                 const absZ = Math.abs(zScore);
                 if (absZ > 3) { zClass = 'very-high-z'; }
                 else if (absZ > 2) { zClass = 'high-z'; }
-            }
+                }
             row.className = zClass;
 
             row.insertCell().textContent = displayName;
@@ -424,7 +424,7 @@ function createMetricsTable(
     }
 
     return table;
-}
+} 
 
 /**
  * Renders a single time series chart for a specific security.

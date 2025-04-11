@@ -21,7 +21,12 @@
                 <tr>
                     {# Use the column_order provided by the backend #}
                     {% for col_name in column_order %}
-                        <th>{{ col_name }}</th>
+                        {# Add sortable class and data attribute. Add default sort attribute if it matches. #}
+                        <th class="sortable"
+                            data-column-name="{{ col_name }}"
+                            {% if col_name == 'Duration Contribution Change' %}data-sort-default="desc"{% endif %}>
+                            {{ col_name }}
+                        </th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -41,14 +46,15 @@
                      #}
                     <tr class="{{ row_class }}">
                         {% for col_name in column_order %}
-                            <td>
+                            {# Add data-value for numeric columns to aid sorting #}
+                            <td {% if row[col_name] is number %}data-value="{{ row[col_name] }}"{% endif %}>
                                 {# Special formatting for the change column or others if needed #}
                                 {% if col_name == id_col_name %}
                                      {# Make the Security Name a link #}
-                                     <a href="{{ url_for('security.security_details_page', metric_name='Duration', security_id=row[col_name]|urlencode) }}">{{ row[col_name] }}</a>
+                                     <a href="{{ url_for('security.security_details', metric_name='Duration', security_id=row[col_name]|urlencode) }}">{{ row[col_name] }}</a>
                                 {% elif row[col_name] is number %}
                                     {# Format numeric columns, maybe specific format for change #}
-                                     {{ "%.3f"|format(row[col_name]) }}
+                                     {{ "%.4f"|format(row[col_name]) }} {# Use 4 decimal places consistent with backend rounding #}
                                 {% else %}
                                      {{ row[col_name] if row[col_name] is not none else '' }}
                                 {% endif %}

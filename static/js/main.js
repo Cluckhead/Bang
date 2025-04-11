@@ -148,40 +148,11 @@ document.addEventListener('DOMContentLoaded', () => {
         initTableSorter('comparison-table'); // Enable client-side sorting
     }
 
-    // --- Security Details Page (Single Chart) ---
-    const securityChartCanvas = document.getElementById('primarySecurityChart');
-    const securityJsonDataElement = document.getElementById('chartJsonData');
-
-    if (securityChartCanvas && securityJsonDataElement) {
-        console.log("Security details page detected. Initializing single chart.");
-        try {
-            const securityChartData = JSON.parse(securityJsonDataElement.textContent);
-            if (securityChartData && securityChartData.primary && securityChartData.primary.labels && securityChartData.primary.datasets) {
-                renderSingleSecurityChart(
-                    securityChartCanvas.id,
-                    securityChartData.primary.labels,
-                    securityChartData.primary.datasets,
-                    securityChartData.security_id + ' - ' + securityChartData.metric_name
-                );
-                
-                const durationChartCanvas = document.getElementById('durationSecurityChart');
-                if(durationChartCanvas && securityChartData.duration && securityChartData.duration.labels && securityChartData.duration.datasets) {
-                    renderSingleSecurityChart(
-                        durationChartCanvas.id,
-                        securityChartData.duration.labels,
-                        securityChartData.duration.datasets,
-                        securityChartData.security_id + ' - Duration'
-                    );
-                }
-
-            } else {
-                console.warn('Security chart JSON data is incomplete or invalid.', securityChartData);
-            }
-        } catch (error) {
-            console.error('Error parsing security chart data or rendering chart:', error);
-        }
-    } else {
-       // console.log("Security chart canvas or JSON data element not found, skipping single chart rendering.");
+    // --- Fund Duration Details Page ---
+    const fundDurationTable = document.getElementById('fund-duration-table');
+    if (fundDurationTable) {
+        console.log("Fund duration details page table detected. Initializing sorter.");
+        initTableSorter('fund-duration-table'); 
     }
 
     // Add any other global initializations here

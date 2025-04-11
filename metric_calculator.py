@@ -200,51 +200,9 @@ def _process_dataframe_metrics(
             fund_data_hist = df.loc[(slice(None), fund_code), cols_to_process]
             fund_data_hist = fund_data_hist.reset_index(level=1, drop=True).sort_index()
 
-            # --- Begin Relative Calculation Logic ---
-            first_fund_col_found = None
-            for f_col in fund_cols:
-                if f_col in fund_data_hist.columns:
-                    first_fund_col_found = f_col
-                    break # Use the first one found as the 'Portfolio'
-
-            # Check if both portfolio and benchmark columns are available for this fund
-            if first_fund_col_found and benchmark_col and benchmark_col in fund_data_hist.columns:
-                port_col_hist = fund_data_hist[first_fund_col_found]
-                bench_col_hist = fund_data_hist[benchmark_col]
-
-                # Ensure both series have data before calculating relative
-                if not port_col_hist.dropna().empty and not bench_col_hist.dropna().empty:
-                    relative_hist = port_col_hist - bench_col_hist
-                    relative_change_hist = pd.Series(index=relative_hist.index, dtype=np.float64)
-                    if not relative_hist.dropna().empty and len(relative_hist.dropna()) > 1:
-                        relative_change_hist = relative_hist.diff()
-                    else:
-                         logger.debug(f"Cannot calculate difference for Relative series, {metric_prefix}fund \'{fund_code}\' due to insufficient data.")
-
-                    # Calculate stats for the 'Relative' series
-                    relative_stats = _calculate_column_stats(
-                        relative_hist,
-                        relative_change_hist,
-                        latest_date,
-                        "Relative", # Use fixed name "Relative"
-                        prefix=metric_prefix
-                    )
-                    fund_specific_metrics.update(relative_stats)
-                    # Note: We do NOT update current_fund_max_abs_z based on the relative Z-score
-                    # Sorting should still be based on the primary fund/benchmark deviations.
-                else:
-                    logger.debug(f"Skipping Relative calculation for {metric_prefix}fund '{fund_code}' due to missing data in portfolio ('{first_fund_col_found}') or benchmark ('{benchmark_col}') series.")
-            elif first_fund_col_found and benchmark_col:
-                 logger.debug(f"Skipping Relative calculation for {metric_prefix}fund '{fund_code}': Benchmark column '{benchmark_col}' not found in fund's specific data slice.")
-            elif benchmark_col:
-                 logger.debug(f"Skipping Relative calculation for {metric_prefix}fund '{fund_code}': No Fund/Portfolio column found from {fund_cols}.")
-            else:
-                 logger.debug(f"Skipping Relative calculation for {metric_prefix}fund '{fund_code}': Benchmark column not specified for this DataFrame.")
-            # --- End Relative Calculation Logic ---
-
             for col_name in cols_to_process:
                 if col_name not in fund_data_hist.columns:
-                    logger.warning(f"Column \'{col_name}\' unexpectedly not found for fund \'{fund_code}\' in {metric_prefix}DF. Skipping metrics.")
+                    logger.warning(f"Column '{col_name}' unexpectedly not found for fund '{fund_code}' in {metric_prefix}DF. Skipping metrics.")
                     continue
 
                 col_hist = fund_data_hist[col_name]

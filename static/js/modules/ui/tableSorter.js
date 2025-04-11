@@ -45,6 +45,28 @@ export function initTableSorter(tableId) {
             sortRows(tbody, columnIndex, direction, columnName);
         });
     });
+
+    // --- Default Sort --- 
+    const defaultSortHeader = table.querySelector('thead th[data-sort-default]');
+    if (defaultSortHeader) {
+        const defaultDirection = defaultSortHeader.dataset.sortDefault === 'asc' ? 1 : -1;
+        const defaultColumnIndex = Array.from(defaultSortHeader.parentNode.children).indexOf(defaultSortHeader);
+        const defaultColumnName = defaultSortHeader.dataset.columnName;
+
+        console.log(`Table sorter: Applying default sort on column '${defaultColumnName}' (index ${defaultColumnIndex}), direction ${defaultDirection === 1 ? 'asc' : 'desc'}`);
+
+        // Set initial visual indicators
+        if (defaultDirection === 1) {
+            defaultSortHeader.classList.add('sort-asc');
+        } else {
+            defaultSortHeader.classList.add('sort-desc');
+        }
+
+        // Perform the initial sort
+        sortRows(tbody, defaultColumnIndex, defaultDirection, defaultColumnName);
+    } else {
+        console.log(`Table sorter: No default sort specified for table '${tableId}'.`);
+    }
 }
 
 /**
