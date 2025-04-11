@@ -35,50 +35,91 @@ PER_PAGE_COMPARISON = 50 # Items per page for comparison summary
 
 # --- Data Loading and Processing ---
 
-def load_comparison_data(file1='sec_duration.csv', file2='sec_durationSP.csv'): # Updated filenames
-    """Loads, processes, and merges data from two security duration files.
+def load_weights_and_held_status(weights_filename='w_secs.csv'):
+    """Loads weights data and determines the latest held status for each ISIN."""
+    log.info(f"Loading weights data from: {weights_filename}")
+    df_weights, _ = load_and_process_security_data(weights_filename)
+
+    if df_weights.empty:
+        log.warning(f"Weights file '{weights_filename}' is empty or failed to load.")
+        return pd.Series(dtype=bool)
+
+    if 'ISIN' not in df_weights.columns or 'Date' not in df_weights.columns or 'Value' not in df_weights.columns:
+        log.error(f"Weights file '{weights_filename}' is missing required columns (ISIN, Date, Value).")
+        return pd.Series(dtype=bool)
+
+    # Ensure Value is numeric
+    df_weights['Value'] = pd.to_numeric(df_weights['Value'], errors='coerce')
+
+    # Find the latest entry for each ISIN
+    latest_weights = df_weights.loc[df_weights.groupby('ISIN')['Date'].idxmax()]
+
+    # Determine held status (latest weight > 0)
+    held_status = latest_weights.set_index('ISIN')['Value'].fillna(0) > 0 # Fill NaN weights with 0
+    held_status.name = 'is_held'
+
+    log.info(f"Determined latest held status for {len(held_status)} ISINs from '{weights_filename}'.")
+    return held_status
+
+
+def load_duration_comparison_data(file1='sec_duration.csv', file2='sec_durationSP.csv'):
+    """Loads, processes, merges data from two security duration files, and gets held status.
 
     Returns:
-        tuple: (merged_df, static_data, common_static_cols, id_col_name)
-               Returns (pd.DataFrame(), pd.DataFrame(), [], None) on error.
+        tuple: (merged_df, static_data, common_static_cols, id_col_name, held_status)
+               Returns (pd.DataFrame(), pd.DataFrame(), [], None, pd.Series(dtype=bool)) on error.
     """
     log.info(f"Loading duration comparison data: {file1} and {file2}")
-    # Pass only the filename, as load_and_process_security_data prepends DATA_FOLDER internally
     df1, static_cols1 = load_and_process_security_data(file1)
     df2, static_cols2 = load_and_process_security_data(file2)
 
+    # Load held status
+    held_status = load_weights_and_held_status()
+
     if df1.empty or df2.empty:
         log.warning(f"One or both duration dataframes are empty. File1 empty: {df1.empty}, File2 empty: {df2.empty}")
-        return pd.DataFrame(), pd.DataFrame(), [], None # Return None for id_col_name
+        return pd.DataFrame(), pd.DataFrame(), [], None, held_status
 
-    # Identify common static columns (excluding the ID column used for merging)
     common_static_cols = list(set(static_cols1) & set(static_cols2))
 
-    # Get the actual ID column name (should be the same for both, use df1)
-    if df1.index.nlevels == 2:
-        id_col_name = df1.index.names[1] # Assuming 'Security ID'/Name is the second level
-        log.info(f"Identified ID column from index: {id_col_name}")
+    # Identify ID column - check for 'ISIN' first
+    if 'ISIN' in df1.columns:
+        id_col_name = 'ISIN'
+        log.info(f"Identified ID column from columns: {id_col_name}")
+    elif not df1.empty and df1.columns:
+        potential_id = df1.columns[0]
+        log.warning(f"\'ISIN\' column not found in df1. Attempting to use first column \'{potential_id}\' as ID.")
+        id_col_name = potential_id
+        if id_col_name not in df2.columns:
+            log.error(f"Fallback ID column '{id_col_name}' from df1 not found in df2.")
+            return pd.DataFrame(), pd.DataFrame(), [], None, held_status
     else:
-        log.error("Processed Duration DataFrame df1 does not have the expected 2-level MultiIndex.")
-        return pd.DataFrame(), pd.DataFrame(), [], None # Return None for id_col_name
+        log.error("Failed to identify ID column in duration data.")
+        return pd.DataFrame(), pd.DataFrame(), [], None, held_status
 
-    # Prepare for merge - keep only necessary columns and rename Value columns
-    df1_merge = df1.reset_index()[[id_col_name, 'Date', 'Value'] + common_static_cols].rename(columns={'Value': 'Value_Orig'})
-    df2_merge = df2.reset_index()[[id_col_name, 'Date', 'Value']].rename(columns={'Value': 'Value_New'}) # Don't need static cols twice
+    if id_col_name in common_static_cols:
+        common_static_cols.remove(id_col_name)
+        log.debug(f"Removed ID column '{id_col_name}' from common_static_cols.")
 
-    # Perform an outer merge to keep all dates and securities from both files
+    try:
+        df1_merge = df1[[id_col_name, 'Date', 'Value'] + common_static_cols].rename(columns={'Value': 'Value_Orig'})
+        if id_col_name not in df2.columns:
+            log.error(f"ID column '{id_col_name}' identified in df1 not found in df2 columns: {df2.columns.tolist()}")
+            raise KeyError(f"ID column '{id_col_name}' not found in second dataframe")
+        df2_merge = df2[[id_col_name, 'Date', 'Value']].rename(columns={'Value': 'Value_New'})
+    except KeyError as e:
+        log.error(f"Missing required column for merge preparation in duration data: {e}. Df1 cols: {df1.columns.tolist()}, Df2 cols: {df2.columns.tolist()}")
+        return pd.DataFrame(), pd.DataFrame(), [], None, held_status
+
     merged_df = pd.merge(df1_merge, df2_merge, on=[id_col_name, 'Date'], how='outer')
-
-    # Calculate daily changes
     merged_df = merged_df.sort_values(by=[id_col_name, 'Date'])
     merged_df['Change_Orig'] = merged_df.groupby(id_col_name)['Value_Orig'].diff()
     merged_df['Change_New'] = merged_df.groupby(id_col_name)['Value_New'].diff()
 
-    # Store static data separately - get the latest version per security
     static_data = merged_df.groupby(id_col_name)[common_static_cols].last().reset_index()
 
     log.info(f"Successfully merged duration data. Shape: {merged_df.shape}")
-    return merged_df, static_data, common_static_cols, id_col_name # Return the identified ID column name
+    return merged_df, static_data, common_static_cols, id_col_name, held_status
 
 
 def calculate_comparison_stats(merged_df, static_data, id_col):
@@ -201,159 +242,186 @@ def summary():
             sort_order = 'desc'
         ascending = sort_order == 'asc'
 
+        # NEW: Get holding status filter
+        show_sold = request.args.get('show_sold', 'false').lower() == 'true'
+
         # Get active filters (ensuring keys are correct)
         active_filters = {k.replace('filter_', ''): v
                           for k, v in request.args.items()
                           if k.startswith('filter_') and v}
-        log.info(f"Request Params: Page={page}, SortBy={sort_by}, Order={sort_order}, Filters={active_filters}")
+        log.info(f"Request Params: Page={page}, SortBy={sort_by}, Order={sort_order}, Filters={active_filters}, ShowSold={show_sold}")
 
         # --- Load and Prepare Data ---
-        # Capture the actual ID column name returned by the load function
-        merged_data, static_data, static_cols, actual_id_col = load_comparison_data()
+        merged_data, static_data, static_cols, actual_id_col, held_status = load_duration_comparison_data()
 
         if actual_id_col is None:
             log.error("Failed to get ID column name during duration data loading.")
             return "Error loading duration comparison data: Could not determine ID column.", 500
 
-        # Pass the actual ID column name to the stats calculation function
         summary_stats = calculate_comparison_stats(merged_data, static_data, id_col=actual_id_col)
 
-        if summary_stats.empty and not merged_data.empty:
-             log.warning("Duration calculation resulted in empty stats DataFrame, but merged data was present.")
-        elif summary_stats.empty:
-             log.info("No duration summary statistics could be calculated.")
-             # Render with message if empty even before filtering
+        if summary_stats.empty:
+            log.info("No duration summary statistics could be calculated.")
+            return render_template('duration_comparison_page.html', # Updated template
+                                   table_data=[],
+                                   columns_to_display=[],
+                                   id_column_name=actual_id_col,
+                                   filter_options={},
+                                   active_filters={},
+                                   current_sort_by=sort_by,
+                                   current_sort_order=sort_order,
+                                   pagination=None,
+                                   show_sold=show_sold, # Pass filter status
+                                   message="No duration comparison data available.")
+
+        # --- Merge Held Status --- 
+        if not held_status.empty and actual_id_col in summary_stats.columns:
+            summary_stats = pd.merge(summary_stats, held_status, left_on=actual_id_col, right_index=True, how='left')
+            summary_stats['is_held'] = summary_stats['is_held'].fillna(False)
+            log.info(f"Merged held status. Stats shape: {summary_stats.shape}")
+        else:
+            log.warning("Could not merge held status for duration data.")
+            summary_stats['is_held'] = False
+
+        # --- Apply Holding Status Filter --- 
+        original_count = len(summary_stats)
+        if not show_sold:
+            summary_stats = summary_stats[summary_stats['is_held'] == True]
+            log.info(f"Applied 'Show Held Only' filter. Kept {len(summary_stats)} out of {original_count} securities.")
+        else:
+            log.info("Skipping 'Show Held Only' filter (show_sold is True).")
+
+        if summary_stats.empty:
+             log.info("No securities remaining after applying holding status filter.")
              return render_template('duration_comparison_page.html', # Updated template
                                     table_data=[],
-                                    columns_to_display=[],
+                                    columns_to_display=[actual_id_col] + static_cols, # Show basic cols
                                     id_column_name=actual_id_col,
                                     filter_options={},
                                     active_filters={},
                                     current_sort_by=sort_by,
                                     current_sort_order=sort_order,
                                     pagination=None,
-                                    message="No duration comparison data available.")
+                                    show_sold=show_sold, # Pass filter status
+                                    message="No currently held securities found.")
 
-        # --- Collect Filter Options (From Full Dataset Before Filtering) ---
+        # --- Collect Filter Options (From Data *After* Holding Filter) --- 
         filter_options = {}
-        potential_filter_cols = static_cols # Add other potential categorical columns from summary_stats if needed
+        potential_filter_cols = static_cols 
         for col in potential_filter_cols:
             if col in summary_stats.columns:
                 unique_vals = summary_stats[col].dropna().unique().tolist()
-                # Basic type check and sort if possible - Improved Robust Sorting Key
                 try:
-                    # Attempt numerical sort first if applicable (handles ints/floats mixed with strings gracefully)
                     sorted_vals = sorted(unique_vals, key=lambda x: (isinstance(x, (int, float)), x))
                 except TypeError:
-                     # Fallback to string sort if mixed types cause issues
                     sorted_vals = sorted(unique_vals, key=str)
                 filter_options[col] = sorted_vals
+        final_filter_options = dict(sorted(filter_options.items())) # Sort filter dropdowns alphabetically
+        log.info(f"Filter options generated: {list(final_filter_options.keys())}") # Use final_filter_options
 
-        log.info(f"Filter options generated: {list(filter_options.keys())}")
-
-        # --- Apply Filters ---
+        # --- Apply Static Column Filters --- 
         filtered_data = summary_stats.copy()
         if active_filters:
-            log.info(f"Applying filters: {active_filters}")
+            log.info(f"Applying static column filters: {active_filters}")
             for col, value in active_filters.items():
-                if col in filtered_data.columns:
-                    # Handle potential type mismatches (e.g., filter value is string, column is number)
+                if col in filtered_data.columns and value:
                     try:
-                         # Convert filter value to column type if possible
-                        col_type = filtered_data[col].dtype
-                        if pd.api.types.is_numeric_dtype(col_type):
-                            value = pd.to_numeric(value, errors='ignore') # Coerce to numeric if possible
-                        elif pd.api.types.is_datetime64_any_dtype(col_type):
-                             value = pd.to_datetime(value, errors='ignore') # Coerce to datetime if possible
-                        
-                        # Apply filter (handle NaN explicitly if needed)
-                        if pd.isna(value):
-                            filtered_data = filtered_data[filtered_data[col].isna()]
-                        else:
-                            filtered_data = filtered_data[filtered_data[col] == value]
-
+                        # Robust string comparison
+                         filtered_data = filtered_data[filtered_data[col].astype(str).str.lower() == str(value).lower()]
                     except Exception as e:
                         log.warning(f"Could not apply filter for column '{col}' with value '{value}'. Error: {e}. Skipping filter.")
                 else:
                     log.warning(f"Filter column '{col}' not found in data. Skipping filter.")
-            log.info(f"Data shape after filtering: {filtered_data.shape}")
+            log.info(f"Data shape after static filtering: {filtered_data.shape}")
         else:
-            log.info("No active filters.")
+            log.info("No active static column filters.")
+
+        if filtered_data.empty:
+             log.info("No data remaining after applying static column filters.")
+             return render_template('duration_comparison_page.html', # Updated template
+                                    table_data=[],
+                                    columns_to_display=[actual_id_col] + static_cols, # Show basic cols
+                                    id_column_name=actual_id_col,
+                                    filter_options=final_filter_options, # Show filter options
+                                    active_filters=active_filters,
+                                    current_sort_by=sort_by,
+                                    current_sort_order=sort_order,
+                                    pagination=None,
+                                    show_sold=show_sold, # Pass filter status
+                                    message="No data matches the current filters.")
 
         # --- Apply Sorting ---
         if sort_by in filtered_data.columns:
             log.info(f"Sorting by '{sort_by}' ({'Ascending' if ascending else 'Descending'})")
-            # Handle NaNs during sorting - place them appropriately
-            na_position = 'last' # Default, can be 'first' if preferred
+            na_position = 'last' 
             try:
                 filtered_data = filtered_data.sort_values(by=sort_by, ascending=ascending, na_position=na_position)
             except Exception as e:
                 log.error(f"Error during sorting by '{sort_by}': {e}. Falling back to default sort.")
-                sort_by = 'Change_Correlation' # Revert to default if error
+                sort_by = 'Change_Correlation' 
                 ascending = False
                 filtered_data = filtered_data.sort_values(by=sort_by, ascending=ascending, na_position=na_position)
         else:
-            log.warning(f"Sort column '{sort_by}' not found. Using default 'Change_Correlation'.")
-            sort_by = 'Change_Correlation' # Ensure default is used if provided key is invalid
-            ascending = False
-            filtered_data = filtered_data.sort_values(by=sort_by, ascending=ascending, na_position='last')
+            log.warning(f"Sort column '{sort_by}' not found. Using default ID sort.")
+            sort_by = actual_id_col 
+            ascending = True
+            filtered_data = filtered_data.sort_values(by=actual_id_col, ascending=ascending, na_position='last')
 
         # --- Pagination ---
         total_items = len(filtered_data)
-        total_pages = math.ceil(total_items / PER_PAGE_COMPARISON)
-        start_index = (page - 1) * PER_PAGE_COMPARISON
-        end_index = start_index + PER_PAGE_COMPARISON
+        safe_per_page = max(1, PER_PAGE_COMPARISON)
+        total_pages = math.ceil(total_items / safe_per_page)
+        total_pages = max(1, total_pages)
+        page = max(1, min(page, total_pages))
+        start_index = (page - 1) * safe_per_page
+        end_index = start_index + safe_per_page
         paginated_data = filtered_data.iloc[start_index:end_index]
         log.info(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Displaying items {start_index}-{end_index-1}")
 
+        page_window = 2
+        start_page_display = max(1, page - page_window)
+        end_page_display = min(total_pages, page + page_window)
+
         # --- Prepare for Template ---
-        # Define columns to display (ensure actual_id_col is first)
-        # Base columns - adjust as needed for duration comparison specifics
         base_cols = [
             'Level_Correlation', 'Change_Correlation',
             'Mean_Abs_Diff', 'Max_Abs_Diff',
             'NaN_Count_Orig', 'NaN_Count_New', 'Total_Points',
             'Same_Date_Range',
-            'Start_Date_Orig', 'End_Date_Orig',
-            'Start_Date_New', 'End_Date_New',
-            'Max_Orig', 'Min_Orig', 'Max_New', 'Min_New'
             # Add/remove columns as needed
         ]
-        # Ensure static columns come after the ID and before the calculated stats
         columns_to_display = [actual_id_col] + \
                              [col for col in static_cols if col != actual_id_col and col in paginated_data.columns] + \
                              [col for col in base_cols if col in paginated_data.columns]
 
-
-        # Convert DataFrame to list of dictionaries for easy template iteration
         table_data = paginated_data.to_dict(orient='records')
 
-        # Format specific columns (like correlations, dates)
+        # Format specific columns 
         for row in table_data:
             for col in ['Level_Correlation', 'Change_Correlation']:
                  if col in row and pd.notna(row[col]):
-                    row[col] = f"{row[col]:.4f}" # Format correlation
-            for col in ['Start_Date_Orig', 'End_Date_Orig', 'Start_Date_New', 'End_Date_New']:
-                 if col in row and pd.notna(row[col]):
-                    try:
-                        # Ensure it's a Timestamp before formatting
-                        if isinstance(row[col], pd.Timestamp):
-                             row[col] = row[col].strftime('%Y-%m-%d')
-                        # If already string, assume correct format or skip
-                    except AttributeError:
-                        log.debug(f"Could not format date column '{col}' with value '{row[col]}'. Type: {type(row[col])}")
-                        pass # Keep original value if formatting fails
+                    row[col] = f"{row[col]:.4f}" 
+            # Add date formatting if needed for stats cols
 
         # Create pagination object
-        pagination = {
+        pagination_context = {
             'page': page,
-            'per_page': PER_PAGE_COMPARISON,
+            'per_page': safe_per_page,
             'total_items': total_items,
             'total_pages': total_pages,
             'has_prev': page > 1,
             'has_next': page < total_pages,
-            'prev_num': page - 1 if page > 1 else None,
-            'next_num': page + 1 if page < total_pages else None,
+            'prev_num': page - 1,
+            'next_num': page + 1,
+            'start_page_display': start_page_display,
+            'end_page_display': end_page_display,
+            # Function to generate URLs for pagination links, preserving state
+             'url_for_page': lambda p: url_for('duration_comparison_bp.summary', 
+                                              page=p, 
+                                              sort_by=sort_by, 
+                                              sort_order=sort_order, 
+                                              show_sold=str(show_sold).lower(), # Pass holding status
+                                              **{f'filter_{k}': v for k, v in active_filters.items()})
         }
         log.info("--- Successfully Prepared Data for Duration Comparison Template ---")
 
@@ -361,11 +429,12 @@ def summary():
                                table_data=table_data,
                                columns_to_display=columns_to_display,
                                id_column_name=actual_id_col, # Pass the ID column name
-                               filter_options=filter_options,
+                               filter_options=final_filter_options,
                                active_filters=active_filters,
                                current_sort_by=sort_by,
                                current_sort_order=sort_order,
-                               pagination=pagination,
+                               pagination=pagination_context,
+                               show_sold=show_sold, # Pass holding filter status
                                message=None) # No message if data is present
 
     except FileNotFoundError as e:
@@ -373,7 +442,11 @@ def summary():
         return f"Error: Required duration comparison file not found ({e.filename}). Check the Data folder.", 404
     except Exception as e:
         log.exception("An unexpected error occurred in the duration comparison summary view.") # Log full traceback
-        return f"An internal error occurred: {e}", 500
+        return render_template('duration_comparison_page.html', 
+                               message=f"An unexpected error occurred: {e}",
+                               table_data=[], pagination=None, filter_options={}, 
+                               active_filters={}, show_sold=show_sold, columns_to_display=[], 
+                               id_column_name='Security') # Include show_sold in error template
 
 
 @duration_comparison_bp.route('/duration_comparison/details/<path:security_id>')
@@ -383,7 +456,7 @@ def duration_comparison_details(security_id):
     try:
         # Load the merged data again (could potentially cache this)
         # Specify filenames explicitly
-        merged_df, _, common_static_cols, id_col_name = load_comparison_data(file1='sec_duration.csv', file2='sec_durationSP.csv')
+        merged_df, _, common_static_cols, id_col_name, _ = load_duration_comparison_data(file1='sec_duration.csv', file2='sec_durationSP.csv')
 
         if id_col_name is None:
              log.error(f"Failed to get ID column name for details view (Security: {security_id}).")

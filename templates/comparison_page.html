@@ -31,6 +31,12 @@
                 </select>
             </div>
             {% endfor %}
+            <div class="col-md-3 d-flex align-items-end">
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="showSoldToggle" name="show_sold" value="true" {% if show_sold %}checked{% endif %}>
+                    <label class="form-check-label" for="showSoldToggle"><small>Show Sold Securities</small></label>
+                </div>
+            </div>
             <div class="col-md-auto">
                 <button type="submit" class="btn btn-primary btn-sm">Apply Filters</button>
                 {# Add a clear button only if filters are active #}
@@ -40,8 +46,8 @@
             </div>
         </div>
         {# Hidden fields to preserve current sort order when applying filters - page is implicitly reset #}
-        <input type="hidden" name="sort_by" value="{{ current_sort_by }}">
-        <input type="hidden" name="sort_order" value="{{ current_sort_order }}">
+        <input type="hidden" name="sort_by" value="{{ current_sort_by }}" id="currentSortBy">
+        <input type="hidden" name="sort_order" value="{{ current_sort_order }}" id="currentSortOrder">
     </form>
     {% endif %}
 
@@ -158,7 +164,85 @@
 
 {% block scripts %}
 {{ super() }}
-{# Client-side sorting can still be enabled via tableSorter.js if desired, #}
-{# but core pagination/filtering/sorting is server-side. #}
-{# Ensure tableSorter.js is loaded via base.html if you keep initTableSorter in main.js #}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const filterForm = document.getElementById('filter-form');
+        const currentSortBy = document.getElementById('currentSortBy');
+        const currentSortOrder = document.getElementById('currentSortOrder');
+        const showSoldToggle = document.getElementById('showSoldToggle');
+
+        // Function to get current filters from the form
+        function getCurrentFilters() {
+            const formData = new FormData(filterForm);
+            const filters = {};
+            for (const [key, value] of formData.entries()) {
+                if (key.startsWith('filter_') && value) {
+                    filters[key] = value;
+                }
+            }
+            // Include show_sold status explicitly
+            filters['show_sold'] = showSoldToggle.checked ? 'true' : 'false';
+            return filters;
+        }
+
+        // 1. Handle Form Submission (Apply Filters button)
+        // The form naturally submits with all values, including the hidden sort fields and the toggle state.
+
+        // 2. Handle Sorting Header Clicks
+        document.querySelectorAll('.sortable-header').forEach(header => {
+            header.addEventListener('click', function(e) {
+                e.preventDefault();
+                const sortBy = this.getAttribute('data-sort-by');
+                let sortOrder = 'asc';
+                if (currentSortBy.value === sortBy && currentSortOrder.value === 'asc') {
+                    sortOrder = 'desc';
+                }
+                currentSortBy.value = sortBy;
+                currentSortOrder.value = sortOrder;
+                filterForm.submit(); // Submit the form with updated sort fields
+            });
+        });
+
+        // 3. Handle Show Sold Toggle Change
+        showSoldToggle.addEventListener('change', function() {
+            // When toggle changes, reset page to 1 and submit form
+            const url = new URL(filterForm.action);
+            const params = new URLSearchParams(url.search);
+
+            // Get existing filters
+            const filters = getCurrentFilters(); // Includes new toggle state
+            Object.entries(filters).forEach(([key, value]) => {
+                params.set(key, value);
+            });
+
+            // Reset page to 1
+            params.delete('page');
+            // Keep current sort order
+            params.set('sort_by', currentSortBy.value);
+            params.set('sort_order', currentSortOrder.value);
+
+            window.location.href = `${url.pathname}?${params.toString()}`;
+        });
+
+        // 4. Update Pagination Links to include all current filters and sort state
+        document.querySelectorAll('.pagination-link').forEach(link => {
+            if (!link.parentElement.classList.contains('disabled') && link.getAttribute('href') !== '#') {
+                const url = new URL(link.href);
+                const params = new URLSearchParams(url.search); // Existing params (includes page number)
+                const filters = getCurrentFilters(); // Get current filters including toggle state
+
+                // Add filters to pagination link
+                Object.entries(filters).forEach(([key, value]) => {
+                    params.set(key, value);
+                });
+
+                // Add sorting to pagination link
+                params.set('sort_by', currentSortBy.value);
+                params.set('sort_order', currentSortOrder.value);
+
+                link.href = `${url.pathname}?${params.toString()}`;
+            }
+        });
+    });
+</script>
 {% endblock %} 
