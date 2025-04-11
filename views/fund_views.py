@@ -150,7 +150,8 @@ def fund_duration_details(fund_code):
 # --- New Route for Fund Detail Page ---
 @fund_bp.route('/<fund_code>')
 def fund_detail(fund_code):
-    """Renders a page displaying all available time-series charts for a specific fund."""
+    """Renders a page displaying all available time-series charts for a specific fund,
+       optionally including comparison data from sp_ts_* files."""
     current_app.logger.info(f"--- Requesting Detail Page for Fund: {fund_code} ---")
     all_chart_data = []
     available_metrics = []
@@ -159,13 +160,15 @@ def fund_detail(fund_code):
     error_messages = [] # Collect specific errors
 
     try:
-        # Find all time-series files
+        # Find all primary time-series files
         ts_files_pattern = os.path.join(DATA_FOLDER, 'ts_*.csv')
         ts_files = glob.glob(ts_files_pattern)
-        current_app.logger.info(f"Found {len(ts_files)} potential ts_ files: {[os.path.basename(f) for f in ts_files]}")
+        # Exclude sp_ts files initially, handle them later
+        ts_files = [f for f in ts_files if not os.path.basename(f).startswith('sp_ts_')]
+        current_app.logger.info(f"Found {len(ts_files)} primary ts_ files: {[os.path.basename(f) for f in ts_files]}")
 
         if not ts_files:
-            current_app.logger.warning("No ts_*.csv files found in Data folder.")
+            current_app.logger.warning("No primary ts_*.csv files found in Data folder.")
             return render_template('fund_detail_page.html',
                                    fund_code=fund_code,
                                    chart_data_json='[]',
@@ -182,95 +185,206 @@ def fund_detail(fund_code):
                 skipped_files += 1
                 continue
 
-            metric_name = match.group(1).replace('_', ' ').title()
-            current_app.logger.info(f"\nProcessing {filename} for metric: {metric_name}")
+            metric_name_raw = match.group(1) # Keep raw name for SP file lookup
+            metric_name_display = metric_name_raw.replace('_', ' ').title()
+            current_app.logger.info(f"\\nProcessing {filename} for metric: {metric_name_display}")
 
+            # --- Prepare SP file path ---
+            sp_filename = f"sp_{filename}"
+            sp_file_path = os.path.join(DATA_FOLDER, sp_filename)
+            sp_df = None
+            sp_fund_col_name = None
+            sp_load_error = None
+
+            # --- Load primary data ---
+            df = None
+            fund_cols = None
+            benchmark_col = None
+            primary_load_error = None
             try:
-                # Load data
-                # It returns a 6-tuple: (primary_df, primary_fund_cols, primary_bench_col, sec_df, sec_fund_cols, sec_bench_col)
-                # We only care about the primary results here.
                 load_result = load_and_process_data(filename, data_folder=DATA_FOLDER)
-                df = load_result[0]                # Primary DataFrame
-                fund_cols = load_result[1]          # Primary fund columns list
-                benchmark_col = load_result[2]      # Primary benchmark column name (or None)
+                df = load_result[0]
+                fund_cols = load_result[1]
+                benchmark_col = load_result[2]
 
                 if df is None or df.empty:
                     current_app.logger.warning(f"No data loaded or DataFrame empty for {filename}. Skipping.")
                     skipped_files += 1
                     continue
 
-                # Check index levels AFTER loading
                 if 'Code' not in df.index.names:
                      current_app.logger.error(f"Index level 'Code' not found in DataFrame loaded from {filename}. Index: {df.index.names}. Skipping.")
                      error_messages.append(f"Failed to process {filename}: Missing 'Code' index level.")
                      skipped_files += 1
                      continue
 
-                # Use boolean indexing for filtering - MORE ROBUST
-                fund_mask = df.index.get_level_values('Code') == fund_code
-                fund_df = df[fund_mask]
-
-                if fund_df.empty:
-                    current_app.logger.info(f"Fund code '{fund_code}' not found in data from {filename}. Skipping metric for chart.")
-                    skipped_files += 1 # Still counts as processed the file, just no data for this fund
-                    continue
-
-                current_app.logger.info(f"Fund code '{fund_code}' found. Preparing chart data for '{metric_name}'...")
-                available_metrics.append(metric_name)
-
-                # Drop the 'Code' level now we've filtered
-                fund_df = fund_df.droplevel('Code')
-
-                # Prepare chart data structure
-                chart_data = {
-                    'metricName': metric_name,
-                    'labels': fund_df.index.strftime('%Y-%m-%d').tolist(),
-                    'datasets': []
-                }
-
-                # Add fund dataset
-                fund_col_name = next((col for col in fund_cols if col in fund_df.columns), None)
-                if fund_col_name:
-                    fund_values = fund_df[fund_col_name].where(pd.notna(fund_df[fund_col_name]), None).tolist()
-                    chart_data['datasets'].append({
-                        'label': f"{fund_code} {metric_name}",
-                        'data': fund_values,
-                        'borderColor': current_app.config['COLOR_PALETTE'][0 % len(current_app.config['COLOR_PALETTE'])],
-                        'tension': 0.1,
-                        'pointRadius': 1,
-                        'borderWidth': 1.5
-                    })
-                else:
-                    current_app.logger.warning(f"Warning: Could not find primary fund data column ({fund_cols}) in {filename} for fund {fund_code}")
-
-                # Add benchmark dataset
-                if benchmark_col and benchmark_col in fund_df.columns:
-                    bench_values = fund_df[benchmark_col].where(pd.notna(fund_df[benchmark_col]), None).tolist()
-                    chart_data['datasets'].append({
-                        'label': f"Benchmark ({benchmark_col})",
-                        'data': bench_values,
-                        'borderColor': current_app.config['COLOR_PALETTE'][1 % len(current_app.config['COLOR_PALETTE'])],
-                        'tension': 0.1,
-                        'pointRadius': 1,
-                        'borderDash': [5, 5],
-                        'borderWidth': 1
-                    })
-
-                # Only add chart if we have at least one dataset
-                if chart_data['datasets']:
-                    all_chart_data.append(chart_data)
-                    processed_files += 1
-                else:
-                     current_app.logger.warning(f"No valid datasets generated for metric '{metric_name}' from {filename}. Skipping chart.")
-                     skipped_files += 1 # Count as skipped if no dataset generated
-
             except Exception as e:
-                current_app.logger.error(f"Error processing file {filename} for fund {fund_code}: {e}", exc_info=True)
-                error_messages.append(f"Error processing {filename}: {e}")
+                current_app.logger.error(f"Error loading primary file {filename}: {e}", exc_info=False)
+                primary_load_error = f"Error loading {filename}: {e}"
+                error_messages.append(primary_load_error)
                 skipped_files += 1
+                # Continue processing other files, but skip this metric
+                continue # Skip to next ts_file
 
-        # --- After processing all files --- 
-        current_app.logger.info(f"Finished processing {processed_files + skipped_files} files for fund {fund_code}. Found metrics: {available_metrics}. Skipped/Empty: {skipped_files}")
+            # --- Load SP data if primary load was successful and SP file exists ---
+            if primary_load_error is None and os.path.exists(sp_file_path):
+                current_app.logger.info(f"Found corresponding SP file: {sp_filename}. Attempting to load.")
+                try:
+                    sp_load_result = load_and_process_data(sp_filename, data_folder=DATA_FOLDER)
+                    sp_df = sp_load_result[0]
+                    sp_fund_cols = sp_load_result[1] # Assuming same structure for fund cols
+                    # SP files typically don't have benchmarks in this context, ignore sp_load_result[2]
+                    # --- Correction: Let's check for SP benchmark column too ---
+                    sp_benchmark_col = sp_load_result[2] # Get potential SP benchmark col name
+
+                    if sp_df is None or sp_df.empty:
+                        current_app.logger.warning(f"No data loaded or DataFrame empty for SP file {sp_filename}.")
+                        sp_df = None # Ensure sp_df is None if empty
+                    elif 'Code' not in sp_df.index.names:
+                         current_app.logger.error(f"Index level 'Code' not found in DataFrame loaded from SP file {sp_filename}. Index: {sp_df.index.names}.")
+                         sp_df = None # Ensure sp_df is None if index is wrong
+                         sp_load_error = f"SP file {sp_filename} missing 'Code' index."
+                         error_messages.append(sp_load_error)
+                    else:
+                        # Find the fund column name in the SP data
+                        sp_fund_col_name = next((col for col in sp_fund_cols if col in sp_df.columns), None)
+                        if not sp_fund_col_name:
+                             current_app.logger.warning(f"Could not find fund data column in SP file {sp_filename}.")
+                             sp_df = None # Cannot use this SP data without fund column
+                        # We keep sp_df if benchmark exists, even if fund doesn't
+
+                except Exception as e:
+                    current_app.logger.error(f"Error loading SP file {sp_filename}: {e}", exc_info=False)
+                    sp_load_error = f"Error loading SP file {sp_filename}: {e}"
+                    error_messages.append(sp_load_error)
+                    sp_df = None # Ensure sp_df is None on error
+
+            # --- Filter primary data for the fund ---
+            fund_mask = df.index.get_level_values('Code') == fund_code
+            fund_df = df[fund_mask]
+
+            if fund_df.empty:
+                current_app.logger.info(f"Fund code '{fund_code}' not found in primary data from {filename}. Skipping metric.")
+                skipped_files += 1 # Processed file, but no data for this fund
+                continue # Skip to next ts_file
+
+            current_app.logger.info(f"Fund code '{fund_code}' found in primary data. Preparing chart data for '{metric_name_display}'...")
+            available_metrics.append(metric_name_display) # Use display name
+
+            # Drop the 'Code' level now we've filtered
+            fund_df = fund_df.droplevel('Code')
+
+            # --- Filter SP data for the fund (if loaded) ---
+            sp_fund_df = None
+            if sp_df is not None:
+                sp_fund_mask = sp_df.index.get_level_values('Code') == fund_code
+                sp_fund_df = sp_df[sp_fund_mask]
+                if not sp_fund_df.empty:
+                    sp_fund_df = sp_fund_df.droplevel('Code')
+                    current_app.logger.info(f"Fund code '{fund_code}' found in SP data from {sp_filename}.")
+                else:
+                    current_app.logger.info(f"Fund code '{fund_code}' *not* found in SP data from {sp_filename}.")
+                    sp_fund_df = None # Treat as if no SP data for this fund
+
+            # --- Prepare chart data structure ---
+            # Use the primary fund_df index as the master list of labels
+            # Align SP data to this index later if needed
+            chart_labels = fund_df.index.strftime('%Y-%m-%d').tolist()
+            chart_data = {
+                'metricName': metric_name_display, # Use display name
+                'labels': chart_labels,
+                'datasets': []
+            }
+
+            # Add primary fund dataset
+            fund_col_name = next((col for col in fund_cols if col in fund_df.columns), None)
+            if fund_col_name:
+                # Reindex to ensure consistent length and alignment, fill missing with None
+                fund_values = fund_df[fund_col_name].reindex(fund_df.index).where(pd.notna, None).tolist()
+                chart_data['datasets'].append({
+                    'label': f"{fund_code} {metric_name_display}",
+                    'data': fund_values,
+                    'borderColor': current_app.config['COLOR_PALETTE'][0 % len(current_app.config['COLOR_PALETTE'])],
+                    'tension': 0.1,
+                    'pointRadius': 1,
+                    'borderWidth': 1.5,
+                    'isSpData': False # Explicitly mark as not SP
+                })
+            else:
+                current_app.logger.warning(f"Warning: Could not find primary fund data column ({fund_cols}) in {filename} for fund {fund_code}")
+
+            # Add benchmark dataset (from primary data)
+            if benchmark_col and benchmark_col in fund_df.columns:
+                # Reindex to ensure consistent length and alignment
+                bench_values = fund_df[benchmark_col].reindex(fund_df.index).where(pd.notna, None).tolist()
+                chart_data['datasets'].append({
+                    'label': f"Benchmark ({benchmark_col})",
+                    'data': bench_values,
+                    'borderColor': current_app.config['COLOR_PALETTE'][1 % len(current_app.config['COLOR_PALETTE'])],
+                    'tension': 0.1,
+                    'pointRadius': 1,
+                    'borderDash': [5, 5],
+                    'borderWidth': 1,
+                    'isSpData': False # Explicitly mark as not SP
+                })
+
+            # --- Add SP fund dataset (if available) ---
+            if sp_fund_df is not None:
+                # Add SP Fund Data (if column exists)
+                if sp_fund_col_name:
+                    # Reindex SP data to the primary data's date index to ensure alignment for the chart
+                    sp_fund_aligned = sp_fund_df[sp_fund_col_name].reindex(fund_df.index)
+                    sp_values = sp_fund_aligned.where(pd.notna, None).tolist() # Replace NaN with None for JSON
+                    chart_data['datasets'].append({
+                        'label': f"{fund_code} {metric_name_display} (SP)",
+                        'data': sp_values,
+                        'borderColor': current_app.config['COLOR_PALETTE'][2 % len(current_app.config['COLOR_PALETTE'])], # Use a different color
+                        'tension': 0.1,
+                        'pointRadius': 1,
+                        'borderDash': [2, 2], # Different dash style
+                        'borderWidth': 1.5,
+                        'isSpData': True # Mark this dataset as SP data
+                        # 'hidden': True # Optionally start hidden
+                    })
+                    current_app.logger.info(f"Added SP Fund dataset for metric '{metric_name_display}'.")
+                else:
+                    current_app.logger.warning(f"SP Fund column ('{sp_fund_cols}') not found in filtered SP data for {sp_filename}, fund {fund_code}.")
+
+                # --- Add SP benchmark dataset (if available) ---
+                if sp_benchmark_col and sp_benchmark_col in sp_fund_df.columns:
+                    # Reindex SP benchmark data to the primary data's date index
+                    sp_bench_aligned = sp_fund_df[sp_benchmark_col].reindex(fund_df.index)
+                    sp_bench_values = sp_bench_aligned.where(pd.notna, None).tolist()
+                    chart_data['datasets'].append({
+                        'label': f"Benchmark ({sp_benchmark_col}) (SP)", # Label appropriately
+                        'data': sp_bench_values,
+                        'borderColor': current_app.config['COLOR_PALETTE'][3 % len(current_app.config['COLOR_PALETTE'])], # Use another color
+                        'tension': 0.1,
+                        'pointRadius': 1,
+                        'borderDash': [2, 2], # Use dash similar to SP fund
+                        'borderWidth': 1,
+                        'isSpData': True # Mark this dataset as SP data
+                    })
+                    current_app.logger.info(f"Added SP Benchmark dataset ('{sp_benchmark_col}') for metric '{metric_name_display}'.")
+                elif sp_benchmark_col:
+                    current_app.logger.warning(f"SP Benchmark column ('{sp_benchmark_col}') specified but not found in filtered SP data for {sp_filename}, fund {fund_code}.")
+
+            # Only add chart if we have at least one non-empty dataset
+            if any(d['data'] for d in chart_data['datasets']):
+                all_chart_data.append(chart_data)
+                processed_files += 1
+            else:
+                 current_app.logger.warning(f"No valid datasets generated for metric '{metric_name_display}' from {filename} (and potentially {sp_filename}). Skipping chart.")
+                 skipped_files += 1 # Count as skipped if no dataset generated
+
+            # Explicitly remove large dataframes from memory
+            del df, fund_df, sp_df, sp_fund_df, load_result
+            if 'sp_load_result' in locals(): del sp_load_result
+            import gc
+            gc.collect()
+
+        # --- After processing all files ---
+        current_app.logger.info(f"Finished processing files for fund {fund_code}. Generated charts for: {available_metrics}. Total Processed: {processed_files}, Skipped/No Data/Errors: {skipped_files}")
 
         if not all_chart_data:
              # Combine specific errors with the generic message if available

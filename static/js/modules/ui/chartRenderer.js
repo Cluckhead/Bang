@@ -169,21 +169,28 @@ export function renderChartsAndTables(container, payload) {
 }
 
 /**
- * Updates the visibility of secondary data datasets across all rendered charts.
- * @param {boolean} show - Whether to show or hide the secondary datasets.
+ * Updates the visibility of secondary/SP data datasets across all managed charts.
+ * @param {boolean} show - Whether to show or hide the secondary/SP datasets.
  */
 function toggleSecondaryDataVisibility(show) {
-    console.log(`[chartRenderer] Toggling secondary data visibility to: ${show}`);
-    Object.values(chartInstances).forEach(chart => {
+    console.log(`[chartRenderer] Toggling SP data visibility to: ${show}`);
+    // Iterate through the centrally stored chart instances
+    Object.entries(chartInstances).forEach(([key, chart]) => {
+        let spDatasetToggled = false;
         chart.data.datasets.forEach((dataset, index) => {
-            if (dataset.source === 'secondary') {
+            // Check the isSpData flag added from Python
+            if (dataset.isSpData === true) {
                 // Use setDatasetVisibility for better control than just 'hidden' property
                 chart.setDatasetVisibility(index, show);
-                console.log(`[chartRenderer] Chart ${chart.canvas.id} - Setting dataset ${index} ('${dataset.label}') visibility to ${show}`);
+                console.log(`[chartRenderer] Chart ${chart.canvas.id} - Setting SP dataset ${index} ('${dataset.label}') visibility to ${show}`);
+                spDatasetToggled = true;
             }
         });
-        chart.update(); // Update the chart to reflect visibility changes
-        console.log(`[chartRenderer] Updated chart ${chart.canvas.id}`);
+        // Only update if an SP dataset was actually toggled for this chart
+        if (spDatasetToggled) {
+            chart.update(); // Update the chart to reflect visibility changes
+            console.log(`[chartRenderer] Updated chart ${chart.canvas.id}`);
+        }
     });
 }
 
@@ -422,17 +429,18 @@ export function renderSingleSecurityChart(canvasId, chartData, securityId, metri
 } 
 
 /**
- * Renders multiple time series charts into the specified container for the fund detail page.
- * Iterates through metrics for a single fund.
- * @param {HTMLElement} container - The parent element to render into (e.g., #fundChartsArea).
- * @param {Array<object>} allChartData - An array where each object contains data for one metric's chart.
- *                                       Expected structure: [{ metricName: '...', labels: [...], datasets: [...] }, ...]
+ * Renders multiple charts onto a single page (like the Fund Detail page).
+ * Stores created chart instances in the module-level 'chartInstances' object.
+ * @param {HTMLElement} container - The parent element to render into.
+ * @param {Array<object>} allChartData - An array of chart data objects, each with metricName, labels, datasets.
  */
 export function renderFundCharts(container, allChartData) {
     console.log("[chartRenderer] Rendering charts for fund detail page.");
     console.log("[chartRenderer] Received Data:", JSON.parse(JSON.stringify(allChartData))); // Deep copy for logging
     
     container.innerHTML = ''; // Clear previous content
+    // Clear previous chart instances for this specific rendering context
+    Object.keys(chartInstances).forEach(key => delete chartInstances[key]); 
 
     if (!allChartData || !Array.isArray(allChartData) || allChartData.length === 0) {
         console.warn("[chartRenderer] No chart data provided for the fund page.");
@@ -483,7 +491,8 @@ export function renderFundCharts(container, allChartData) {
                     is_missing_latest: null // Not applicable here
                  });
                  
-                 createTimeSeriesChart(
+                 // Create the chart AND store the instance
+                 const chartInstance = createTimeSeriesChart(
                      canvas.id,         // The unique canvas ID
                      metricData,        // Data object with labels and datasets
                      metricName,        // Title prefix (e.g., "Yield")
@@ -491,7 +500,14 @@ export function renderFundCharts(container, allChartData) {
                      null,              // zScoreForTitle (not applicable)
                      null               // is_missing_latest (not applicable)
                  );
-                 console.log(`[chartRenderer] createTimeSeriesChart call finished for metric: ${metricName}.`);
+                 
+                 if (chartInstance) {
+                     // Store the instance in the module-level object
+                     chartInstances[canvas.id] = chartInstance;
+                     console.log(`[chartRenderer] Stored chart instance for ${metricName} with key ${canvas.id}`);
+                 } else {
+                     console.error(`[chartRenderer] Failed to get chart instance for metric: ${metricName}`);
+                 }
             } else {
                 console.error(`[chartRenderer] Could not get 2D context for canvas ${canvas.id} (Metric: ${metricName})`);
                 const errorP = document.createElement('p');
@@ -504,3 +520,6 @@ export function renderFundCharts(container, allChartData) {
 
     console.log("[chartRenderer] Finished rendering all fund charts.");
 } 
+
+// Export necessary functions
+export { toggleSecondaryDataVisibility }; // Export toggle function 
