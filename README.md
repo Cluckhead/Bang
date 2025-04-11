@@ -11,9 +11,15 @@ This application provides a web interface to load, process, and check financial 
 ## Features
 
 *   **Time-Series Metric Analysis:** Load `ts_*.csv` files, view latest changes, Z-scores, and historical data charts for various metrics per fund.
+    *   Optionally loads corresponding `sp_ts_*.csv` files (if they exist) to provide comparison data (e.g., S&P data) on the same charts.
+    *   Includes a toggle switch on the **Metric Detail Page** (`/metric/<metric_name>`) to show/hide this comparison data.
 *   **Security-Level Analysis:** Load wide-format `sec_*.csv` files, view latest changes and Z-scores across securities, and drill down into historical charts (Value, Price, Duration) for individual securities.
     *   **Performance:** Uses server-side pagination, filtering (search, dropdowns), and sorting for improved performance with large datasets.
-*   **Fund-Specific Views:** Analyze data aggregated or filtered by specific funds (e.g., Fund Duration Details, General Fund Overview).
+*   **Fund-Specific Views:** Analyze data aggregated or filtered by specific funds.
+    *   General Fund Overview (`/fund/<fund_code>`): Displays all available time-series metric charts for a single fund.
+        *   Optionally loads corresponding `sp_ts_*.csv` files for comparison data.
+        *   Includes a toggle switch to show/hide this comparison data.
+    *   Fund Duration Details (`/fund/duration_details/<fund_code>`): Shows duration changes for securities held by a specific fund.
 *   **Security Exclusions:** Maintain a list of securities to temporarily exclude from the main Security Summary page (`/security/summary`). Exclusions can have start/end dates and comments.
 *   **Weight Check:** Load fund (`w_Funds.csv`) and benchmark (`w_Bench.csv`) weight files and display them side-by-side, highlighting any daily weights that are not exactly 100% via `/weights/check`.
 *   **Yield Curve Analysis:** Load yield curve data (`curves.csv`), check for potential inconsistencies (e.g., monotonicity, anomalous daily changes) and display curve charts per currency via `/curve/summary` and `/curve/details/<currency>`.
@@ -84,6 +90,7 @@ graph TD
     F1b1 --> F1b1a(chartRenderer.js);
     F1b1 --> F1b1b(securityTableFilter.js);
     F1b1 --> F1b1c(tableSorter.js);
+    F1b1 --> F1b1d(toggleSwitchHandler.js);
     F1b --> F1b2(utils);
     F1b2 --> F1b2a(helpers.js);
     F1b --> F1b3(charts);
@@ -113,6 +120,7 @@ graph TD
 ## Data Files (`Data/`)
 
 *   `ts_*.csv`: Time-series data, indexed by Date and Code (Fund/Benchmark).
+*   `sp_ts_*.csv`: (Optional) Secondary/comparison time-series data, corresponding to `ts_*.csv` files. Used on Metric and Fund Detail pages.
 *   `sec_*.csv`: Security-level data, typically wide format with dates as columns.
 *   `pre_*.csv`: Input files for the `process_data.py` script.
 *   `new_*.csv`: Output files from the `process_data.py` script.
@@ -162,12 +170,13 @@ graph TD
 ### `metric_calculator.py`
 *   **Purpose:** Provides functions for calculating statistical metrics (mean, max, min, latest value, change, Z-score) from preprocessed time-series data.
 *   **Key Features:**
-    *   Operates on a DataFrame indexed by Date and Fund Code.
-    *   Calculates metrics for both fund and benchmark columns (if present).
+    *   Operates on DataFrames indexed by Date and Fund Code.
+    *   Calculates metrics for primary data (e.g., `ts_*.csv`) and optionally for secondary/comparison data (e.g., `sp_ts_*.csv`).
+    *   Handles fund and benchmark columns for both primary and secondary sources.
     *   Handles `NaN` values gracefully.
 *   **Functions:**
     *   `_calculate_column_stats(...)`: Helper for single-column stats.
-    *   `calculate_latest_metrics(...)`: Calculates latest metrics per fund, sorted by max absolute Z-score.
+    *   `calculate_latest_metrics(...)`: Calculates latest metrics per fund for both primary and secondary data, sorted by max absolute primary Z-score.
 
 ### `process_data.py`
 *   **Purpose:** Serves as a pre-processing step for specific CSV files (usually `pre_*.csv`), aggregating rows and handling duplicates.
@@ -220,7 +229,7 @@ These modules contain the Flask Blueprints defining the application's routes.
 ### `views/metric_views.py` (`metric_bp`)
 *   **Purpose:** Detailed views for specific time-series metrics.
 *   **Routes:**
-    *   `/metric/<metric_name>`: Renders `metric_page_js.html`. Loads `ts_*.csv`, calculates metrics, and passes JSON data (metadata, fund data) to the template for JavaScript chart rendering. Includes link to fund duration details if metric is 'Duration'.
+    *   `/metric/<metric_name>`: Renders `metric_page_js.html`. Loads primary (`ts_*.csv`) and optional secondary (`sp_ts_*.csv`) data. Calculates metrics for both, prepares JSON data (including an `isSpData` flag in datasets), and passes it to the template. The JavaScript (`main.js`, `chartRenderer.js`) renders charts and handles the SP data toggle switch.
 
 ### `views/security_views.py` (`security_bp`)
 *   **Purpose:** Security-level data checks.
@@ -237,7 +246,7 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **Purpose:** Fund-specific views.
 *   **Routes:**
     *   `/fund/duration_details/<fund_code>`: Renders `fund_duration_details.html`. Loads `sec_duration.csv`, filters by fund, calculates recent duration changes, and displays results.
-    *   `/fund/<fund_code>`: Renders `fund_detail_page.html`. Finds all `ts_*.csv` files, loads data for the specified fund, and prepares data for rendering multiple time-series charts on a single page.
+    *   `/fund/<fund_code>`: Renders `fund_detail_page.html`. Finds all primary `ts_*.csv` files and corresponding optional `sp_ts_*.csv` files. Loads data for the specified fund from both sources, adds an `isSpData` flag to datasets, and prepares data for rendering multiple time-series charts on a single page via JavaScript (`main.js`, `chartRenderer.js`), including an SP data toggle switch.
 
 ### `views/exclusion_views.py` (`exclusion_bp`)
 *   **Purpose:** Managing the security exclusion list (`Data/exclusions.csv`).
@@ -298,6 +307,7 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`base.html`:** Main layout, includes Bootstrap, navbar, common structure. All other templates extend this.
 *   **`index.html`:** Dashboard page. Displays metric links and Z-Score summary table.
 *   **`metric_page_js.html`:** Detail page for a time-series metric (rendered via JS).
+    *   Includes a toggle switch (`#toggleSpData`) to show/hide secondary/SP comparison data on charts.
 *   **`securities_page.html`:** Security check summary table. Includes filter/search form, sortable headers, table body, and pagination controls.
 *   **`security_details_page.html`:** Detail page for a single security (charts).
 *   **`fund_duration_details.html`:** Table showing security duration changes for a specific fund.
@@ -306,6 +316,7 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`comparison_page.html`:** Comparison summary table. Includes filter form, sortable headers, table body, and pagination controls.
 *   **`comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread).
 *   **`fund_detail_page.html`:** Displays multiple charts for different metrics for a single fund.
+    *   Includes a toggle switch (`#toggleSpData`) to show/hide secondary/SP comparison data on charts.
 *   **`weight_check.html`:** Placeholder page for weight checks.
 *   **`duration_comparison_page.html`:** Comparison summary table for Duration.
 *   **`duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Duration).

@@ -20,24 +20,32 @@ const chartInstances = {};
  */
 export function renderChartsAndTables(container, payload) {
     const metadata = payload.metadata;
-    const chartsData = payload.funds;
+    const fundsData = payload.funds; // Renamed from chartsData for clarity
     const metricName = metadata.metric_name;
     const latestDate = metadata.latest_date;
-    const fundColNames = metadata.fund_col_names;
-    const benchmarkColName = metadata.benchmark_col_name;
-    const secondaryDataAvailable = metadata.secondary_data_available;
-    const secondaryFundColNames = metadata.secondary_fund_col_names;
-    const secondaryBenchmarkColName = metadata.secondary_benchmark_col_name;
+    // Keep original column names from metadata for table generation
+    const primaryFundColsMeta = metadata.fund_col_names;
+    const primaryBenchColMeta = metadata.benchmark_col_name;
+    const secondaryFundColsMeta = metadata.secondary_fund_col_names;
+    const secondaryBenchColMeta = metadata.secondary_benchmark_col_name;
+    const secondaryDataAvailableOverall = metadata.secondary_data_available;
 
     console.log("[chartRenderer] Rendering charts for metric:", metricName, "Latest Date:", latestDate);
     console.log("[chartRenderer] Metadata:", metadata);
-    console.log("[chartRenderer] Fund Data Keys:", Object.keys(chartsData || {}));
+    console.log("[chartRenderer] Fund Data Keys:", Object.keys(fundsData || {}));
 
     // Clear previous content and chart instances
     container.innerHTML = '';
-    Object.keys(chartInstances).forEach(key => delete chartInstances[key]);
+    Object.keys(chartInstances).forEach(key => {
+        try {
+            chartInstances[key]?.destroy(); // Properly destroy old chart instances
+        } catch (e) {
+            console.warn(`Error destroying chart instance ${key}:`, e);
+        }
+        delete chartInstances[key];
+    });
 
-    if (!chartsData || Object.keys(chartsData).length === 0) {
+    if (!fundsData || Object.keys(fundsData).length === 0) {
         console.warn("[chartRenderer] No fund data available for metric:", metricName);
         container.innerHTML = '<p>No fund data available for this metric.</p>';
         return;
@@ -45,41 +53,40 @@ export function renderChartsAndTables(container, payload) {
 
     // --- Setup Toggle Switch --- 
     const toggleContainer = document.getElementById('sp-toggle-container');
-    const toggleSwitch = document.getElementById('toggleSpData');
-
-    // Only control visibility of the container here
     // Event listener will be attached by the caller (main.js)
     if (toggleContainer) {
-        if (secondaryDataAvailable) {
-            console.log("[chartRenderer] Secondary data available, ensuring toggle container is visible.");
-            toggleContainer.style.display = 'block'; // Show the toggle container
+        // Show toggle if *any* secondary data is potentially available based on metadata
+        if (secondaryDataAvailableOverall) {
+            console.log("[chartRenderer] Overall secondary data available, ensuring toggle container is visible.");
+            toggleContainer.style.display = 'block'; 
         } else {
-            console.log("[chartRenderer] Secondary data not available, ensuring toggle container is hidden.");
-            toggleContainer.style.display = 'none'; // Ensure toggle container is hidden
+            console.log("[chartRenderer] Overall secondary data not available, ensuring toggle container is hidden.");
+            toggleContainer.style.display = 'none'; 
         }
     } else {
         console.warn("[chartRenderer] Toggle switch container not found in the DOM.");
     }
 
-    // --- Render Chart and Table for Each Fund --- 
-    for (const [fundCode, data] of Object.entries(chartsData)) {
+    // --- Render Charts and Tables for Each Fund --- 
+    for (const [fundCode, fundData] of Object.entries(fundsData)) {
         console.log(`[chartRenderer] Processing fund: ${fundCode}`);
-        const metrics = data.metrics; // Flattened metrics for this fund
-        const isMissingLatest = data.is_missing_latest;
+        const charts = fundData.charts || [];
+        const isMissingLatest = fundData.is_missing_latest;
 
-        // Find max absolute Z-score from PRIMARY metrics for section highlight
+        // Find max absolute Z-score from PRIMARY MAIN metrics for section highlight
         let maxAbsPrimaryZScore = 0;
         let primaryZScoreForTitle = null;
-        if (metrics) {
+        const mainChartConfig = charts.find(c => c.chart_type === 'main');
+        if (mainChartConfig && mainChartConfig.latest_metrics) {
+            const mainMetrics = mainChartConfig.latest_metrics;
             const primaryColsToCheck = [];
-            if (benchmarkColName) primaryColsToCheck.push(benchmarkColName);
-            if (fundColNames && Array.isArray(fundColNames)) primaryColsToCheck.push(...fundColNames);
+            if (primaryBenchColMeta) primaryColsToCheck.push(primaryBenchColMeta);
+            if (primaryFundColsMeta && Array.isArray(primaryFundColsMeta)) primaryColsToCheck.push(...primaryFundColsMeta);
             
             primaryColsToCheck.forEach(colName => {
                 if (!colName) return;
-                // Look for the non-prefixed Z-score key
                 const zScoreKey = `${colName} Change Z-Score`; 
-                const zScore = metrics[zScoreKey];
+                const zScore = mainMetrics[zScoreKey];
                  if (zScore !== null && typeof zScore !== 'undefined' && !isNaN(zScore)) {
                      const absZ = Math.abs(zScore);
                      if (absZ > maxAbsPrimaryZScore) {
@@ -95,12 +102,12 @@ export function renderChartsAndTables(container, payload) {
         if (maxAbsPrimaryZScore > 3) { zClass = 'very-high-z'; }
         else if (maxAbsPrimaryZScore > 2) { zClass = 'high-z'; }
 
-        // --- Create DOM Elements --- 
-        const wrapper = document.createElement('div');
-        wrapper.className = `chart-container-wrapper ${zClass}`;
-        wrapper.id = `chart-wrapper-${fundCode}`;
+        // Create a main wrapper for the fund
+        const fundWrapper = document.createElement('div');
+        fundWrapper.className = `fund-wrapper ${zClass}`; // Use a different class for the outer wrapper
+        fundWrapper.id = `fund-wrapper-${fundCode}`;
 
-        // Add Duration Details Link (if applicable)
+        // Add Duration Details Link (if applicable) - Moved to fund level
         if (metricName === 'Duration') {
             const linkDiv = document.createElement('div');
             linkDiv.className = 'mb-2 text-end';
@@ -109,55 +116,97 @@ export function renderChartsAndTables(container, payload) {
             link.className = 'btn btn-info btn-sm';
             link.textContent = `View Security Duration Changes for ${fundCode} →`;
             linkDiv.appendChild(link);
-            wrapper.appendChild(linkDiv);
+            fundWrapper.appendChild(linkDiv);
         }
 
-        // Create Chart Canvas
-        const canvas = document.createElement('canvas');
-        canvas.id = `chart-${fundCode}`;
-        canvas.className = 'chart-canvas';
-        wrapper.appendChild(canvas);
+        // Create a row container for the charts within this fund
+        const chartsRow = document.createElement('div');
+        chartsRow.className = 'row'; // Bootstrap row class
 
-        // Create Metrics Table (handles primary and secondary columns)
-        const table = createMetricsTable(
-            metrics,
-            latestDate,
-            fundColNames,
-            benchmarkColName,
-            secondaryDataAvailable,
-            secondaryFundColNames,
-            secondaryBenchmarkColName,
-            "S&P " // Prefix for secondary
-        );
-        wrapper.appendChild(table);
-        container.appendChild(wrapper);
+        // Now loop through the charts for this fund (Relative first, then Main)
+        charts.forEach(chartConfig => {
+            const chartType = chartConfig.chart_type;
+            const chartTitle = chartConfig.title;
+            const chartLabels = chartConfig.labels;
+            const chartDatasets = chartConfig.datasets;
+            const chartMetrics = chartConfig.latest_metrics;
+            const chartId = `${fundCode}-${chartType}`;
 
-        // --- Render Chart --- 
-        setTimeout(() => {
-            const chartCanvas = document.getElementById(canvas.id);
-             if (chartCanvas && chartCanvas.getContext('2d')) {
-                 console.log(`[chartRenderer] Rendering chart for ${fundCode}`);
-                 // Pass the specific Z-score corresponding to the max absolute primary Z
-                 const chart = createTimeSeriesChart(canvas.id, data, metricName, fundCode, primaryZScoreForTitle, isMissingLatest);
-                 if (chart) {
-                     chartInstances[fundCode] = chart; // Store chart instance
-                     console.log(`[chartRenderer] Stored chart instance for ${fundCode}`);
-                 } else {
-                      console.error(`[chartRenderer] Failed to create chart instance for ${fundCode}`);
-                 }
-            } else {
-                console.error(`[chartRenderer] Could not get 2D context for canvas ${canvas.id}`);
-                const errorP = document.createElement('p');
-                errorP.textContent = 'Error rendering chart.';
-                errorP.className = 'text-danger';
-                if (chartCanvas && chartCanvas.parentNode) {
-                    chartCanvas.parentNode.replaceChild(errorP, chartCanvas);
-                } else if (wrapper) {
-                    wrapper.appendChild(errorP);
+            console.log(`[chartRenderer] Creating elements for chart: ${chartId}`);
+
+             // --- Create DOM Elements for Each Chart --- 
+            const chartWrapper = document.createElement('div');
+            // Add column class for side-by-side layout on large screens
+            chartWrapper.className = `chart-container-wrapper chart-type-${chartType} col-lg-6`; 
+            chartWrapper.id = `chart-wrapper-${chartId}`;
+
+            // Create Chart Canvas
+            const canvas = document.createElement('canvas');
+            canvas.id = `chart-${chartId}`;
+            canvas.className = 'chart-canvas';
+            chartWrapper.appendChild(canvas);
+
+            // Create Metrics Table (pass specific metrics and chart type)
+            const table = createMetricsTable(
+                chartMetrics,
+                latestDate,
+                chartType, // Pass chart type to determine columns
+                metadata // Pass full metadata for context
+            );
+            chartWrapper.appendChild(table);
+            
+            // Append chartWrapper to the row, not the fundWrapper directly
+            chartsRow.appendChild(chartWrapper); 
+
+            // --- Render Chart --- 
+            setTimeout(() => {
+                const chartCanvas = document.getElementById(canvas.id);
+                if (chartCanvas && chartCanvas.getContext('2d')) {
+                    console.log(`[chartRenderer] Rendering chart for ${chartId}`);
+                    
+                    // Prepare chart data object for the charting function
+                    const chartDataForFunction = {
+                        labels: chartLabels,
+                        datasets: chartDatasets
+                    };
+                    
+                    // Pass specific Z-score ONLY if it's the main chart
+                    const zScoreForChartTitle = (chartType === 'main') ? primaryZScoreForTitle : null;
+
+                    const chart = createTimeSeriesChart(
+                        canvas.id, 
+                        chartDataForFunction, // Pass the structured data
+                        chartTitle, // Use the title from config
+                        fundCode, // Keep fund code for context if needed
+                        zScoreForChartTitle, // Pass main Z-score only to main chart
+                        isMissingLatest // Still relevant at fund level
+                    );
+                    if (chart) {
+                        chartInstances[chartId] = chart; // Store chart instance with unique ID
+                        console.log(`[chartRenderer] Stored chart instance for ${chartId}`);
+                    } else {
+                        console.error(`[chartRenderer] Failed to create chart instance for ${chartId}`);
+                    }
+                } else {
+                    console.error(`[chartRenderer] Could not get 2D context for canvas ${canvas.id}`);
+                    const errorP = document.createElement('p');
+                    errorP.textContent = 'Error rendering chart.';
+                    errorP.className = 'text-danger';
+                    if (chartCanvas && chartCanvas.parentNode) {
+                        chartCanvas.parentNode.replaceChild(errorP, chartCanvas);
+                    } else if (chartWrapper) {
+                        chartWrapper.appendChild(errorP);
+                    }
                 }
-            }
-        }, 0); 
-    }
+            }, 0); 
+        }); // End loop through charts for the fund
+
+        // Append the row containing the charts to the main fund wrapper
+        fundWrapper.appendChild(chartsRow);
+
+        container.appendChild(fundWrapper); // Add the fund's wrapper to the main container
+
+    } // End loop through funds
     console.log("[chartRenderer] Finished processing all funds.");
 }
 
@@ -165,175 +214,217 @@ export function renderChartsAndTables(container, payload) {
  * Updates the visibility of secondary/SP data datasets across all managed charts.
  * @param {boolean} show - Whether to show or hide the secondary/SP datasets.
  */
-function toggleSecondaryDataVisibility(show) {
+export function toggleSecondaryDataVisibility(show) { // Make sure this is exported if used by main.js
     console.log(`[chartRenderer] Toggling SP data visibility to: ${show}`);
     // Iterate through the centrally stored chart instances
-    Object.entries(chartInstances).forEach(([key, chart]) => {
+    Object.entries(chartInstances).forEach(([chartId, chart]) => {
+        if (!chart || typeof chart.destroy === 'undefined') { // Check if chart instance is valid
+            console.warn(`[chartRenderer] Skipping invalid chart instance for ID: ${chartId}`);
+            return;
+        }
         let spDatasetToggled = false;
-        chart.data.datasets.forEach((dataset, index) => {
-            // Check the isSpData flag added from Python
-            if (dataset.isSpData === true) {
-                // Use setDatasetVisibility for better control than just 'hidden' property
-                chart.setDatasetVisibility(index, show);
-                console.log(`[chartRenderer] Chart ${chart.canvas.id} - Setting SP dataset ${index} ('${dataset.label}') visibility to ${show}`);
-                spDatasetToggled = true;
+        try {
+            chart.data.datasets.forEach((dataset, index) => {
+                // Check the isSpData flag added from Python
+                if (dataset.isSpData === true) {
+                    // Use setDatasetVisibility for better control than just 'hidden' property
+                    chart.setDatasetVisibility(index, show);
+                    console.log(`[chartRenderer] Chart ${chart.canvas.id} (${chartId}) - Setting SP dataset ${index} ('${dataset.label}') visibility to ${show}`);
+                    spDatasetToggled = true;
+                }
+            });
+            // Only update if an SP dataset was actually toggled for this chart
+            if (spDatasetToggled) {
+                chart.update(); // Update the chart to reflect visibility changes
+                console.log(`[chartRenderer] Updated chart ${chart.canvas.id} (${chartId})`);
             }
-        });
-        // Only update if an SP dataset was actually toggled for this chart
-        if (spDatasetToggled) {
-            chart.update(); // Update the chart to reflect visibility changes
-            console.log(`[chartRenderer] Updated chart ${chart.canvas.id}`);
+        } catch (error) {
+            console.error(`[chartRenderer] Error toggling visibility for chart ${chartId}:`, error);
+             // Potentially remove the instance if it's causing persistent errors?
+            // delete chartInstances[chartId]; 
         }
     });
 }
 
 /**
- * Creates the HTML table element displaying metrics.
- * Includes primary columns and optionally secondary (prefixed) columns.
+ * Creates the HTML table element displaying metrics for a specific chart.
  *
- * @param {object | null} metrics - Flattened metrics object from Flask.
+ * @param {object | null} metrics - Metrics object specific to this chart (relative or main).
  * @param {string} latestDate - The latest date string.
- * @param {string[]} fundColNames - List of primary fund value column names.
- * @param {string | null} benchmarkColName - Primary benchmark column name.
- * @param {boolean} secondaryAvailable - Flag indicating if secondary data exists.
- * @param {string[] | null} secondaryFundColNames - List of secondary fund value column names.
- * @param {string | null} secondaryBenchmarkColName - Secondary benchmark column name.
- * @param {string} secondaryPrefix - Prefix for secondary metric keys (e.g., "S&P ").
+ * @param {string} chartType - 'relative' or 'main'.
+ * @param {object} metadata - The overall metadata object from Flask (for column names).
  * @returns {HTMLTableElement} The created table element.
  */
 function createMetricsTable(
     metrics, 
     latestDate, 
-    fundColNames, 
-    benchmarkColName, 
-    secondaryAvailable, 
-    secondaryFundColNames, 
-    secondaryBenchmarkColName, 
-    secondaryPrefix
+    chartType, 
+    metadata 
 ) {
     const table = document.createElement('table');
-    table.className = 'table table-sm table-bordered metrics-table'; // Apply base classes
+    table.className = 'table table-sm table-bordered metrics-table';
 
     const thead = table.createTHead();
     const headerRow = thead.insertRow();
-    // Define headers dynamically based on secondary data availability
-    headerRow.innerHTML = `
-        <th>Column</th>
-        <th>Latest Value (${latestDate})</th>
-        <th>Change</th>
-        <th>Mean</th> 
-        <th>Max</th> 
-        <th>Min</th> 
-        <th>Change Z-Score</th>
-        ${secondaryAvailable ? `
-        <th class="text-muted">S&P Latest</th>
-        <th class="text-muted">S&P Change</th>
-        <th class="text-muted">S&P Mean</th>
-        <th class="text-muted">S&P Max</th>
-        <th class="text-muted">S&P Min</th>
-        <th class="text-muted">S&P Z-Score</th>
-        ` : ''} 
-    `;
-
     const tbody = table.createTBody();
 
-    if (!metrics) {
-        console.warn("[createMetricsTable] Metrics object is null.");
+    const secondaryAvailable = metadata.secondary_data_available; // Overall flag
+    const primaryFundColsMeta = metadata.fund_col_names || [];
+    const primaryBenchColMeta = metadata.benchmark_col_name;
+    const secondaryFundColsMeta = metadata.secondary_fund_col_names || [];
+    const secondaryBenchColMeta = metadata.secondary_benchmark_col_name;
+    const secondaryPrefix = "S&P ";
+
+    if (!metrics || Object.keys(metrics).length === 0) {
+        console.warn(`[createMetricsTable] Metrics object is null or empty for chart type: ${chartType}.`);
+        headerRow.innerHTML = '<th>Metrics</th>'; // Simple header
         const row = tbody.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = secondaryAvailable ? 13 : 7; // Adjust colspan based on headers
         cell.textContent = 'Metrics not available.';
         return table;
     }
 
-    // Combine primary columns for iteration
-    const allPrimaryColumns = [];
-    if (benchmarkColName) allPrimaryColumns.push(benchmarkColName);
-    if (fundColNames && Array.isArray(fundColNames)) allPrimaryColumns.push(...fundColNames);
+    // --- Define Headers based on Chart Type --- 
+    let headers = ['Column', `Latest Value (${latestDate})`, 'Change', 'Mean', 'Max', 'Min', 'Change Z-Score'];
+    let secondaryHeaders = ['S&P Latest', 'S&P Change', 'S&P Mean', 'S&P Max', 'S&P Min', 'S&P Z-Score'];
+    let showSecondaryColumns = false;
 
-    // Create one row per primary column
-    allPrimaryColumns.forEach(colName => {
-        if (!colName) return;
+    if (chartType === 'relative') {
+        // Check if any S&P Relative metrics actually exist
+        showSecondaryColumns = Object.keys(metrics).some(key => key.startsWith(secondaryPrefix + 'Relative '));
+    } else { // chartType === 'main'
+        // Check if any regular S&P metrics exist (excluding relative)
+        showSecondaryColumns = Object.keys(metrics).some(key => key.startsWith(secondaryPrefix) && !key.startsWith(secondaryPrefix + 'Relative '));
+    }
 
-        const row = tbody.insertRow();
-        
-        // --- Primary Metrics --- 
-        const pri_latestValKey = `${colName} Latest Value`;
-        const pri_changeKey = `${colName} Change`;
-        const pri_meanKey = `${colName} Mean`;
-        const pri_maxKey = `${colName} Max`;
-        const pri_minKey = `${colName} Min`;
-        const pri_zScoreKey = `${colName} Change Z-Score`;
+    headerRow.innerHTML = `<th>${headers.join('</th><th>')}</th>` + 
+                         (showSecondaryColumns ? `<th class="text-muted">${secondaryHeaders.join('</th><th class="text-muted">')}</th>` : '');
 
-        const pri_zScoreValue = metrics[pri_zScoreKey];
-        let pri_zScoreClass = ''; // Default class
-        if (pri_zScoreValue !== null && typeof pri_zScoreValue !== 'undefined' && !isNaN(pri_zScoreValue)) {
-             const absZ = Math.abs(pri_zScoreValue);
-             if (absZ > 3) { pri_zScoreClass = 'very-high-z'; }
-             else if (absZ > 2) { pri_zScoreClass = 'high-z'; }
-        }
+    // --- Populate Rows based on Chart Type --- 
 
-        // Populate primary cells
-        row.innerHTML = `
-            <td>${colName}</td>
-            <td>${formatNumber(metrics[pri_latestValKey])}</td>
-            <td>${formatNumber(metrics[pri_changeKey])}</td>
-            <td>${formatNumber(metrics[pri_meanKey])}</td>
-            <td>${formatNumber(metrics[pri_maxKey])}</td>
-            <td>${formatNumber(metrics[pri_minKey])}</td>
-            <td class="${pri_zScoreClass}">${formatNumber(pri_zScoreValue)}</td>
-        `;
+    const addRow = (displayName, baseKey, isSecondary = false) => {
+        const prefix = isSecondary ? secondaryPrefix : '';
+        const fullBaseKey = prefix + baseKey;
 
-        // --- Secondary Metrics (if available) --- 
-        if (secondaryAvailable) {
-            // Try to find the corresponding secondary column name (simple exact match)
-            let secColName = null;
-            if (benchmarkColName === colName && secondaryBenchmarkColName) {
-                secColName = secondaryBenchmarkColName;
-            } else if (secondaryFundColNames && secondaryFundColNames.includes(colName)) {
-                secColName = colName;
+        // Check if *any* metric exists for this base key and prefix
+        const latestValKey = `${fullBaseKey} Latest Value`;
+        const changeKey = `${fullBaseKey} Change`;
+        const meanKey = `${fullBaseKey} Mean`;
+        const maxKey = `${fullBaseKey} Max`;
+        const minKey = `${fullBaseKey} Min`;
+        const zScoreKey = `${fullBaseKey} Change Z-Score`;
+
+        // Only add row if at least one relevant metric is present
+        if (
+            metrics.hasOwnProperty(latestValKey) || metrics.hasOwnProperty(changeKey) || 
+            metrics.hasOwnProperty(meanKey) || metrics.hasOwnProperty(maxKey) || 
+            metrics.hasOwnProperty(minKey) || metrics.hasOwnProperty(zScoreKey)
+        ) {
+            const row = tbody.insertRow();
+            const zScore = metrics[zScoreKey];
+            let zClass = '';
+            if (zScore !== null && typeof zScore !== 'undefined' && !isNaN(zScore)) {
+                const absZ = Math.abs(zScore);
+                if (absZ > 3) { zClass = 'very-high-z'; }
+                else if (absZ > 2) { zClass = 'high-z'; }
             }
+            row.className = zClass;
             
-            let secCellsHTML = '<td colspan="6" class="text-muted text-center">(N/A)</td>'; // Default placeholder
-            
-            // Check if a corresponding secondary column exists and has metrics
-            if (secColName && `${secondaryPrefix}${secColName} Latest Value` in metrics) {
-                const sec_latestValKey = `${secondaryPrefix}${secColName} Latest Value`;
-                const sec_changeKey = `${secondaryPrefix}${secColName} Change`;
-                const sec_meanKey = `${secondaryPrefix}${secColName} Mean`;
-                const sec_maxKey = `${secondaryPrefix}${secColName} Max`;
-                const sec_minKey = `${secondaryPrefix}${secColName} Min`;
-                const sec_zScoreKey = `${secondaryPrefix}${secColName} Change Z-Score`;
+            row.insertCell().textContent = displayName;
+            row.insertCell().textContent = formatNumber(metrics[latestValKey]);
+            row.insertCell().textContent = formatNumber(metrics[changeKey]);
+            row.insertCell().textContent = formatNumber(metrics[meanKey]);
+            row.insertCell().textContent = formatNumber(metrics[maxKey]);
+            row.insertCell().textContent = formatNumber(metrics[minKey]);
+            row.insertCell().textContent = formatNumber(metrics[zScoreKey]);
 
-                const sec_zScoreValue = metrics[sec_zScoreKey];
-                let sec_zScoreClass = 'text-muted'; // Default secondary class
-                if (sec_zScoreValue !== null && typeof sec_zScoreValue !== 'undefined' && !isNaN(sec_zScoreValue)) {
-                    const absZ = Math.abs(sec_zScoreValue);
-                    // Apply similar Z-score highlighting, but keep text muted unless significant
-                    if (absZ > 3) { sec_zScoreClass = 'very-high-z text-muted'; } 
-                    else if (absZ > 2) { sec_zScoreClass = 'high-z text-muted'; } 
+            if (showSecondaryColumns && !isSecondary) {
+                // Add placeholder cells if primary row but secondary columns shown
+                for (let i = 0; i < secondaryHeaders.length; i++) {
+                    row.insertCell().textContent = '-';
                 }
-                
-                secCellsHTML = `
-                    <td class="text-muted">${formatNumber(metrics[sec_latestValKey])}</td>
-                    <td class="text-muted">${formatNumber(metrics[sec_changeKey])}</td>
-                    <td class="text-muted">${formatNumber(metrics[sec_meanKey])}</td>
-                    <td class="text-muted">${formatNumber(metrics[sec_maxKey])}</td>
-                    <td class="text-muted">${formatNumber(metrics[sec_minKey])}</td>
-                    <td class="${sec_zScoreClass}">${formatNumber(sec_zScoreValue)}</td>
-                `;
-            } else if (secColName) {
-                // If secColName was found but metrics weren't in the object (e.g., secondary processing failed for this col)
-                secCellsHTML = '<td colspan="6" class="text-muted text-center">(Metrics missing)</td>';
             }
-            // Append the secondary cells (either data or placeholder)
-            row.innerHTML += secCellsHTML;
+        } else if (isSecondary && showSecondaryColumns) {
+            // Add secondary row even if primary version doesn't exist, but only if secondary columns are shown
+            const row = tbody.insertRow();
+            row.insertCell().textContent = displayName;
+            row.insertCell().textContent = formatNumber(metrics[latestValKey]);
+            row.insertCell().textContent = formatNumber(metrics[changeKey]);
+            row.insertCell().textContent = formatNumber(metrics[meanKey]);
+            row.insertCell().textContent = formatNumber(metrics[maxKey]);
+            row.insertCell().textContent = formatNumber(metrics[minKey]);
+            row.insertCell().textContent = formatNumber(metrics[zScoreKey]);
+            
+            // Add empty primary cells
+             for (let i = 0; i < headers.length -1; i++) { // -1 for the name column
+                 row.insertCell(1).textContent = '-'; // Insert after name
+             }
+             row.className = 'text-muted'; // Mute the secondary row
         }
-    });
+    };
+    
+    const addPairedRow = (displayName, baseKey) => {
+        const primaryExists = Object.keys(metrics).some(k => k.startsWith(baseKey) && !k.startsWith(secondaryPrefix));
+        const secondaryExists = showSecondaryColumns && Object.keys(metrics).some(k => k.startsWith(secondaryPrefix + baseKey));
 
-    console.log("[createMetricsTable] Table created.");
+        if (primaryExists || secondaryExists) {
+            const row = tbody.insertRow();
+            const zScoreKey = `${baseKey} Change Z-Score`;
+            const zScore = metrics[zScoreKey]; // Use primary Z for highlight
+            let zClass = '';
+            if (zScore !== null && typeof zScore !== 'undefined' && !isNaN(zScore)) {
+                const absZ = Math.abs(zScore);
+                if (absZ > 3) { zClass = 'very-high-z'; }
+                else if (absZ > 2) { zClass = 'high-z'; }
+            }
+            row.className = zClass;
+
+            row.insertCell().textContent = displayName;
+            // Primary Metrics
+            row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Latest Value`]) : '-';
+            row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Change`]) : '-';
+            row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Mean`]) : '-';
+            row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Max`]) : '-';
+            row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Min`]) : '-';
+            row.insertCell().textContent = primaryExists ? formatNumber(metrics[zScoreKey]) : '-';
+
+            // Secondary Metrics (if columns are shown)
+            if (showSecondaryColumns) {
+                row.insertCell().textContent = secondaryExists ? formatNumber(metrics[`${secondaryPrefix}${baseKey} Latest Value`]) : '-';
+                row.insertCell().textContent = secondaryExists ? formatNumber(metrics[`${secondaryPrefix}${baseKey} Change`]) : '-';
+                row.insertCell().textContent = secondaryExists ? formatNumber(metrics[`${secondaryPrefix}${baseKey} Mean`]) : '-';
+                row.insertCell().textContent = secondaryExists ? formatNumber(metrics[`${secondaryPrefix}${baseKey} Max`]) : '-';
+                row.insertCell().textContent = secondaryExists ? formatNumber(metrics[`${secondaryPrefix}${baseKey} Min`]) : '-';
+                row.insertCell().textContent = secondaryExists ? formatNumber(metrics[`${secondaryPrefix}${baseKey} Change Z-Score`]) : '-';
+            }
+        }
+    };
+
+
+    if (chartType === 'relative') {
+        // Add row specifically for 'Relative' if its metrics exist
+        addPairedRow('Relative (Port - Bench)', 'Relative');
+    } else { // chartType === 'main'
+        // Add Benchmark row first if it exists
+        if (primaryBenchColMeta) {
+             addPairedRow(primaryBenchColMeta, primaryBenchColMeta);
+        }
+        // Add rows for Fund columns
+        primaryFundColsMeta.forEach(fundCol => {
+            addPairedRow(fundCol, fundCol);
+        });
+    }
+
+    // Ensure tbody is not empty, add placeholder if needed
+    if (tbody.rows.length === 0) {
+        const row = tbody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = headers.length + (showSecondaryColumns ? secondaryHeaders.length : 0);
+        cell.textContent = 'No relevant metrics found for this chart.';
+    }
+
     return table;
-} 
+}
 
 /**
  * Renders a single time series chart for a specific security.
@@ -515,4 +606,4 @@ export function renderFundCharts(container, allChartData) {
 } 
 
 // Export necessary functions
-export { toggleSecondaryDataVisibility }; // Export toggle function 
+// REMOVED: export { toggleSecondaryDataVisibility }; // Export toggle function 

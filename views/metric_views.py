@@ -140,17 +140,20 @@ def metric_page(metric_name):
         for fund_code in fund_codes_in_metrics:
             fund_latest_metrics_row = latest_metrics.loc[fund_code]
             is_missing_latest = fund_code in missing_latest.index
+            fund_charts = [] # Initialize list to hold chart configs for this fund
 
             primary_labels = []
-            primary_datasets = []
-            fund_hist_primary = None
             primary_dt_index = None
-            
-            # Get Primary Historical Data
+            fund_hist_primary = None
+            relative_primary_hist = None
+            relative_secondary_hist = None # Initialize
+
+            # --- Get Primary Historical Data ---
             if fund_code in primary_df_index.get_level_values(1):
                 fund_hist_primary = primary_df.xs(fund_code, level=1).sort_index()
                 if isinstance(fund_hist_primary.index, pd.DatetimeIndex):
                     primary_dt_index = fund_hist_primary.index # Store before filtering
+                    # Filter out weekends (assuming data is daily/business daily)
                     fund_hist_primary = fund_hist_primary[primary_dt_index.dayofweek < 5]
                     primary_dt_index = fund_hist_primary.index # Update after filtering
                     primary_labels = primary_dt_index.strftime('%Y-%m-%d').tolist()
@@ -158,142 +161,228 @@ def metric_page(metric_name):
                     primary_labels = fund_hist_primary.index.astype(str).tolist()
                     print(f"Warning: Primary index for {fund_code} is not DatetimeIndex.")
 
-                # Create Primary Datasets
+            # --- Get Secondary Historical Data ---
+            fund_hist_secondary = None
+            if secondary_data_available and secondary_df_index is not None and fund_code in secondary_df_index.get_level_values(1):
+                fund_hist_secondary_raw = secondary_df.xs(fund_code, level=1).sort_index()
+                if isinstance(fund_hist_secondary_raw.index, pd.DatetimeIndex):
+                    fund_hist_secondary_raw = fund_hist_secondary_raw[fund_hist_secondary_raw.index.dayofweek < 5]
+                    # Reindex to primary date index if possible
+                    if primary_dt_index is not None and not primary_dt_index.empty:
+                         try:
+                             if isinstance(fund_hist_secondary_raw.index, pd.DatetimeIndex):
+                                 fund_hist_secondary = fund_hist_secondary_raw.reindex(primary_dt_index)
+                                 print(f"Successfully reindexed secondary data for {fund_code}.")
+                             else:
+                                 print(f"Warning: Cannot reindex - Secondary index for {fund_code} is not DatetimeIndex after filtering.")
+                         except Exception as reindex_err:
+                             print(f"Warning: Reindexing secondary data for {fund_code} failed: {reindex_err}. Chart may be misaligned.")
+                             fund_hist_secondary = fund_hist_secondary_raw # Use unaligned as fallback
+                    else:
+                         print(f"Warning: Cannot reindex secondary for {fund_code} - Primary DatetimeIndex unavailable.")
+                         fund_hist_secondary = fund_hist_secondary_raw # Use unaligned as fallback
+                else:
+                    print(f"Warning: Secondary index for {fund_code} is not DatetimeIndex.")
+                    fund_hist_secondary = fund_hist_secondary_raw # Use raw if not datetime
+
+            # --- Prepare Relative Chart Data (if possible) ---
+            relative_datasets = []
+            relative_chart_config = None
+            relative_metrics_for_js = {}
+
+            # 1. Calculate Primary Relative Series
+            pri_fund_col_used = None
+            if fund_hist_primary is not None and pri_fund_cols:
+                for f_col in pri_fund_cols:
+                    if f_col in fund_hist_primary.columns:
+                        pri_fund_col_used = f_col
+                        break
+            if pri_fund_col_used and pri_bench_col and pri_bench_col in fund_hist_primary.columns:
+                port_col_hist = fund_hist_primary[pri_fund_col_used]
+                bench_col_hist = fund_hist_primary[pri_bench_col]
+                if not port_col_hist.dropna().empty and not bench_col_hist.dropna().empty:
+                    relative_primary_hist = (port_col_hist - bench_col_hist).round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None)
+                    relative_datasets.append({
+                        'label': 'Relative (Port - Bench)',
+                        'data': relative_primary_hist.tolist(),
+                        'borderColor': '#1f77b4', # Specific color for primary relative
+                        'backgroundColor': '#aec7e8',
+                        'tension': 0.1,
+                        'source': 'primary_relative',
+                        'isSpData': False
+                    })
+                    # Extract primary relative metrics
+                    for col in fund_latest_metrics_row.index:
+                        if col.startswith('Relative '):
+                             relative_metrics_for_js[col] = fund_latest_metrics_row[col] if pd.notna(fund_latest_metrics_row[col]) else None
+
+
+            # 2. Calculate Secondary Relative Series (if applicable)
+            sec_fund_col_used = None
+            if fund_hist_secondary is not None and sec_fund_cols:
+                 for f_col in sec_fund_cols:
+                    if f_col in fund_hist_secondary.columns:
+                        sec_fund_col_used = f_col
+                        break
+            if sec_fund_col_used and sec_bench_col and sec_bench_col in fund_hist_secondary.columns:
+                port_col_hist_sec = fund_hist_secondary[sec_fund_col_used]
+                bench_col_hist_sec = fund_hist_secondary[sec_bench_col]
+                # Check if S&P Relative metrics exist, indicating calculation happened
+                if 'S&P Relative Change Z-Score' in fund_latest_metrics_row.index and pd.notna(fund_latest_metrics_row['S&P Relative Change Z-Score']):
+                    if not port_col_hist_sec.dropna().empty and not bench_col_hist_sec.dropna().empty:
+                        relative_secondary_hist = (port_col_hist_sec - bench_col_hist_sec).round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None)
+                        relative_datasets.append({
+                            'label': 'S&P Relative (Port - Bench)',
+                            'data': relative_secondary_hist.tolist(),
+                            'borderColor': '#ff7f0e', # Specific color for secondary relative
+                            'backgroundColor': '#ffbb78',
+                            'borderDash': [2, 2],
+                            'tension': 0.1,
+                            'source': 'secondary_relative',
+                            'isSpData': True,
+                            'hidden': True # Initially hidden
+                        })
+                         # Extract secondary relative metrics
+                        for col in fund_latest_metrics_row.index:
+                            if col.startswith('S&P Relative '):
+                                relative_metrics_for_js[col] = fund_latest_metrics_row[col] if pd.notna(fund_latest_metrics_row[col]) else None
+
+            # 3. Create Relative Chart Config if primary relative data exists
+            if relative_primary_hist is not None:
+                relative_chart_config = {
+                    'chart_type': 'relative',
+                    'title': f'{fund_code} - Relative ({metric_name})',
+                    'labels': primary_labels,
+                    'datasets': relative_datasets,
+                    'latest_metrics': relative_metrics_for_js
+                }
+                # We will add this later, after the main chart
+                # fund_charts.append(relative_chart_config) # Add relative chart first
+
+            # --- Prepare Main Chart Data ---
+            main_datasets = []
+            main_metrics_for_js = {}
+
+            # 1. Primary Datasets (Portfolio/Benchmark)
+            if fund_hist_primary is not None:
                 if pri_bench_col and pri_bench_col in fund_hist_primary.columns:
                     bench_values = fund_hist_primary[pri_bench_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
-                    primary_datasets.append({
+                    main_datasets.append({
                         'label': pri_bench_col,
                         'data': bench_values,
                         'borderColor': 'black', 'backgroundColor': 'grey',
                         'borderDash': [5, 5], 'tension': 0.1,
-                        'source': 'primary',
-                        'isSpData': False
+                        'source': 'primary', 'isSpData': False
                     })
                 if pri_fund_cols:
                     for i, fund_col in enumerate(pri_fund_cols):
                         if fund_col in fund_hist_primary.columns:
                             fund_values = fund_hist_primary[fund_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
                             color = COLOR_PALETTE[i % len(COLOR_PALETTE)]
-                            primary_datasets.append({
+                            main_datasets.append({
                                 'label': fund_col,
                                 'data': fund_values,
                                 'borderColor': color, 'backgroundColor': color + '40',
                                 'tension': 0.1,
-                                'source': 'primary',
-                                'isSpData': False
+                                'source': 'primary', 'isSpData': False
                             })
-            else:
-                print(f"Warning: Fund {fund_code} not found in primary source for historical data.")
+                # Extract primary non-relative metrics
+                for col in fund_latest_metrics_row.index:
+                    if not col.startswith('Relative ') and not col.startswith('S&P Relative '):
+                        main_metrics_for_js[col] = fund_latest_metrics_row[col] if pd.notna(fund_latest_metrics_row[col]) else None
 
-            # Get Secondary Historical Data (and align to primary labels)
-            secondary_datasets = []
-            if secondary_data_available and secondary_df_index is not None and fund_code in secondary_df_index.get_level_values(1):
-                fund_hist_secondary = secondary_df.xs(fund_code, level=1).sort_index()
-                if isinstance(fund_hist_secondary.index, pd.DatetimeIndex):
-                    fund_hist_secondary = fund_hist_secondary[fund_hist_secondary.index.dayofweek < 5]
-                    # Reindex to primary date index if possible
-                    if primary_dt_index is not None and not primary_dt_index.empty:
-                         try:
-                             # Ensure secondary index is also datetime before reindexing
-                             if isinstance(fund_hist_secondary.index, pd.DatetimeIndex):
-                                 fund_hist_secondary_aligned = fund_hist_secondary.reindex(primary_dt_index)
-                                 # Replace fund_hist_secondary with aligned version for dataset creation
-                                 fund_hist_secondary = fund_hist_secondary_aligned
-                                 print(f"Successfully reindexed secondary data for {fund_code}.")
-                             else:
-                                 print(f"Warning: Cannot reindex - Secondary index for {fund_code} is not DatetimeIndex after filtering.")
-                         except Exception as reindex_err:
-                             print(f"Warning: Reindexing secondary data for {fund_code} failed: {reindex_err}. Chart may be misaligned.")
-                    else:
-                         print(f"Warning: Cannot reindex secondary for {fund_code} - Primary DatetimeIndex unavailable.")
-                else:
-                    print(f"Warning: Secondary index for {fund_code} is not DatetimeIndex.")
-
-                # Create Secondary Datasets (using potentially reindexed data)
+            # 2. Secondary Datasets (Portfolio/Benchmark)
+            if fund_hist_secondary is not None:
                 if sec_bench_col and sec_bench_col in fund_hist_secondary.columns:
                     bench_values_sec = fund_hist_secondary[sec_bench_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
-                    secondary_datasets.append({
-                        'label': f"S&P {sec_bench_col}",
-                        'data': bench_values_sec,
-                        'xAxisID': 'x',
-                        'borderColor': '#FFA500',
-                        'backgroundColor': '#FFDAB9',
-                        'borderDash': [2, 2], 'tension': 0.1,
-                        'source': 'secondary',
-                        'isSpData': True,
-                        'hidden': True
-                    })
+                    # Check if S&P benchmark metrics exist
+                    if f'S&P {sec_bench_col} Change Z-Score' in fund_latest_metrics_row.index and pd.notna(fund_latest_metrics_row[f'S&P {sec_bench_col} Change Z-Score']):
+                         main_datasets.append({
+                            'label': f"S&P {sec_bench_col}",
+                            'data': bench_values_sec,
+                            'borderColor': '#FFA500', 'backgroundColor': '#FFDAB9',
+                            'borderDash': [2, 2], 'tension': 0.1,
+                            'source': 'secondary', 'isSpData': True, 'hidden': True
+                        })
                 if sec_fund_cols:
                     for i, fund_col in enumerate(sec_fund_cols):
                         if fund_col in fund_hist_secondary.columns:
-                            fund_values_sec = fund_hist_secondary[fund_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
-                            color_index = i # Default index
-                            if pri_fund_cols: # Try to match color with primary
-                                try:
-                                    color_index = pri_fund_cols.index(fund_col)
-                                except ValueError:
-                                    pass # Keep default index if no match
-                            base_color = COLOR_PALETTE[color_index % len(COLOR_PALETTE)]
-                            secondary_datasets.append({
-                                'label': f"S&P {fund_col}",
-                                'data': fund_values_sec,
-                                'xAxisID': 'x',
-                                'borderColor': base_color,
-                                'backgroundColor': base_color + '20',
-                                'borderDash': [2, 2],
-                                'tension': 0.1,
-                                'source': 'secondary',
-                                'isSpData': True,
-                                'hidden': True
-                            })
-            elif secondary_data_available:
-                 print(f"Info: Fund {fund_code} not found in secondary source for historical data.")
+                             # Check if S&P fund metrics exist
+                             if f'S&P {fund_col} Change Z-Score' in fund_latest_metrics_row.index and pd.notna(fund_latest_metrics_row[f'S&P {fund_col} Change Z-Score']):
+                                fund_values_sec = fund_hist_secondary[fund_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
+                                color_index = i
+                                if pri_fund_cols:
+                                    try: color_index = pri_fund_cols.index(fund_col)
+                                    except ValueError: pass
+                                base_color = COLOR_PALETTE[color_index % len(COLOR_PALETTE)]
+                                main_datasets.append({
+                                    'label': f"S&P {fund_col}",
+                                    'data': fund_values_sec,
+                                    'borderColor': base_color, 'backgroundColor': base_color + '20',
+                                    'borderDash': [2, 2], 'tension': 0.1,
+                                    'source': 'secondary', 'isSpData': True, 'hidden': True
+                                })
+                 # Extract secondary non-relative metrics
+                for col in fund_latest_metrics_row.index:
+                    if col.startswith('S&P ') and not col.startswith('S&P Relative '):
+                         main_metrics_for_js[col] = fund_latest_metrics_row[col] if pd.notna(fund_latest_metrics_row[col]) else None
 
-            # Combine metrics and chart data for the fund
-            fund_latest_metrics_dict = fund_latest_metrics_row.round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).to_dict()
+            # 3. Create Main Chart Config
+            main_chart_config = None # Initialize
+            if main_datasets: # Only create if there's actual data
+                main_chart_config = {
+                    'chart_type': 'main',
+                    'title': f'{fund_code} - {metric_name}',
+                    'labels': primary_labels,
+                    'datasets': main_datasets,
+                    'latest_metrics': main_metrics_for_js
+                }
+                # Add main chart FIRST
+                fund_charts.append(main_chart_config)
+            
+            # Now add the relative chart config if it exists
+            if relative_chart_config:
+                fund_charts.append(relative_chart_config)
+
+            # --- Store Fund Data ---
             funds_data_for_js[fund_code] = {
-                'labels': primary_labels, # Use primary labels for the chart axis
-                'datasets': primary_datasets + secondary_datasets,
-                'metrics': fund_latest_metrics_dict,
+                'charts': fund_charts,
                 'is_missing_latest': is_missing_latest
             }
-        
-        # --- Prepare Final JSON Payload --- 
+
+        # --- Final JSON Payload ---
         json_payload = {
             "metadata": {
                 "metric_name": metric_name,
                 "latest_date": latest_date_str,
+                 # Keep original column names for potential reference, though chart uses specific labels now
                 "fund_col_names": pri_fund_cols or [],
                 "benchmark_col_name": pri_bench_col,
                 "secondary_fund_col_names": sec_fund_cols if secondary_data_available else [],
                 "secondary_benchmark_col_name": sec_bench_col if secondary_data_available else None,
                 "secondary_data_available": secondary_data_available
             },
-            "funds": funds_data_for_js
+            "funds": funds_data_for_js # Use the new structure
         }
-        print(f"Finished preparing data for {metric_name}. Sending to template.")
-        
-        # --- Render Template --- 
+
+        print(f"--- Completed processing metric: {metric_name} ---")
+
         return render_template('metric_page_js.html',
                                metric_name=metric_name,
                                charts_data_json=jsonify(json_payload).get_data(as_text=True),
-                               latest_date=latest_date_overall.strftime('%d/%m/%Y') if pd.notna(latest_date_overall) else 'N/A', 
-                               missing_funds=missing_latest)
+                               latest_date=latest_date_overall.strftime('%d/%m/%Y'),
+                               missing_funds=missing_latest,
+                               error_message=None) # Explicitly set error to None on success
 
-    # --- Exception Handling --- 
-    except FileNotFoundError:
-        # Specific handling for primary file not found is done within the try block
-        # This except block catches potential FileNotFoundError from dependencies (less likely)
-        print(f"Unexpected FileNotFoundError during processing of {metric_name}: {primary_filename} or {secondary_filename}")
+    except FileNotFoundError as e:
+        print(f"Error: File not found during processing for {metric_name}. Details: {e}")
         traceback.print_exc()
-        return f"An unexpected file error occurred while processing {metric_name}.", 500
-        
-    except ValueError as ve:
-        print(f"Value Error processing {metric_name}: {ve}")
-        traceback.print_exc()
-        return f"Error processing data for metric '{metric_name}'. Details: {ve}", 400
-        
+        error_msg = f"Error: Required data file not found for metric '{metric_name}'. {e}"
+        return render_template('metric_page_js.html', metric_name=metric_name, charts_data_json='{}', latest_date='N/A', missing_funds=pd.DataFrame(), error_message=error_msg), 404
+
     except Exception as e:
-        print(f"Unhandled Error processing {metric_name} for fund {fund_code}: {e}")
-        traceback.print_exc()
-        return f"An unexpected server error occurred while processing metric '{metric_name}'. Details: {e}", 500
+        print(f"Error processing metric page for {metric_name} (Fund: {fund_code}): {e}")
+        traceback.print_exc() # Log the full traceback to console/log file
+        error_msg = f"An error occurred while processing metric '{metric_name}'. Please check the server logs for details. Error: {e}"
+        # Attempt to render template with error message
+        return render_template('metric_page_js.html', metric_name=metric_name, charts_data_json='{}', latest_date='N/A', missing_funds=pd.DataFrame(), error_message=error_msg), 500
