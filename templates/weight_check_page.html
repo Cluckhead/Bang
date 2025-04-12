@@ -15,7 +15,8 @@
                     <thead class="thead-light">
                         <tr>
                             <th>Fund Code</th>
-                            {% for date in date_headers %}
+                            {# Reverse the date headers so newest is first #}
+                            {% for date in date_headers | reverse %}
                                 <th class="text-center">{{ date }}</th>
                             {% endfor %}
                         </tr>
@@ -24,7 +25,8 @@
                         {% for fund_code, date_values in data.items()|sort %}
                             <tr>
                                 <td class="fw-bold">{{ fund_code }}</td>
-                                {% for date in date_headers %}
+                                {# Reverse the date headers again to match the header order #}
+                                {% for date in date_headers | reverse %}
                                     {% set cell_data = date_values.get(date) %}
                                     {% if cell_data %}
                                         {% set value_str = cell_data.value_str %}
