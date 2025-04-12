@@ -7,10 +7,40 @@ import pandas as pd
 import logging
 import os
 import io
+import re
 from collections import Counter
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
+
+def clean_date_format(dates):
+    """
+    Clean up date format by removing time components and ensuring consistent YYYY-MM-DD format.
+    
+    Args:
+        dates (list): List of date strings or values to clean
+        
+    Returns:
+        list: List of cleaned date strings in YYYY-MM-DD format
+    """
+    cleaned_dates = []
+    for date in dates:
+        # Remove time component if it exists (T00:00:00 format)
+        if isinstance(date, str) and 'T' in date:
+            cleaned_date = date.split('T')[0]
+            cleaned_dates.append(cleaned_date)
+        else:
+            # If date is in datetime format, convert to string in YYYY-MM-DD format
+            try:
+                if pd.notnull(date):
+                    date_obj = pd.to_datetime(date)
+                    cleaned_dates.append(date_obj.strftime('%Y-%m-%d'))
+                else:
+                    cleaned_dates.append(date)
+            except:
+                cleaned_dates.append(date)
+                
+    return cleaned_dates
 
 def process_weight_file(input_path: str, output_path: str, dates_path: str = None):
     """
@@ -45,6 +75,11 @@ def process_weight_file(input_path: str, output_path: str, dates_path: str = Non
             dates_df = pd.read_csv(dates_path)
             dates = dates_df['Date'].tolist()
             logger.info(f"Loaded {len(dates)} dates from {dates_path}")
+            
+            # Clean up date formats to remove time components
+            dates = clean_date_format(dates)
+            logger.info(f"Cleaned up date formats to remove time components")
+            
         except Exception as e:
             logger.error(f"Error loading dates from {dates_path}: {e}")
             return

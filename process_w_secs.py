@@ -7,6 +7,7 @@ with dates from Dates.csv as the column headers for the weight values.
 import os
 import pandas as pd
 import logging
+import re
 
 # Configure basic logging
 logging.basicConfig(
@@ -37,6 +38,27 @@ def process_securities_file():
         dates_df = pd.read_csv(dates_path)
         dates = dates_df['Date'].tolist()
         logger.info(f"Loaded {len(dates)} dates from {dates_path}")
+        
+        # Clean up dates by removing any time component if present
+        cleaned_dates = []
+        for date in dates:
+            # Remove time component if it exists (T00:00:00 format)
+            if isinstance(date, str) and 'T' in date:
+                cleaned_date = date.split('T')[0]
+                cleaned_dates.append(cleaned_date)
+            else:
+                # If date is in datetime format, convert to string in YYYY-MM-DD format
+                try:
+                    if pd.notnull(date):
+                        date_obj = pd.to_datetime(date)
+                        cleaned_dates.append(date_obj.strftime('%Y-%m-%d'))
+                    else:
+                        cleaned_dates.append(date)
+                except:
+                    cleaned_dates.append(date)
+                    
+        logger.info(f"Cleaned up date formats to remove time components")
+        dates = cleaned_dates
         
         # Reverse the dates so newest is on the right
         dates = dates[::-1]
