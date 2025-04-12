@@ -119,6 +119,7 @@ def create_app():
     from views.spread_duration_comparison_views import spread_duration_comparison_bp
     # --- End import new blueprints ---
     from views.curve_views import curve_bp # Import the new blueprint
+    from views.issue_views import issue_bp # Import the issue tracking blueprint
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
@@ -133,6 +134,7 @@ def create_app():
     app.register_blueprint(spread_duration_comparison_bp)
     # --- End register new blueprints ---
     app.register_blueprint(curve_bp) # Register the new blueprint
+    app.register_blueprint(issue_bp) # Register the issue tracking blueprint
 
     app.logger.info("Registered Blueprints:")
     app.logger.info(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
@@ -148,6 +150,7 @@ def create_app():
     print(f"- {spread_duration_comparison_bp.name} (prefix: {spread_duration_comparison_bp.url_prefix})")
     # --- End print new blueprints ---
     app.logger.info(f"- {curve_bp.name} (prefix: {curve_bp.url_prefix})") # Log registration
+    app.logger.info(f"- {issue_bp.name} (prefix: {issue_bp.url_prefix})") # Log registration for issues
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')

@@ -21,6 +21,7 @@ This application provides a web interface to load, process, and check financial 
         *   Includes a toggle switch to show/hide this comparison data.
     *   Fund Duration Details (`/fund/duration_details/<fund_code>`): Shows duration changes for securities held by a specific fund.
 *   **Security Exclusions:** Maintain a list of securities to temporarily exclude from the main Security Summary page (`/security/summary`). Exclusions can have start/end dates and comments.
+*   **Data Issue Tracking:** Provides a dedicated page (`/issues`) to log, view, and manage data issues found in various sources (S&P, Production, Pi, IVP, Benchmark). Tracks who raised the issue, when, the impacted fund, the data source, the date the issue occurred, a description, and resolution details (who closed it, when, and comments). Issues are stored in `Data/data_issues.csv`.
 *   **Weight Check:** Load fund (`w_Funds.csv`) and benchmark (`w_Bench.csv`) weight files and display them side-by-side, highlighting any daily weights that are not exactly 100% via `/weights/check`.
 *   **Yield Curve Analysis:** Load yield curve data (`curves.csv`), check for potential inconsistencies (e.g., monotonicity, anomalous daily changes) and display curve charts per currency via `/curve/summary` and `/curve/details/<currency>`.
 *   **Data Comparison:**
@@ -51,6 +52,7 @@ graph TD
     C --> C3(security_processing.py);
     C --> C4(process_data.py);
     C --> C5(curve_processing.py);
+    C --> C6(issue_processing.py);
 
     D --> D1(main_views.py);
     D --> D2(metric_views.py);
@@ -63,6 +65,7 @@ graph TD
     D --> D9(duration_comparison_views.py);
     D --> D10(spread_duration_comparison_views.py);
     D --> D11(curve_views.py);
+    D --> D12(issue_views.py);
 
     E --> E1(base.html);
     E --> E2(index.html);
@@ -82,6 +85,7 @@ graph TD
     E --> E16(spread_duration_comparison_details_page.html);
     E --> E17(curve_summary.html);
     E --> E18(curve_details.html);
+    E --> E19(issues_page.html);
 
     F --> F1(js);
     F1 --> F1a(main.js);
@@ -106,6 +110,7 @@ graph TD
     G --> G8(w_Funds.csv);
     G --> G9(w_Bench.csv);
     G --> G10(curves.csv);
+    G --> G11(data_issues.csv);
 
     H --> H1(config.py);
     H --> H2(utils.py);
@@ -131,6 +136,7 @@ graph TD
 *   `w_Funds.csv`: Wide format file containing daily fund weights (expected to be 100%). Used by the Weight Check page.
 *   `w_Bench.csv`: Wide format file containing daily benchmark weights (expected to be 100%). Used by the Weight Check page.
 *   `curves.csv`: Contains yield curve data (Date, Currency Code, Term, Daily Value). Used by the Yield Curve Check feature.
+*   **`data_issues.csv`**: Stores a log of reported data issues. Columns: `IssueID`, `DateRaised`, `RaisedBy`, `FundImpacted`, `DataSource`, `IssueDate`, `Description`, `Status` ('Open'/'Closed'), `DateClosed`, `ClosedBy`, `ResolutionComment`.
 
 ## Python Files
 
@@ -216,6 +222,22 @@ graph TD
     *   `load_curve_data(...)`: Loads and preprocesses the `curves.csv` file.
     *   `get_latest_curve_date(...)`: Finds the most recent date in the loaded data.
     *   `check_curve_inconsistencies(...)`: Performs the inconsistency checks and returns a summary dictionary.
+
+### `issue_processing.py`
+*   **Purpose:** Handles loading, adding, and updating data issues stored in `Data/data_issues.csv`.
+*   **Key Features:**
+    *   Loads the CSV into a DataFrame, parsing dates.
+    *   Generates unique, sequential IDs (e.g., `ISSUE-001`) for new issues.
+    *   Provides functions to add a new issue (`add_issue`) and close an existing one (`close_issue`).
+    *   Loads the list of available funds from `Data/FundList.csv` for use in dropdowns.
+    *   Ensures the `data_issues.csv` file exists with correct headers.
+*   **Functions:**
+    *   `load_issues()`: Loads issues from CSV.
+    *   `_save_issues()`: Saves DataFrame to CSV.
+    *   `_generate_issue_id()`: Creates a new issue ID.
+    *   `add_issue()`: Adds a new record.
+    *   `close_issue()`: Updates a record to 'Closed' status with resolution details.
+    *   `load_fund_list()`: Gets fund codes from `FundList.csv`.
 
 ## View Modules (`views/`)
 
@@ -309,6 +331,12 @@ These modules contain the Flask Blueprints defining the application's routes.
     *   `/curve/summary`: Renders `curve_summary.html`. Loads curve data, runs inconsistency checks using `curve_processing.check_curve_inconsistencies`, and displays a summary table for all currencies.
     *   `/curve/details/<currency>`: Renders `curve_details.html`. Displays a line chart of the yield curve for the specified `currency` on a selected date. Includes a dropdown to select and view curves for previous dates.
 
+### `views/issue_views.py` (`issue_bp`)
+*   **Purpose:** Handles the Data Issue Tracking page.
+*   **Routes:**
+    *   `/issues` (GET/POST): Renders `issues_page.html`. Displays separate tables for open and closed issues. Handles the form submission for adding a new issue.
+    *   `/issues/close` (POST): Handles the form submission (via modal) to mark an issue as closed, recording the closer and resolution comment.
+
 ## HTML Templates (`templates/`)
 
 *   **`base.html`:** Main layout, includes Bootstrap, navbar, common structure. All other templates extend this.
@@ -331,4 +359,5 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`spread_duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread Duration).
 *   **`curve_summary.html`:** Displays a summary table of the yield curve inconsistency checks for the latest date across all currencies.
 *   **`curve_details.html`:** Shows a line chart of the yield curve for a specific currency and provides a date selector to view historical curves. Includes JavaScript for Chart.js rendering.
+*   **`issues_page.html`:** UI for tracking data issues. Includes a form to raise new issues and tables to display open and closed issues, with functionality to close open ones via a modal.
 ``` 
