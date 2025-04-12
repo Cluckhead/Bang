@@ -71,9 +71,24 @@ def load_curve_data(data_folder_path: str):
         return pd.DataFrame() # Return empty DataFrame
 
     try:
-        # Specify dayfirst=True for DD/MM/YYYY format
-        df = pd.read_csv(file_path, parse_dates=['Date'], dayfirst=True)
+        # Load without automatic date parsing initially
+        df = pd.read_csv(file_path)
         logger.info(f"Successfully loaded {len(df)} rows from {file_path}")
+
+        # Explicitly parse the 'Date' column - robust to different formats
+        if 'Date' in df.columns:
+            # Specify the exact format to handle YYYY-MM-DDTHH:MM:SS
+            df['Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%dT%H:%M:%S', errors='coerce')
+            # Drop rows where date parsing failed
+            original_rows_date = len(df)
+            df.dropna(subset=['Date'], inplace=True)
+            rows_after_date = len(df)
+            if original_rows_date > rows_after_date:
+                logger.warning(f"Dropped {original_rows_date - rows_after_date} rows due to unparseable 'Date'.")
+        else:
+            logger.error(f"Critical: 'Date' column not found in {file_path}")
+            return pd.DataFrame()
+
     except Exception as e:
         logger.error(f"Error reading curve data CSV '{file_path}': {e}", exc_info=True)
         return pd.DataFrame()
