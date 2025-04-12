@@ -13,6 +13,7 @@ import numpy as np
 from utils import _is_date_like, parse_fund_list # Import required utils
 # Updated import to include data loader
 from data_loader import load_and_process_data
+from security_processing import load_and_process_security_data, calculate_security_latest_metrics # For fund_duration_details
 
 # Define the blueprint
 fund_bp = Blueprint('fund', __name__, url_prefix='/fund')
@@ -263,9 +264,13 @@ def fund_duration_details(fund_code):
 # --- New Route for Fund Detail Page ---
 @fund_bp.route('/<fund_code>')
 def fund_detail(fund_code):
-    """Renders a page displaying all available time-series charts for a specific fund,
-       optionally including comparison data from sp_ts_* files."""
+    """
+    Renders the fund detail page, displaying time-series charts for all available
+    metrics associated with the given fund_code.
+    Includes primary data and optionally secondary/SP data if corresponding files exist.
+    """
     current_app.logger.info(f"--- Requesting Detail Page for Fund: {fund_code} ---")
+    data_folder = current_app.config['DATA_FOLDER'] # Define data_folder using app config
     all_chart_data = []
     available_metrics = []
     processed_files = 0
@@ -315,7 +320,8 @@ def fund_detail(fund_code):
             benchmark_col = None
             primary_load_error = None
             try:
-                load_result = load_and_process_data(filename, data_folder=data_folder)
+                # Corrected keyword argument
+                load_result = load_and_process_data(primary_filename=filename, data_folder_path=data_folder)
                 df = load_result[0]
                 fund_cols = load_result[1]
                 benchmark_col = load_result[2]
@@ -343,7 +349,8 @@ def fund_detail(fund_code):
             if primary_load_error is None and os.path.exists(sp_file_path):
                 current_app.logger.info(f"Found corresponding SP file: {sp_filename}. Attempting to load.")
                 try:
-                    sp_load_result = load_and_process_data(sp_filename, data_folder=data_folder)
+                    # Corrected keyword argument
+                    sp_load_result = load_and_process_data(primary_filename=sp_filename, data_folder_path=data_folder)
                     sp_df = sp_load_result[0]
                     sp_fund_cols = sp_load_result[1] # Assuming same structure for fund cols
                     # SP files typically don't have benchmarks in this context, ignore sp_load_result[2]
