@@ -1,4 +1,5 @@
-# Purpose: Handles loading, preprocessing, and analysis of yield curve data (Data/curves.csv).
+# Purpose: Handles loading, preprocessing, and analysis of yield curve data (curves.csv).
+# The `load_curve_data` function expects the absolute path to the data folder to be provided.
 
 # Stdlib imports
 import os
@@ -10,18 +11,11 @@ import pandas as pd
 import numpy as np
 
 # Local imports
-from config import DATA_FOLDER
+# Removed: from config import DATA_FOLDER
 import logging # Import logging
 
-# Get the logger instance from Flask app if available, otherwise basic config
-# This allows logging consistent with the Flask app when run via Flask
-try:
-    from flask import current_app
-    logger = current_app.logger
-except RuntimeError: # Handle cases where script is run outside Flask context
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s : %(message)s')
-    logger = logging.getLogger(__name__)
-
+# Get the logger instance. Assumes Flask app has configured logging.
+logger = logging.getLogger(__name__)
 
 # Constants for term conversion
 TERM_MULTIPLIERS = {
@@ -53,14 +47,32 @@ def _term_to_days(term_str):
         logger.warning(f"Could not parse term '{term_str}' to days.")
         return None # Indicate failure to parse
 
-def load_curve_data(file_path=os.path.join(DATA_FOLDER, 'curves.csv')):
-    """Loads and preprocesses the curve data from the CSV file."""
+def load_curve_data(data_folder_path: str):
+    """Loads and preprocesses the curve data from 'curves.csv' within the given folder.
+
+    Args:
+        data_folder_path (str): The absolute path to the folder containing 'curves.csv'.
+                                The caller is responsible for providing the correct path,
+                                typically obtained from `current_app.config['DATA_FOLDER']`.
+
+    Returns:
+        pd.DataFrame: Processed curve data indexed by [Currency, Date, Term],
+                      or an empty DataFrame if loading/processing fails.
+    """
+    if not data_folder_path:
+        logger.error("No data_folder_path provided to load_curve_data.")
+        return pd.DataFrame()
+
+    file_path = os.path.join(data_folder_path, 'curves.csv')
+    logger.info(f"Attempting to load curve data from: {file_path}")
+
     if not os.path.exists(file_path):
         logger.error(f"Curve data file not found at {file_path}")
         return pd.DataFrame() # Return empty DataFrame
 
     try:
-        df = pd.read_csv(file_path, parse_dates=['Date'])
+        # Specify dayfirst=True for DD/MM/YYYY format
+        df = pd.read_csv(file_path, parse_dates=['Date'], dayfirst=True)
         logger.info(f"Successfully loaded {len(df)} rows from {file_path}")
     except Exception as e:
         logger.error(f"Error reading curve data CSV '{file_path}': {e}", exc_info=True)

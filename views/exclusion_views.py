@@ -22,13 +22,19 @@ EXCLUSIONS_FILE = 'exclusions.csv'
 SECURITIES_SOURCE_FILE = 'sec_spread.csv' # Adjust if needed
 SECURITY_ID_COLUMN = 'Security Name' # Corrected column name
 
-def get_data_path(filename):
-    """Constructs the full path to a data file within the DATA_FOLDER."""
-    return os.path.join(current_app.config['DATA_FOLDER'], filename)
+def load_exclusions(data_folder_path: str):
+    """Loads the current list of exclusions from the CSV file.
 
-def load_exclusions():
-    """Loads the current list of exclusions from the CSV file."""
-    exclusions_path = get_data_path(EXCLUSIONS_FILE)
+    Args:
+        data_folder_path (str): The absolute path to the data folder.
+
+    Returns:
+        list[dict]: A list of dictionaries representing the exclusions, or [] if error.
+    """
+    if not data_folder_path:
+        logging.error("No data_folder_path provided to load_exclusions.")
+        return []
+    exclusions_path = os.path.join(data_folder_path, EXCLUSIONS_FILE)
     try:
         if os.path.exists(exclusions_path) and os.path.getsize(exclusions_path) > 0:
             df = pd.read_csv(exclusions_path, parse_dates=['AddDate', 'EndDate'], dayfirst=False) # Specify date format if needed
@@ -46,9 +52,19 @@ def load_exclusions():
         logging.error(f"Error loading exclusions from {exclusions_path}: {e}")
         return [] # Return empty list on error
 
-def load_available_securities():
-    """Loads the list of available security IDs from the source file."""
-    securities_file_path = get_data_path(SECURITIES_SOURCE_FILE)
+def load_available_securities(data_folder_path: str):
+    """Loads the list of available security IDs from the source file.
+
+    Args:
+        data_folder_path (str): The absolute path to the data folder.
+
+    Returns:
+        list[str]: A sorted list of unique available security IDs, or [] if error.
+    """
+    if not data_folder_path:
+        logging.error("No data_folder_path provided to load_available_securities.")
+        return []
+    securities_file_path = os.path.join(data_folder_path, SECURITIES_SOURCE_FILE)
     try:
         if os.path.exists(securities_file_path):
             # Load only the necessary column
@@ -68,9 +84,22 @@ def load_available_securities():
         logging.error(f"Error loading available securities from {securities_file_path}: {e}")
         return []
 
-def add_exclusion(security_id, end_date_str, comment):
-    """Adds a new exclusion to the CSV file."""
-    exclusions_path = get_data_path(EXCLUSIONS_FILE)
+def add_exclusion(data_folder_path: str, security_id, end_date_str, comment):
+    """Adds a new exclusion to the CSV file.
+
+    Args:
+        data_folder_path (str): The absolute path to the data folder.
+        security_id:
+        end_date_str:
+        comment:
+
+    Returns:
+        tuple[bool, str]: (Success status, Message)
+    """
+    if not data_folder_path:
+        logging.error("No data_folder_path provided to add_exclusion.")
+        return False, "Internal Server Error: Data folder path not configured."
+    exclusions_path = os.path.join(data_folder_path, EXCLUSIONS_FILE)
     try:
         # Basic validation
         if not security_id or not comment:
@@ -100,9 +129,21 @@ def add_exclusion(security_id, end_date_str, comment):
         logging.error(f"Error adding exclusion to {exclusions_path}: {e}")
         return False, "An error occurred while saving the exclusion."
 
-def remove_exclusion(security_id_to_remove, add_date_str_to_remove):
-    """Removes a specific exclusion entry from the CSV file based on SecurityID and AddDate."""
-    exclusions_path = get_data_path(EXCLUSIONS_FILE)
+def remove_exclusion(data_folder_path: str, security_id_to_remove, add_date_str_to_remove):
+    """Removes a specific exclusion entry from the CSV file based on SecurityID and AddDate.
+
+    Args:
+        data_folder_path (str): The absolute path to the data folder.
+        security_id_to_remove:
+        add_date_str_to_remove:
+
+    Returns:
+        tuple[bool, str]: (Success status, Message)
+    """
+    if not data_folder_path:
+        logging.error("No data_folder_path provided to remove_exclusion.")
+        return False, "Internal Server Error: Data folder path not configured."
+    exclusions_path = os.path.join(data_folder_path, EXCLUSIONS_FILE)
     try:
         if not os.path.exists(exclusions_path) or os.path.getsize(exclusions_path) == 0:
             logging.warning(f"Attempted to remove exclusion, but '{EXCLUSIONS_FILE}' is empty or does not exist.")
@@ -142,6 +183,12 @@ def manage_exclusions():
     GET: Displays the list of current exclusions and the form to add new ones.
     POST: Processes the form submission to add a new exclusion.
     """
+    # Retrieve the configured absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
     message = None
     message_type = 'info' # Can be 'success' or 'error'
 
@@ -150,7 +197,8 @@ def manage_exclusions():
         end_date_str = request.form.get('end_date')
         comment = request.form.get('comment')
 
-        success, msg = add_exclusion(security_id, end_date_str, comment)
+        # Pass the absolute data_folder path to the helper function
+        success, msg = add_exclusion(data_folder, security_id, end_date_str, comment)
         if success:
             # Redirect to the same page using GET to prevent form resubmission
             return redirect(url_for('exclusion_bp.manage_exclusions', _external=True))
@@ -160,8 +208,9 @@ def manage_exclusions():
             # Fall through to render the page again with the error message
 
     # For both GET requests and POST failures, load data and render template
-    current_exclusions = load_exclusions()
-    available_securities = load_available_securities()
+    # Pass the absolute data_folder path to the helper functions
+    current_exclusions = load_exclusions(data_folder)
+    available_securities = load_available_securities(data_folder)
 
     return render_template('exclusions_page.html',
                            exclusions=current_exclusions,
@@ -172,6 +221,13 @@ def manage_exclusions():
 @exclusion_bp.route('/exclusions/remove', methods=['POST'])
 def remove_exclusion_route():
     """Handles the POST request to remove an exclusion."""
+    # Retrieve the configured absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        # Redirect back with an error indication (flash message would be better)
+        return redirect(url_for('exclusion_bp.manage_exclusions'))
+
     security_id = request.form.get('security_id')
     add_date_str = request.form.get('add_date') # Get AddDate as string
 
@@ -182,7 +238,8 @@ def remove_exclusion_route():
         # For simplicity, redirect back to the main page; flash messages would be better
         return redirect(url_for('exclusion_bp.manage_exclusions'))
 
-    success, msg = remove_exclusion(security_id, add_date_str)
+    # Pass the absolute data_folder path to the helper function
+    success, msg = remove_exclusion(data_folder, security_id, add_date_str)
 
     # Regardless of success/failure, redirect back to the main exclusions page.
     # Consider using flash messages to display the success/error message after redirect.

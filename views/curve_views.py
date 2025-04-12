@@ -19,8 +19,14 @@ curve_bp = Blueprint('curve_bp', __name__, template_folder='../templates')
 @curve_bp.route('/curve/summary')
 def curve_summary():
     """Displays a summary of yield curve checks for the latest date."""
+    # Retrieve the absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
     current_app.logger.info("Loading curve data for summary...")
-    curve_df = load_curve_data()
+    curve_df = load_curve_data(data_folder_path=data_folder)
 
     if curve_df.empty:
         current_app.logger.warning("Curve data is empty or failed to load.")
@@ -41,7 +47,14 @@ def curve_summary():
 def curve_details(currency):
     """Displays the yield curve chart for a specific currency and date, with historical overlays."""
     current_app.logger.info(f"Loading curve data for currency: {currency}")
-    curve_df = load_curve_data()
+    # Retrieve the absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
+    # Pass the data folder path to the loading function
+    curve_df = load_curve_data(data_folder_path=data_folder)
 
     # Get parameters from request
     selected_date_str = request.args.get('date')

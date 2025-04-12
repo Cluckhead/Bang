@@ -17,40 +17,18 @@ import os
 import logging
 from typing import List, Tuple, Optional
 import re # Import regex for pattern matching
+from flask import current_app # Import current_app to access config
 
-# --- Logging Setup ---
-LOG_FILENAME = 'data_processing_errors.log'
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-
-# Get the logger for the current module
+# Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO) # Set minimum level for the logger
 
-# Prevent adding handlers multiple times
-if not logger.handlers:
-    # Console Handler (INFO and above)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch_formatter = logging.Formatter(LOG_FORMAT)
-    ch.setFormatter(ch_formatter)
-    logger.addHandler(ch)
-
-    # File Handler (WARNING and above)
-    try:
-        # Attempt to create log file in the parent directory (project root)
-        log_filepath = os.path.join(os.path.dirname(__file__), '..', LOG_FILENAME)
-        fh = logging.FileHandler(log_filepath, mode='a') # Append mode
-        fh.setLevel(logging.WARNING)
-        fh_formatter = logging.Formatter(LOG_FORMAT)
-        fh.setFormatter(fh_formatter)
-        logger.addHandler(fh)
-    except Exception as e:
-        logger.error(f"Failed to configure file logging to {log_filepath}: {e}")
-# --- End Logging Setup ---
+# --- Removed logging setup block --- 
+# Logging is now handled centrally by the Flask app factory in app.py
 
 
 # Define constants
-DATA_FOLDER = 'Data'
+# Removed DATA_FOLDER constant - path is now dynamically determined
+
 # Standard internal column names after renaming
 STD_DATE_COL = 'Date'
 STD_CODE_COL = 'Code'
@@ -228,138 +206,122 @@ LoadResult = Tuple[
 def load_and_process_data(
     primary_filename: str,
     secondary_filename: Optional[str] = None,
-    data_folder: str = DATA_FOLDER
+    data_folder_path: Optional[str] = None # Renamed and made optional
 ) -> LoadResult:
     """Loads and processes a primary CSV file and optionally a secondary CSV file.
+
+    Retrieves the data folder path from Flask's current_app.config['DATA_FOLDER']
+    if data_folder_path is not provided. Assumes execution within a Flask request context
+    when data_folder_path is None.
 
     Uses the internal _process_single_file helper for processing each file.
 
     Args:
         primary_filename (str): The name of the primary CSV file.
         secondary_filename (Optional[str]): The name of the secondary CSV file. Defaults to None.
-        data_folder (str): The path to the folder containing the data files. Defaults to DATA_FOLDER.
+        data_folder_path (Optional[str]): Explicit path to the folder containing the data files.
+                                           If None, path is retrieved from current_app.config.
 
     Returns:
         LoadResult: A tuple containing the processed DataFrames and metadata for
                     primary and (optionally) secondary files. Elements corresponding
-                    to a file will be None if the file doesn't exist or processing fails.
+                    to a file will be None if the file doesn't exist or processing fails,
+                    or if the data folder path cannot be determined.
     """
+    data_folder: Optional[str] = None
+
+    if data_folder_path is None:
+        try:
+            # Retrieve the absolute path configured during app initialization
+            data_folder = current_app.config['DATA_FOLDER']
+            logger.info(f"Using data folder from current_app.config: {data_folder}")
+            if not data_folder:
+                 logger.error("DATA_FOLDER in current_app.config is not set or empty.")
+                 return None, None, None, None, None, None
+        except RuntimeError:
+            logger.error("Cannot access current_app.config. load_and_process_data must be called within a Flask request context or be provided with an explicit data_folder_path.")
+            # Return None for all parts of the tuple if path cannot be determined
+            return None, None, None, None, None, None
+        except KeyError:
+            logger.error("'DATA_FOLDER' key not found in current_app.config. Ensure it is set during app initialization.")
+            return None, None, None, None, None, None
+    else:
+        # Use the explicitly provided path
+        data_folder = data_folder_path
+        logger.info(f"Using explicitly provided data_folder_path: {data_folder}")
+
+    # Ensure data_folder is not None before proceeding (should be handled above, but belt-and-suspenders)
+    if data_folder is None:
+         logger.critical("Data folder path could not be determined. Aborting load.")
+         return None, None, None, None, None, None
+
+    # --- Process Primary File --- 
     primary_filepath = os.path.join(data_folder, primary_filename)
-    logger.info(f"--- Starting data load for primary: {primary_filename} ---")
+    logger.info(f"--- Starting data load for primary: {primary_filename} from {primary_filepath} ---")
     primary_result = _process_single_file(primary_filepath, primary_filename)
 
-    primary_df = None
-    primary_original_val_cols = None
-    primary_benchmark_col = None
+    df1, cols1, bench1 = (None, None, None)
     if primary_result:
-        primary_df, primary_original_val_cols, primary_benchmark_col = primary_result
-        logger.info(f"Primary file '{primary_filename}' loaded. Shape: {primary_df.shape if primary_df is not None else 'None'}")
+        df1, cols1, bench1 = primary_result
+        logger.info(f"Primary file '{primary_filename}' processed. Shape: {df1.shape if df1 is not None else 'N/A'}. Benchmark: {bench1}")
     else:
-        logger.error(f"Failed to process primary file: {primary_filename}")
-        # Still return structure, but with Nones for primary
-        primary_df = _create_empty_dataframe([], False) # Provide minimal empty DF
-        primary_original_val_cols = []
-        primary_benchmark_col = None
+        logger.warning(f"Processing failed for primary file: {primary_filename}")
 
-
-    secondary_df = None
-    secondary_original_val_cols = None
-    secondary_benchmark_col = None
-
+    # --- Process Secondary File (if provided) --- 
+    df2, cols2, bench2 = (None, None, None)
     if secondary_filename:
         secondary_filepath = os.path.join(data_folder, secondary_filename)
-        logger.info(f"--- Checking for secondary file: {secondary_filename} ---")
-        if os.path.exists(secondary_filepath):
-            logger.info(f"Secondary file found. Processing: {secondary_filename}")
-            secondary_result = _process_single_file(secondary_filepath, secondary_filename)
-            if secondary_result:
-                secondary_df, secondary_original_val_cols, secondary_benchmark_col = secondary_result
-                logger.info(f"Secondary file '{secondary_filename}' loaded. Shape: {secondary_df.shape if secondary_df is not None else 'None'}")
-            else:
-                 logger.warning(f"Failed to process secondary file: {secondary_filename}. Proceeding without it.")
-                 # Keep secondary parts as None if processing fails
+        logger.info(f"--- Starting data load for secondary: {secondary_filename} from {secondary_filepath} ---")
+        secondary_result = _process_single_file(secondary_filepath, secondary_filename)
+        if secondary_result:
+            df2, cols2, bench2 = secondary_result
+            logger.info(f"Secondary file '{secondary_filename}' processed. Shape: {df2.shape if df2 is not None else 'N/A'}. Benchmark: {bench2}")
         else:
-            logger.info(f"Secondary file not found: {secondary_filename}. Proceeding with primary only.")
-    else:
-        logger.info("No secondary filename provided.")
+            logger.warning(f"Processing failed for secondary file: {secondary_filename}")
 
-    return (
-        primary_df, primary_original_val_cols, primary_benchmark_col,
-        secondary_df, secondary_original_val_cols, secondary_benchmark_col
-    )
+    return df1, cols1, bench1, df2, cols2, bench2
 
-# Example Usage (optional, for testing)
+# --- Standalone Execution / Testing --- 
+# Note: If run directly, this block cannot use current_app.config.
+# It needs to determine the data folder path independently, potentially using get_data_folder_path from utils.
+
+# Example (requires config.py and utils.py to be importable):
 # if __name__ == '__main__':
-#     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
-#     logger.info("Running data_loader directly for testing...")
-#
-#     # Test case 1: Primary file only (exists)
-#     print("\n--- Test Case 1: Primary Only (ts_Duration.csv) ---")
 #     try:
-#         pri_df, pri_ovc, pri_bc, sec_df, sec_ovc, sec_bc = load_and_process_data('ts_Duration.csv')
-#         if pri_df is not None:
-#             print(f"Primary loaded successfully. Shape: {pri_df.shape}")
-#             print(f"Primary Orig Val Cols: {pri_ovc}")
-#             print(f"Primary Bench Col: {pri_bc}")
-#             print(pri_df.head())
+#         from utils import get_data_folder_path
+#         # Determine the root path assuming data_loader.py is one level down from the project root
+#         script_dir = os.path.dirname(os.path.abspath(__file__))
+#         project_root = os.path.dirname(script_dir)
+#         # Use the utility function to get the configured path
+#         standalone_data_path = get_data_folder_path(app_root_path=project_root)
+#         print(f"[Standalone] Determined data path: {standalone_data_path}")
+#
+#         # Example usage:
+#         primary_file = 'ts_NAV_Report_Short.csv' # Replace with your actual test file
+#         # secondary_file = 'sp_NAV_Report_Short.csv' # Optional secondary file
+#         df1, cols1, bench1, df2, cols2, bench2 = load_and_process_data(
+#             primary_filename=primary_file,
+#             # secondary_filename=secondary_file,
+#             data_folder_path=standalone_data_path # Pass the determined path explicitly
+#         )
+#
+#         if df1 is not None:
+#             print(f"\n--- Primary Data ({primary_file}) ---")
+#             print(df1.head())
+#             print(f"Original Value Columns: {cols1}")
+#             print(f"Benchmark Column: {bench1}")
 #         else:
-#             print("Primary loading failed.")
-#         print(f"Secondary DF is None: {sec_df is None}")
+#             print(f"\nFailed to load primary data ({primary_file}). Check logs.")
 #
+#         # if secondary_file and df2 is not None:
+#         #     print(f"\n--- Secondary Data ({secondary_file}) ---")
+#         #     print(df2.head())
+#         #     print(f"Original Value Columns: {cols2}")
+#         #     print(f"Benchmark Column: {bench2}")
+#         # elif secondary_file:
+#         #      print(f"\nFailed to load secondary data ({secondary_file}). Check logs.")
+#
+#     except ImportError:
+#         print("Error: Could not import utils.get_data_folder_path. Ensure utils.py and config.py exist and are accessible.")
 #     except Exception as e:
-#         print(f"Error in Test Case 1: {e}")
-#
-#     # Test case 2: Primary and Secondary (both exist)
-#     print("\n--- Test Case 2: Primary (ts_Duration.csv) and Secondary (sp_ts_Duration.csv) ---")
-#     # Ensure you have a 'sp_ts_Duration.csv' file in 'Data/' for this test
-#     secondary_test_file = 'sp_ts_Duration.csv'
-#     if not os.path.exists(os.path.join(DATA_FOLDER, secondary_test_file)):
-#         print(f"WARNING: Secondary test file '{secondary_test_file}' not found. Skipping Test Case 2.")
-#     else:
-#         try:
-#             pri_df, pri_ovc, pri_bc, sec_df, sec_ovc, sec_bc = load_and_process_data('ts_Duration.csv', secondary_filename=secondary_test_file)
-#             if pri_df is not None:
-#                 print(f"Primary loaded successfully. Shape: {pri_df.shape}")
-#                 print(f"Primary Orig Val Cols: {pri_ovc}")
-#                 print(f"Primary Bench Col: {pri_bc}")
-#             else:
-#                 print("Primary loading failed.")
-#
-#             if sec_df is not None:
-#                 print(f"Secondary loaded successfully. Shape: {sec_df.shape}")
-#                 print(f"Secondary Orig Val Cols: {sec_ovc}")
-#                 print(f"Secondary Bench Col: {sec_bc}")
-#                 print(sec_df.head())
-#             else:
-#                 print("Secondary loading failed or file not found.")
-#
-#         except Exception as e:
-#             print(f"Error in Test Case 2: {e}")
-#
-#     # Test case 3: Primary exists, Secondary does not
-#     print("\n--- Test Case 3: Primary (ts_Duration.csv) and Secondary (non_existent.csv) ---")
-#     try:
-#         pri_df, pri_ovc, pri_bc, sec_df, sec_ovc, sec_bc = load_and_process_data('ts_Duration.csv', secondary_filename='non_existent.csv')
-#         if pri_df is not None:
-#             print(f"Primary loaded successfully. Shape: {pri_df.shape}")
-#         else:
-#             print("Primary loading failed.")
-#         print(f"Secondary DF is None: {sec_df is None}")
-#         print(f"Secondary Orig Val Cols is None: {sec_ovc is None}")
-#         print(f"Secondary Bench Col is None: {sec_bc is None}")
-#
-#     except Exception as e:
-#         print(f"Error in Test Case 3: {e}")
-#
-#     # Test case 4: Primary does not exist
-#     print("\n--- Test Case 4: Primary (bad_file.csv) ---")
-#     try:
-#         pri_df, pri_ovc, pri_bc, sec_df, sec_ovc, sec_bc = load_and_process_data('bad_file.csv')
-#         print(f"Primary DF is not None: {pri_df is not None}") # Should be True, but df will be empty
-#         print(f"Primary DF shape: {pri_df.shape if pri_df is not None else 'None'}")
-#         print(f"Primary Orig Val Cols: {pri_ovc}")
-#         print(f"Primary Bench Col: {pri_bc}")
-#         print(f"Secondary DF is None: {sec_df is None}")
-#
-#     except Exception as e:
-#         print(f"Error in Test Case 4: {e}") 
+#         print(f"An error occurred during standalone execution: {e}") 

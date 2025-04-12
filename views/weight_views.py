@@ -5,8 +5,7 @@ import os
 import pandas as pd
 import traceback
 import logging
-from flask import Blueprint, render_template
-from config import DATA_FOLDER
+from flask import Blueprint, render_template, current_app
 
 # Define the blueprint
 weight_bp = Blueprint('weight', __name__, url_prefix='/weights')
@@ -34,12 +33,25 @@ def _is_date_like_column(col_name):
     except (ValueError, TypeError):
         return False
 
-def load_and_process_weight_data(filename):
-    """Loads a wide weight file, processes percentages, checks against 100%."""
-    filepath = os.path.join(DATA_FOLDER, filename)
+def load_and_process_weight_data(data_folder_path: str, filename: str):
+    """Loads a wide weight file, processes percentages, checks against 100%.
+
+    Args:
+        data_folder_path (str): The absolute path to the data folder.
+        filename (str): The name of the weight file (e.g., 'w_Funds.csv').
+
+    Returns:
+        tuple: (dict | None, list[str])
+               - Dictionary of processed data {fund_code: {date: {data}}} or None on error.
+               - List of sorted date headers (YYYY-MM-DD) found in the file.
+    """
+    if not data_folder_path:
+        logging.error(f"No data_folder_path provided for file {filename}")
+        return None, []
+    filepath = os.path.join(data_folder_path, filename)
     if not os.path.exists(filepath):
         logging.error(f"Weight file not found: {filepath}")
-        return None, [] # Return None for data, empty list for headers
+        return None, []
 
     try:
         df = pd.read_csv(filepath, encoding='utf-8')
@@ -103,11 +115,18 @@ def load_and_process_weight_data(filename):
 @weight_bp.route('/check')
 def weight_check():
     """Displays the weight check page."""
+    # Retrieve the configured absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
     fund_filename = 'w_Funds.csv'
     bench_filename = 'w_Bench.csv'
 
-    fund_data, fund_date_headers = load_and_process_weight_data(fund_filename)
-    bench_data, bench_date_headers = load_and_process_weight_data(bench_filename)
+    # Pass the absolute data folder path to the helper function
+    fund_data, fund_date_headers = load_and_process_weight_data(data_folder, fund_filename)
+    bench_data, bench_date_headers = load_and_process_weight_data(data_folder, bench_filename)
 
     # Use the longer list of dates as the canonical header list, assuming they might differ slightly
     all_date_headers = sorted(list(set(fund_date_headers + bench_date_headers)))

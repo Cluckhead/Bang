@@ -10,7 +10,6 @@ import re # Added for extracting metric name
 import numpy as np
 
 # Import necessary functions from other modules
-from config import DATA_FOLDER
 from utils import _is_date_like, parse_fund_list # Import required utils
 # Updated import to include data loader
 from data_loader import load_and_process_data
@@ -21,9 +20,16 @@ fund_bp = Blueprint('fund', __name__, url_prefix='/fund')
 @fund_bp.route('/duration_details/<fund_code>') # Corresponds to /fund/duration_details/...
 def fund_duration_details(fund_code):
     """Renders a page showing duration changes for securities held by a specific fund."""
+    # Retrieve the absolute data folder path from the app context
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
     duration_filename = "sec_duration.csv"
-    data_filepath = os.path.join(DATA_FOLDER, duration_filename)
-    print(f"--- Requesting Duration Details for Fund: {fund_code} --- File: {duration_filename}")
+    # Construct absolute path
+    data_filepath = os.path.join(data_folder, duration_filename)
+    current_app.logger.info(f"--- Requesting Duration Details for Fund: {fund_code} --- File: {data_filepath}")
 
     if not os.path.exists(data_filepath):
         print(f"Error: Duration file '{duration_filename}' not found.")
@@ -101,7 +107,8 @@ def fund_duration_details(fund_code):
 
         # --- Load and Process Weight Data (w_secs.csv) --- 
         weights_filename = "w_secs.csv"
-        weights_filepath = os.path.join(DATA_FOLDER, weights_filename)
+        # Construct absolute path for weights file
+        weights_filepath = os.path.join(data_folder, weights_filename)
         contribution_calculated = False # Flag to track if calculation was successful
         new_contribution_cols = []
 
@@ -267,7 +274,7 @@ def fund_detail(fund_code):
 
     try:
         # Find all primary time-series files
-        ts_files_pattern = os.path.join(DATA_FOLDER, 'ts_*.csv')
+        ts_files_pattern = os.path.join(data_folder, 'ts_*.csv')
         ts_files = glob.glob(ts_files_pattern)
         # Exclude sp_ts files initially, handle them later
         ts_files = [f for f in ts_files if not os.path.basename(f).startswith('sp_ts_')]
@@ -297,7 +304,7 @@ def fund_detail(fund_code):
 
             # --- Prepare SP file path ---
             sp_filename = f"sp_{filename}"
-            sp_file_path = os.path.join(DATA_FOLDER, sp_filename)
+            sp_file_path = os.path.join(data_folder, sp_filename)
             sp_df = None
             sp_fund_col_name = None
             sp_load_error = None
@@ -308,7 +315,7 @@ def fund_detail(fund_code):
             benchmark_col = None
             primary_load_error = None
             try:
-                load_result = load_and_process_data(filename, data_folder=DATA_FOLDER)
+                load_result = load_and_process_data(filename, data_folder=data_folder)
                 df = load_result[0]
                 fund_cols = load_result[1]
                 benchmark_col = load_result[2]
@@ -336,7 +343,7 @@ def fund_detail(fund_code):
             if primary_load_error is None and os.path.exists(sp_file_path):
                 current_app.logger.info(f"Found corresponding SP file: {sp_filename}. Attempting to load.")
                 try:
-                    sp_load_result = load_and_process_data(sp_filename, data_folder=DATA_FOLDER)
+                    sp_load_result = load_and_process_data(sp_filename, data_folder=data_folder)
                     sp_df = sp_load_result[0]
                     sp_fund_cols = sp_load_result[1] # Assuming same structure for fund cols
                     # SP files typically don't have benchmarks in this context, ignore sp_load_result[2]

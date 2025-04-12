@@ -4,6 +4,8 @@
 # - Creating the Flask application instance.
 # - Setting up basic configuration (like the secret key).
 # - Ensuring necessary folders (like the instance folder) exist.
+# - Determining and configuring the absolute data folder path using `utils.get_data_folder_path`.
+# - Centralizing logging configuration (File and Console handlers).
 # - Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`, `comparison_bp`, `duration_comparison_bp`, `spread_duration_comparison_bp`, `api_bp`, `weight_bp`) from the `views`
 #   directory, which contain the application\'s routes and view logic.
 # - Providing a conditional block (`if __name__ == '__main__':`) to run the development server
@@ -14,18 +16,20 @@
 from flask import Flask, render_template, Blueprint, jsonify
 import os
 import logging
+from logging.handlers import RotatingFileHandler # Import handler
 # --- Add imports for the new route ---
 import subprocess
 import sys # To get python executable path
 # --- End imports ---
 
-# Import configurations and utilities (potentially needed by factory setup later)
-from config import DATA_FOLDER, COLOR_PALETTE # Uncommented import
-# from utils import _is_date_like, parse_fund_list # Not directly used in factory itself yet
+# Import configurations and utilities
+from config import COLOR_PALETTE # Import other needed configs
+from utils import get_data_folder_path # Import the path utility
 
 def create_app():
     """Factory function to create and configure the Flask app."""
     app = Flask(__name__, instance_relative_config=True) # instance_relative_config=True allows for instance folder config
+    app.logger.info(f"Application root path: {app.root_path}")
 
     # Basic configuration (can be expanded later, e.g., loading from config file)
     app.config.from_mapping(
@@ -33,18 +37,69 @@ def create_app():
         # Add other default configurations if needed
     )
 
-    # Load configuration from config.py
+    # Load configuration from config.py (e.g., COLOR_PALETTE)
     app.config.from_object('config')
+    app.logger.info("Loaded configuration from config.py")
 
-    # Ensure the instance folder exists (if using instance_relative_config)
+    # --- Determine and set the Data Folder Path --- 
+    # Use the utility function to get the absolute data path, using the app's root path as the base
+    # This ensures consistency whether the path in config.py is relative or absolute
+    absolute_data_path = get_data_folder_path(app_root_path=app.root_path)
+    app.config['DATA_FOLDER'] = absolute_data_path
+    app.logger.info(f"Data folder path set to: {app.config['DATA_FOLDER']}")
+    # --- End Data Folder Path Setup ---
+
+    # Ensure the instance folder exists (needed for logging)
     try:
-        os.makedirs(app.instance_path)
-    except OSError:
-        pass # Already exists
+        os.makedirs(app.instance_path, exist_ok=True) # exist_ok=True prevents error if exists
+        app.logger.info(f"Instance folder ensured at: {app.instance_path}")
+    except OSError as e:
+        app.logger.error(f"Could not create instance folder at {app.instance_path}: {e}", exc_info=True)
+        # Depending on severity, might want to raise an exception or exit
 
-    # Configure logging
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s')
+    # --- Centralized Logging Configuration --- 
+    # Remove Flask's default handlers
+    app.logger.handlers.clear()
+    app.logger.setLevel(logging.DEBUG) # Set the app logger level (DEBUG captures everything)
+
+    # Formatter
+    log_formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    )
+
+    # File Handler (Rotating)
+    log_file_path = os.path.join(app.instance_path, 'app.log')
+    max_log_size = 1024 * 1024 * 10 # 10 MB
+    backup_count = 5
+    try:
+        file_handler = RotatingFileHandler(
+            log_file_path,
+            maxBytes=max_log_size,
+            backupCount=backup_count
+        )
+        file_handler.setFormatter(log_formatter)
+        file_handler.setLevel(logging.INFO) # Log INFO and higher to file
+        app.logger.addHandler(file_handler)
+        app.logger.info(f"File logging configured to: {log_file_path}")
+    except Exception as e:
+        app.logger.error(f"Failed to configure file logging to {log_file_path}: {e}", exc_info=True)
+
+    # Console Handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_formatter)
+    # Set console level potentially higher for less noise (e.g., INFO) or keep DEBUG for development
+    console_handler.setLevel(logging.DEBUG)
+    app.logger.addHandler(console_handler)
+
+    app.logger.info("Centralized logging configured (File & Console).")
+    # --- End Logging Configuration ---
+
+    # Configure logging (consider moving to a dedicated logging setup function)
+    # Note: BasicConfig should ideally be called only once. If utils.py also calls it,
+    # it might conflict or be ineffective here. A more robust setup is recommended.
+    # logging.basicConfig(level=logging.INFO,
+    #                     format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s')
+    # app.logger.info("Logging configured.") # BasicConfig might be configured in utils already
 
     # Serve static files (for JS, CSS, etc.)
     # Note: static_url_path defaults to /static, static_folder defaults to 'static' in root

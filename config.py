@@ -6,6 +6,15 @@
 Configuration settings for the Flask application.
 """
 
+# Define the primary data directory.
+# This path is read by the `utils.get_data_folder_path` function during application startup.
+# - If this is an absolute path (e.g., 'C:/MyApp/Data', '/var/data'), it will be used directly.
+# - If this is a relative path (e.g., 'Data', '../SharedData'), it will be resolved
+#   to an absolute path relative to the application's root directory (determined by Flask's app.root_path
+#   or the script's location for standalone scripts).
+# **Use forward slashes (/) for paths, even on Windows, for consistency.**
+# If this variable is missing, empty, or the file doesn't exist, the utility function
+# will fall back to using 'Data' relative to the application root.
 DATA_FOLDER = 'Data'
 
 # Define a list of distinct colors for chart lines

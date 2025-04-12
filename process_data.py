@@ -1,10 +1,12 @@
-# This script serves as a pre-processing step for specific CSV files within the 'Data' directory.
+# This script serves as a pre-processing step for specific CSV files within the configured data directory.
 # It targets files prefixed with 'pre_', reads them, and performs data aggregation and cleaning.
 # The core logic involves grouping rows based on identical values across most columns, excluding 'Funds' and 'Security Name'.
 # For rows sharing the same 'Security Name' but differing in other data points, the 'Security Name' is suffixed
 # (e.g., _1, _2) to ensure uniqueness. The 'Funds' associated with identical data rows are aggregated
 # into a single list-like string representation (e.g., '[FUND1,FUND2]').
-# The processed data is then saved to a new CSV file prefixed with 'new_'.
+# The processed data is then saved to a new CSV file prefixed with 'new_' in the same data directory.
+# It also processes a weight file (`w_Funds.csv`).
+# The data directory is determined dynamically using `utils.get_data_folder_path`.
 
 # process_data.py
 # This script processes CSV files in the 'Data' directory that start with 'pre_'.
@@ -20,71 +22,50 @@ from datetime import datetime
 import io
 # Import the new weight processing function
 from weight_processing import process_weight_file
+# Import the path utility
+from utils import get_data_folder_path
 
-# --- Logging Setup ---
-# Use the same log file as other data processing scripts
-LOG_FILENAME = 'data_processing_errors.log'
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-
-# Get the logger for the current module
+# Get the logger instance. Assumes logging is configured elsewhere (e.g., by Flask app or calling script).
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
-# Prevent adding handlers multiple times
-if not logger.handlers:
-    # Console Handler (INFO and above)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch_formatter = logging.Formatter(LOG_FORMAT)
-    ch.setFormatter(ch_formatter)
-    logger.addHandler(ch)
+# --- Removed logging setup block --- 
+# Logging is now handled centrally by the Flask app factory in app.py or by the script runner.
 
-    # File Handler (WARNING and above)
-    try:
-        # Create log file path relative to this file's location (assuming it's in the project root)
-        log_filepath = os.path.join(os.path.dirname(__file__), LOG_FILENAME) # If script is in root
-        # If script is in a sub-directory, adjust path:
-        # log_filepath = os.path.join(os.path.dirname(__file__), '..', LOG_FILENAME)
-        fh = logging.FileHandler(log_filepath, mode='a')
-        fh.setLevel(logging.WARNING)
-        fh_formatter = logging.Formatter(LOG_FORMAT)
-        fh.setFormatter(fh_formatter)
-        logger.addHandler(fh)
-    except Exception as e:
-        # Log to stderr if file logging setup fails
-        import sys
-        print(f"Error setting up file logging for process_data: {e}", file=sys.stderr)
-# --- End Logging Setup ---
+# Removed DATES_FILE_PATH constant - path is now determined dynamically in main()
 
-# Define a constant for the dates file path
-DATES_FILE_PATH = os.path.join('Data', 'dates.csv') # Define path to dates file
-
-def read_and_sort_dates(dates_file):
+def read_and_sort_dates(dates_file_path):
     """
     Reads dates from a CSV file, sorts them, and returns them as a list of strings.
 
     Args:
-        dates_file (str): Path to the CSV file containing dates (expected single column).
+        dates_file_path (str): Absolute path to the CSV file containing dates.
 
     Returns:
         list[str] | None: A sorted list of date strings (YYYY-MM-DD) or None if an error occurs.
     """
+    if not dates_file_path:
+        logger.error("No dates_file_path provided to read_and_sort_dates.")
+        return None
+    if not os.path.exists(dates_file_path):
+        logger.error(f"Dates file not found at {dates_file_path}")
+        return None
+
     try:
-        dates_df = pd.read_csv(dates_file, parse_dates=[0]) # Assume date is the first column
+        dates_df = pd.read_csv(dates_file_path, parse_dates=[0]) # Assume date is the first column
         # Handle potential parsing errors if the column isn't purely dates
         if dates_df.iloc[:, 0].isnull().any():
-             logger.warning(f"Warning: Some values in {dates_file} could not be parsed as dates.")
+             logger.warning(f"Warning: Some values in {dates_file_path} could not be parsed as dates.")
              # Attempt to drop NaT values and proceed
              dates_df = dates_df.dropna(subset=[dates_df.columns[0]])
              if dates_df.empty:
-                 logger.error(f"Error: No valid dates found in {dates_file} after handling parsing issues.")
+                 logger.error(f"Error: No valid dates found in {dates_file_path} after handling parsing issues.")
                  return None
 
         # Sort dates chronologically
         sorted_dates = dates_df.iloc[:, 0].sort_values()
         # Format dates as 'YYYY-MM-DD' strings for column headers
         date_strings = sorted_dates.dt.strftime('%Y-%m-%d').tolist()
-        logger.info(f"Successfully read and sorted {len(date_strings)} dates from {dates_file}.")
+        logger.info(f"Successfully read and sorted {len(date_strings)} dates from {dates_file_path}.")
 
         # --- Deduplicate the date list while preserving order --- 
         unique_date_strings = []
@@ -98,21 +79,22 @@ def read_and_sort_dates(dates_file):
                 duplicates_found = True
         
         if duplicates_found:
-            logger.warning(f"Duplicate dates found in {dates_file}. Using unique sorted dates: {len(unique_date_strings)} unique dates.")
+            logger.warning(f"Duplicate dates found in {dates_file_path}. Using unique sorted dates: {len(unique_date_strings)} unique dates.")
         # --- End Deduplication ---
 
         return unique_date_strings # Return the deduplicated list
     except FileNotFoundError:
-        logger.error(f"Error: Dates file not found at {dates_file}")
+        # This case should ideally be caught by the initial os.path.exists check, but included for robustness
+        logger.error(f"Error: Dates file not found at {dates_file_path}")
         return None
     except pd.errors.EmptyDataError:
-        logger.error(f"Error: Dates file is empty - {dates_file}")
+        logger.error(f"Error: Dates file is empty - {dates_file_path}")
         return None
     except IndexError:
-        logger.error(f"Error: Dates file {dates_file} seems to have no columns.")
+        logger.error(f"Error: Dates file {dates_file_path} seems to have no columns.")
         return None
     except Exception as e:
-        logger.error(f"An unexpected error occurred reading dates from {dates_file}: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred reading dates from {dates_file_path}: {e}", exc_info=True)
         return None
 
 
@@ -264,7 +246,7 @@ def process_csv_file(input_path, output_path, date_columns):
 
         # --- Date Replacement Logic using Detected Patterns ---
         if date_columns is None:
-            logger.warning(f"Date information from {DATES_FILE_PATH} is unavailable. Cannot check or replace headers in {input_path}. Processing with original headers: {original_cols}")
+            logger.warning(f"Date information from {dates_file_path} is unavailable. Cannot check or replace headers in {input_path}. Processing with original headers: {original_cols}")
         # --- Prioritize Pattern B for Date Replacement ---
         elif is_patternB_dominant:
              placeholder_count_B = len(detected_sequence_patternB)
@@ -437,75 +419,67 @@ def process_csv_file(input_path, output_path, date_columns):
 
 
 def main():
-    """
-    Main function to find and process all 'pre_*.csv' files in the 'Data' directory.
+    """Main execution function to find and process 'pre_' files and the weight file."""
+    logger.info("--- Starting pre-processing script --- ")
 
-    Also processes weight files w_Funds.csv and w_Bench.csv for header replacement.
-    """
-    # --- Read Dates ---
-    # Define the path to the dates file
-    dates_file_path = DATES_FILE_PATH # Use the constant defined at the top
-    # Attempt to read and sort dates
-    date_columns = read_and_sort_dates(dates_file_path)
-    # If dates couldn't be read, date_columns will be None.
-    # process_csv_file will handle this by skipping files.
-    # Log message indicating status of date loading is handled within read_and_sort_dates.
-    # --- End Read Dates ---
-
-    # Define input directory path
-    input_dir = 'Data'
-
-    # --- Process Weight Files (Header Replacement) ---
-    # Call the new function if dates were successfully loaded
-    if date_columns:
-        logger.info("Attempting to process weight file headers...")
-        w_funds_path = os.path.join(input_dir, 'w_Funds.csv')
-        w_bench_path = os.path.join(input_dir, 'w_Bench.csv')
-        process_weight_file(w_funds_path, date_columns)
-        process_weight_file(w_bench_path, date_columns)
-        logger.info("Finished processing weight file headers.")
-    else:
-        logger.warning("Skipping weight file header processing because dates were not loaded.")
-    # --- End Process Weight Files ---
-
-    input_prefix = 'pre_'
-    # output_prefix = 'new_' #disabled
-    output_prefix = ''
+    # Determine the root path for this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Use the utility to get the configured absolute data folder path
+    # Pass the script's directory as the base for resolving relative paths if necessary
+    input_dir = get_data_folder_path(app_root_path=script_dir)
+    logger.info(f"Using data directory: {input_dir}")
 
     if not os.path.isdir(input_dir):
-        logger.error(f"Input directory '{input_dir}' not found.")
+        logger.error(f"Data directory not found or is not a directory: {input_dir}. Cannot proceed.")
         return
 
-    logger.info(f"Starting pre-processing scan in directory: '{input_dir}'")
+    # Construct absolute path for dates.csv
+    dates_file_path = os.path.join(input_dir, 'dates.csv')
+
+    # Read and prepare date columns
+    date_columns = read_and_sort_dates(dates_file_path)
+    if date_columns is None:
+        logger.warning("Could not read or process dates.csv. Files requiring date replacement might be skipped or processed incorrectly.")
+        # Continue processing other files that might not need date replacement, but log the warning.
+
+    # Find files starting with 'pre_' in the determined data directory
     processed_count = 0
     skipped_count = 0
-    # Iterate through all files in the specified directory
     for filename in os.listdir(input_dir):
-        # Check if the file matches the pattern 'pre_*.csv'
-        if filename.startswith(input_prefix) and filename.endswith('.csv'):
-            input_file_path = os.path.join(input_dir, filename)
-            # Construct the output filename by replacing 'pre_' with 'new_'
-            output_filename = filename.replace(input_prefix, output_prefix, 1)
-            output_file_path = os.path.join(input_dir, output_filename)
-
-            # Process the individual CSV file
-            try:
-                # Pass the loaded date_columns to the processing function
-                process_csv_file(input_file_path, output_file_path, date_columns)
-                # Simple check if output exists might not be enough if process_csv_file skips creation
-                # We rely on logs from process_csv_file to indicate success/failure/skip
-                processed_count +=1 # Increment even if skipped internally, as we attempted it.
-            except Exception as e:
-                 # Catch any unexpected errors bubbling up from process_csv_file
-                 logger.error(f"Unhandled exception processing {input_file_path} in main loop: {e}", exc_info=True)
-                 skipped_count += 1
-        else:
-            # Optionally log files that don't match the pattern if needed for debugging
-            # logger.debug(f"Skipping file '{filename}' as it does not match pattern 'pre_*.csv'")
-            pass
+        if filename.startswith('pre_') and filename.endswith('.csv'):
+            input_path = os.path.join(input_dir, filename)
+            # Create the output filename by replacing 'pre_' with 'new_'
+            output_filename = filename.replace('pre_', 'new_', 1)
+            output_path = os.path.join(input_dir, output_filename)
             
-    logger.info(f"Pre-processing scan finished. Attempted processing {processed_count} files. Encountered errors in {skipped_count} files during main loop (check logs for details).")
+            logger.info(f"Found file to process: {input_path} -> {output_path}")
+            try:
+                process_csv_file(input_path, output_path, date_columns)
+                processed_count += 1
+            except Exception as e:
+                logger.error(f"Error processing file {input_path}: {e}", exc_info=True)
+                skipped_count += 1
+        
+    logger.info(f"Finished processing 'pre_' files. Processed: {processed_count}, Skipped due to errors: {skipped_count}")
+
+    # --- Process the weight file --- 
+    weight_input_filename = 'w_Funds.csv'
+    weight_output_filename = 'w_Funds_Processed.csv' # Define an output name
+    weight_input_path = os.path.join(input_dir, weight_input_filename)
+    weight_output_path = os.path.join(input_dir, weight_output_filename)
+
+    if os.path.exists(weight_input_path):
+        logger.info(f"Processing weight file: {weight_input_path} -> {weight_output_path}")
+        try:
+            # Pass the absolute input and output paths
+            process_weight_file(weight_input_path, weight_output_path)
+        except Exception as e:
+            logger.error(f"Error processing weight file {weight_input_path}: {e}", exc_info=True)
+    else:
+        logger.warning(f"Weight file not found at {weight_input_path}. Skipping weight processing.")
+
+    logger.info("--- Pre-processing script finished --- ")
+
 
 if __name__ == "__main__":
-    # Ensure the script runs the main function when executed directly
     main() 

@@ -1,64 +1,39 @@
 # weight_processing.py
-# This script provides functionality to process weight files (w_Funds.csv, w_Bench.csv).
-# It replaces placeholder column headers (like 'Port Weight' or 'Bench Weight') with actual dates
-# read from an external dates file, if the counts match. The file is then overwritten with the updated headers.
+# This script provides functionality to process weight files (e.g., w_Funds.csv).
+# It reads a weight file, identifies the relevant columns, and saves the processed data
+# to a specified output path. (Original header replacement logic is removed as per the
+# simplification in process_data.py's call).
 
 import pandas as pd
 import logging
 import os
 import io
 
-# Use the same log file as other data processing scripts
-LOG_FILENAME = 'data_processing_errors.log'
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-
-# Get the logger for the current module
+# Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
-# Explicitly configure logger if not already configured by importer (like process_data)
-if not logger.handlers:
-    logger.setLevel(logging.DEBUG) # Set level to DEBUG to allow debug messages
 
-    # Console Handler (INFO and above)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO) # Log INFO and higher to console
-    ch_formatter = logging.Formatter(LOG_FORMAT)
-    ch.setFormatter(ch_formatter)
-    logger.addHandler(ch)
-
-    # File Handler (WARNING and above)
-    try:
-        # Ensure log file path is correct relative to this script's location
-        log_filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), LOG_FILENAME)
-        fh = logging.FileHandler(log_filepath, mode='a')
-        fh.setLevel(logging.WARNING) # Log WARNING and higher to file
-        fh_formatter = logging.Formatter(LOG_FORMAT)
-        fh.setFormatter(fh_formatter)
-        logger.addHandler(fh)
-    except Exception as e:
-        # Fallback to console logging if file handler fails
-        logger.error(f"Failed to set up file logging for weight_processing: {e}", exc_info=True)
-
-
-def process_weight_file(input_path, date_columns):
+def process_weight_file(input_path: str, output_path: str):
     """
-    Reads a weight CSV file (e.g., w_Funds.csv), replaces placeholder weight columns
-    with dates if counts match, and overwrites the original file.
+    Reads a weight CSV file, performs necessary processing (if any), and saves
+    it to the specified output path.
+
+    Currently, this function primarily copies the file, assuming pre-processing
+    (like header replacement) might happen elsewhere or is not needed for weights.
+    Add specific weight processing logic here if required in the future.
 
     Args:
-        input_path (str): Path to the input weight CSV file.
-        date_columns (list[str]): Sorted list of date strings ('YYYY-MM-DD') for headers.
+        input_path (str): Absolute path to the input weight CSV file (e.g., w_Funds.csv).
+        output_path (str): Absolute path where the processed weight file should be saved.
     """
     if not os.path.exists(input_path):
-        logger.error(f"Weight file not found: {input_path}. Skipping.")
+        logger.error(f"Weight file not found: {input_path}. Skipping processing.")
         return
-    if not date_columns:
-        logger.warning(f"No date columns provided for {input_path}. Cannot replace headers. Skipping.")
-        return
+
+    logger.info(f"Processing weight file: {input_path} -> {output_path}")
 
     try:
         # Read the input CSV - add robustness
         df = pd.read_csv(input_path, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
-        logger.info(f"Processing weight file: {input_path}")
 
         # Log DataFrame info at DEBUG level
         buf = io.StringIO()
@@ -66,97 +41,46 @@ def process_weight_file(input_path, date_columns):
         logger.debug(f"DataFrame info after read for {input_path}:\n{buf.getvalue()}")
 
         if df.empty:
-            logger.warning(f"Weight file {input_path} is empty or contains only invalid lines. Skipping processing.")
+            logger.warning(f"Weight file {input_path} is empty or contains only invalid lines. Saving empty file to {output_path}.")
+            # Save an empty file or a file with just headers, depending on desired behavior
+            df.to_csv(output_path, index=False, encoding='utf-8')
             return
 
-        original_cols = df.columns.tolist()
+        # --- Placeholder for future weight-specific processing --- 
+        # Example: Rename columns, calculate new metrics, filter rows, etc.
+        # df['NewWeight'] = df['SomeWeight'] * 100 
+        # logger.info(f"Applied custom processing to weight data from {input_path}.")
+        # --- End Placeholder --- 
 
-        # Identify the key identifier column (e.g., 'Fund Code')
-        # Assuming it's the first column for simplicity, but could be made more robust
-        if not original_cols:
-             logger.error(f"Weight file {input_path} seems to have no columns. Skipping.")
-             return
-        id_col = original_cols[0]
-        logger.debug(f"Identified ID column: '{id_col}'")
-
-        # Identify the weight columns (all columns after the first one)
-        weight_cols = original_cols[1:]
-        if not weight_cols:
-            logger.warning(f"Weight file {input_path} has an ID column ('{id_col}') but no subsequent weight columns. Skipping header replacement.")
-            return
-
-        # --- Detect Header Pattern --- Detect Base, Base.1, Base.2 pattern ---
-        base_col_name = None
-        detected_sequence = []
-        if weight_cols:
-            first_weight_col = weight_cols[0]
-            # Check if it looks like a base name (no '.' suffix added by pandas)
-            if '.' not in first_weight_col:
-                base_col_name = first_weight_col
-                detected_sequence.append(base_col_name)
-                # Check subsequent columns for the pattern Base.1, Base.2 etc.
-                for i in range(1, len(weight_cols)):
-                    expected_col = f"{base_col_name}.{i}"
-                    if weight_cols[i] == expected_col:
-                        detected_sequence.append(expected_col)
-                    else:
-                        # Pattern broken, might be a mix or just short sequence
-                        logger.debug(f"Pattern '{base_col_name}.{i}' broken at index {i+1} in {input_path}. Found '{weight_cols[i]}'")
-                        break
-            else:
-                # First weight column already has a suffix, maybe Base.1? This logic doesn't handle that start case.
-                logger.warning(f"First weight column '{first_weight_col}' in {input_path} already contains '.'. Cannot determine base name for pattern check.")
-
-        if not base_col_name or len(detected_sequence) < 2: # Need at least Base and Base.1
-            logger.warning(f"Could not detect a clear 'Base, Base.1, ...' pattern in weight columns for {input_path}. First few: {weight_cols[:5]}. Skipping header replacement.")
-            return
-        # --- End Pattern Detection ---
-
-        logger.info(f"Detected pattern starting with '{base_col_name}'. Sequence length: {len(detected_sequence)} in {input_path}.")
-
-        # Compare counts
-        num_pattern_cols = len(detected_sequence)
-        num_date_cols = len(date_columns)
-
-        # Check if the *entire* set of weight columns matches the detected pattern length
-        if num_pattern_cols != len(weight_cols):
-             logger.warning(f"Detected pattern sequence length ({num_pattern_cols}) does not match total number of weight columns ({len(weight_cols)}) in {input_path}. Headers might be mixed. Skipping replacement.")
-             return
-
-        # Now compare the matched pattern length with date count
-        if num_pattern_cols == num_date_cols:
-            logger.info(f"Count match ({num_date_cols} dates). Replacing headers in {input_path}.")
-            new_columns = [id_col] + date_columns
-            df.columns = new_columns
-
-            # Overwrite the original file with the new headers
-            try:
-                df.to_csv(input_path, index=False, encoding='utf-8')
-                logger.info(f"Successfully updated headers and overwritten: {input_path}")
-            except Exception as write_e:
-                logger.error(f"Error writing updated headers back to {input_path}: {write_e}", exc_info=True)
-                # Consider reverting df.columns here if needed, though the in-memory change is already done.
-        else:
-            logger.warning(f"Count mismatch in {input_path}: Found pattern sequence of length {num_pattern_cols} (based on '{base_col_name}'), but have {num_date_cols} dates. Headers will NOT be replaced.")
+        # Save the processed DataFrame to the output path
+        df.to_csv(output_path, index=False, encoding='utf-8')
+        logger.info(f"Successfully processed and saved weight file to: {output_path}")
 
     except FileNotFoundError:
         # This case is handled by the initial check, but included for completeness
-        logger.error(f"Error: Input weight file not found - {input_path}")
+        logger.error(f"Error: Input weight file not found during processing - {input_path}")
     except pd.errors.EmptyDataError:
-         logger.warning(f"Weight file is empty or contains only header - {input_path}. Skipping.")
+         logger.warning(f"Weight file is empty - {input_path}. Skipping save.")
     except pd.errors.ParserError as pe:
         logger.error(f"Error parsing CSV weight file {input_path}: {pe}. Check file format and integrity.", exc_info=True)
     except Exception as e:
-        logger.error(f"An unexpected error occurred processing weight file {input_path}: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred processing weight file {input_path} to {output_path}: {e}", exc_info=True)
 
-# Example of how to potentially call this (e.g., from process_data.py or for testing)
+
+# Example usage note:
+# This script is typically called by process_data.py, which provides
+# the absolute input and output paths derived from the configured data directory.
+# Standalone execution would require manual path specification.
+#
+# Example (for understanding, not direct execution without setup):
 # if __name__ == "__main__":
-#    # This part would typically run inside process_data.py's main function
-#    DATES_FILE_PATH = os.path.join('Data', 'dates.csv')
-#    from process_data import read_and_sort_dates # Assuming process_data.py is accessible
-#    dates = read_and_sort_dates(DATES_FILE_PATH)
-#    if dates:
-#        process_weight_file(os.path.join('Data', 'w_Funds.csv'), dates)
-#        process_weight_file(os.path.join('Data', 'w_Bench.csv'), dates)
+#    # Requires manual setup of paths if run standalone
+#    test_input_dir = '/path/to/your/data' # Replace with actual path
+#    test_input_file = os.path.join(test_input_dir, 'w_Funds.csv')
+#    test_output_file = os.path.join(test_input_dir, 'w_Funds_Processed.csv')
+#
+#    if os.path.exists(test_input_file):
+#        print(f"Testing weight processing: {test_input_file} -> {test_output_file}")
+#        process_weight_file(test_input_file, test_output_file)
 #    else:
-#        print("Could not read dates, skipping weight file processing.") 
+#        print(f"Test input file not found: {test_input_file}")

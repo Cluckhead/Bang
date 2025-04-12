@@ -13,7 +13,7 @@ import math # Add math for pagination calculation
 try:
     from security_processing import load_and_process_security_data # May need adjustments
     from utils import parse_fund_list # Example utility
-    from config import DATA_FOLDER, COLOR_PALETTE
+    from config import COLOR_PALETTE
 except ImportError:
     # Handle potential import errors if the structure is different
     logging.error("Could not import required modules from parent directory.")
@@ -21,7 +21,7 @@ except ImportError:
     # Example: sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     from ..security_processing import load_and_process_security_data
     from ..utils import parse_fund_list
-    from ..config import DATA_FOLDER, COLOR_PALETTE
+    from ..config import COLOR_PALETTE
 
 
 duration_comparison_bp = Blueprint('duration_comparison_bp', __name__,
@@ -35,91 +35,162 @@ PER_PAGE_COMPARISON = 50 # Items per page for comparison summary
 
 # --- Data Loading and Processing ---
 
-def load_weights_and_held_status(weights_filename='w_secs.csv'):
-    """Loads weights data and determines the latest held status for each ISIN."""
-    log.info(f"Loading weights data from: {weights_filename}")
-    df_weights, _ = load_and_process_security_data(weights_filename)
+def load_weights_and_held_status(data_folder_path: str, weights_filename='w_secs.csv'):
+    """Loads weights data and determines the latest held status for each security ID.
+
+    Args:
+        data_folder_path (str): The absolute path to the data folder.
+        weights_filename (str, optional): The name of the weights file. Defaults to 'w_secs.csv'.
+
+    Returns:
+        pd.Series: Series indexed by Security ID indicating held status (True/False).
+                   Returns an empty Series on error.
+    """
+    # Corrected logic starts here
+    if not data_folder_path:
+        log.error("No data_folder_path provided to load_weights_and_held_status.")
+        return pd.Series(dtype=bool)
+
+    weights_filepath = os.path.join(data_folder_path, weights_filename)
+    log.info(f"Loading weights data from: {weights_filepath}")
+
+    # Pass the full path to the data loading function
+    df_weights, _ = load_and_process_security_data(weights_filename, data_folder_path)
 
     if df_weights.empty:
-        log.warning(f"Weights file '{weights_filename}' is empty or failed to load.")
+        log.warning(f"Weights file '{weights_filepath}' is empty or failed to load.")
         return pd.Series(dtype=bool)
 
-    if 'ISIN' not in df_weights.columns or 'Date' not in df_weights.columns or 'Value' not in df_weights.columns:
-        log.error(f"Weights file '{weights_filename}' is missing required columns (ISIN, Date, Value).")
+    # --- Check index and columns AFTER loading --- 
+    if df_weights.index.nlevels != 2:
+        log.error(f"Weights file '{weights_filepath}' did not have the expected 2 index levels (Date, ID) after processing.")
+        return pd.Series(dtype=bool)
+        
+    # Get index names dynamically
+    date_level_name, id_level_name = df_weights.index.names
+    log.info(f"Weights file index levels identified: Date='{date_level_name}', ID='{id_level_name}'")
+
+    # Reset index to access Date and ID as columns
+    df_weights = df_weights.reset_index()
+
+    # Check if required columns are present AFTER resetting index
+    required_cols = [date_level_name, id_level_name, 'Value']
+    missing_cols = [col for col in required_cols if col not in df_weights.columns]
+    
+    if missing_cols:
+        log.error(f"Weights file '{weights_filepath}' is missing required columns after processing and index reset: {missing_cols}. Available columns: {df_weights.columns.tolist()}")
         return pd.Series(dtype=bool)
 
-    # Ensure Value is numeric
-    df_weights['Value'] = pd.to_numeric(df_weights['Value'], errors='coerce')
+    # Find the latest date in the weights data using the dynamic date column name
+    latest_date = df_weights[date_level_name].max()
+    if pd.isna(latest_date):
+        log.warning(f"Could not determine the latest date in '{weights_filepath}'.")
+        return pd.Series(dtype=bool)
 
-    # Find the latest entry for each ISIN
-    latest_weights = df_weights.loc[df_weights.groupby('ISIN')['Date'].idxmax()]
+    log.info(f"Latest date in weights file '{weights_filepath}': {latest_date}")
 
-    # Determine held status (latest weight > 0)
-    held_status = latest_weights.set_index('ISIN')['Value'].fillna(0) > 0 # Fill NaN weights with 0
-    held_status.name = 'is_held'
+    # Filter for the latest date using the dynamic date column name
+    latest_weights = df_weights[df_weights[date_level_name] == latest_date]
+    
+    # Set index using the dynamic ID column name and check weight > 0
+    held_status = latest_weights.set_index(id_level_name)['Value'] > 0
+    held_status.name = 'is_held' # Name the series for easier merging later
 
-    log.info(f"Determined latest held status for {len(held_status)} ISINs from '{weights_filename}'.")
+    log.info(f"Determined held status for {len(held_status)} IDs based on weights on {latest_date}.")
     return held_status
+    # Corrected logic ends here
 
 
-def load_duration_comparison_data(file1='sec_duration.csv', file2='sec_durationSP.csv'):
+def load_duration_comparison_data(data_folder_path: str, file1='sec_duration.csv', file2='sec_durationSP.csv'):
     """Loads, processes, merges data from two security duration files, and gets held status.
+
+    Args:
+        data_folder_path (str): The absolute path to the data folder.
+        file1 (str, optional): Filename for the first dataset. Defaults to 'sec_duration.csv'.
+        file2 (str, optional): Filename for the second dataset. Defaults to 'sec_durationSP.csv'.
 
     Returns:
         tuple: (merged_df, static_data, common_static_cols, id_col_name, held_status)
                Returns (pd.DataFrame(), pd.DataFrame(), [], None, pd.Series(dtype=bool)) on error.
     """
-    log.info(f"Loading duration comparison data: {file1} and {file2}")
-    df1, static_cols1 = load_and_process_security_data(file1)
-    df2, static_cols2 = load_and_process_security_data(file2)
+    log.info(f"Loading duration comparison data: {file1} and {file2} from {data_folder_path}")
+    if not data_folder_path:
+        log.error("No data_folder_path provided to load_duration_comparison_data.")
+        return pd.DataFrame(), pd.DataFrame(), [], None, pd.Series(dtype=bool)
 
-    # Load held status
-    held_status = load_weights_and_held_status()
+    # Load held status first (uses its own corrected loading logic)
+    held_status = load_weights_and_held_status(data_folder_path)
+
+    # Pass the absolute data folder path to the loading functions
+    df1, static_cols1 = load_and_process_security_data(file1, data_folder_path)
+    df2, static_cols2 = load_and_process_security_data(file2, data_folder_path)
 
     if df1.empty or df2.empty:
-        log.warning(f"One or both duration dataframes are empty. File1 empty: {df1.empty}, File2 empty: {df2.empty}")
+        log.warning(f"One or both duration dataframes are empty after loading. File1 empty: {df1.empty}, File2 empty: {df2.empty}")
+        # Return held_status even if data is empty, as it might be needed
         return pd.DataFrame(), pd.DataFrame(), [], None, held_status
 
+    # --- Verify Index and Get Actual Names ---
+    if df1.index.nlevels != 2 or df2.index.nlevels != 2:
+        log.error("One or both duration dataframes do not have the expected 2 index levels after loading.")
+        return pd.DataFrame(), pd.DataFrame(), [], None, held_status
+
+    # Assume index names are consistent between df1 and df2 as they use the same loader
+    date_level_name, id_level_name = df1.index.names
+    log.info(f"Duration data index levels identified: Date='{date_level_name}', ID='{id_level_name}'")
+
+    # --- Reset Index ---
+    df1 = df1.reset_index()
+    df2 = df2.reset_index()
+    log.debug(f"Duration df1 columns after reset: {df1.columns.tolist()}")
+    log.debug(f"Duration df2 columns after reset: {df2.columns.tolist()}")
+    
+    # --- Check Required Columns (Post-Reset) ---
+    required_cols_df1 = [id_level_name, date_level_name, 'Value']
+    required_cols_df2 = [id_level_name, date_level_name, 'Value'] # Assuming Value is standard output name
+    
+    missing_cols_df1 = [col for col in required_cols_df1 if col not in df1.columns]
+    missing_cols_df2 = [col for col in required_cols_df2 if col not in df2.columns]
+
+    if missing_cols_df1 or missing_cols_df2:
+        log.error(f"Missing required columns after index reset. Df1 missing: {missing_cols_df1}, Df2 missing: {missing_cols_df2}")
+        return pd.DataFrame(), pd.DataFrame(), [], None, held_status
+
+    # Common static columns (excluding the ID column which is now standard)
     common_static_cols = list(set(static_cols1) & set(static_cols2))
+    if id_level_name in common_static_cols:
+        common_static_cols.remove(id_level_name)
+        log.debug(f"Removed ID column '{id_level_name}' from common_static_cols list.")
+        
+    # Ensure 'Value' is not accidentally in common_static_cols
+    if 'Value' in common_static_cols:
+        common_static_cols.remove('Value')
 
-    # Identify ID column - check for 'ISIN' first
-    if 'ISIN' in df1.columns:
-        id_col_name = 'ISIN'
-        log.info(f"Identified ID column from columns: {id_col_name}")
-    elif not df1.empty and df1.columns:
-        potential_id = df1.columns[0]
-        log.warning(f"\'ISIN\' column not found in df1. Attempting to use first column \'{potential_id}\' as ID.")
-        id_col_name = potential_id
-        if id_col_name not in df2.columns:
-            log.error(f"Fallback ID column '{id_col_name}' from df1 not found in df2.")
-            return pd.DataFrame(), pd.DataFrame(), [], None, held_status
-    else:
-        log.error("Failed to identify ID column in duration data.")
-        return pd.DataFrame(), pd.DataFrame(), [], None, held_status
-
-    if id_col_name in common_static_cols:
-        common_static_cols.remove(id_col_name)
-        log.debug(f"Removed ID column '{id_col_name}' from common_static_cols.")
-
+    # --- Merge Preparation (Using Correct Column Names) ---
     try:
-        df1_merge = df1[[id_col_name, 'Date', 'Value'] + common_static_cols].rename(columns={'Value': 'Value_Orig'})
-        if id_col_name not in df2.columns:
-            log.error(f"ID column '{id_col_name}' identified in df1 not found in df2 columns: {df2.columns.tolist()}")
-            raise KeyError(f"ID column '{id_col_name}' not found in second dataframe")
-        df2_merge = df2[[id_col_name, 'Date', 'Value']].rename(columns={'Value': 'Value_New'})
+        # Select using the dynamically identified date and id column names
+        df1_merge = df1[[id_level_name, date_level_name, 'Value'] + common_static_cols].rename(columns={'Value': 'Value_Orig'})
+        df2_merge = df2[[id_level_name, date_level_name, 'Value']].rename(columns={'Value': 'Value_New'})
     except KeyError as e:
-        log.error(f"Missing required column for merge preparation in duration data: {e}. Df1 cols: {df1.columns.tolist()}, Df2 cols: {df2.columns.tolist()}")
+        # This should be less likely now, but keep for safety
+        log.error(f"KeyError during merge preparation using dynamic names '{id_level_name}', '{date_level_name}': {e}. Df1 cols: {df1.columns.tolist()}, Df2 cols: {df2.columns.tolist()}")
         return pd.DataFrame(), pd.DataFrame(), [], None, held_status
 
-    merged_df = pd.merge(df1_merge, df2_merge, on=[id_col_name, 'Date'], how='outer')
-    merged_df = merged_df.sort_values(by=[id_col_name, 'Date'])
-    merged_df['Change_Orig'] = merged_df.groupby(id_col_name)['Value_Orig'].diff()
-    merged_df['Change_New'] = merged_df.groupby(id_col_name)['Value_New'].diff()
+    # --- Perform Merge ---
+    # Merge using the dynamic date and id column names
+    merged_df = pd.merge(df1_merge, df2_merge, on=[id_level_name, date_level_name], how='outer')
+    merged_df = merged_df.sort_values(by=[id_level_name, date_level_name])
+    
+    # Calculate changes using the dynamic ID column name for grouping
+    merged_df['Change_Orig'] = merged_df.groupby(id_level_name)['Value_Orig'].diff()
+    merged_df['Change_New'] = merged_df.groupby(id_level_name)['Value_New'].diff()
 
-    static_data = merged_df.groupby(id_col_name)[common_static_cols].last().reset_index()
+    # Extract static data using the dynamic ID column name
+    static_data = merged_df.groupby(id_level_name)[common_static_cols].last().reset_index()
 
     log.info(f"Successfully merged duration data. Shape: {merged_df.shape}")
-    return merged_df, static_data, common_static_cols, id_col_name, held_status
+    # Return the dynamic ID column name for use in later functions
+    return merged_df, static_data, common_static_cols, id_level_name, held_status
 
 
 def calculate_comparison_stats(merged_df, static_data, id_col):
@@ -233,6 +304,12 @@ def calculate_comparison_stats(merged_df, static_data, id_col):
 def summary():
     """Displays the duration comparison summary page with server-side filtering, sorting, and pagination."""
     log.info("--- Starting Duration Comparison Summary Request ---")
+    # Retrieve the configured absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
     try:
         # --- Get Request Parameters ---
         page = request.args.get('page', 1, type=int)
@@ -252,7 +329,7 @@ def summary():
         log.info(f"Request Params: Page={page}, SortBy={sort_by}, Order={sort_order}, Filters={active_filters}, ShowSold={show_sold}")
 
         # --- Load and Prepare Data ---
-        merged_data, static_data, static_cols, actual_id_col, held_status = load_duration_comparison_data()
+        merged_data, static_data, static_cols, actual_id_col, held_status = load_duration_comparison_data(data_folder)
 
         if actual_id_col is None:
             log.error("Failed to get ID column name during duration data loading.")
@@ -452,21 +529,26 @@ def summary():
 @duration_comparison_bp.route('/duration_comparison/details/<path:security_id>')
 def duration_comparison_details(security_id):
     """Displays side-by-side historical duration charts for a specific security."""
-    log.info(f"Fetching duration comparison details for security: {security_id}")
+    log.info(f"--- Starting Duration Comparison Detail Request for Security ID: {security_id} ---")
+    # Retrieve the configured absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
     try:
-        # Load the merged data again (could potentially cache this)
-        # Specify filenames explicitly
-        merged_df, _, common_static_cols, id_col_name, _ = load_duration_comparison_data(file1='sec_duration.csv', file2='sec_durationSP.csv')
+        # Pass the absolute data folder path
+        merged_data, static_data, common_static_cols, id_col_name, _ = load_duration_comparison_data(data_folder)
 
         if id_col_name is None:
              log.error(f"Failed to get ID column name for details view (Security: {security_id}).")
              return "Error loading duration comparison data: Could not determine ID column.", 500
-        if merged_df.empty:
+        if merged_data.empty:
             log.warning(f"Merged duration data is empty for details view (Security: {security_id}).")
             return f"No merged duration data found for Security ID: {security_id}", 404
 
         # Filter data for the specific security using the correct ID column name
-        security_data = merged_df[merged_df[id_col_name] == security_id].copy() # Use .copy()
+        security_data = merged_data[merged_data[id_col_name] == security_id].copy() # Use .copy()
 
         if security_data.empty:
             log.warning(f"No duration data found for the specific Security ID: {security_id}")

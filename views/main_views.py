@@ -4,13 +4,13 @@
 """
 Blueprint for main application routes, like the index page.
 """
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, current_app
 import os
 import pandas as pd
 import traceback
 
 # Import necessary functions/constants from other modules
-from config import DATA_FOLDER
+# Removed: from config import DATA_FOLDER
 from data_loader import load_and_process_data
 from metric_calculator import calculate_latest_metrics
 
@@ -22,20 +22,36 @@ def index():
     """Renders the main dashboard page (`index.html`).
 
     This view performs the following steps:
-    1. Scans the `DATA_FOLDER` for time-series metric files (prefixed with `ts_`).
+    1. Scans the configured data directory for time-series metric files (prefixed with `ts_`).
     2. For each `ts_` file found:
-        a. Loads and processes the data using `data_loader.load_and_process_data`.
+        a. Loads and processes the data using `data_loader.load_and_process_data`,
+           providing the configured data directory path.
         b. Calculates metrics (including Z-scores) using `metric_calculator.calculate_latest_metrics`.
         c. Extracts the 'Change Z-Score' columns for both the benchmark and any specific fund columns.
-    3. Aggregates all extracted 'Change Z-Score' columns from all files into a single pandas DataFrame (`summary_df`).
+    3. Aggregates all extracted 'Change Z-score' columns from all files into a single pandas DataFrame (`summary_df`).
     4. Creates unique column names for the summary table by combining the original column name and the metric file name
        (e.g., 'Benchmark - Yield', 'FUND_A - Duration').
     5. Passes the list of available metric display names (filenames without `ts_`) and the aggregated Z-score
        DataFrame (`summary_df`) along with its corresponding column headers (`summary_metrics`) to the `index.html` template.
     This allows the dashboard to display a consolidated view of the most recent significant changes across all metrics.
     """
-    # Find only files starting with ts_ and ending with .csv
-    files = [f for f in os.listdir(DATA_FOLDER) if f.startswith('ts_') and f.endswith('.csv')]
+    # Retrieve the absolute data folder path from the app context
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
+    current_app.logger.info(f"Scanning data folder for dashboard: {data_folder}")
+
+    # Find only files starting with ts_ and ending with .csv in the configured data folder
+    try:
+        files = [f for f in os.listdir(data_folder) if f.startswith('ts_') and f.endswith('.csv')]
+    except FileNotFoundError:
+        current_app.logger.error(f"Configured DATA_FOLDER does not exist: {data_folder}")
+        files = []
+    except Exception as e:
+        current_app.logger.error(f"Error listing files in data folder {data_folder}: {e}")
+        files = []
 
     # Create two lists: one for filenames (with ts_), one for display (without ts_)
     metric_filenames = sorted([os.path.splitext(f)[0] for f in files])
@@ -56,7 +72,16 @@ def index():
         try:
             print(f"Processing {filename}...")
             # Unpack all 6 values, but only use the primary ones for the dashboard summary
-            df, fund_cols, benchmark_col, _sec_df, _sec_fund_cols, _sec_bench_col = load_and_process_data(filename)
+            # Pass the absolute data folder path to the loader
+            df, fund_cols, benchmark_col, _sec_df, _sec_fund_cols, _sec_bench_col = load_and_process_data(
+                primary_filename=filename,
+                data_folder_path=data_folder # Pass the absolute path
+            )
+
+            # Check if data loading failed (df will be None)
+            if df is None:
+                 print(f"Warning: Failed to load data for {filename}. Skipping.")
+                 continue # Skip this file if loading failed
 
             # Skip if no benchmark AND no fund columns identified
             if not benchmark_col and not fund_cols:

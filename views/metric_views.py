@@ -6,14 +6,14 @@
 """
 Blueprint for metric-specific routes (e.g., displaying individual metric charts).
 """
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, render_template, jsonify, current_app
 import os
 import pandas as pd
 import numpy as np
 import traceback
 
 # Import necessary functions/constants from other modules
-from config import DATA_FOLDER, COLOR_PALETTE
+from config import COLOR_PALETTE
 from data_loader import load_and_process_data, LoadResult # Import LoadResult type
 from metric_calculator import calculate_latest_metrics
 
@@ -43,10 +43,12 @@ def metric_page(metric_name):
 
         # --- Validate Primary Data --- 
         if primary_df is None or primary_df.empty or pri_fund_cols is None:
-            # Check if the file exists before saying it couldn't be processed
-            primary_filepath = os.path.join(DATA_FOLDER, primary_filename)
+            # Retrieve the configured absolute data folder path for error reporting
+            data_folder_for_error = current_app.config['DATA_FOLDER']
+            # Construct the full path using the absolute data_folder path
+            primary_filepath = os.path.join(data_folder_for_error, primary_filename)
             if not os.path.exists(primary_filepath):
-                 print(f"Error: Primary data file not found: {primary_filepath}")
+                 current_app.logger.error(f"Error: Primary data file not found: {primary_filepath}")
                  return f"Error: Data file for metric '{metric_name}' (expected: '{primary_filename}') not found.", 404
             else:
                  print(f"Error: Failed to process primary data file: {primary_filename}")

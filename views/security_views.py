@@ -1,7 +1,7 @@
 """
 Blueprint for security-related routes (e.g., summary page and individual details).
 """
-from flask import Blueprint, render_template, jsonify, send_from_directory, url_for
+from flask import Blueprint, render_template, jsonify, send_from_directory, url_for, current_app
 import os
 import pandas as pd
 import numpy as np
@@ -12,19 +12,20 @@ from flask import request # Import request
 import math
 
 # Import necessary functions/constants from other modules
-from config import DATA_FOLDER, COLOR_PALETTE
+from config import COLOR_PALETTE # Keep palette
 from security_processing import load_and_process_security_data, calculate_security_latest_metrics
 # Import the exclusion loading function
-from views.exclusion_views import load_exclusions, get_data_path
+from views.exclusion_views import load_exclusions # Only import load_exclusions
 
 # Define the blueprint
 security_bp = Blueprint('security', __name__, url_prefix='/security')
 
 PER_PAGE = 50 # Define how many items per page
 
-def get_active_exclusions():
+def get_active_exclusions(data_folder_path: str):
     """Loads exclusions and returns a set of SecurityIDs that are currently active."""
-    exclusions = load_exclusions() # This returns a list of dicts
+    # Pass the data folder path to the load_exclusions function
+    exclusions = load_exclusions(data_folder_path)
     active_exclusions = set()
     today = datetime.now().date()
 
@@ -48,6 +49,12 @@ def securities_page():
     """Renders a page summarizing potential issues in security-level data, with server-side pagination, filtering, and sorting."""
     print("\n--- Starting Security Data Processing (Paginated) ---")
 
+    # Retrieve the configured absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
     # --- Get Request Parameters ---
     page = request.args.get('page', 1, type=int)
     search_term = request.args.get('search_term', '', type=str).strip()
@@ -68,7 +75,8 @@ def securities_page():
 
     # --- Load Base Data ---
     spread_filename = "sec_Spread.csv"
-    data_filepath = os.path.join(DATA_FOLDER, spread_filename)
+    # Construct absolute path
+    data_filepath = os.path.join(data_folder, spread_filename)
     filter_options = {} # To store all possible options for filter dropdowns
     
     if not os.path.exists(data_filepath):
@@ -77,7 +85,8 @@ def securities_page():
 
     try:
         print(f"Loading and processing file: {spread_filename}")
-        df_long, static_cols = load_and_process_security_data(spread_filename)
+        # Pass the absolute data folder path
+        df_long, static_cols = load_and_process_security_data(spread_filename, data_folder)
 
         if df_long is None or df_long.empty:
             print(f"Skipping {spread_filename} due to load/process errors or empty data.")
@@ -110,8 +119,8 @@ def securities_page():
             elif old_id_col in combined_metrics_df.columns:
                  id_col_name = old_id_col
             else:
-                 print(f"Error: Cannot find a usable ID column ('{id_col_name}' or fallback '{old_id_col}').")
-                 return render_template('securities_page.html', message=f"Error: Cannot identify securities.", securities_data=[], pagination=None)
+                 print(f"Error: Cannot find a usable ID column ('{id_col_name}' or fallback '{old_id_col}') in {spread_filename}.")
+                 return render_template('securities_page.html', message=f"Error: Cannot identify securities in {spread_filename}.", securities_data=[], pagination=None)
 
         # Store the original unfiltered dataframe's columns 
         original_columns = combined_metrics_df.columns.tolist()
@@ -141,8 +150,8 @@ def securities_page():
 
         # 2. Active Exclusions Filter (should still work if exclusions use SecurityID/Name, adapt if needed)
         try:
-            # TODO: Verify if exclusions use ISIN or Security Name
-            active_exclusion_ids = get_active_exclusions()
+            # Pass the absolute data folder path to get active exclusions
+            active_exclusion_ids = get_active_exclusions(data_folder)
             # Assuming exclusions use Security Name/ID for now. If they use ISIN, this is correct.
             # If they use Security Name, we need to filter on that column instead.
             exclusion_col_to_check = id_col_name # Assumes exclusions use ISIN
@@ -335,6 +344,12 @@ def security_details(metric_name, security_id):
     decoded_security_id = unquote(security_id)
     print(f"\n--- Requesting Security Details: Metric='{metric_name}', Decoded ID='{decoded_security_id}' ---")
 
+    # Retrieve the configured absolute data folder path
+    data_folder = current_app.config['DATA_FOLDER']
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
     # --- Define ID Column Name (consistent with summary page) --- 
     id_col = 'ISIN' 
 
@@ -369,7 +384,7 @@ def security_details(metric_name, security_id):
         # --- Load Base Metric Data --- 
         print(f"Loading base metric file: {base_metric_filename}")
         # df_long now has columns: Date, ISIN, Security Name, other_static, Value
-        df_long, static_cols = load_and_process_security_data(base_metric_filename)
+        df_long, static_cols = load_and_process_security_data(base_metric_filename, data_folder)
 
         if df_long is None or df_long.empty:
             print(f"Error: Failed to load or process base metric data '{base_metric_filename}'.")
@@ -443,7 +458,7 @@ def security_details(metric_name, security_id):
         # --- Load, Filter, Index, Reindex Price Data --- 
         try:
             print(f"Loading price file: {price_filename}")
-            df_price_long, _ = load_and_process_security_data(price_filename)
+            df_price_long, _ = load_and_process_security_data(price_filename, data_folder)
             if df_price_long is not None and not df_price_long.empty and filter_col in df_price_long.columns:
                 print(f"Filtering price data for {filter_col}='{decoded_security_id}'")
                 price_data_filtered = df_price_long[df_price_long[filter_col].astype(str) == decoded_security_id].copy()
@@ -478,7 +493,7 @@ def security_details(metric_name, security_id):
         # --- Load, Filter, Index, Reindex Duration Data --- 
         try:
             print(f"Loading duration file: {duration_filename}")
-            df_duration_long, _ = load_and_process_security_data(duration_filename)
+            df_duration_long, _ = load_and_process_security_data(duration_filename, data_folder)
             if df_duration_long is not None and not df_duration_long.empty and filter_col in df_duration_long.columns:
                 print(f"Filtering duration data for {filter_col}='{decoded_security_id}'")
                 duration_data_filtered = df_duration_long[df_duration_long[filter_col].astype(str) == decoded_security_id].copy()
@@ -512,7 +527,7 @@ def security_details(metric_name, security_id):
         # --- Load, Filter, Index, Reindex Spread Duration Data --- 
         try:
             print(f"Loading spread duration file: {spread_duration_filename}")
-            df_sd_long, _ = load_and_process_security_data(spread_duration_filename)
+            df_sd_long, _ = load_and_process_security_data(spread_duration_filename, data_folder)
             if df_sd_long is not None and not df_sd_long.empty and filter_col in df_sd_long.columns:
                 print(f"Filtering spread duration data for {filter_col}='{decoded_security_id}'")
                 sd_data_filtered = df_sd_long[df_sd_long[filter_col].astype(str) == decoded_security_id].copy()
@@ -545,7 +560,7 @@ def security_details(metric_name, security_id):
         # --- Load, Filter, Index, Reindex Spread Data --- 
         try:
             print(f"Loading spread file: {spread_filename}")
-            df_s_long, _ = load_and_process_security_data(spread_filename)
+            df_s_long, _ = load_and_process_security_data(spread_filename, data_folder)
             if df_s_long is not None and not df_s_long.empty and filter_col in df_s_long.columns:
                 print(f"Filtering spread data for {filter_col}='{decoded_security_id}'")
                 s_data_filtered = df_s_long[df_s_long[filter_col].astype(str) == decoded_security_id].copy()
@@ -577,7 +592,7 @@ def security_details(metric_name, security_id):
         # --- Load, Filter, Index, Reindex SP Spread Duration Data --- 
         try:
             print(f"Loading SP spread duration file: {sp_spread_duration_filename}")
-            df_spsd_long, _ = load_and_process_security_data(sp_spread_duration_filename)
+            df_spsd_long, _ = load_and_process_security_data(sp_spread_duration_filename, data_folder)
             if df_spsd_long is not None and not df_spsd_long.empty and filter_col in df_spsd_long.columns:
                 print(f"Filtering SP spread duration data for {filter_col}='{decoded_security_id}'")
                 spsd_data_filtered = df_spsd_long[df_spsd_long[filter_col].astype(str) == decoded_security_id].copy()
@@ -610,7 +625,7 @@ def security_details(metric_name, security_id):
         # --- Load, Filter, Index, Reindex SP Duration Data --- 
         try:
             print(f"Loading SP duration file: {sp_duration_filename}")
-            df_spd_long, _ = load_and_process_security_data(sp_duration_filename)
+            df_spd_long, _ = load_and_process_security_data(sp_duration_filename, data_folder)
             if df_spd_long is not None and not df_spd_long.empty and filter_col in df_spd_long.columns:
                 print(f"Filtering SP duration data for {filter_col}='{decoded_security_id}'")
                 spd_data_filtered = df_spd_long[df_spd_long[filter_col].astype(str) == decoded_security_id].copy()
@@ -643,7 +658,7 @@ def security_details(metric_name, security_id):
         # --- Load, Filter, Index, Reindex SP Spread Data --- 
         try:
             print(f"Loading SP spread file: {sp_spread_filename}")
-            df_sps_long, _ = load_and_process_security_data(sp_spread_filename)
+            df_sps_long, _ = load_and_process_security_data(sp_spread_filename, data_folder)
             if df_sps_long is not None and not df_sps_long.empty and filter_col in df_sps_long.columns:
                 print(f"Filtering SP spread data for {filter_col}='{decoded_security_id}'")
                 sps_data_filtered = df_sps_long[df_sps_long[filter_col].astype(str) == decoded_security_id].copy()

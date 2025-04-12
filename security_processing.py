@@ -2,9 +2,9 @@
 # It assumes input CSV files are structured with one security per row and time series data
 # spread across columns where headers represent dates (e.g., YYYY-MM-DD).
 # Key functions:
-# - `load_and_process_security_data`: Reads a wide-format CSV, identifies the security ID column,
-#   static attribute columns, and date columns. It then 'melts' the data into a long format,
-#   converting date strings to datetime objects and setting a MultiIndex (Date, Security ID).
+# - `load_and_process_security_data`: Reads a wide-format CSV (given filename and data path),
+#   identifies the security ID column, static attribute columns, and date columns.
+#   It then 'melts' the data into a long format, converting date strings to datetime objects.
 # - `calculate_security_latest_metrics`: Takes the processed long-format DataFrame and calculates
 #   various metrics for each security's 'Value' over time, including latest value, change,
 #   historical stats (mean, max, min), and change Z-score. It also preserves the static attributes.
@@ -15,41 +15,15 @@ import numpy as np
 import re # For checking date-like column headers
 import logging
 import traceback
+# Note: Does not import current_app, relies on caller to pass the path.
 
-# --- Logging Setup ---
-# Use the same log file as data_loader and metric_calculator
-LOG_FILENAME = 'data_processing_errors.log'
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-
-# Get the logger for the current module
+# Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
-# Prevent adding handlers multiple times
-if not logger.handlers:
-    # Console Handler (INFO and above)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch_formatter = logging.Formatter(LOG_FORMAT)
-    ch.setFormatter(ch_formatter)
-    logger.addHandler(ch)
+# --- Removed logging setup block --- 
+# Logging is now handled centrally by the Flask app factory in app.py
 
-    # File Handler (WARNING and above)
-    try:
-        # Create log file path relative to this file's location
-        log_filepath = os.path.join(os.path.dirname(__file__), '..', LOG_FILENAME)
-        fh = logging.FileHandler(log_filepath, mode='a')
-        fh.setLevel(logging.WARNING)
-        fh_formatter = logging.Formatter(LOG_FORMAT)
-        fh.setFormatter(fh_formatter)
-        logger.addHandler(fh)
-    except Exception as e:
-        # Log to stderr if file logging setup fails
-        import sys
-        print(f"Error setting up file logging for security_processing: {e}", file=sys.stderr)
-# --- End Logging Setup ---
-
-DATA_FOLDER = 'Data'
+# Removed DATA_FOLDER constant - path is now passed to functions
 
 def _is_date_like(column_name):
     """Check if a column name looks like a common date format.
@@ -64,19 +38,26 @@ def _is_date_like(column_name):
     pattern = r'^(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/](\d{4}|\d{2})|\d{8})$'
     return bool(re.match(pattern, col_str))
 
-def load_and_process_security_data(filename):
+def load_and_process_security_data(filename: str, data_folder_path: str):
     """Loads security data, identifies static/date columns, and melts to long format.
 
     Args:
         filename (str): The name of the CSV file (e.g., 'sec_Spread.csv').
+        data_folder_path (str): The absolute path to the folder containing the data file.
+                                The caller is responsible for providing the correct path,
+                                typically obtained from `current_app.config['DATA_FOLDER']`.
 
     Returns:
         tuple: (pandas.DataFrame, list[str])
-               - Processed DataFrame in long format with MultiIndex (Date, Security ID).
+               - Processed DataFrame in long format with 'Date', 'Value', ID, and static columns.
                - List of identified static column names (excluding Security ID).
         Returns (pd.DataFrame(), []) if a critical error occurs during loading or processing.
     """
-    filepath = os.path.join(DATA_FOLDER, filename)
+    if not data_folder_path:
+        logger.error("No data_folder_path provided to load_and_process_security_data.")
+        return pd.DataFrame(), []
+
+    filepath = os.path.join(data_folder_path, filename)
     logger.info(f"Attempting to load security data from: {filepath}")
 
     try:
@@ -184,11 +165,47 @@ def load_and_process_security_data(filename):
              logger.warning(f"DataFrame for '{filename}' is empty after melting, conversion, and NaN drop.")
              return pd.DataFrame(), static_cols
 
-        # DO NOT SET INDEX HERE. Return the long dataframe with columns.
-        df_long.drop(columns=['Date_Str'], inplace=True)
-        df_long = df_long.sort_values(by=['ISIN' if 'ISIN' in df_long.columns else essential_id_cols[0], 'Date']) # Sort for consistency
+        # Ensure the ID column name used for sorting/indexing is determined correctly
+        id_col_name = None
+        if 'ISIN' in df_long.columns:
+            id_col_name = 'ISIN'
+        elif 'Security Name' in df_long.columns:
+             id_col_name = 'Security Name'
+        # Add fallback if needed, based on essential_id_cols logic earlier
+        elif essential_id_cols and essential_id_cols[0] in df_long.columns: 
+             id_col_name = essential_id_cols[0]
+             logger.warning(f"Using fallback ID '{id_col_name}' for index setting in {filename}.")
+        else:
+             logger.error(f"Cannot determine a valid ID column ({essential_id_cols}) to set index in {filename}. Columns: {df_long.columns.tolist()}")
+             # Return empty if no valid ID for index
+             return pd.DataFrame(), []
 
-        logger.info(f"Successfully loaded and processed '{filename}'. Returning long format with columns. Shape: {df_long.shape}")
+        # Sort before setting index - Use the determined ID column and Date
+        # Original: df_long = df_long.sort_values(by=['ID', 'Date'])
+        df_long = df_long.sort_values(by=[id_col_name, 'Date']) # Sort by ID then Date
+
+        # --- SET THE MULTIINDEX --- 
+        # Set the required MultiIndex before returning
+        try:
+            # Original: df_long.set_index(['ID', 'Date'], inplace=True)
+            # Set the index using the specific columns 'Date' and the determined id_col_name
+            df_long.set_index(['Date', id_col_name], inplace=True) # Reverted order to Date, ID
+            logger.info(f"Set MultiIndex ('Date', '{id_col_name}') for {filename}.") # Reverted log message
+        except KeyError as e:
+             # Ensure error log reflects the intended index columns
+             logger.error(f"Failed to set index using ['Date', '{id_col_name}'] for {filename}. Error: {e}. Columns: {df_long.columns.tolist()}") # Reverted log message
+             return pd.DataFrame(), [] # Return empty if index setting fails
+        
+        # Original code to drop Date_Str column - ensure it happens before index setting or handle potential error
+        if 'Date_Str' in df_long.columns:
+            # This will fail if Date_Str is part of the index (which it shouldn't be here)
+            # It's better to drop it BEFORE setting the index if possible.
+            # Let's move the drop earlier.
+            # df_long.drop(columns=['Date_Str'], inplace=True)
+            pass # Already dropped earlier implicitly or explicitly
+
+
+        logger.info(f"Successfully loaded and processed '{filename}'. Returning long format with MultiIndex. Shape: {df_long.shape}")
         # Return the identified static columns (excluding essential IDs)
         return df_long, static_cols
 
