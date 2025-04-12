@@ -255,7 +255,7 @@ def calculate_latest_metrics(
     secondary_benchmark_col: Optional[str] = None,
     secondary_prefix: str = "S&P " # Prefix for secondary metrics
 ) -> pd.DataFrame:
-    """Calculates latest metrics for primary and optional secondary data.
+    """Calculates latest metrics for primary and optional secondary data, including relative metrics.
 
     Merges metrics from both sources based on Fund Code.
     Sorts the final DataFrame by the maximum absolute Z-score from the *primary* source.
@@ -299,7 +299,7 @@ def calculate_latest_metrics(
         logger.error(f"Error preparing combined data for metric calculation: {e}", exc_info=True)
         return pd.DataFrame()
 
-    # --- Calculate Metrics for Primary Data --- #
+    # --- Calculate Base Metrics for Primary Data --- #
     primary_metrics_list, primary_max_abs_z = _process_dataframe_metrics(
         primary_df_sorted,
         fund_codes, # Use combined fund codes
@@ -308,9 +308,11 @@ def calculate_latest_metrics(
         latest_date,
         metric_prefix="" # No prefix for primary
     )
+    primary_metrics_df = pd.DataFrame(primary_metrics_list).set_index('Fund Code') if primary_metrics_list else pd.DataFrame(index=fund_codes)
 
-    # --- Calculate Metrics for Secondary Data (if present) --- #
-    secondary_metrics_list = []
+
+    # --- Calculate Base Metrics for Secondary Data (if present) --- #
+    secondary_metrics_df = pd.DataFrame(index=fund_codes) # Initialize empty df with correct index
     if secondary_df_sorted is not None and secondary_fund_cols is not None:
         logger.info(f"Processing secondary data with prefix: '{secondary_prefix}'")
         secondary_metrics_list, _ = _process_dataframe_metrics(
@@ -321,25 +323,114 @@ def calculate_latest_metrics(
             latest_date,
             metric_prefix=secondary_prefix
         )
+        if secondary_metrics_list:
+            secondary_metrics_df = pd.DataFrame(secondary_metrics_list).set_index('Fund Code')
     else:
         logger.info("No valid secondary data provided or fund columns missing, skipping secondary metrics.")
 
-    # --- Combine Metrics --- #
-    if not primary_metrics_list:
-        logger.warning("Primary metric calculation resulted in empty list. Returning empty DataFrame.")
+
+    # --- Calculate RELATIVE Metrics (Primary) ---
+    if primary_benchmark_col and primary_benchmark_col in primary_df_sorted.columns and primary_fund_cols:
+        # Find the first primary fund column that actually exists
+        pri_fund_col_used = next((col for col in primary_fund_cols if col in primary_df_sorted.columns), None)
+        if pri_fund_col_used:
+            logger.info(f"Calculating primary relative metrics ({pri_fund_col_used} - {primary_benchmark_col}).")
+            relative_metrics_list = []
+            for fund_code in fund_codes:
+                if fund_code not in primary_df_sorted.index.get_level_values(1):
+                    continue # Skip if fund not in primary data
+
+                fund_data = primary_df_sorted.loc[(slice(None), fund_code), [pri_fund_col_used, primary_benchmark_col]]
+                fund_data = fund_data.reset_index(level=1, drop=True).sort_index()
+
+                # Calculate historical relative series
+                port_col_hist = fund_data[pri_fund_col_used]
+                bench_col_hist = fund_data[primary_benchmark_col]
+                if not port_col_hist.dropna().empty and not bench_col_hist.dropna().empty:
+                    relative_hist = port_col_hist - bench_col_hist
+                    relative_change_hist = pd.Series(index=relative_hist.index, dtype=np.float64)
+                    if not relative_hist.dropna().empty and len(relative_hist.dropna()) > 1:
+                        relative_change_hist = relative_hist.diff()
+
+                    # Calculate stats for the relative series
+                    relative_stats = _calculate_column_stats(
+                        relative_hist, relative_change_hist, latest_date, "Relative", prefix=""
+                    )
+                    relative_stats['Fund Code'] = fund_code # Add Fund Code for merging
+                    relative_metrics_list.append(relative_stats)
+                else:
+                     logger.debug(f"Skipping primary relative calculation for {fund_code} due to insufficient data.")
+
+
+            if relative_metrics_list:
+                relative_primary_df = pd.DataFrame(relative_metrics_list).set_index('Fund Code')
+                # Add these relative columns to the primary metrics dataframe
+                primary_metrics_df = primary_metrics_df.merge(relative_primary_df, left_index=True, right_index=True, how='left')
+        else:
+            logger.warning("Could not find a valid primary fund column to calculate relative metrics.")
+    else:
+         logger.info("Skipping primary relative metric calculation (benchmark or fund column missing).")
+
+
+    # --- Calculate RELATIVE Metrics (Secondary) ---
+    if secondary_df_sorted is not None and secondary_benchmark_col and secondary_benchmark_col in secondary_df_sorted.columns and secondary_fund_cols:
+        # Find the first secondary fund column that actually exists
+        sec_fund_col_used = next((col for col in secondary_fund_cols if col in secondary_df_sorted.columns), None)
+        if sec_fund_col_used:
+            logger.info(f"Calculating secondary relative metrics ({sec_fund_col_used} - {secondary_benchmark_col}) with prefix '{secondary_prefix}'.")
+            relative_metrics_list_sec = []
+            for fund_code in fund_codes:
+                if fund_code not in secondary_df_sorted.index.get_level_values(1):
+                    continue # Skip if fund not in secondary data
+
+                fund_data_sec = secondary_df_sorted.loc[(slice(None), fund_code), [sec_fund_col_used, secondary_benchmark_col]]
+                fund_data_sec = fund_data_sec.reset_index(level=1, drop=True).sort_index()
+
+                # Calculate historical relative series
+                port_col_hist_sec = fund_data_sec[sec_fund_col_used]
+                bench_col_hist_sec = fund_data_sec[secondary_benchmark_col]
+
+                if not port_col_hist_sec.dropna().empty and not bench_col_hist_sec.dropna().empty:
+                    relative_hist_sec = port_col_hist_sec - bench_col_hist_sec
+                    relative_change_hist_sec = pd.Series(index=relative_hist_sec.index, dtype=np.float64)
+                    if not relative_hist_sec.dropna().empty and len(relative_hist_sec.dropna()) > 1:
+                        relative_change_hist_sec = relative_hist_sec.diff()
+
+                     # Calculate stats for the secondary relative series
+                    relative_stats_sec = _calculate_column_stats(
+                        relative_hist_sec, relative_change_hist_sec, latest_date, "Relative", prefix=secondary_prefix
+                    )
+                    relative_stats_sec['Fund Code'] = fund_code # Add Fund Code for merging
+                    relative_metrics_list_sec.append(relative_stats_sec)
+                else:
+                     logger.debug(f"Skipping secondary relative calculation for {fund_code} due to insufficient data.")
+
+            if relative_metrics_list_sec:
+                relative_secondary_df = pd.DataFrame(relative_metrics_list_sec).set_index('Fund Code')
+                 # Add these relative columns to the secondary metrics dataframe
+                secondary_metrics_df = secondary_metrics_df.merge(relative_secondary_df, left_index=True, right_index=True, how='left')
+        else:
+            logger.warning("Could not find a valid secondary fund column to calculate relative metrics.")
+    else:
+         logger.info("Skipping secondary relative metric calculation (benchmark or fund column missing or secondary data missing).")
+
+
+    # --- Combine Base and Relative Metrics --- #
+    if not primary_metrics_df.empty:
+        # Merge primary and secondary base+relative metrics based on Fund Code index
+        combined_metrics_df = primary_metrics_df.merge(
+            secondary_metrics_df, left_index=True, right_index=True, how='outer', suffixes=('', '_sec_merge_temp') # Avoid direct column clashes if secondary only had relative
+        )
+        # Clean up potential temporary suffixes if secondary only contributed relative cols
+        combined_metrics_df.columns = [col.replace('_sec_merge_temp', '') for col in combined_metrics_df.columns]
+    elif not secondary_metrics_df.empty:
+         # Only secondary data was processed (unlikely given initial checks, but handle)
+         logger.warning("Only secondary metrics were calculated.")
+         combined_metrics_df = secondary_metrics_df
+    else:
+        logger.warning("No metrics could be calculated for primary or secondary data.")
         return pd.DataFrame()
 
-    # Convert lists of dicts to DataFrames
-    primary_metrics_df = pd.DataFrame(primary_metrics_list).set_index('Fund Code')
-
-    if secondary_metrics_list:
-        secondary_metrics_df = pd.DataFrame(secondary_metrics_list).set_index('Fund Code')
-        # Merge based on Fund Code index, keeping all funds (outer merge)
-        combined_metrics_df = primary_metrics_df.merge(
-            secondary_metrics_df, left_index=True, right_index=True, how='outer'
-        )
-    else:
-        combined_metrics_df = primary_metrics_df
 
     # --- Sort Results --- #
     # Add the primary max abs Z-score as a temporary column for sorting
