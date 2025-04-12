@@ -10,6 +10,7 @@ from urllib.parse import unquote
 from datetime import datetime
 from flask import request # Import request
 import math
+import json
 
 # Import necessary functions/constants from other modules
 from config import COLOR_PALETTE # Keep palette
@@ -339,379 +340,278 @@ def replace_nan_with_none(obj):
 
 @security_bp.route('/security/details/<metric_name>/<path:security_id>')
 def security_details(metric_name, security_id):
-    """Renders the details page for a specific security, showing historical charts."""
-    # Decode the security_id from the URL path, which might contain encoded characters
+    """Renders a details page for a specific security, showing historical charts."""
+    
+    # --- Decode the security ID ---
     decoded_security_id = unquote(security_id)
-    print(f"\n--- Requesting Security Details: Metric='{metric_name}', Decoded ID='{decoded_security_id}' ---")
+    print(f"--- Requesting Security Details: Metric='{metric_name}', Decoded ID='{decoded_security_id}' ---")
 
-    # Retrieve the configured absolute data folder path
     data_folder = current_app.config['DATA_FOLDER']
-    if not data_folder:
-        current_app.logger.error("DATA_FOLDER is not configured in the application.")
-        return "Internal Server Error: Data folder not configured", 500
+    chart_data = {'labels': [], 'primary_datasets': [], 'duration_dataset': None, 'sp_duration_dataset': None, 'spread_duration_dataset': None, 'sp_spread_duration_dataset': None, 'spread_dataset': None, 'sp_spread_dataset': None }
+    latest_date_str = "N/A"
+    static_info_dict = {}
+    all_dates = set() # Collect all dates across datasets
 
-    # --- Define ID Column Name (consistent with summary page) --- 
-    id_col = 'ISIN' 
-
-    # --- Data Files to Load --- 
-    # We need the base metric file, plus potentially Price and Duration
-    base_metric_filename = f"sec_{metric_name}.csv"
-    price_filename = "sec_Price.csv"
-    duration_filename = "sec_Duration.csv"
-    # Add new filenames
-    spread_duration_filename = "sec_Spread duration.csv"
-    spread_filename = "sec_Spread.csv"
-    sp_spread_duration_filename = "sec_Spread durationSP.csv" 
-    sp_duration_filename = "sec_DurationSP.csv" 
-    sp_spread_filename = "sec_SpreadSP.csv"
-
-    chart_data = {
-        'labels': [],
-        'primary_datasets': [], # For Base Metric + Price
-        'duration_dataset': None,
-        'sp_duration_dataset': None, # New
-        'spread_duration_dataset': None, # New
-        'sp_spread_duration_dataset': None, # New
-        'spread_dataset': None, # New
-        'sp_spread_dataset': None, # New
-        'static_info': None,
-        'latest_date': None,
-        'metric_name': metric_name,
-        'security_id': decoded_security_id
-    }
-
-    try:
-        # --- Load Base Metric Data --- 
-        print(f"Loading base metric file: {base_metric_filename}")
-        # df_long now has columns: Date, ISIN, Security Name, other_static, Value
-        df_long, static_cols = load_and_process_security_data(base_metric_filename, data_folder)
-
-        if df_long is None or df_long.empty:
-            print(f"Error: Failed to load or process base metric data '{base_metric_filename}'.")
-            return render_template('security_details_page.html', 
-                                   security_id=decoded_security_id, 
-                                   metric_name=metric_name, 
-                                   chart_data_json='{}', 
-                                   static_info=None,
-                                   latest_date='N/A',
-                                   message=f"Error loading base data for {metric_name}.")
-
-        # --- Filter by Security ID (ISIN) --- 
-        print(f"Filtering data for ISIN='{decoded_security_id}'")
-        filter_col = 'ISIN' 
+    # Helper function to load, process, and filter security data
+    def load_filter_and_extract(filename, security_id_to_filter, id_column_name='Security Name'): # <-- Change default ID column
+        filepath = os.path.join(data_folder, filename)
+        print(f"Loading file: {filename}")
+        if not os.path.exists(filepath):
+            print(f"Warning: File not found - {filename}")
+            return None, None, set()
         
-        if filter_col not in df_long.columns:
-            print(f"Error: Required filter column '{filter_col}' not found in the loaded data from {base_metric_filename}. Columns: {df_long.columns.tolist()}")
-            return render_template('security_details_page.html', security_id=decoded_security_id, metric_name=metric_name, 
-                                    chart_data_json='{}', static_info=None, latest_date='N/A',
-                                    message=f"Error: Identifier column '{filter_col}' not found in data.")
-
-        # Filter the base dataframe
-        security_data_filtered = df_long[df_long[filter_col].astype(str) == decoded_security_id].copy()
-
-        if security_data_filtered.empty:
-            print(f"No data found for {filter_col}='{decoded_security_id}' in {base_metric_filename}.")
-            return render_template('security_details_page.html', 
-                                   security_id=decoded_security_id, 
-                                   metric_name=metric_name, 
-                                   chart_data_json='{}',
-                                   static_info=None,
-                                   latest_date='N/A',
-                                   message=f"No data found for {filter_col}: {decoded_security_id}.")
-
-        # --- Set Date Index for Plotting/Reindexing --- 
-        print(f"Found {len(security_data_filtered)} data points for {decoded_security_id}. Setting Date index.")
-        if 'Date' not in security_data_filtered.columns:
-             print("Error: 'Date' column missing after filtering base data.")
-             # Handle error...
-        security_data = security_data_filtered.set_index('Date').sort_index()
-
-        # --- Get Static Info (from filtered data before indexing) --- 
-        static_info = {}
-        first_row_series = security_data_filtered.iloc[0] 
-        for col in static_cols:
-            if col in security_data_filtered.columns: # Check against the columns
-                static_info[col] = first_row_series[col]
-        # Also add Security Name if it exists and isn't already in static_cols
-        if 'Security Name' in security_data_filtered.columns and 'Security Name' not in static_cols:
-             static_info['Security Name'] = first_row_series['Security Name']
-        chart_data['static_info'] = static_info
-        
-        # --- Get Labels & Latest Date (from Date index) --- 
-        chart_data['labels'] = security_data.index.strftime('%Y-%m-%d').tolist()
-        chart_data['latest_date'] = chart_data['labels'][-1] if chart_data['labels'] else 'N/A'
-
-        # --- Prepare Base Metric Dataset --- 
-        if 'Value' in security_data.columns:
-             metric_values = security_data['Value'].round(3).fillna(np.nan).tolist()
-             chart_data['primary_datasets'].append({
-                 'label': metric_name,
-                 'data': metric_values,
-                 'borderColor': COLOR_PALETTE[0 % len(COLOR_PALETTE)],
-                 'backgroundColor': COLOR_PALETTE[0 % len(COLOR_PALETTE)] + '40',
-                 'yAxisID': 'y', # Assign to the primary Y-axis
-                 'tension': 0.1
-             })
-        else:
-             print(f"Warning: 'Value' column not found in security_data for metric {metric_name}")
-
-        # --- Load, Filter, Index, Reindex Price Data --- 
         try:
-            print(f"Loading price file: {price_filename}")
-            df_price_long, _ = load_and_process_security_data(price_filename, data_folder)
-            if df_price_long is not None and not df_price_long.empty and filter_col in df_price_long.columns:
-                print(f"Filtering price data for {filter_col}='{decoded_security_id}'")
-                price_data_filtered = df_price_long[df_price_long[filter_col].astype(str) == decoded_security_id].copy()
+            df_long, static_cols = load_and_process_security_data(filename, data_folder)
+            if df_long is None or df_long.empty:
+                print(f"Warning: No data loaded or processed for {filename}")
+                return None, None, set()
+
+            # --- Use the specified ID column for filtering ---
+            if id_column_name in df_long.columns:
+                # Filter using the decoded security ID and the correct column
+                filtered_df = df_long[df_long[id_column_name] == security_id_to_filter].copy()
+                if filtered_df.empty:
+                   print(f"Warning: No data found for {id_column_name}='{security_id_to_filter}' in {filename} (column filter)")
+                   # Fallback: Attempt filtering by index if column filter failed
+                   if df_long.index.name == id_column_name or id_column_name in df_long.index.names:
+                        print(f"--> Attempting index filter for '{id_column_name}'...")
+                        try:
+                           # Use .loc which can handle single/multi-index
+                           filtered_df = df_long.loc[[security_id_to_filter]].copy()
+                           if filtered_df.empty:
+                               print(f"--> Also no data found in index for '{security_id_to_filter}'")
+                               return None, static_cols, set()
+                           else:
+                               print(f"--> Found data in index for '{security_id_to_filter}'")
+                        except KeyError:
+                             print(f"--> KeyError when looking for '{security_id_to_filter}' in index.")
+                             return None, static_cols, set()
+                        except Exception as idx_e:
+                            print(f"--> Unexpected error during index filtering: {idx_e}")
+                            return None, static_cols, set()
+                   else:
+                        print(f"--> Column filter failed, and ID '{id_column_name}' not found in index names: {df_long.index.names}")
+                        return None, static_cols, set()
+                # If we got here, filtered_df might be populated (either from column or index filter)
                 
-                if not price_data_filtered.empty:
-                    if 'Date' in price_data_filtered.columns:
-                        # Set Date index for Price data
-                        price_data = price_data_filtered.set_index('Date').sort_index()
-                        # Reindex using the main security_data's Date index
-                        price_values = price_data['Value'].reindex(security_data.index).round(3).fillna(np.nan).tolist()
-                        chart_data['primary_datasets'].append({
-                            'label': 'Price',
-                            'data': price_values,
-                            'borderColor': COLOR_PALETTE[1 % len(COLOR_PALETTE)],
-                            'backgroundColor': COLOR_PALETTE[1 % len(COLOR_PALETTE)] + '40',
-                            'yAxisID': 'y1', # Assign to the secondary Y-axis
-                            'tension': 0.1,
-                            'borderDash': [5, 5] # Optional: dashed line for price
-                        })
-                        print("Added Price data to primary chart.")
-                    else:
-                         print("Warning: Price data missing 'Date' column after filtering.")
-                else:
-                     print(f"No Price data found for {filter_col}='{decoded_security_id}'")
+            elif df_long.index.name == id_column_name or id_column_name in df_long.index.names:
+                 # ID column not in columns, but IS in index - filter directly by index
+                 print(f"Filtering {filename} directly by index '{id_column_name}' for '{security_id_to_filter}'")
+                 try:
+                     filtered_df = df_long.loc[[security_id_to_filter]].copy()
+                     if filtered_df.empty:
+                         print(f"--> No data found in index for '{security_id_to_filter}'")
+                         return None, static_cols, set()
+                 except KeyError:
+                     print(f"--> KeyError when looking for '{security_id_to_filter}' in index.")
+                     return None, static_cols, set()
+                 except Exception as idx_e:
+                    print(f"--> Unexpected error during direct index filtering: {idx_e}")
+                    return None, static_cols, set()
             else:
-                 print(f"Failed to load price data or {filter_col} missing.")
-        except FileNotFoundError:
-             print(f"Price file {price_filename} not found.")
-        except Exception as e:
-            print(f"Error processing price data: {e}")
-
-        # --- Load, Filter, Index, Reindex Duration Data --- 
-        try:
-            print(f"Loading duration file: {duration_filename}")
-            df_duration_long, _ = load_and_process_security_data(duration_filename, data_folder)
-            if df_duration_long is not None and not df_duration_long.empty and filter_col in df_duration_long.columns:
-                print(f"Filtering duration data for {filter_col}='{decoded_security_id}'")
-                duration_data_filtered = df_duration_long[df_duration_long[filter_col].astype(str) == decoded_security_id].copy()
-
-                if not duration_data_filtered.empty:
-                     if 'Date' in duration_data_filtered.columns:
-                        # Set Date index for Duration data
-                        duration_data = duration_data_filtered.set_index('Date').sort_index()
-                        # Reindex using the main security_data's Date index
-                        duration_values = duration_data['Value'].reindex(security_data.index).round(3).fillna(np.nan).tolist()
-                        chart_data['duration_dataset'] = {
-                           'label': 'Duration',
-                           'data': duration_values,
-                           'borderColor': COLOR_PALETTE[2 % len(COLOR_PALETTE)],
-                           'backgroundColor': COLOR_PALETTE[2 % len(COLOR_PALETTE)] + '40',
-                           'yAxisID': 'y', # Use standard Y-axis for this separate chart
-                           'tension': 0.1
-                        }
-                        print("Prepared Duration data for separate chart.")
-                     else:
-                          print("Warning: Duration data missing 'Date' column after filtering.")
-                else:
-                    print(f"No Duration data found for {filter_col}='{decoded_security_id}'")
-            else:
-                 print(f"Failed to load duration data or {filter_col} missing.")
-        except FileNotFoundError:
-             print(f"Duration file {duration_filename} not found.")
-        except Exception as e:
-            print(f"Error processing duration data: {e}")
-
-        # --- Load, Filter, Index, Reindex Spread Duration Data --- 
-        try:
-            print(f"Loading spread duration file: {spread_duration_filename}")
-            df_sd_long, _ = load_and_process_security_data(spread_duration_filename, data_folder)
-            if df_sd_long is not None and not df_sd_long.empty and filter_col in df_sd_long.columns:
-                print(f"Filtering spread duration data for {filter_col}='{decoded_security_id}'")
-                sd_data_filtered = df_sd_long[df_sd_long[filter_col].astype(str) == decoded_security_id].copy()
-
-                if not sd_data_filtered.empty:
-                     if 'Date' in sd_data_filtered.columns:
-                        sd_data = sd_data_filtered.set_index('Date').sort_index()
-                        # Reindex using the main security_data's Date index
-                        sd_values = sd_data['Value'].reindex(security_data.index).round(3).fillna(np.nan).tolist()
-                        chart_data['spread_duration_dataset'] = {
-                           'label': 'Spread Duration',
-                           'data': sd_values,
-                           'borderColor': COLOR_PALETTE[3 % len(COLOR_PALETTE)],
-                           'backgroundColor': COLOR_PALETTE[3 % len(COLOR_PALETTE)] + '40',
-                           'yAxisID': 'y', 
-                           'tension': 0.1
-                        }
-                        print("Prepared Spread Duration data.")
-                     else:
-                          print("Warning: Spread Duration data missing 'Date' column after filtering.")
-                else:
-                    print(f"No Spread Duration data found for {filter_col}='{decoded_security_id}'")
-            else:
-                 print(f"Failed to load spread duration data or {filter_col} missing.")
-        except FileNotFoundError:
-             print(f"Spread duration file {spread_duration_filename} not found.")
-        except Exception as e:
-            print(f"Error processing spread duration data: {e}")
+                 # Handle case where the expected ID column isn't in columns OR index
+                 print(f"Error: Required filter column/index '{id_column_name}' not found in the loaded data from {filename}. Columns: {df_long.columns.tolist()}, Index: {df_long.index.names}")
+                 return None, static_cols, set()
             
-        # --- Load, Filter, Index, Reindex Spread Data --- 
-        try:
-            print(f"Loading spread file: {spread_filename}")
-            df_s_long, _ = load_and_process_security_data(spread_filename, data_folder)
-            if df_s_long is not None and not df_s_long.empty and filter_col in df_s_long.columns:
-                print(f"Filtering spread data for {filter_col}='{decoded_security_id}'")
-                s_data_filtered = df_s_long[df_s_long[filter_col].astype(str) == decoded_security_id].copy()
+            # --- Check if filtering resulted in data ---
+            if filtered_df is None or filtered_df.empty:
+                print(f"No data found for '{security_id_to_filter}' after all filter attempts in {filename}.")
+                return None, static_cols, set()
 
-                if not s_data_filtered.empty:
-                     if 'Date' in s_data_filtered.columns:
-                        s_data = s_data_filtered.set_index('Date').sort_index()
-                        s_values = s_data['Value'].reindex(security_data.index).round(3).fillna(np.nan).tolist()
-                        chart_data['spread_dataset'] = {
-                           'label': 'Spread',
-                           'data': s_values,
-                           'borderColor': COLOR_PALETTE[4 % len(COLOR_PALETTE)],
-                           'backgroundColor': COLOR_PALETTE[4 % len(COLOR_PALETTE)] + '40',
-                           'yAxisID': 'y', 
-                           'tension': 0.1
-                        }
-                        print("Prepared Spread data.")
-                     else:
-                          print("Warning: Spread data missing 'Date' column after filtering.")
-                else:
-                    print(f"No Spread data found for {filter_col}='{decoded_security_id}'")
-            else:
-                 print(f"Failed to load spread data or {filter_col} missing.")
-        except FileNotFoundError:
-             print(f"Spread file {spread_filename} not found.")
-        except Exception as e:
-            print(f"Error processing spread data: {e}")
-
-        # --- Load, Filter, Index, Reindex SP Spread Duration Data --- 
-        try:
-            print(f"Loading SP spread duration file: {sp_spread_duration_filename}")
-            df_spsd_long, _ = load_and_process_security_data(sp_spread_duration_filename, data_folder)
-            if df_spsd_long is not None and not df_spsd_long.empty and filter_col in df_spsd_long.columns:
-                print(f"Filtering SP spread duration data for {filter_col}='{decoded_security_id}'")
-                spsd_data_filtered = df_spsd_long[df_spsd_long[filter_col].astype(str) == decoded_security_id].copy()
-
-                if not spsd_data_filtered.empty:
-                     if 'Date' in spsd_data_filtered.columns:
-                        spsd_data = spsd_data_filtered.set_index('Date').sort_index()
-                        spsd_values = spsd_data['Value'].reindex(security_data.index).round(3).fillna(np.nan).tolist()
-                        chart_data['sp_spread_duration_dataset'] = {
-                           'label': 'SP Spread Duration',
-                           'data': spsd_values,
-                           'borderColor': COLOR_PALETTE[5 % len(COLOR_PALETTE)],
-                           'backgroundColor': COLOR_PALETTE[5 % len(COLOR_PALETTE)] + '40',
-                           'yAxisID': 'y', 
-                           'borderDash': [5, 5], # Dashed line for SP
-                           'tension': 0.1
-                        }
-                        print("Prepared SP Spread Duration data.")
-                     else:
-                          print("Warning: SP Spread Duration data missing 'Date' column after filtering.")
-                else:
-                    print(f"No SP Spread Duration data found for {filter_col}='{decoded_security_id}'")
-            else:
-                 print(f"Failed to load SP spread duration data or {filter_col} missing.")
-        except FileNotFoundError:
-             print(f"SP Spread duration file {sp_spread_duration_filename} not found.")
-        except Exception as e:
-            print(f"Error processing SP spread duration data: {e}")
-
-        # --- Load, Filter, Index, Reindex SP Duration Data --- 
-        try:
-            print(f"Loading SP duration file: {sp_duration_filename}")
-            df_spd_long, _ = load_and_process_security_data(sp_duration_filename, data_folder)
-            if df_spd_long is not None and not df_spd_long.empty and filter_col in df_spd_long.columns:
-                print(f"Filtering SP duration data for {filter_col}='{decoded_security_id}'")
-                spd_data_filtered = df_spd_long[df_spd_long[filter_col].astype(str) == decoded_security_id].copy()
-
-                if not spd_data_filtered.empty:
-                     if 'Date' in spd_data_filtered.columns:
-                        spd_data = spd_data_filtered.set_index('Date').sort_index()
-                        spd_values = spd_data['Value'].reindex(security_data.index).round(3).fillna(np.nan).tolist()
-                        chart_data['sp_duration_dataset'] = {
-                           'label': 'SP Duration',
-                           'data': spd_values,
-                           'borderColor': COLOR_PALETTE[2 % len(COLOR_PALETTE)], # Match base duration color index
-                           'backgroundColor': COLOR_PALETTE[2 % len(COLOR_PALETTE)] + '20', # Lighter bg
-                           'yAxisID': 'y', 
-                           'borderDash': [5, 5], # Dashed line for SP
-                           'tension': 0.1
-                        }
-                        print("Prepared SP Duration data.")
-                     else:
-                          print("Warning: SP Duration data missing 'Date' column after filtering.")
-                else:
-                    print(f"No SP Duration data found for {filter_col}='{decoded_security_id}'")
-            else:
-                 print(f"Failed to load SP duration data or {filter_col} missing.")
-        except FileNotFoundError:
-             print(f"SP Duration file {sp_duration_filename} not found.")
-        except Exception as e:
-            print(f"Error processing SP duration data: {e}")
+            # --- Ensure 'Date' is a column --- 
+            # Crucial step: If 'Date' ended up in the index, reset it.
+            if 'Date' not in filtered_df.columns and 'Date' in filtered_df.index.names:
+                print(f"'Date' found in index, resetting index for {filename}...")
+                filtered_df.reset_index(inplace=True)
             
-        # --- Load, Filter, Index, Reindex SP Spread Data --- 
-        try:
-            print(f"Loading SP spread file: {sp_spread_filename}")
-            df_sps_long, _ = load_and_process_security_data(sp_spread_filename, data_folder)
-            if df_sps_long is not None and not df_sps_long.empty and filter_col in df_sps_long.columns:
-                print(f"Filtering SP spread data for {filter_col}='{decoded_security_id}'")
-                sps_data_filtered = df_sps_long[df_sps_long[filter_col].astype(str) == decoded_security_id].copy()
+            # --- Validate 'Date' column presence and convert --- 
+            if 'Date' not in filtered_df.columns:
+                 print(f"Error: 'Date' column STILL missing after filtering and index reset attempt for {filename}. Columns: {filtered_df.columns}")
+                 return None, static_cols, set()
+                     
+            try:
+                filtered_df['Date'] = pd.to_datetime(filtered_df['Date'])
+                filtered_df.sort_values('Date', inplace=True)
+            except Exception as date_e:
+                print(f"Error converting 'Date' column to datetime or sorting for {filename}: {date_e}")
+                traceback.print_exc()
+                return None, static_cols, set()
 
-                if not sps_data_filtered.empty:
-                     if 'Date' in sps_data_filtered.columns:
-                        sps_data = sps_data_filtered.set_index('Date').sort_index()
-                        sps_values = sps_data['Value'].reindex(security_data.index).round(3).fillna(np.nan).tolist()
-                        chart_data['sp_spread_dataset'] = {
-                           'label': 'SP Spread',
-                           'data': sps_values,
-                           'borderColor': COLOR_PALETTE[4 % len(COLOR_PALETTE)], # Match base spread color index
-                           'backgroundColor': COLOR_PALETTE[4 % len(COLOR_PALETTE)] + '20', # Lighter bg
-                           'yAxisID': 'y', 
-                           'borderDash': [5, 5], # Dashed line for SP
-                           'tension': 0.1
-                        }
-                        print("Prepared SP Spread data.")
-                     else:
-                          print("Warning: SP Spread data missing 'Date' column after filtering.")
-                else:
-                    print(f"No SP Spread data found for {filter_col}='{decoded_security_id}'")
-            else:
-                 print(f"Failed to load SP spread data or {filter_col} missing.")
-        except FileNotFoundError:
-             print(f"SP Spread file {sp_spread_filename} not found.")
+            # Extract dates from this specific security's data
+            current_dates = set(filtered_df['Date'])
+            
+            print(f"Successfully filtered {filename} for {id_column_name}='{security_id_to_filter}'. Found {len(filtered_df)} rows.")
+            return filtered_df, static_cols, current_dates
+
         except Exception as e:
-            print(f"Error processing SP spread data: {e}")
+            print(f"Error loading/processing/filtering file {filename} for ID {security_id_to_filter}: {e}")
+            traceback.print_exc() # Print full traceback for debugging
+            return None, None, set()
+            
+    # --- Load and Process Base Metric Data ---
+    base_metric_filename = f"sec_{metric_name}.csv"
+    # Use the helper function with the DECODED ID and 'Security Name'
+    df_metric_long, static_cols_metric, metric_dates = load_filter_and_extract(
+        base_metric_filename, decoded_security_id, 'Security Name' 
+    )
+    if df_metric_long is not None and not df_metric_long.empty:
+        all_dates.update(metric_dates)
+        # Extract static info from the first loaded file (assume it's consistent)
+        if static_cols_metric:
+             latest_metric_row = df_metric_long.iloc[-1]
+             static_info_dict = {col: latest_metric_row[col] for col in static_cols_metric if col in latest_metric_row and pd.notna(latest_metric_row[col])}
+             print(f"Extracted static info: {static_info_dict}")
+        else:
+             print("No static columns identified in base metric file.")
+             
+    # --- Load and Process Price Data ---
+    df_price_long, _, price_dates = load_filter_and_extract(
+        "sec_Price.csv", decoded_security_id, 'Security Name'
+    )
+    if df_price_long is not None: all_dates.update(price_dates)
+        
+    # --- Load and Process Duration Data (Primary and SP) ---
+    df_duration_long, _, duration_dates = load_filter_and_extract(
+        "sec_Duration.csv", decoded_security_id, 'Security Name' 
+    )
+    if df_duration_long is not None: all_dates.update(duration_dates)
 
+    df_sp_duration_long, _, sp_duration_dates = load_filter_and_extract(
+        "sec_DurationSP.csv", decoded_security_id, 'Security Name' 
+    )
+    if df_sp_duration_long is not None: all_dates.update(sp_duration_dates)
+        
+    # --- Load and Process Spread Duration Data (Primary and SP) ---
+    df_spread_dur_long, _, spread_dur_dates = load_filter_and_extract(
+        "sec_Spread duration.csv", decoded_security_id, 'Security Name' 
+    )
+    if df_spread_dur_long is not None: all_dates.update(spread_dur_dates)
 
-        # --- Render Template --- 
-        print(f"Rendering security details page for {decoded_security_id}")
-        # Replace NaN with None before JSON serialization
-        chart_data_clean = replace_nan_with_none(chart_data)
+    df_sp_spread_dur_long, _, sp_spread_dur_dates = load_filter_and_extract(
+        "sec_Spread durationSP.csv", decoded_security_id, 'Security Name' 
+    )
+    if df_sp_spread_dur_long is not None: all_dates.update(sp_spread_dur_dates)
+
+    # --- Load and Process Spread Data (Primary and SP) ---
+    df_spread_long, _, spread_dates = load_filter_and_extract(
+        "sec_Spread.csv", decoded_security_id, 'Security Name'
+    )
+    if df_spread_long is not None: all_dates.update(spread_dates)
+    
+    df_sp_spread_long, _, sp_spread_dates = load_filter_and_extract(
+        "sec_SpreadSP.csv", decoded_security_id, 'Security Name'
+    )
+    if df_sp_spread_long is not None: all_dates.update(sp_spread_dates)
+
+    # --- Prepare Chart Data ---
+    if not all_dates:
+        print("No dates found across any datasets. Cannot generate chart labels.")
+        # Render template with a message indicating no data
         return render_template('security_details_page.html',
-                               security_id=decoded_security_id,
+                               security_id=decoded_security_id, # Show decoded ID
                                metric_name=metric_name,
-                               # Use the cleaned data for JSON
-                               chart_data_json=jsonify(chart_data_clean).get_data(as_text=True),
-                               static_info=chart_data['static_info'], # Static info likely doesn't have NaNs
-                               latest_date=chart_data['latest_date'])
+                               chart_data_json='{}', # Empty data
+                               latest_date="N/A",
+                               static_info=static_info_dict, # Pass potentially empty dict
+                               error_message=f"No historical data found for security '{decoded_security_id}'.")
 
-    except FileNotFoundError as e:
-        print(f"Error: File not found during processing for {decoded_security_id}. Details: {e}")
-        traceback.print_exc()
-        return f"Error: Required data file not found for security details. {e}", 404
+    # Create sorted list of unique dates across all datasets
+    sorted_dates = sorted(list(all_dates))
+    chart_data['labels'] = [d.strftime('%Y-%m-%d') for d in sorted_dates]
+    latest_date_str = chart_data['labels'][-1] if chart_data['labels'] else "N/A"
+    
+    # Create a reference DataFrame with all dates for merging
+    date_ref_df = pd.DataFrame({'Date': sorted_dates})
 
-    except Exception as e:
-        print(f"Error processing security details for {decoded_security_id}: {e}")
-        traceback.print_exc()
-        return f"An error occurred processing security details for {decoded_security_id}: {e}", 500
+    # Helper function to prepare dataset for Chart.js
+    def prepare_dataset(df, value_col, label, color, y_axis_id='y'):
+        if df is None or df.empty:
+            print(f"Cannot prepare dataset for '{label}': DataFrame is None or empty.")
+             # Return structure with null data matching the length of labels
+            return {
+                'label': label,
+                'data': [None] * len(chart_data['labels']), # Use None for missing points
+                'borderColor': color,
+                'backgroundColor': color + '80', # Optional: add transparency
+                'fill': False,
+                'tension': 0.1,
+                'pointRadius': 2,
+                'pointHoverRadius': 5,
+                'yAxisID': y_axis_id,
+                'spanGaps': True # Let Chart.js connect lines over nulls
+            }
+            
+        # Ensure value column is numeric, coercing errors
+        df[value_col] = pd.to_numeric(df[value_col], errors='coerce')
 
-# Add a route for static asset discovery (like in metric_views)
+        # Merge with the full date range, using pd.NA for missing numeric values
+        merged_df = pd.merge(date_ref_df, df[['Date', value_col]], on='Date', how='left')
+        
+        # Replace pandas NA/NaN with None for JSON compatibility
+        # data_values = merged_df[value_col].replace({pd.NA: None, np.nan: None}).tolist()
+        # Replace only NaN with None, keep numeric types where possible
+        # Ensure the column is float first to handle potential integers mixed with NaN
+        data_values = merged_df[value_col].astype(float).replace({np.nan: None}).tolist()
+
+
+        return {
+            'label': label,
+            'data': data_values,
+            'borderColor': color,
+            'backgroundColor': color + '80',
+            'fill': False,
+            'tension': 0.1,
+            'pointRadius': 2,
+            'pointHoverRadius': 5,
+            'yAxisID': y_axis_id,
+            'spanGaps': True
+        }
+
+    # Primary Chart Datasets (Metric + Price)
+    if df_metric_long is not None:
+        chart_data['primary_datasets'].append(
+            prepare_dataset(df_metric_long, 'Value', metric_name, COLOR_PALETTE[0], 'y')
+        )
+    else: # Add placeholder if metric data failed to load
+        chart_data['primary_datasets'].append(
+            prepare_dataset(None, 'Value', metric_name, COLOR_PALETTE[0], 'y')
+        )
+        
+    if df_price_long is not None:
+        chart_data['primary_datasets'].append(
+            prepare_dataset(df_price_long, 'Value', 'Price', COLOR_PALETTE[1], 'y1') # Use secondary axis
+        )
+    else: # Add placeholder if price data failed to load
+         chart_data['primary_datasets'].append(
+            prepare_dataset(None, 'Value', 'Price', COLOR_PALETTE[1], 'y1')
+        )
+
+    # Duration Chart Datasets
+    chart_data['duration_dataset'] = prepare_dataset(df_duration_long, 'Value', 'Duration', COLOR_PALETTE[2])
+    chart_data['sp_duration_dataset'] = prepare_dataset(df_sp_duration_long, 'Value', 'SP Duration', COLOR_PALETTE[3])
+
+    # Spread Duration Chart Datasets
+    chart_data['spread_duration_dataset'] = prepare_dataset(df_spread_dur_long, 'Value', 'Spread Duration', COLOR_PALETTE[4])
+    chart_data['sp_spread_duration_dataset'] = prepare_dataset(df_sp_spread_dur_long, 'Value', 'SP Spread Duration', COLOR_PALETTE[5])
+
+    # Spread Chart Datasets
+    chart_data['spread_dataset'] = prepare_dataset(df_spread_long, 'Value', 'Spread', COLOR_PALETTE[6])
+    chart_data['sp_spread_dataset'] = prepare_dataset(df_sp_spread_long, 'Value', 'SP Spread', COLOR_PALETTE[7])
+
+    # Convert the entire chart_data dictionary to JSON safely
+    chart_data_json = json.dumps(chart_data, default=replace_nan_with_none, indent=4) # Use helper for NaN->null
+
+
+    print(f"Rendering security details page for {decoded_security_id}")
+    # Pass the decoded ID to the template
+    return render_template('security_details_page.html',
+                           security_id=decoded_security_id, 
+                           metric_name=metric_name,
+                           chart_data_json=chart_data_json,
+                           latest_date=latest_date_str,
+                           static_info=static_info_dict)
+
+
 @security_bp.route('/static/<path:filename>')
 def static_files(filename):
     return send_from_directory(os.path.join(security_bp.root_path, '..', 'static'), filename) 
