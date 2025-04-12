@@ -1,12 +1,13 @@
 # weight_processing.py
 # This script provides functionality to process weight files (e.g., w_Funds.csv).
 # It reads a weight file, identifies the relevant columns, and saves the processed data
-# to a specified output path. It replaces duplicate column headers with dates from Dates.csv.
+# to a specified output path. It replaces duplicate headers with dates from Dates.csv.
 
 import pandas as pd
 import logging
 import os
 import io
+from collections import Counter
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
@@ -29,20 +30,6 @@ def process_weight_file(input_path: str, output_path: str, dates_path: str = Non
     logger.info(f"Processing weight file: {input_path} -> {output_path}")
 
     try:
-        # Read the input CSV - add robustness
-        df = pd.read_csv(input_path, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
-
-        # Log DataFrame info at DEBUG level
-        buf = io.StringIO()
-        df.info(verbose=True, buf=buf)
-        logger.debug(f"DataFrame info after read for {input_path}:\n{buf.getvalue()}")
-
-        if df.empty:
-            logger.warning(f"Weight file {input_path} is empty or contains only invalid lines. Saving empty file to {output_path}.")
-            # Save an empty file or a file with just headers, depending on desired behavior
-            df.to_csv(output_path, index=False, encoding='utf-8')
-            return
-
         # Find the folder containing the input file to look for Dates.csv if not provided
         if dates_path is None:
             input_dir = os.path.dirname(input_path)
@@ -62,30 +49,145 @@ def process_weight_file(input_path: str, output_path: str, dates_path: str = Non
             logger.error(f"Error loading dates from {dates_path}: {e}")
             return
 
-        # Get original column names
-        original_cols = df.columns.tolist()
+        # Read the input CSV - add robustness
+        input_basename = os.path.basename(input_path).lower()
         
-        # Identify the fund column (should be first column)
-        fund_col = original_cols[0]  # Assume first column is fund column
-        logger.info(f"Using '{fund_col}' as the fund identifier column")
-
-        # Get data columns (all except the first)
-        data_cols = original_cols[1:]
-        
-        # Check if we have enough dates for all data columns
-        if len(data_cols) > len(dates):
-            logger.warning(f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only.")
-            dates = dates[:len(data_cols)]
-        elif len(data_cols) < len(dates):
-            logger.warning(f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates.")
-            dates = dates[:len(data_cols)]
-
-        # Create new column names with the fund column and dates
-        new_columns = [fund_col] + dates
-        
-        # Rename the columns
-        df.columns = new_columns
-        logger.info(f"Replaced duplicate headers with {len(dates)} dates from Dates.csv")
+        # Special handling for different file types based on filename
+        if "w_funds" in input_basename or "w_bench" in input_basename:
+            # For funds and bench files, we know they have a simple structure:
+            # First column is fund code, all others are weight columns to be replaced with dates
+            df = pd.read_csv(input_path, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
+            
+            if df.empty:
+                logger.warning(f"Weight file {input_path} is empty. Skipping.")
+                return
+                
+            # Get original column names
+            original_cols = df.columns.tolist()
+            
+            # First column remains the same (Fund Code)
+            id_col = original_cols[0]
+            
+            # All other columns become dates
+            data_cols = original_cols[1:]
+            
+            if len(data_cols) > len(dates):
+                logger.warning(f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only.")
+                dates = dates[:len(data_cols)]
+            elif len(data_cols) < len(dates):
+                logger.warning(f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates.")
+                dates = dates[:len(data_cols)]
+                
+            # Create new column list
+            new_columns = [id_col] + dates
+            
+            # Rename columns
+            df.columns = new_columns
+            logger.info(f"Replaced {len(data_cols)} weight columns with dates")
+            
+        elif "w_secs" in input_basename:
+            # For securities file, we need to handle potential metadata columns
+            # Read the file but skip header normalization
+            df = pd.read_csv(input_path, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
+            
+            if df.empty:
+                logger.warning(f"Weight file {input_path} is empty. Skipping.")
+                return
+                
+            # Get original column names
+            original_cols = df.columns.tolist()
+            
+            # For securities, we assume:
+            # - First column is always the ID column (ISIN)
+            # - Fixed number of metadata columns (e.g., up to column X)
+            # - The rest are date columns that need replacing
+            
+            # Identify metadata vs data columns
+            # Determine if any columns look like repeated weight/value columns
+            # For simplicity, we'll assume a pattern like "Weight", "Price", etc. repeats
+            value_patterns = ["weight", "price", "value", "duration"]
+            
+            # Count columns that match common patterns
+            pattern_counts = {}
+            for col in original_cols:
+                col_lower = col.lower()
+                for pattern in value_patterns:
+                    if pattern in col_lower:
+                        if pattern not in pattern_counts:
+                            pattern_counts[pattern] = 0
+                        pattern_counts[pattern] += 1
+                        
+            # Find the most common pattern
+            most_common_pattern = None
+            max_count = 0
+            for pattern, count in pattern_counts.items():
+                if count > max_count:
+                    max_count = count
+                    most_common_pattern = pattern
+                    
+            if most_common_pattern and max_count > 1:
+                logger.info(f"Found repeated pattern '{most_common_pattern}' {max_count} times in {input_path}")
+                
+                # Create list of columns to replace (those matching the pattern)
+                replace_indices = []
+                for i, col in enumerate(original_cols):
+                    if most_common_pattern in col.lower():
+                        replace_indices.append(i)
+                        
+                # Ensure we don't try to use more dates than we have
+                if len(replace_indices) > len(dates):
+                    logger.warning(f"Not enough dates ({len(dates)}) for all pattern columns ({len(replace_indices)}). Using available dates only.")
+                    dates = dates[:len(replace_indices)]
+                elif len(replace_indices) < len(dates):
+                    logger.warning(f"More dates ({len(dates)}) than pattern columns ({len(replace_indices)}). Using first {len(replace_indices)} dates.")
+                    dates = dates[:len(replace_indices)]
+                    
+                # Replace columns matching the pattern with dates
+                new_columns = original_cols.copy()
+                for i, idx in enumerate(replace_indices):
+                    if i < len(dates):
+                        new_columns[idx] = dates[i]
+                
+                # Rename columns
+                df.columns = new_columns
+                logger.info(f"Replaced {len(replace_indices)} columns matching '{most_common_pattern}' with dates")
+            else:
+                # Fallback: use the simpler approach of taking first column as ID, rest as dates
+                logger.warning(f"No clear pattern found in {input_path}. Using default approach (first column = ID, rest = dates).")
+                
+                id_col = original_cols[0]
+                data_cols = original_cols[1:]
+                
+                if len(data_cols) > len(dates):
+                    logger.warning(f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only.")
+                    dates = dates[:len(data_cols)]
+                elif len(data_cols) < len(dates):
+                    logger.warning(f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates.")
+                    dates = dates[:len(data_cols)]
+                    
+                new_columns = [id_col] + dates
+                df.columns = new_columns
+                logger.info(f"Replaced {len(data_cols)} columns with dates")
+        else:
+            # Default handling for unknown files
+            logger.warning(f"Unknown file type: {input_path}. Using default handling.")
+            df = pd.read_csv(input_path, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
+            
+            # Assume first column is ID, rest are dates
+            original_cols = df.columns.tolist()
+            id_col = original_cols[0]
+            data_cols = original_cols[1:]
+            
+            if len(data_cols) > len(dates):
+                logger.warning(f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only.")
+                dates = dates[:len(data_cols)]
+            elif len(data_cols) < len(dates):
+                logger.warning(f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates.")
+                dates = dates[:len(data_cols)]
+                
+            new_columns = [id_col] + dates
+            df.columns = new_columns
+            logger.info(f"Replaced all columns after the first with dates")
 
         # Save the processed DataFrame to the output path
         df.to_csv(output_path, index=False, encoding='utf-8')
@@ -98,6 +200,8 @@ def process_weight_file(input_path: str, output_path: str, dates_path: str = Non
          logger.warning(f"Weight file is empty - {input_path}. Skipping save.")
     except pd.errors.ParserError as pe:
         logger.error(f"Error parsing CSV weight file {input_path}: {pe}. Check file format and integrity.", exc_info=True)
+    except PermissionError as pe:
+        logger.error(f"Permission error saving to {output_path}: {pe}. Ensure the file is not open in another program.", exc_info=True)
     except Exception as e:
         logger.error(f"An unexpected error occurred processing weight file {input_path} to {output_path}: {e}", exc_info=True)
 
