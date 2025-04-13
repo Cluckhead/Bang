@@ -127,7 +127,7 @@ graph TD
 *   `ts_*.csv`: Time-series data, indexed by Date and Code (Fund/Benchmark).
 *   `sp_ts_*.csv`: (Optional) Secondary/comparison time-series data, corresponding to `ts_*.csv` files. Used on Metric and Fund Detail pages.
 *   `sec_*.csv`: Security-level data, typically wide format with dates as columns.
-*   `pre_*.csv`: Input files for the `process_data.py` script.
+*   `pre_*.csv`: Input files for the `process_data.py` script. This script processes these files and saves the output as `sec_*.csv`, overwriting any existing files with the same name.
 *   `new_*.csv`: Output files from the `process_data.py` script.
 *   **`exclusions.csv`**: Stores the list of excluded securities. Contains columns: `SecurityID`, `AddDate`, `EndDate`, `Comment`.
 *   `QueryMap.csv`: Maps query IDs to filenames for the API simulation.
@@ -185,7 +185,7 @@ graph TD
     *   `calculate_latest_metrics(...)`: Calculates latest metrics per fund for both primary and secondary data, sorted by max absolute primary Z-score.
 
 ### `process_data.py`
-*   **Purpose:** Serves as a pre-processing step for specific CSV files (usually `pre_*.csv`), aggregating rows and handling duplicates.
+*   **Purpose:** Serves as a pre-processing step for specific CSV files (usually `pre_*.csv`), aggregating rows and handling duplicates. It outputs corresponding `sec_*.csv` files, overwriting existing ones.
 *   **Functions:**
     *   `process_csv_file(...)`: Processes a single input file.
     *   `main()`: Processes all `pre_*.csv` files in the `Data` directory.

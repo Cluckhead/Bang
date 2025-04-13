@@ -4,7 +4,8 @@
 # For rows sharing the same 'Security Name' but differing in other data points, the 'Security Name' is suffixed
 # (e.g., _1, _2) to ensure uniqueness. The 'Funds' associated with identical data rows are aggregated
 # into a single list-like string representation (e.g., '[FUND1,FUND2]').
-# The processed data is then saved to a new CSV file prefixed with 'new_' in the same data directory.
+# The processed data is then saved to a corresponding CSV file prefixed with 'sec_' (overwriting existing files)
+# in the same data directory.
 # It also processes a weight file (`w_Funds.csv`).
 # The data directory is determined dynamically using `utils.get_data_folder_path`.
 
@@ -12,7 +13,7 @@
 # This script processes CSV files in the 'Data' directory that start with 'pre_'.
 # It merges rows based on identical values in all columns except 'Funds'.
 # Duplicated 'Security Name' entries with differing data are suffixed (_1, _2, etc.).
-# The aggregated 'Funds' are stored as a list in the output file.
+# The aggregated 'Funds' are stored as a list in the output file, saved as 'sec_*.csv'.
 
 import os
 import pandas as pd
@@ -102,11 +103,12 @@ def read_and_sort_dates(dates_file_path):
 def process_csv_file(input_path, output_path, date_columns):
     """
     Reads a 'pre_' CSV file, potentially replaces placeholder columns with dates,
-    processes it according to the rules, and writes the result to a 'new_' CSV file.
+    processes it according to the rules, and writes the result to a 'sec_' CSV file,
+    overwriting if it exists.
 
     Args:
         input_path (str): Path to the input CSV file (e.g., 'Data/pre_sec_duration.csv').
-        output_path (str): Path to the output CSV file (e.g., 'Data/new_sec_duration.csv').
+        output_path (str): Path to the output CSV file (e.g., 'Data/sec_duration.csv').
         date_columns (list[str] | None): Sorted list of date strings for headers, or None if dates couldn't be read.
     """
     # If date_columns is None (due to error reading dates.csv), log and skip processing files needing date replacement.
@@ -446,13 +448,19 @@ def main():
     processed_count = 0
     skipped_count = 0
     for filename in os.listdir(input_dir):
+        # Skip non-CSV files and the specific weight files which are handled separately
+        if not filename.endswith('.csv') or filename.startswith('pre_w_'):
+            if filename.startswith('pre_w_'):
+                logger.debug(f"Skipping {filename} in main loop, will be handled by weight processor.")
+            continue # Skip this file in the main loop
+
         if filename.startswith('pre_') and filename.endswith('.csv'):
             input_path = os.path.join(input_dir, filename)
-            # Create the output filename by replacing 'pre_' with 'new_'
-            output_filename = filename.replace('pre_', 'new_', 1)
+            # Create the output filename by replacing 'pre_' with '' (e.g., sec_duration.csv)
+            output_filename = filename.replace('pre_', '', 1)
             output_path = os.path.join(input_dir, output_filename)
             
-            logger.info(f"Found file to process: {input_path} -> {output_path}")
+            logger.info(f"Found file to process: {input_path} -> {output_path} (will overwrite)")
             try:
                 process_csv_file(input_path, output_path, date_columns)
                 processed_count += 1
@@ -460,23 +468,28 @@ def main():
                 logger.error(f"Error processing file {input_path}: {e}", exc_info=True)
                 skipped_count += 1
         
-    logger.info(f"Finished processing 'pre_' files. Processed: {processed_count}, Skipped due to errors: {skipped_count}")
+    logger.info(f"Finished processing general 'pre_' files. Processed: {processed_count}, Skipped due to errors: {skipped_count}")
 
-    # --- Process the weight file --- 
-    weight_input_filename = 'w_Funds.csv'
-    weight_output_filename = 'w_Funds_Processed.csv' # Define an output name
-    weight_input_path = os.path.join(input_dir, weight_input_filename)
-    weight_output_path = os.path.join(input_dir, weight_output_filename)
+    # --- Process the specific weight files using weight_processing --- 
+    weight_files_to_process = {
+        'pre_w_fund.csv': 'w_Funds.csv',
+        'pre_w_bench.csv': 'w_Bench.csv',
+        'pre_w_secs.csv': 'w_secs.csv'
+    }
 
-    if os.path.exists(weight_input_path):
-        logger.info(f"Processing weight file: {weight_input_path} -> {weight_output_path}")
-        try:
-            # Pass the absolute input and output paths
-            process_weight_file(weight_input_path, weight_output_path)
-        except Exception as e:
-            logger.error(f"Error processing weight file {weight_input_path}: {e}", exc_info=True)
-    else:
-        logger.warning(f"Weight file not found at {weight_input_path}. Skipping weight processing.")
+    for input_fname, output_fname in weight_files_to_process.items():
+        weight_input_path = os.path.join(input_dir, input_fname)
+        weight_output_path = os.path.join(input_dir, output_fname)
+
+        if os.path.exists(weight_input_path):
+            logger.info(f"Processing weight file: {weight_input_path} -> {weight_output_path}")
+            try:
+                # Pass the absolute input, output paths, and the absolute dates_path
+                process_weight_file(weight_input_path, weight_output_path, dates_file_path)
+            except Exception as e:
+                logger.error(f"Error processing weight file {weight_input_path}: {e}", exc_info=True)
+        else:
+            logger.warning(f"Weight input file not found: {weight_input_path}. Skipping processing for {output_fname}.")
 
     logger.info("--- Pre-processing script finished --- ")
 

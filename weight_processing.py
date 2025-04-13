@@ -73,11 +73,18 @@ def process_weight_file(input_path: str, output_path: str, dates_path: str = Non
         # Read dates
         try:
             dates_df = pd.read_csv(dates_path)
-            dates = dates_df['Date'].tolist()
-            logger.info(f"Loaded {len(dates)} dates from {dates_path}")
+            # Ensure the date column is parsed correctly
+            dates_df['Date'] = pd.to_datetime(dates_df['Date'], errors='coerce')
+            # Drop any rows where date parsing failed
+            dates_df = dates_df.dropna(subset=['Date'])
+            # Sort dates chronologically (oldest first)
+            dates_df = dates_df.sort_values(by='Date')
+            # Get the sorted list of date objects
+            sorted_dates = dates_df['Date'].tolist()
+            logger.info(f"Loaded {len(sorted_dates)} dates from {dates_path}")
             
             # Clean up date formats to remove time components
-            dates = clean_date_format(dates)
+            dates = clean_date_format(sorted_dates)
             logger.info(f"Cleaned up date formats to remove time components")
             
         except Exception as e:
@@ -169,23 +176,30 @@ def process_weight_file(input_path: str, output_path: str, dates_path: str = Non
                     if most_common_pattern in col.lower():
                         replace_indices.append(i)
                         
-                # Ensure we don't try to use more dates than we have
-                if len(replace_indices) > len(dates):
-                    logger.warning(f"Not enough dates ({len(dates)}) for all pattern columns ({len(replace_indices)}). Using available dates only.")
-                    dates = dates[:len(replace_indices)]
-                elif len(replace_indices) < len(dates):
-                    logger.warning(f"More dates ({len(dates)}) than pattern columns ({len(replace_indices)}). Using first {len(replace_indices)} dates.")
-                    dates = dates[:len(replace_indices)]
-                    
-                # Replace columns matching the pattern with dates
-                new_columns = original_cols.copy()
-                for i, idx in enumerate(replace_indices):
-                    if i < len(dates):
-                        new_columns[idx] = dates[i]
+                # --- Refined Date Replacement Logic for Mismatch --- 
+                num_dates = len(dates)
+                num_replace_cols = len(replace_indices)
                 
-                # Rename columns
+                if num_dates != num_replace_cols:
+                    logger.warning(f"Date count ({num_dates}) differs from pattern column count ({num_replace_cols}) for {input_path}. Replacing headers using the minimum count: {min(num_dates, num_replace_cols)}.")
+                else:
+                    logger.info(f"Found {num_dates} dates and {num_replace_cols} pattern columns. Replacing headers.")
+
+                # Determine how many headers we can actually replace
+                num_to_replace = min(num_dates, num_replace_cols)
+
+                # Replace the identified columns with dates, up to the minimum count
+                new_columns = original_cols.copy()
+                for i in range(num_to_replace):
+                    idx_to_replace = replace_indices[i]
+                    # Ensure we don't try to access dates beyond its bounds (already handled by num_to_replace)
+                    new_columns[idx_to_replace] = dates[i] 
+                # Columns in replace_indices beyond num_to_replace will keep their original names
+                # --- End Refined Logic --- 
+                
+                # Rename columns in the DataFrame
                 df.columns = new_columns
-                logger.info(f"Replaced {len(replace_indices)} columns matching '{most_common_pattern}' with dates")
+                logger.info(f"Replaced {num_to_replace} columns matching '{most_common_pattern}' with dates")
             else:
                 # Fallback: use the simpler approach of taking first column as ID, rest as dates
                 logger.warning(f"No clear pattern found in {input_path}. Using default approach (first column = ID, rest = dates).")
