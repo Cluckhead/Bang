@@ -1,19 +1,19 @@
 # This script serves as a pre-processing step for specific CSV files within the configured data directory.
 # It targets files prefixed with 'pre_', reads them, and performs data aggregation and cleaning.
-# The core logic involves grouping rows based on identical values across most columns, excluding 'Funds' and 'Security Name'.
-# For rows sharing the same 'Security Name' but differing in other data points, the 'Security Name' is suffixed
-# (e.g., _1, _2) to ensure uniqueness. The 'Funds' associated with identical data rows are aggregated
-# into a single list-like string representation (e.g., '[FUND1,FUND2]').
+# The core logic involves grouping rows based on identical values across most columns, excluding 'Funds', 'Security Name', and potentially 'ISIN'.
+# For rows sharing the same 'Security Name' but differing in other data points, the script attempts to find
+# an 'ISIN' column and suffixes its value (e.g., -1, -2) to ensure uniqueness for downstream processing.
+# The 'Funds' associated with identical data rows are aggregated into a single list-like string representation (e.g., '[FUND1,FUND2]').
 # The processed data is then saved to a corresponding CSV file prefixed with 'sec_' (overwriting existing files)
 # in the same data directory.
-# It also processes a weight file (`w_Funds.csv`).
+# It also processes weight files (`pre_w_*.csv`).
 # The data directory is determined dynamically using `utils.get_data_folder_path`.
 
 # process_data.py
 # This script processes CSV files in the 'Data' directory that start with 'pre_'.
-# It merges rows based on identical values in all columns except 'Funds'.
-# Duplicated 'Security Name' entries with differing data are suffixed (_1, _2, etc.).
-# The aggregated 'Funds' are stored as a list in the output file, saved as 'sec_*.csv'.
+# It merges rows based on identical values in most columns (excluding 'Funds', 'Security Name', potentially 'ISIN').
+# If multiple data versions exist for the same 'Security Name', it suffixes the 'ISIN' column value (-1, -2, etc.).
+# The aggregated 'Funds' are stored as a list-like string in the output file, saved as 'sec_*.csv'.
 
 import os
 import pandas as pd
@@ -100,7 +100,7 @@ def read_and_sort_dates(dates_file_path):
 
 
 # Modify process_csv_file signature to accept date_columns
-def process_csv_file(input_path, output_path, date_columns):
+def process_csv_file(input_path, output_path, date_columns, dates_file_path):
     """
     Reads a 'pre_' CSV file, potentially replaces placeholder columns with dates,
     processes it according to the rules, and writes the result to a 'sec_' CSV file,
@@ -110,6 +110,7 @@ def process_csv_file(input_path, output_path, date_columns):
         input_path (str): Path to the input CSV file (e.g., 'Data/pre_sec_duration.csv').
         output_path (str): Path to the output CSV file (e.g., 'Data/sec_duration.csv').
         date_columns (list[str] | None): Sorted list of date strings for headers, or None if dates couldn't be read.
+        dates_file_path (str): Path to the dates CSV file.
     """
     # If date_columns is None (due to error reading dates.csv), log and skip processing files needing date replacement.
     # We'll handle the actual replacement logic further down.
@@ -372,11 +373,19 @@ def process_csv_file(input_path, output_path, date_columns):
                 # Assign the aggregated funds as a string formatted like a list: "[FUND1,FUND2,...]"
                 new_row_series['Funds'] = f"[{','.join(funds_list)}]"
 
-                # If there was more than one distinct version for this Security Name, suffix the name
+                # If there was more than one distinct version for this Security Name,
+                # attempt to suffix the ISIN column to create a unique identifier.
                 if num_versions > 1:
-                    # Ensure sec_name is a string before formatting
-                    new_row_series['Security Name'] = f"{str(sec_name)}_{i+1}"
-                # Else: keep the original Security Name (already stringified and set in new_row_series)
+                    isin_col_name = 'ISIN' # Define the expected ISIN column name
+                    if isin_col_name in new_row_series.index:
+                        original_isin = new_row_series[isin_col_name]
+                        # Ensure ISIN is treated as string for concatenation
+                        new_isin = f"{str(original_isin)}-{i+1}"
+                        new_row_series[isin_col_name] = new_isin
+                        logger.debug(f"Suffixed ISIN for duplicate Security Name '{sec_name}'. Original: '{original_isin}', New: '{new_isin}'")
+                    else:
+                        # If ISIN column doesn't exist, log a warning. Do not modify Security Name.
+                        logger.warning(f"Found {num_versions} distinct data versions for Security Name '{sec_name}' but column '{isin_col_name}' not found. Cannot apply suffix to ISIN.")
 
                 # Append the processed row (as a dictionary) to our results list
                 processed_rows.append(new_row_series.to_dict())
@@ -462,7 +471,8 @@ def main():
             
             logger.info(f"Found file to process: {input_path} -> {output_path} (will overwrite)")
             try:
-                process_csv_file(input_path, output_path, date_columns)
+                # Pass dates_file_path to the function
+                process_csv_file(input_path, output_path, date_columns, dates_file_path)
                 processed_count += 1
             except Exception as e:
                 logger.error(f"Error processing file {input_path}: {e}", exc_info=True)
