@@ -277,6 +277,10 @@ def fund_detail(fund_code):
     skipped_files = 0
     error_messages = [] # Collect specific errors
 
+    # Helper function to convert NaN to None for JSON compatibility
+    def nan_to_none(data_list):
+        return [None if pd.isna(x) else x for x in data_list]
+
     try:
         # Find all primary time-series files
         ts_files_pattern = os.path.join(data_folder, 'ts_*.csv')
@@ -423,7 +427,7 @@ def fund_detail(fund_code):
                 fund_values = fund_df[fund_col_name].reindex(fund_df.index).where(pd.notna, None).tolist()
                 chart_data['datasets'].append({
                     'label': f"{fund_code} {metric_name_display}",
-                    'data': fund_values,
+                    'data': nan_to_none(fund_values),
                     'borderColor': current_app.config['COLOR_PALETTE'][0 % len(current_app.config['COLOR_PALETTE'])],
                     'tension': 0.1,
                     'pointRadius': 1,
@@ -439,7 +443,7 @@ def fund_detail(fund_code):
                 bench_values = fund_df[benchmark_col].reindex(fund_df.index).where(pd.notna, None).tolist()
                 chart_data['datasets'].append({
                     'label': f"Benchmark ({benchmark_col})",
-                    'data': bench_values,
+                    'data': nan_to_none(bench_values),
                     'borderColor': current_app.config['COLOR_PALETTE'][1 % len(current_app.config['COLOR_PALETTE'])],
                     'tension': 0.1,
                     'pointRadius': 1,
@@ -457,7 +461,7 @@ def fund_detail(fund_code):
                     sp_values = sp_fund_aligned.where(pd.notna, None).tolist() # Replace NaN with None for JSON
                     chart_data['datasets'].append({
                         'label': f"{fund_code} {metric_name_display} (SP)",
-                        'data': sp_values,
+                        'data': nan_to_none(sp_values),
                         'borderColor': current_app.config['COLOR_PALETTE'][2 % len(current_app.config['COLOR_PALETTE'])], # Use a different color
                         'tension': 0.1,
                         'pointRadius': 1,
@@ -477,7 +481,7 @@ def fund_detail(fund_code):
                     sp_bench_values = sp_bench_aligned.where(pd.notna, None).tolist()
                     chart_data['datasets'].append({
                         'label': f"Benchmark ({sp_benchmark_col}) (SP)", # Label appropriately
-                        'data': sp_bench_values,
+                        'data': nan_to_none(sp_bench_values),
                         'borderColor': current_app.config['COLOR_PALETTE'][3 % len(current_app.config['COLOR_PALETTE'])], # Use another color
                         'tension': 0.1,
                         'pointRadius': 1,
