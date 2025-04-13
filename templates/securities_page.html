@@ -105,6 +105,11 @@ main.js:29 DOM fully loaded and parsed
                 </tr>
             </thead>
             <tbody id="securities-table-body">
+                {# Add an empty spacer row to prevent header overlap with first data row #}
+                <tr class="spacer-row" style="height: 45px; background: transparent; border: none;">
+                    <td colspan="{{ column_order|length }}" style="padding: 0; border: none;"></td>
+                </tr>
+                
                 {% for row in securities_data %}
                     {% set z_score = row['Change Z-Score'] %}
                     {% set abs_z_score = z_score|abs if z_score is not none else 0 %} {# Calculate here #}

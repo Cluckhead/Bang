@@ -29,4 +29,24 @@ th.sortable.sort-desc .sort-indicator::before {
 /* Hover effect for sortable headers */
 th.sortable:hover {
     background-color: #e9ecef; /* Light grey background on hover */
+}
+
+/* Ensure sticky header cells position correctly below the fixed navbar */
+#securities-table thead.sticky-top th {
+    position: sticky; /* Ensure stickiness is explicitly defined */
+    top: 56px; /* Adjust to match fixed navbar height */
+    z-index: 1019; /* Ensure it's above table body but below navbar (Bootstrap navbar is 1030) */
+    background-color: var(--bs-table-bg); /* Match the header background */
+}
+
+/* Add padding to the first row to prevent content from being hidden under header */
+#securities-table tbody tr:first-child {
+    margin-top: 45px; /* Add vertical space to the first row */
+}
+
+/* Alternatively, add a pseudo element to create space before the first row */
+#securities-table tbody::before {
+    content: "";
+    display: block;
+    height: 45px; /* Adjust this value as needed to prevent overlap */
 } 

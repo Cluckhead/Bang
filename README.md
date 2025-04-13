@@ -266,7 +266,8 @@ These modules contain the Flask Blueprints defining the application's routes.
         *   Passes paginated data and metadata to the template.
         *   Security IDs (using ISIN from `w_secs.csv`) link to the details page.
     *   `/security/details/<metric_name>/<path:security_id>`: Renders `security_details_page.html`.
-        *   Shows historical charts for a specific security (identified by ISIN via `security_id`).
+        *   Shows historical charts for a specific security. The `security_id` from the URL (which is typically an ISIN) is decoded using `urllib.parse.unquote`.
+        *   **Data Loading:** Filters data primarily using the decoded `security_id` against the `ISIN` column/index in the relevant `sec_*.csv` files. If no data is found using `ISIN`, it attempts a fallback filter using the `Security Name` column.
         *   Displays the requested base `metric_name` overlaid with Price (from `sec_Price.csv`).
         *   Additionally displays separate charts for:
             *   Duration (from `sec_Duration.csv`) overlaid with SP Duration (from `sec_DurationSP.csv`).
@@ -370,4 +371,3 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`curve_summary.html`:** Displays a summary table of the yield curve inconsistency checks for the latest date across all currencies.
 *   **`curve_details.html`:** Shows a line chart of the yield curve for a specific currency and provides a date selector to view historical curves. Includes JavaScript for Chart.js rendering.
 *   **`issues_page.html`:** UI for tracking data issues. Includes a form to raise new issues and tables to display open and closed issues, with functionality to close open ones via a modal.
-```
