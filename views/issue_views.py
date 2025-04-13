@@ -8,7 +8,7 @@ from datetime import datetime
 
 issue_bp = Blueprint('issue_bp', __name__, template_folder='templates')
 
-DATA_SOURCES = ["S&P", "Production", "Pi", "IVP", "Benchmark"] # Define allowed sources
+DATA_SOURCES = ["S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug"] # Define allowed sources
 
 @issue_bp.route('/issues', methods=['GET', 'POST'])
 def manage_issues():
