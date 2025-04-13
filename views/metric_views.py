@@ -138,6 +138,10 @@ def metric_page(metric_name):
         primary_df_index = primary_df.index
         secondary_df_index = secondary_df.index if secondary_data_available and secondary_df is not None else None
 
+        # Helper function to convert NaN to None for JSON compatibility
+        def nan_to_none(data_list):
+            return [None if pd.isna(x) else x for x in data_list]
+
         # Loop through funds present in the calculated metrics
         for fund_code in fund_codes_in_metrics:
             fund_latest_metrics_row = latest_metrics.loc[fund_code]
@@ -187,6 +191,65 @@ def metric_page(metric_name):
                     print(f"Warning: Secondary index for {fund_code} is not DatetimeIndex.")
                     fund_hist_secondary = fund_hist_secondary_raw # Use raw if not datetime
 
+            # --- Prepare Main Chart Datasets (Primary Data) ---
+            main_datasets = []
+            if fund_hist_primary is not None:
+                # Add primary fund column(s)
+                if pri_fund_cols:
+                    for i, col in enumerate(pri_fund_cols):
+                        if col in fund_hist_primary.columns:
+                            main_datasets.append({
+                                "label": col,
+                                "data": nan_to_none(fund_hist_primary[col].tolist()), # Convert NaN to None
+                                "borderColor": COLOR_PALETTE[i % len(COLOR_PALETTE)],
+                                "backgroundColor": f"{COLOR_PALETTE[i % len(COLOR_PALETTE)]}40", # Add alpha
+                                "tension": 0.1,
+                                "source": "primary",
+                                "isSpData": False
+                            })
+                # Add primary benchmark column
+                if pri_bench_col and pri_bench_col in fund_hist_primary.columns:
+                    main_datasets.append({
+                        "label": "Benchmark",
+                        "data": nan_to_none(fund_hist_primary[pri_bench_col].tolist()), # Convert NaN to None
+                        "borderColor": "black",
+                        "backgroundColor": "grey",
+                        "borderDash": [5, 5],
+                        "tension": 0.1,
+                        "source": "primary",
+                        "isSpData": False
+                    })
+
+            # --- Add Secondary Data to Main Chart Datasets ---
+            if secondary_data_available and fund_hist_secondary is not None:
+                 # Add secondary fund column(s) - Use same color but different style
+                if sec_fund_cols:
+                    for i, col in enumerate(sec_fund_cols):
+                        if col in fund_hist_secondary.columns:
+                             main_datasets.append({
+                                "label": f"S&P {col}", # Prefix with S&P
+                                "data": nan_to_none(fund_hist_secondary[col].tolist()), # Convert NaN to None
+                                "borderColor": COLOR_PALETTE[i % len(COLOR_PALETTE)], # Same base color
+                                "backgroundColor": f"{COLOR_PALETTE[i % len(COLOR_PALETTE)]}20", # Lighter alpha
+                                "borderDash": [2, 2], # Different dash style
+                                "tension": 0.1,
+                                "source": "secondary",
+                                "isSpData": True # Mark as SP data
+                            })
+
+                # Add secondary benchmark column
+                if sec_bench_col and sec_bench_col in fund_hist_secondary.columns:
+                    main_datasets.append({
+                        "label": "S&P Benchmark",
+                        "data": nan_to_none(fund_hist_secondary[sec_bench_col].tolist()), # Convert NaN to None
+                        "borderColor": "#FFA500", # Orange for SP Benchmark
+                        "backgroundColor": "#FFDAB9", # Light Orange
+                        "borderDash": [2, 2],
+                        "tension": 0.1,
+                        "source": "secondary",
+                        "isSpData": True # Mark as SP data
+                    })
+
             # --- Prepare Relative Chart Data (if possible) ---
             relative_datasets = []
             relative_chart_config = None
@@ -206,7 +269,7 @@ def metric_page(metric_name):
                     relative_primary_hist = (port_col_hist - bench_col_hist).round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None)
                     relative_datasets.append({
                         'label': 'Relative (Port - Bench)',
-                        'data': relative_primary_hist.tolist(),
+                        'data': nan_to_none(relative_primary_hist.tolist()),
                         'borderColor': '#1f77b4', # Specific color for primary relative
                         'backgroundColor': '#aec7e8',
                         'tension': 0.1,
@@ -217,7 +280,6 @@ def metric_page(metric_name):
                     for col in fund_latest_metrics_row.index:
                         if col.startswith('Relative '):
                              relative_metrics_for_js[col] = fund_latest_metrics_row[col] if pd.notna(fund_latest_metrics_row[col]) else None
-
 
             # 2. Calculate Secondary Relative Series (if applicable)
             sec_fund_col_used = None
@@ -235,7 +297,7 @@ def metric_page(metric_name):
                         relative_secondary_hist = (port_col_hist_sec - bench_col_hist_sec).round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None)
                         relative_datasets.append({
                             'label': 'S&P Relative (Port - Bench)',
-                            'data': relative_secondary_hist.tolist(),
+                            'data': nan_to_none(relative_secondary_hist.tolist()),
                             'borderColor': '#ff7f0e', # Specific color for secondary relative
                             'backgroundColor': '#ffbb78',
                             'borderDash': [2, 2],
@@ -261,83 +323,15 @@ def metric_page(metric_name):
                 # We will add this later, after the main chart
                 # fund_charts.append(relative_chart_config) # Add relative chart first
 
-            # --- Prepare Main Chart Data ---
-            main_datasets = []
-            main_metrics_for_js = {}
-
-            # 1. Primary Datasets (Portfolio/Benchmark)
-            if fund_hist_primary is not None:
-                if pri_bench_col and pri_bench_col in fund_hist_primary.columns:
-                    bench_values = fund_hist_primary[pri_bench_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
-                    main_datasets.append({
-                        'label': pri_bench_col,
-                        'data': bench_values,
-                        'borderColor': 'black', 'backgroundColor': 'grey',
-                        'borderDash': [5, 5], 'tension': 0.1,
-                        'source': 'primary', 'isSpData': False
-                    })
-                if pri_fund_cols:
-                    for i, fund_col in enumerate(pri_fund_cols):
-                        if fund_col in fund_hist_primary.columns:
-                            fund_values = fund_hist_primary[fund_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
-                            color = COLOR_PALETTE[i % len(COLOR_PALETTE)]
-                            main_datasets.append({
-                                'label': fund_col,
-                                'data': fund_values,
-                                'borderColor': color, 'backgroundColor': color + '40',
-                                'tension': 0.1,
-                                'source': 'primary', 'isSpData': False
-                            })
-                # Extract primary non-relative metrics
-                for col in fund_latest_metrics_row.index:
-                    if not col.startswith('Relative ') and not col.startswith('S&P Relative '):
-                        main_metrics_for_js[col] = fund_latest_metrics_row[col] if pd.notna(fund_latest_metrics_row[col]) else None
-
-            # 2. Secondary Datasets (Portfolio/Benchmark)
-            if fund_hist_secondary is not None:
-                if sec_bench_col and sec_bench_col in fund_hist_secondary.columns:
-                    bench_values_sec = fund_hist_secondary[sec_bench_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
-                    # Check if S&P benchmark metrics exist
-                    if f'S&P {sec_bench_col} Change Z-Score' in fund_latest_metrics_row.index and pd.notna(fund_latest_metrics_row[f'S&P {sec_bench_col} Change Z-Score']):
-                         main_datasets.append({
-                            'label': f"S&P {sec_bench_col}",
-                            'data': bench_values_sec,
-                            'borderColor': '#FFA500', 'backgroundColor': '#FFDAB9',
-                            'borderDash': [2, 2], 'tension': 0.1,
-                            'source': 'secondary', 'isSpData': True, 'hidden': True
-                        })
-                if sec_fund_cols:
-                    for i, fund_col in enumerate(sec_fund_cols):
-                        if fund_col in fund_hist_secondary.columns:
-                             # Check if S&P fund metrics exist
-                             if f'S&P {fund_col} Change Z-Score' in fund_latest_metrics_row.index and pd.notna(fund_latest_metrics_row[f'S&P {fund_col} Change Z-Score']):
-                                fund_values_sec = fund_hist_secondary[fund_col].round(3).replace([np.inf, -np.inf], np.nan).where(pd.notnull, None).tolist()
-                                color_index = i
-                                if pri_fund_cols:
-                                    try: color_index = pri_fund_cols.index(fund_col)
-                                    except ValueError: pass
-                                base_color = COLOR_PALETTE[color_index % len(COLOR_PALETTE)]
-                                main_datasets.append({
-                                    'label': f"S&P {fund_col}",
-                                    'data': fund_values_sec,
-                                    'borderColor': base_color, 'backgroundColor': base_color + '20',
-                                    'borderDash': [2, 2], 'tension': 0.1,
-                                    'source': 'secondary', 'isSpData': True, 'hidden': True
-                                })
-                 # Extract secondary non-relative metrics
-                for col in fund_latest_metrics_row.index:
-                    if col.startswith('S&P ') and not col.startswith('S&P Relative '):
-                         main_metrics_for_js[col] = fund_latest_metrics_row[col] if pd.notna(fund_latest_metrics_row[col]) else None
-
-            # 3. Create Main Chart Config
-            main_chart_config = None # Initialize
+            # --- Prepare Main Chart Config
+            main_chart_config = None
             if main_datasets: # Only create if there's actual data
                 main_chart_config = {
                     'chart_type': 'main',
                     'title': f'{fund_code} - {metric_name}',
                     'labels': primary_labels,
                     'datasets': main_datasets,
-                    'latest_metrics': main_metrics_for_js
+                    'latest_metrics': fund_latest_metrics_row.to_dict()
                 }
                 # Add main chart FIRST
                 fund_charts.append(main_chart_config)

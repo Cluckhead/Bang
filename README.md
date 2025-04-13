@@ -23,6 +23,7 @@ This application provides a web interface to load, process, and check financial 
 *   **Security Exclusions:** Maintain a list of securities to temporarily exclude from the main Security Summary page (`/security/summary`). Exclusions can have start/end dates and comments.
 *   **Data Issue Tracking:** Provides a dedicated page (`/issues`) to log, view, and manage data issues found in various sources (S&P, Production, Pi, IVP, Benchmark). Tracks who raised the issue, when, the impacted fund, the data source, the date the issue occurred, a description, and resolution details (who closed it, when, and comments). Issues are stored in `Data/data_issues.csv`.
 *   **Weight Check:** Load fund (`w_Funds.csv`) and benchmark (`w_Bench.csv`) weight files and display them side-by-side, highlighting any daily weights that are not exactly 100% via `/weights/check`.
+*   **Security Weight Analysis:** Load security weights (`w_secs.csv`) which use ISIN as the primary identifier, providing security-level weight information across multiple dates.
 *   **Yield Curve Analysis:** Load yield curve data (`curves.csv`), check for potential inconsistencies (e.g., monotonicity, anomalous daily changes) and display curve charts per currency via `/curve/summary` and `/curve/details/<currency>`.
 *   **Data Comparison:**
     *   Compare two spread files (`sec_spread.csv` vs `sec_spreadSP.csv`) via `/comparison/summary`.
@@ -111,6 +112,7 @@ graph TD
     G --> G9(w_Bench.csv);
     G --> G10(curves.csv);
     G --> G11(data_issues.csv);
+    G --> G12(w_secs.csv);
 
     H --> H1(config.py);
     H --> H2(utils.py);
@@ -135,6 +137,7 @@ graph TD
 *   `Dates.csv`: May exist for specific configurations or helper data.
 *   `w_Funds.csv`: Wide format file containing daily fund weights (expected to be 100%). Used by the Weight Check page.
 *   `w_Bench.csv`: Wide format file containing daily benchmark weights (expected to be 100%). Used by the Weight Check page.
+*   `w_secs.csv`: Wide format file containing security weights across multiple dates. Uses ISIN as the primary identifier column, along with other security attributes like Security Name, Funds, Type, etc. This file provides the security weight data referenced in various parts of the application, particularly for security-level analysis.
 *   `curves.csv`: Contains yield curve data (Date, Currency Code, Term, Daily Value). Used by the Yield Curve Check feature.
 *   **`data_issues.csv`**: Stores a log of reported data issues. Columns: `IssueID`, `DateRaised`, `RaisedBy`, `FundImpacted`, `DataSource`, `IssueDate`, `Description`, `Status` ('Open'/'Closed'), `DateClosed`, `ClosedBy`, `ResolutionComment`.
 
@@ -261,7 +264,7 @@ These modules contain the Flask Blueprints defining the application's routes.
         *   Loads spread data (`sec_Spread.csv`), applies filters/search/exclusions.
         *   Calculates metrics, sorts data, and selects the current page.
         *   Passes paginated data and metadata to the template.
-        *   Security IDs (now ISINs) link to the details page.
+        *   Security IDs (using ISIN from `w_secs.csv`) link to the details page.
     *   `/security/details/<metric_name>/<path:security_id>`: Renders `security_details_page.html`.
         *   Shows historical charts for a specific security (identified by ISIN via `security_id`).
         *   Displays the requested base `metric_name` overlaid with Price (from `sec_Price.csv`).
@@ -291,6 +294,7 @@ These modules contain the Flask Blueprints defining the application's routes.
         *   Loads both files, calculates comparison statistics (correlation, diffs, date ranges).
         *   Applies filters, sorts data, and selects the current page.
         *   Passes paginated data and metadata to the template.
+        *   Uses the `id_column_name` variable to determine which column serves as the security identifier (typically ISIN).
     *   `/comparison/details/<path:security_id>`: Renders `comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
 
 ### `views/duration_comparison_views.py` (`duration_comparison_bp`)
@@ -301,6 +305,7 @@ These modules contain the Flask Blueprints defining the application's routes.
         *   Loads both files, calculates comparison statistics.
         *   Applies filters, sorts data, and selects the current page.
         *   Passes paginated data and metadata to the template.
+        *   Uses the `id_column_name` variable to determine which column serves as the security identifier (typically ISIN).
     *   `/duration_comparison/details/<path:security_id>`: Renders `duration_comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
 
 ### `views/spread_duration_comparison_views.py` (`spread_duration_comparison_bp`)
@@ -311,6 +316,7 @@ These modules contain the Flask Blueprints defining the application's routes.
         *   Loads both files, calculates comparison statistics.
         *   Applies filters, sorts data, and selects the current page.
         *   Passes paginated data and metadata to the template.
+        *   Uses the `id_column_name` variable to determine which column serves as the security identifier (typically ISIN).
     *   `/spread_duration_comparison/details/<path:security_id>`: Renders `spread_duration_comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
 
 ### `views/api_views.py` (`api_bp`)
@@ -319,6 +325,10 @@ These modules contain the Flask Blueprints defining the application's routes.
     *   `/get_data`: Renders `get_data.html` (GET). Shows data file statuses, fund selection, and date inputs.
     *   `/run-api-calls`: Handles the POST request from `get_data.html` to simulate API calls based on `QueryMap.csv`. Reads data, merges/overwrites based on `overwrite_mode` flag, and saves to `Data/` folder.
     *   `/rerun-api-call`: Handles POST requests to rerun a single API call for a specific fund.
+*   **Key Features:**
+    *   Dynamic column detection looks for identifiers like 'Code', 'Fund Code', 'security id', 'SecurityID', 'Security Name'.
+    *   When processing security-related files (like `w_secs.csv`), the system will look for ISIN in these column candidates.
+    *   Provides file status checking and robust handling of various file formats.
 
 ### `views/weight_views.py` (`weight_bp`)
 *   **Purpose:** Handles the weight checking functionality.
@@ -360,4 +370,4 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`curve_summary.html`:** Displays a summary table of the yield curve inconsistency checks for the latest date across all currencies.
 *   **`curve_details.html`:** Shows a line chart of the yield curve for a specific currency and provides a date selector to view historical curves. Includes JavaScript for Chart.js rendering.
 *   **`issues_page.html`:** UI for tracking data issues. Includes a form to raise new issues and tables to display open and closed issues, with functionality to close open ones via a modal.
-``` 
+```
