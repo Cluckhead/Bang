@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Security Exclusions{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Manage Security Exclusions</h2>
+    <hr>
+
+    {# Display messages if any #}
+    {% if message %}
+        <div class="alert alert-{{ message_type }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endif %}
+
+    <div class="row">
+        {# Left Column: Display Current Exclusions #}
+        <div class="col-md-7">
+            <h4>Current Exclusions</h4>
+            {% if exclusions %}
+                <table class="table table-striped table-sm">
+                    <thead>
+                        <tr>
+                            <th>Security ID</th>
+                            <th>Date Added</th>
+                            <th>End Date</th>
+                            <th>Comment</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for exclusion in exclusions %}
+                            <tr>
+                                <td>{{ exclusion.SecurityID }}</td>
+                                <td>{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else 'N/A' }}</td>
+                                <td>{{ exclusion.EndDate.strftime('%Y-%m-%d') if exclusion.EndDate else '' }}</td>
+                                <td>{{ exclusion.Comment }}</td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('exclusion_bp.remove_exclusion_route') }}" style="display: inline;">
+                                        <input type="hidden" name="security_id" value="{{ exclusion.SecurityID }}">
+                                        <input type="hidden" name="add_date" value="{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else '' }}">
+                                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this exclusion?');">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No securities are currently excluded.</p>
+            {% endif %}
+        </div>
+
+        {# Right Column: Add New Exclusion Form #}
+        <div class="col-md-5">
+            <h4>Add New Exclusion</h4>
+            <form method="POST" action="{{ url_for('exclusion_bp.manage_exclusions') }}">
+                <div class="mb-3">
+                    <label for="security-search-input" class="form-label">Search & Select Security ID:</label>
+                    <input type="text" id="security-search-input" class="form-control mb-2" placeholder="Type to filter securities...">
+                    <select class="form-select" id="security-select" name="security_id" required>
+                        <option value="" disabled selected>Select a Security ID</option>
+                        {% for sec_id in available_securities %}
+                            <option value="{{ sec_id }}">{{ sec_id }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="end_date" class="form-label">End Date (Optional):</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date">
+                </div>
+                <div class="mb-3">
+                    <label for="comment" class="form-label">Comment (Required):</label>
+                    <textarea class="form-control" id="comment" name="comment" rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Exclusion</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base.html #}
+{# We will add specific JS for the dynamic dropdown here later #}
+<script>
+    // Basic dynamic filtering for the dropdown
+    document.getElementById('security-search-input').addEventListener('input', function() {
+        let filter = this.value.toLowerCase();
+        let select = document.getElementById('security-select');
+        let options = select.options;
+        let firstVisibleOption = null;
+
+        for (let i = 0; i < options.length; i++) {
+            let option = options[i];
+            // Skip the placeholder option
+            if (option.value === "") {
+                option.style.display = ""; // Always show placeholder if input is empty, hide otherwise
+                option.style.display = filter ? "none" : "";
+                continue;
+            }
+
+            let txtValue = option.textContent || option.innerText;
+            if (txtValue.toLowerCase().indexOf(filter) > -1) {
+                option.style.display = "";
+                if (!firstVisibleOption) {
+                     firstVisibleOption = option; // Keep track of the first match
+                }
+            } else {
+                option.style.display = "none";
+            }
+        }
+         // Optionally, select the first visible option if the user hasn't selected one manually
+        // This part can be enhanced, maybe select only if input length > N or on specific event
+        // if (filter && firstVisibleOption && select.selectedIndex <= 0) {
+            // select.value = firstVisibleOption.value;
+        // }
+    });
+
+    // Reset filter when dropdown is clicked (to show all options again initially)
+    document.getElementById('security-select').addEventListener('mousedown', function(){
+       // Optional: Uncomment below to clear search on dropdown click
+       // document.getElementById('security-search-input').value = '';
+       // let event = new Event('input');
+       // document.getElementById('security-search-input').dispatchEvent(event);
+    });
+</script>
+{% endblock %} 

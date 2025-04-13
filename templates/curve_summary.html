@@ -1,0 +1,55 @@
+{# templates/curve_summary.html #}
+{% extends "base.html" %}
+
+{% block title %}Yield Curve Check Summary{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Yield Curve Check Summary</h1>
+    <p class="lead">Summary of potential inconsistencies found in the yield curve data for the latest available date: <strong>{{ latest_date }}</strong>.</p>
+    <p>Checks include basic monotonicity and comparison of daily change profiles against the previous day.</p>
+
+    {% if summary %}
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>Currency</th>
+                    <th>Status / Issues Found</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for currency, issues in summary.items()|sort %}
+                    <tr>
+                        <td><strong>{{ currency }}</strong></td>
+                        <td>
+                            {% if issues == ["OK"] %}
+                                <span class="badge bg-success">OK</span>
+                            {% elif issues == ["Missing data for comparison"] %}
+                                 <span class="badge bg-warning text-dark">Missing Data</span>
+                                 <small class="text-muted ms-2">{{ issues[0] }}</small>
+                            {% else %}
+                                <span class="badge bg-danger">Check Required</span>
+                                <ul class="list-unstyled mb-0 mt-1">
+                                    {% for issue in issues %}
+                                        <li><small><i class="fas fa-exclamation-triangle text-danger me-1"></i>{{ issue }}</small></li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('curve_bp.curve_details', currency=currency) }}" class="btn btn-sm btn-outline-primary">
+                                View Details <i class="fas fa-chart-line ms-1"></i>
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="alert alert-warning" role="alert">
+            No curve data loaded or no summary could be generated. Please check the data file (`Data/curves.csv`) and application logs.
+        </div>
+    {% endif %}
+</div>
+{% endblock %} 

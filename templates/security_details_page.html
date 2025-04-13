@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+
+{% block title %}Security Details: {{ security_id }} - {{ metric_name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ security_id }} - {{ metric_name }}</h1>
+    <p>Latest data as of: <strong>{{ latest_date }}</strong></p>
+    
+    {# Display Static Info #}
+    {% if static_info %}
+    <div class="mb-3 p-3 border rounded bg-light small">
+        <strong>Static Details:</strong> 
+        {% for key, value in static_info.items() %}
+            <span class="me-3">{{ key }}: {{ value }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Primary Chart Area (Metric + Price Overlay) #}
+    <h2>{{ metric_name }} and Price Time Series</h2>
+    <div id="primary-chart-container" class="mb-4" style="height: 450px; position: relative;">
+        <canvas id="primarySecurityChart"></canvas>
+    </div>
+
+    {# Duration Chart Area #}
+    <h2>Duration Time Series</h2>
+    <div id="duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
+        <canvas id="durationSecurityChart"></canvas>
+    </div>
+
+    {# Spread Duration Chart Area #}
+    <h2>Spread Duration Time Series</h2>
+    <div id="spread-duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
+        <canvas id="spreadDurationChart"></canvas>
+    </div>
+
+    {# Spread Chart Area #}
+    <h2>Spread Time Series</h2>
+    <div id="spread-chart-container" class="mb-4" style="height: 450px; position: relative;">
+        <canvas id="spreadChart"></canvas>
+    </div>
+
+    {# Hidden script tag for chart data #}
+    <script id="chartJsonData" type="application/json">
+        {{ chart_data_json|safe }}
+    </script>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{# Include Chart.js library (Likely inherited from base.html, but included here for safety/explicitness if needed) #}
+{# If base.html already includes it, this line can be removed #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get the chart data passed from Flask
+        const chartDataElement = document.getElementById('chartJsonData');
+        const chartData = JSON.parse(chartDataElement.textContent);
+
+        /* --- REMOVED: Helper function to replace 0 with null --- 
+        const processDatasetData = (dataset) => {
+            if (dataset && dataset.data) {
+                dataset.data = dataset.data.map(value => (value === 0 ? null : value));
+            }
+            return dataset; // Return the processed dataset (or original if no data)
+        };
+        */
+
+        // --- REMOVED: Processing datasets before creating charts --- 
+        // No longer needed as backend uses NaN
+        /*
+        if (chartData.primary_datasets) {
+            chartData.primary_datasets = chartData.primary_datasets.map(processDatasetData);
+        }
+        if (chartData.duration_dataset) {
+            chartData.duration_dataset = processDatasetData(chartData.duration_dataset);
+        }
+        // Add processing for new datasets if they were added
+        if (chartData.sp_duration_dataset) { chartData.sp_duration_dataset = processDatasetData(chartData.sp_duration_dataset); }
+        if (chartData.spread_duration_dataset) { chartData.spread_duration_dataset = processDatasetData(chartData.spread_duration_dataset); }
+        if (chartData.sp_spread_duration_dataset) { chartData.sp_spread_duration_dataset = processDatasetData(chartData.sp_spread_duration_dataset); }
+        if (chartData.spread_dataset) { chartData.spread_dataset = processDatasetData(chartData.spread_dataset); }
+        if (chartData.sp_spread_dataset) { chartData.sp_spread_dataset = processDatasetData(chartData.sp_spread_dataset); }
+        */
+
+
+        // --- Render Primary Chart (Metric + Price) --- 
+        const primaryCtx = document.getElementById('primarySecurityChart').getContext('2d');
+        if (chartData.primary_datasets && chartData.primary_datasets.length > 0) {
+            // Check if *any* primary dataset has actual data (nulls are ignored by this check)
+            const hasPrimaryData = chartData.primary_datasets.some(dataset => 
+                dataset.data && dataset.data.some(value => value !== null)
+            );
+
+            if (hasPrimaryData) {
+                new Chart(primaryCtx, {
+                    type: 'line',
+                    data: {
+                        labels: chartData.labels,
+                        datasets: chartData.primary_datasets // Use datasets directly
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        spanGaps: true, // Let Chart.js handle gaps where data is null
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Date'
+                                }
+                            },
+                            y: { // Primary Y-axis (for the main metric)
+                                position: 'left',
+                                title: {
+                                    display: true,
+                                    text: {{ metric_name|tojson }} + ' Value' 
+                                }
+                            },
+                            y1: { // Secondary Y-axis (for Price)
+                                position: 'right',
+                                title: {
+                                    display: true,
+                                    text: 'Price'
+                                },
+                                grid: {
+                                    drawOnChartArea: false, 
+                                },
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            }
+                        }
+                    }
+                });
+            } else {
+                 document.getElementById('primary-chart-container').innerHTML = '<p class="text-info">No primary data available for this security.</p>';
+            }
+        } else {
+            console.error('No primary datasets found for the primary chart.');
+            document.getElementById('primary-chart-container').innerHTML = '<p class="text-danger">Could not render primary chart: No data available.</p>';
+        }
+
+        // --- Render Duration Chart (Now includes SP) ---
+        const durationCtx = document.getElementById('durationSecurityChart').getContext('2d');
+        const durationDatasets = [];
+        if (chartData.duration_dataset) {
+            // Check if there's actual data (not null)
+            if (chartData.duration_dataset.data && chartData.duration_dataset.data.some(value => value !== null)) {
+                durationDatasets.push(chartData.duration_dataset);
+            }
+        }
+        if (chartData.sp_duration_dataset) {
+             if (chartData.sp_duration_dataset.data && chartData.sp_duration_dataset.data.some(value => value !== null)) {
+                durationDatasets.push(chartData.sp_duration_dataset);
+            }
+        }
+
+        if (durationDatasets.length > 0) {
+            new Chart(durationCtx, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: durationDatasets // Use combined list
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    spanGaps: true, 
+                    scales: {
+                        x: { title: { display: true, text: 'Date' } },
+                        y: { title: { display: true, text: 'Duration Value' } }
+                    },
+                    plugins: { /* legend, tooltip */ }
+                }
+            });
+        } else {
+             console.log('No non-null data points found for Duration or SP Duration chart.');
+             document.getElementById('duration-chart-container').innerHTML = '<p class="text-info">No duration data available for this security.</p>';
+        }
+
+        // --- Render Spread Duration Chart (Includes SP) ---
+        const spreadDurationCtx = document.getElementById('spreadDurationChart').getContext('2d');
+        const spreadDurationDatasets = [];
+        if (chartData.spread_duration_dataset && chartData.spread_duration_dataset.data && chartData.spread_duration_dataset.data.some(v => v !== null)) {
+            spreadDurationDatasets.push(chartData.spread_duration_dataset);
+        }
+        if (chartData.sp_spread_duration_dataset && chartData.sp_spread_duration_dataset.data && chartData.sp_spread_duration_dataset.data.some(v => v !== null)) {
+            spreadDurationDatasets.push(chartData.sp_spread_duration_dataset);
+        }
+
+        if (spreadDurationDatasets.length > 0) {
+            new Chart(spreadDurationCtx, {
+                type: 'line',
+                data: { labels: chartData.labels, datasets: spreadDurationDatasets },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, spanGaps: true, 
+                    scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Spread Duration Value' } } },
+                    plugins: { /* legend, tooltip */ }
+                }
+            });
+        } else {
+            console.log('No data found for Spread Duration or SP Spread Duration chart.');
+            document.getElementById('spread-duration-chart-container').innerHTML = '<p class="text-info">Spread Duration data not available for this security.</p>';
+        }
+
+        // --- Render Spread Chart (Includes SP) ---
+        const spreadCtx = document.getElementById('spreadChart').getContext('2d');
+        const spreadDatasets = [];
+        if (chartData.spread_dataset && chartData.spread_dataset.data && chartData.spread_dataset.data.some(v => v !== null)) {
+            spreadDatasets.push(chartData.spread_dataset);
+        }
+        if (chartData.sp_spread_dataset && chartData.sp_spread_dataset.data && chartData.sp_spread_dataset.data.some(v => v !== null)) {
+            spreadDatasets.push(chartData.sp_spread_dataset);
+        }
+
+        if (spreadDatasets.length > 0) {
+            new Chart(spreadCtx, {
+                type: 'line',
+                data: { labels: chartData.labels, datasets: spreadDatasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false, spanGaps: true, 
+                    scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Spread Value' } } },
+                    plugins: { /* legend, tooltip */ }
+                }
+            });
+        } else {
+             console.log('No data found for Spread or SP Spread chart.');
+             document.getElementById('spread-chart-container').innerHTML = '<p class="text-info">Spread data not available for this security.</p>';
+        }
+
+    });
+</script>
+{% endblock %} 

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Duration Comparison Summary{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4"> {# Use container-fluid for wider view #}
+    <h1>Duration Comparison: Original (sec_duration) vs. New (sec_durationSP)</h1> {# Updated Title #}
+    <p class="text-muted">Comparing Duration between the two datasets. Click on a Security ID/Name to see details. Use filters or click column headers to sort. Pagination applied.</p> {# Updated Text #}
+
+    {# Display message if any #}
+    {% if message %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
+    {# --- Filter Form --- #}
+    {% if filter_options %}
+    <form method="GET" action="{{ url_for('duration_comparison_bp.summary') }}" class="mb-3 p-3 border rounded bg-light" id="filter-form"> {# Updated Action URL #}
+        <h5>Filters</h5>
+        <div class="row g-2 align-items-end">
+            {% for column, options in filter_options.items() %}
+            <div class="col-md-2 mb-2">
+                <label for="filter-{{ column }}" class="form-label">{{ column }}</label>
+                <select id="filter-{{ column }}" name="filter_{{ column }}" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    {% for option in options %}
+                    <option value="{{ option }}" {% if active_filters.get(column) == option|string %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+            <div class="col-md-3 d-flex align-items-end">
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="showSoldToggle" name="show_sold" value="true" {% if show_sold %}checked{% endif %}>
+                    <label class="form-check-label" for="showSoldToggle"><small>Show Sold Securities</small></label>
+                </div>
+            </div>
+            <div class="col-md-auto">
+                <button type="submit" class="btn btn-primary btn-sm">Apply Filters</button>
+                {# Add a clear button only if filters are active #}
+                {% if active_filters %}
+                <a href="{{ url_for('duration_comparison_bp.summary') }}" class="btn btn-secondary btn-sm">Clear Filters</a> {# Updated Clear URL #}
+                {% endif %}
+            </div>
+        </div>
+        {# Hidden fields to preserve current sort order when applying filters - page is implicitly reset #}
+        <input type="hidden" name="sort_by" value="{{ current_sort_by }}">
+        <input type="hidden" name="sort_order" value="{{ current_sort_order }}">
+    </form>
+    {% endif %}
+
+    {# --- Data Table --- #}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover table-sm caption-top" id="duration-comparison-table"> {# Updated Table ID #}
+             {# Add table caption for summary #}
+             {% if pagination %}
+             <caption class="pb-1">
+                 Displaying {{ table_data|length }} of {{ pagination.total_items }} total securities.
+                 (Page {{ pagination.page }} of {{ pagination.total_pages }})
+             </caption>
+             {% endif %}
+            <thead class="table-light">
+                <tr>
+                    {# Loop through the columns passed from the view #}
+                    {% for col_name in columns_to_display %}
+                        {% set is_sort_col = (col_name == current_sort_by) %}
+                        {% set next_sort_order = 'asc' if is_sort_col and current_sort_order == 'desc' else 'desc' %}
+                        {# Base arguments, including current filters #}
+                        {% set sort_args = request.args.to_dict() %}
+                        {% set _ = sort_args.pop('page', None) %}
+                        {% set _ = sort_args.update({'sort_by': col_name, 'sort_order': next_sort_order}) %}
+
+                        {# Generate URL for this header #}
+                        {% set sort_url = url_for('duration_comparison_bp.summary', **sort_args) %} {# Updated Sort URL #}
+
+                        {# Add classes for styling and JS #}
+                        <th class="sortable {{ 'sorted-' + current_sort_order if is_sort_col else '' }}"
+                            data-column-name="{{ col_name }}">
+                            <a href="{{ sort_url }}" class="text-decoration-none text-dark">
+                                {{ col_name.replace('_', ' ') | title }}
+                                {% if is_sort_col %}
+                                    <span class="sort-indicator ms-1">{{ '▲' if current_sort_order == 'asc' else '▼' }}</span>
+                                {% endif %}
+                            </a>
+                        </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody id="duration-comparison-table-body"> {# Updated tbody ID #}
+                {% set id_col = id_column_name %}
+                {% for row in table_data %}
+                <tr>
+                    {# Loop through the same columns to ensure order matches header #}
+                    {% for col_name in columns_to_display %}
+                        <td>
+                            {% if col_name == id_col %}
+                                <a href="{{ url_for('duration_comparison_bp.duration_comparison_details', security_id=row[id_col]|urlencode) }}">{{ row[id_col] }}</a> {# Updated Detail URL #}
+                            {% elif col_name in ['Level_Correlation', 'Change_Correlation'] and row[col_name] is not none %}
+                                {# Attempt to format as float, handle potential errors gracefully #}
+                                {% set formatted_val = "%.3f"|format(row[col_name]|float) if row[col_name] is number else row[col_name] %}
+                                {{ formatted_val }}
+                            {% elif col_name in ['Mean_Abs_Diff', 'Max_Abs_Diff'] and row[col_name] is not none %}
+                                {% set formatted_val = "%.2f"|format(row[col_name]|float) if row[col_name] is number else row[col_name] %}
+                                {{ formatted_val }}
+                             {% elif col_name == 'Same_Date_Range' %}
+                                 <span class="badge {{ 'bg-success' if row[col_name] else 'bg-warning' }}">{{ 'Yes' if row[col_name] else 'No' }}</span>
+                            {% elif col_name.endswith('_Date') and row[col_name] %}
+                                 {# Assume date strings are already YYYY-MM-DD from view #}
+                                {{ row[col_name] }}
+                            {% elif row[col_name] is number %}
+                                {{ row[col_name]|round(3) }} {# General numeric formatting #}
+                            {% else %}
+                                {{ row[col_name] if row[col_name] is not none else '' }} {# Display strings or empty #}
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ columns_to_display|length }}" class="text-center">No duration comparison data available matching the current filters.</td> {# Updated Message #}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# --- Pagination Controls --- #}
+    {% if pagination and pagination.total_pages > 1 %}
+    <nav aria-label="Duration comparison data navigation">
+        <ul class="pagination pagination-sm justify-content-center">
+            {# Helper macro for generating pagination links #}
+            {% macro page_link(page_num, text=None, is_disabled=False, is_active=False) %}
+                {% set link_args = request.args.to_dict() %}
+                {% set _ = link_args.update({'page': page_num, 'sort_by': current_sort_by, 'sort_order': current_sort_order}) %}
+                {% set url = url_for('duration_comparison_bp.summary', **link_args) if page_num else '#' %} {# Updated URL #}
+                <li class="page-item {{ 'disabled' if is_disabled }} {{ 'active' if is_active }}">
+                    <a class="page-link" href="{{ url }}" {% if is_active %}aria-current="page"{% endif %}>{{ text or page_num }}</a>
+                </li>
+            {% endmacro %}
+
+            {{ page_link(pagination.prev_num, '&laquo;', is_disabled=not pagination.has_prev) }}
+
+            {# Simplified pagination display logic #}
+            {% set window = 2 %}
+            {% set start_page = [1, pagination.page - window] | max %}
+            {% set end_page = [pagination.total_pages, pagination.page + window] | min %}
+
+            {% if start_page > 1 %}
+                {{ page_link(1) }}
+                {% if start_page > 2 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+            {% endif %}
+
+            {% for p in range(start_page, end_page + 1) %}
+                {{ page_link(p, is_active=(p == pagination.page)) }}
+            {% endfor %}
+
+            {% if end_page < pagination.total_pages %}
+                {% if end_page < pagination.total_pages - 1 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+                {{ page_link(pagination.total_pages) }}
+            {% endif %}
+
+            {{ page_link(pagination.next_num, '&raquo;', is_disabled=not pagination.has_next) }}
+        </ul>
+    </nav>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{# No specific JS needed for this page unless client-side sorting is added back #}
+{% endblock %} 

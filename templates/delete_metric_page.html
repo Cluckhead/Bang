@@ -83,6 +83,13 @@
                     </tr>
                 </tbody>
             </table>
+
+            {# Conditionally add link to fund duration details page #}
+            {% if metric_name == 'Duration' %}
+                <div class="mb-4 text-right">
+                     <a href="{{ url_for('fund_duration_details', fund_code=fund_code) }}" class="btn btn-info btn-sm">View Security Duration Changes for {{ fund_code }} &rarr;</a>
+                </div>
+            {% endif %}
         {% else %}
             <p>No data processed for this metric.</p>
         {% endfor %}

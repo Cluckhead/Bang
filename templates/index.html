@@ -1,34 +1,93 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Data Verification Dashboard</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <style>
-        body { padding-top: 5rem; }
-        .metric-link { margin: 5px; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
-        <a class="navbar-brand" href="/">Data Verification</a>
-    </nav>
+{% extends "base.html" %}
 
-    <main role="main" class="container">
-        <div class="jumbotron">
-            <h1>Dashboard</h1>
-            <p class="lead">Select a metric below to view the checks.</p>
-            <div>
-                {% for metric in metrics %}
-                <a href="{{ url_for('metric_page', metric_name=metric) }}" class="btn btn-primary metric-link">{{ metric }}</a>
-                {% endfor %}
+{% block title %}Data Verification Dashboard{% endblock %}
+
+{% block content %}
+    <div class="jumbotron mt-4"> {# Added mt-4 for spacing below fixed navbar #}
+        <h1>Dashboard</h1>
+        <p class="lead">Select a metric below to view the detailed checks, or see the latest Z-Score summary below.</p>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            {% for metric in metrics %}
+            <div class="col">
+                <div class="card h-100 metric-card">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title">{{ metric }}</h5>
+                        <p class="card-text flex-grow-1">View details for {{ metric }}.</p>
+                        {# Generate the URL using url_for #}
+                        {% set metric_url = url_for('metric.metric_page', metric_name=metric) %}
+                        <a href="{{ metric_url }}" class="btn btn-primary metric-link">View Details</a>
+                        {# Debug: Display the generated URL #}
+                        <span class="text-muted small mt-1">Debug URL: {{ metric_url }}</span>
+                    </div>
+                </div>
             </div>
+            {% endfor %}
         </div>
-    </main>
+    </div>
 
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-</body>
-</html> 
+    <!-- Z-Score Summary Table -->
+    {% if not summary_data.empty %}
+    <h2>Latest Change Z-Score Summary</h2>
+    <div class="table-responsive"> <!-- Make table scrollable on small screens -->
+        <table class="table table-striped table-bordered table-hover table-sm">
+            <thead class="thead-light"> {# thead-light might not be standard BS5, but harmless #}
+                <tr>
+                    <th>Fund Code</th>
+                    {# Use the new summary_metrics list which contains combined names #}
+                    {% for full_metric_name in summary_metrics %}
+                    <th>{{ full_metric_name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for fund_code, row in summary_data.iterrows() %}
+                <tr>
+                    {# Corrected url_for to point to the general fund detail page #}
+                    <td><a href="{{ url_for('fund.fund_detail', fund_code=fund_code) }}" title="View all metrics for {{ fund_code }}">{{ fund_code }}</a></td>
+                    {# Iterate through the same new list for data access #}
+                    {% for full_metric_name in summary_metrics %}
+                        {% set z_score = row[full_metric_name] %}
+                        {% if z_score is none or z_score != z_score %}
+                            {# Handle NaN/None - use base.html styling implicitly #}
+                            <td class="text-muted fst-italic">N/A</td> {# Using BS5 classes #}
+                        {% else %}
+                            {# Apply conditional styling based on Z-score value - Use classes defined in base.html #}
+                            {% set z_abs = z_score|abs %}
+                            {% set cell_class = '' %}
+                            {% if z_abs > 3.0 %}
+                                {% set cell_class = 'table-danger' %}
+                            {% elif z_abs > 2.0 %}
+                                {% set cell_class = 'table-warning' %}
+                            {% endif %}
+                            <td class="{{ cell_class }}">{{ "%.2f"|format(z_score) }}</td>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-warning" role="alert">
+        No Z-score data could be generated for the summary table. Check the console logs for errors.
+    </div>
+    {% endif %}
+
+    <!-- Add a link to the new API Data Retrieval page - Kept original url_for -->
+    <div class="mt-4 mb-4 p-3 border rounded bg-light">
+        <h5>Get Data via API (Simulated)</h5>
+        <p>Select funds and dates to simulate retrieving data from the Rex API.</p>
+        <a href="{{ url_for('api_bp.get_data_page') }}" class="btn btn-success btn-sm">Go to Get Data Page</a>
+    </div>
+
+    <!-- Add a link to the Securities page - url_for already matches base.html -->
+    <div class="mt-4 p-3 border rounded bg-light">
+        <h5>Securities Data Check</h5>
+        <p>View checks for individual securities based on latest daily changes.</p>
+        <a href="{{ url_for('security.securities_page') }}" class="btn btn-info btn-sm">View Securities Check</a>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+{# Add any page-specific scripts here if needed in the future #}
+{% endblock %} 

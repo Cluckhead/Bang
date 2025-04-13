@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Fund Details: {{ fund_code }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Fund Details: {{ fund_code }}</h1>
+
+    {% if message %}
+        <div class="alert alert-info" role="alert">
+            {{ message }}
+        </div>
+    {% endif %}
+
+    {% if chart_data_json and chart_data_json != '[]' %}
+        <!-- Toggle Switch for SP Data -->
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="toggleSpData" checked>
+            <label class="form-check-label" for="toggleSpData">Show SP Comparison Data</label>
+        </div>
+
+        <!-- Embed JSON data for JavaScript -->
+        <script id="fundChartData" type="application/json">
+            {{ chart_data_json | safe }}
+        </script>
+
+        <!-- Area where charts will be rendered by JavaScript -->
+        <div id="fundChartsArea" class="row row-cols-1 row-cols-lg-2 g-4">
+            <!-- Charts will be dynamically inserted here -->
+        </div>
+    {% elif not message %}
+         <div class="alert alert-warning" role="alert">
+            No chart data available to display for this fund.
+        </div>
+    {% endif %}
+
+     <div class="mt-4">
+        <a href="{{ url_for('main.index') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Chart.js is already included in base.html -->
+<!-- Make this a module to allow imports -->
+<script type="module">
+    // Import necessary functions from the chart renderer module
+    import { renderFundCharts, toggleSecondaryDataVisibility } from '{{ url_for('static', filename='js/modules/ui/chartRenderer.js') }}';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const chartDataElement = document.getElementById('fundChartData');
+        const chartsArea = document.getElementById('fundChartsArea');
+        const toggleSwitch = document.getElementById('toggleSpData');
+
+        if (!chartDataElement || !chartsArea || !toggleSwitch) {
+            console.error('[Fund Detail Page] Required elements for chart rendering or toggle not found.');
+            return;
+        }
+
+        try {
+            const allChartData = JSON.parse(chartDataElement.textContent);
+            
+            // Check if any SP data exists across all metrics
+            const anySpDataAvailable = allChartData.some(chartInfo => 
+                chartInfo.datasets && chartInfo.datasets.some(ds => ds.isSpData === true)
+            );
+
+            // Initial setup of the toggle switch based on data availability
+            if (anySpDataAvailable) {
+                toggleSwitch.disabled = false;
+                toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data';
+            } else {
+                toggleSwitch.disabled = true;
+                toggleSwitch.checked = false; // Ensure it's off if disabled
+                toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data (N/A)';
+            }
+
+            // Render the charts using the imported function
+            // This function will now manage the chart instances internally
+            renderFundCharts(chartsArea, allChartData);
+            console.log("[Fund Detail Page] Called renderFundCharts.");
+
+            // Add event listener for the toggle switch
+            // This now calls the centralized toggle function from the module
+            toggleSwitch.addEventListener('change', function() {
+                const showSp = this.checked;
+                console.log(`[Fund Detail Page] Toggle changed: Show SP Data = ${showSp}. Calling toggleSecondaryDataVisibility.`); 
+                toggleSecondaryDataVisibility(showSp); // Call the imported function
+            });
+
+        } catch (error) {
+            console.error('[Fund Detail Page] Error parsing chart data or setting up charts:', error);
+            chartsArea.innerHTML = '<div class="alert alert-danger">Failed to load chart data.</div>';
+            if (toggleSwitch) {
+                toggleSwitch.disabled = true; // Disable toggle on error
+                 toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data (Error)';
+            }
+        }
+    });
+</script>
+{% endblock %} 

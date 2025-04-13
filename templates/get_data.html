@@ -1,0 +1,423 @@
+{% extends "base.html" %}
+
+{% block title %}Get Data via API{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    {# --- Display Data File Statuses --- #}
+    <div class="card mb-4">
+        <div class="card-header">
+            Current Data File Status
+        </div>
+        <div class="card-body">
+            <p class="card-text"><small class="text-muted">Data Folder: <code>{{ data_folder }}</code></small></p>
+            {% if data_file_statuses %}
+            <table class="table table-sm table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>File Name</th>
+                        <th>Latest Data Date (in file)</th>
+                        <th>File Last Modified</th>
+                        <th>Funds Included</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for status in data_file_statuses %}
+                    <tr>
+                        <td>{{ status.filename }}</td>
+                        <td>
+                            {% if status.exists %}
+                                {{ status.latest_data_date }}
+                            {% else %}
+                                <span class="text-muted">File Not Found</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                             {% if status.exists %}
+                                {{ status.last_modified }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                             {% if status.exists %}
+                                {{ status.funds_included }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted">Could not retrieve data file statuses. Check QueryMap.csv or server logs.</p>
+            {% endif %}
+        </div>
+    </div>
+    {# --- End Display Data File Statuses --- #}
+
+    <h2>Get Data via Simulated API (Rex)</h2>
+    <p>Select funds and date range to simulate retrieving data using the Rex API.</p>
+    <p>The simulated API calls will be printed in the terminal where the Flask app is running.</p>
+
+    <form id="get-data-form">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label for="daysBack" class="form-label">Days Back:</label>
+                <input type="number" class="form-control" id="daysBack" name="days_back" value="30" required>
+                <div class="form-text">Number of days of history to retrieve ending on the End Date.</div>
+            </div>
+            <div class="col-md-4">
+                <label for="endDate" class="form-label">End Date:</label>
+                <input type="date" class="form-control" id="endDate" name="end_date" value="{{ default_end_date }}" required>
+                <div class="form-text">Defaults to the previous business day.</div>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Select Funds:</label>
+             <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="select-all-funds">Select All</button>
+             <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="deselect-all-funds">Deselect All</button>
+            <div id="fund-list" class="border p-3" style="max-height: 300px; overflow-y: auto;">
+                {% for fund in funds %}
+                <div class="form-check">
+                    <input class="form-check-input fund-checkbox" type="checkbox" value="{{ fund['Fund Code'] }}" id="fund-{{ fund['Fund Code'] }}" name="funds"
+                           {% if fund['Picked'] %}checked{% endif %}>
+                    <label class="form-check-label" for="fund-{{ fund['Fund Code'] }}">
+                        {{ fund['Fund Code'] }} (AUM: {{ fund['Total Asset Value USD']|int }})
+                    </label>
+                </div>
+                {% else %}
+                <p class="text-danger">No funds found or FundList.csv could not be loaded correctly.</p>
+                {% endfor %}
+            </div>
+             <div class="form-text text-danger d-none" id="fund-selection-error">Please select at least one fund.</div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Simulate API Calls</button>
+        <button type="button" id="run-overwrite-button" class="btn btn-warning ms-2">Run and Overwrite Data</button>
+        <button type="button" id="run-cleanup-button" class="btn btn-secondary ms-2">Run Data Cleanup</button>
+    </form>
+
+    <div id="status-area" class="mt-4" style="display: none;">
+        <h4>Processing Status</h4>
+        <div class="progress mb-2" style="height: 20px;">
+            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        </div>
+        <p id="status-message"></p>
+        <div id="results-summary" class="mt-3">
+            <h5>Results Summary</h5>
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>Query ID</th>
+                        <th>File Name</th>
+                        <th>Simulated Rows Returned</th>
+                        <th>Simulated File Lines</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="results-table-body">
+                    <!-- Results will be populated here -->
+                </tbody>
+            </table>
+        </div>
+         <div id="error-message" class="alert alert-danger mt-3" style="display: none;">
+             <!-- Errors shown here -->
+         </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base.html #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('get-data-form');
+    const statusArea = document.getElementById('status-area');
+    const statusMessage = document.getElementById('status-message');
+    const progressBar = document.getElementById('progress-bar');
+    const resultsTableBody = document.getElementById('results-table-body');
+    const errorMessageDiv = document.getElementById('error-message');
+    const fundSelectionError = document.getElementById('fund-selection-error');
+    const cleanupButton = document.getElementById('run-cleanup-button');
+    const runOverwriteButton = document.getElementById('run-overwrite-button');
+    const cleanupStatus = document.createElement('div');
+    cleanupStatus.id = 'cleanup-status';
+    cleanupStatus.className = 'mt-2';
+    cleanupButton.parentNode.insertBefore(cleanupStatus, cleanupButton.nextSibling);
+    const fundCheckboxes = document.querySelectorAll('.fund-checkbox');
+    const selectAllButton = document.getElementById('select-all-funds');
+    const deselectAllButton = document.getElementById('deselect-all-funds');
+
+    // Select/Deselect All Funds buttons
+    selectAllButton.addEventListener('click', () => {
+        fundCheckboxes.forEach(checkbox => checkbox.checked = true);
+    });
+
+    deselectAllButton.addEventListener('click', () => {
+        fundCheckboxes.forEach(checkbox => checkbox.checked = false);
+    });
+
+    // --- Function to handle the API call logic ---
+    async function handleApiCall(overwriteMode = false) {
+        // Clear previous results and errors
+        statusArea.style.display = 'none';
+        resultsTableBody.innerHTML = '';
+        errorMessageDiv.style.display = 'none';
+        errorMessageDiv.textContent = '';
+        cleanupButton.style.display = 'none';
+        cleanupStatus.textContent = '';
+        cleanupStatus.className = 'mt-2';
+        statusMessage.textContent = '';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        progressBar.classList.remove('bg-success', 'bg-danger');
+        fundSelectionError.classList.add('d-none');
+
+        // Get selected funds
+        const selectedFunds = Array.from(document.querySelectorAll('input[name="funds"]:checked'))
+                                 .map(cb => cb.value);
+
+        // Basic client-side validation
+        if (selectedFunds.length === 0) {
+            fundSelectionError.classList.remove('d-none');
+            return; // Stop submission
+        }
+
+        const daysBack = document.getElementById('daysBack').value;
+        const endDate = document.getElementById('endDate').value;
+
+        if (!endDate) {
+             errorMessageDiv.textContent = 'Please select an End Date.';
+             errorMessageDiv.style.display = 'block';
+            return; // Stop submission
+        }
+
+        // Show status area and indicate processing
+        statusArea.style.display = 'block';
+        statusMessage.textContent = `Starting ${overwriteMode ? 'overwrite' : 'simulation/merge'}...`;
+        progressBar.classList.add('progress-bar-animated');
+        progressBar.classList.remove('bg-success', 'bg-danger');
+        progressBar.style.width = '5%'; // Initial small progress
+        progressBar.textContent = '5%';
+
+        try {
+            // Prepare request body, including the overwrite_mode flag
+            const requestBody = {
+                days_back: parseInt(daysBack, 10),
+                end_date: endDate,
+                funds: selectedFunds,
+                overwrite_mode: overwriteMode // Add the flag here
+            };
+
+            const response = await fetch('{{ url_for("api_bp.run_api_calls") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody) // Send the body with the flag
+            });
+
+            const result = await response.json();
+
+            // Stop animation
+             progressBar.classList.remove('progress-bar-animated');
+
+            if (response.ok && (result.status === 'completed' || result.status === 'completed_with_errors')) {
+                statusMessage.textContent = result.message;
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+                progressBar.classList.add(result.status === 'completed_with_errors' ? 'bg-warning' : 'bg-success');
+
+                // Populate results table
+                resultsTableBody.innerHTML = ''; // Clear any potential previous entries
+                if (result.summary && result.summary.length > 0) {
+                    result.summary.forEach(item => {
+                        // Determine row content based on real vs simulated
+                        let rowsCellContent = 'N/A';
+                        let linesCellContent = 'N/A';
+                        if (item.actual_rows !== undefined && item.actual_rows !== null) { // Real API mode was used
+                            rowsCellContent = item.actual_rows;
+                            linesCellContent = item.actual_lines !== undefined ? item.actual_lines : (rowsCellContent > 0 ? rowsCellContent + 1 : 0);
+                        } else if (item.simulated_rows !== undefined && item.simulated_rows !== null) { // Simulated mode was used
+                            rowsCellContent = item.simulated_rows;
+                            linesCellContent = item.simulated_lines !== undefined ? item.simulated_lines : (rowsCellContent > 0 ? rowsCellContent + 1 : 0);
+                        }
+
+                        // Define fundCode. Prefer 'fund_code' if present, else derive from 'query_id' if possible
+                        let fundCodeForRerun = item.fund_code || null;
+                        // Basic attempt to extract from query_id if needed (adjust regex/logic if format differs)
+                        if (!fundCodeForRerun && item.query_id && typeof item.query_id === 'string') {
+                            const match = item.query_id.match(/some_pattern_to_extract_fund_code/); // Replace with actual pattern if applicable
+                            if (match && match[1]) {
+                                fundCodeForRerun = match[1];
+                            }
+                        }
+
+                        const rerunButtonHtml = fundCodeForRerun
+                            ? `<button class="btn btn-sm btn-outline-primary rerun-button" data-fund-code="${fundCodeForRerun}">Rerun</button>`
+                            : `<span class="text-muted">Rerun N/A</span>`; // No rerun if fund code unknown
+
+                        const row = `<tr data-query-id="${item.query_id}">
+                                        <td>${item.query_id}</td>
+                                        <td>${item.file_name}</td>
+                                        <td>${rowsCellContent}</td>
+                                        <td>${linesCellContent}</td>
+                                        <td><span class="badge ${item.status.includes('OK') || item.status.includes('Saved') || item.status.includes('Simulated') ? 'bg-success' : (item.status.includes('Warning') ? 'bg-warning' : 'bg-danger')}">${item.status}</span></td>
+                                        <td>${rerunButtonHtml}</td>
+                                     </tr>`;
+                        resultsTableBody.innerHTML += row;
+                    });
+                } else {
+                    resultsTableBody.innerHTML = '<tr><td colspan="6">No summary data returned.</td></tr>'; // colspan is 6 now
+                }
+                 errorMessageDiv.style.display = 'none'; // Hide error div if successful
+                 cleanupButton.style.display = 'inline-block';
+
+            } else {
+                // Handle errors reported by the server (e.g., validation errors, file not found)
+                statusMessage.textContent = 'Processing failed.';
+                progressBar.style.width = '100%';
+                progressBar.textContent = 'Error';
+                progressBar.classList.add('bg-danger');
+                errorMessageDiv.textContent = `Error: ${result.message || 'Unknown error'}`;
+                errorMessageDiv.style.display = 'block';
+            }
+        } catch (error) {
+            // Handle network errors or issues with the fetch itself
+            console.error("Fetch error:", error);
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.style.width = '100%';
+            progressBar.textContent = 'Error';
+            progressBar.classList.add('bg-danger');
+            statusMessage.textContent = 'An error occurred during the request.';
+            errorMessageDiv.textContent = 'Network error or server unreachable. Check console for details.';
+            errorMessageDiv.style.display = 'block';
+        }
+    }
+    // --- End of API call handler function ---
+
+    // --- Event Listener for the original "Simulate API Calls" button (which is type="submit") ---
+    form.addEventListener('submit', function(event) {
+        event.preventDefault(); // Prevent traditional form submission
+        handleApiCall(false); // Call the handler function with overwriteMode = false
+    });
+
+    // --- Event Listener for the new "Run and Overwrite Data" button ---
+    runOverwriteButton.addEventListener('click', function() {
+        // No need for event.preventDefault() as it's not a submit button
+        handleApiCall(true); // Call the handler function with overwriteMode = true
+    });
+
+    // Add event listener for the Rerun buttons using event delegation
+    resultsTableBody.addEventListener('click', async function(event) {
+        if (event.target.classList.contains('rerun-button')) {
+            const button = event.target;
+            const row = button.closest('tr');
+            const queryId = row.dataset.queryId;
+            const fundCode = button.dataset.fundCode;
+            const daysBack = document.getElementById('daysBack').value;
+            const endDate = document.getElementById('endDate').value;
+            const cells = row.cells; // Define cells here so it's available in all blocks
+
+            if (!fundCode || !queryId) {
+                console.error('Missing fund code or query ID for rerun');
+                // Optionally display an error to the user near the button/row
+                return;
+            }
+
+            // Provide visual feedback
+            button.disabled = true;
+            button.textContent = 'Running...';
+            // You could also add a temporary status cell or highlight the row
+
+            try {
+                const response = await fetch('/rerun-api-call', { // New endpoint needed
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query_id: queryId,
+                        // Send fundCode as a list in the 'funds' key
+                        funds: [fundCode],
+                        days_back: parseInt(daysBack, 10),
+                        end_date: endDate
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status.includes('OK')) {
+                    // Update the specific row in the table
+                    cells[2].textContent = result.simulated_rows !== undefined ? result.simulated_rows : 'N/A'; // Simulated Rows
+                    cells[3].textContent = result.simulated_lines !== undefined ? result.simulated_lines : 'N/A'; // Simulated Lines
+                    cells[4].innerHTML = `<span class="badge bg-success">${result.status}</span>`; // Status
+
+                    // Optional: Add a temporary success indicator
+                    button.textContent = 'Rerun Success';
+                    setTimeout(() => { button.textContent = 'Rerun'; }, 2000); // Reset after 2s
+
+                } else {
+                    // Handle error - update status cell, show message
+                    cells[4].innerHTML = `<span class="badge bg-danger">Error</span>`;
+                    console.error("Rerun failed:", result.message || 'Unknown error');
+                    // Optionally display error details near the row or in the main error area
+                     button.textContent = 'Rerun Failed';
+                     setTimeout(() => { button.textContent = 'Rerun'; }, 3000); // Reset after 3s
+                }
+
+            } catch (error) {
+                console.error("Rerun fetch error:", error);
+                 cells[4].innerHTML = `<span class="badge bg-danger">Network Error</span>`;
+                 button.textContent = 'Rerun Error';
+                 setTimeout(() => { button.textContent = 'Rerun'; }, 3000); // Reset after 3s
+                // Optionally display error details
+            } finally {
+                 button.disabled = false; // Re-enable button
+                 // Remove any temporary status indicators if needed
+            }
+        }
+    });
+
+    // Add event listener for the new Cleanup button
+    cleanupButton.addEventListener('click', async function() {
+        cleanupStatus.textContent = 'Starting cleanup process...';
+        cleanupStatus.className = 'mt-2 alert alert-info'; // Show feedback
+        cleanupButton.disabled = true; // Disable button while running
+
+        try {
+            const response = await fetch('/run-cleanup', { // Call the new endpoint
+                method: 'POST',
+                 headers: {
+                    'Content-Type': 'application/json', // Optional: Send empty JSON or adjust endpoint
+                },
+                // body: JSON.stringify({}) // Optional: Send empty JSON or adjust endpoint
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.status === 'success') {
+                cleanupStatus.textContent = `Cleanup process finished successfully. Output:\n${result.output}`;
+                cleanupStatus.className = 'mt-2 alert alert-success';
+            } else {
+                 cleanupStatus.textContent = `Cleanup process failed. Error:\n${result.error || result.message || 'Unknown error'}`;
+                 cleanupStatus.className = 'mt-2 alert alert-danger';
+            }
+
+        } catch (error) {
+            console.error("Cleanup fetch error:", error);
+            cleanupStatus.textContent = 'Failed to trigger cleanup process. Network error or server unreachable.';
+            cleanupStatus.className = 'mt-2 alert alert-danger';
+        } finally {
+             cleanupButton.disabled = false; // Re-enable button
+        }
+    });
+});
+</script>
+{% endblock %} 
