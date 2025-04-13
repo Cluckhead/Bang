@@ -29,10 +29,10 @@
                                 {% for date in date_headers | reverse %}
                                     {% set cell_data = date_values.get(date) %}
                                     {% if cell_data %}
-                                        {% set value_str = cell_data.value_str %}
+                                        {% set value_percent_str = cell_data.value_percent_str %}
                                         {% set is_100 = cell_data.is_100 %}
                                         <td class="text-center {{ 'table-danger' if not is_100 }}">
-                                            {{ value_str }}
+                                            {{ value_percent_str }}
                                         </td>
                                     {% else %}
                                         <td class="text-center text-muted">-</td> {# Data missing for this date #}

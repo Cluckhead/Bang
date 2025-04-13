@@ -34,7 +34,7 @@ def _is_date_like_column(col_name):
         return False
 
 def load_and_process_weight_data(data_folder_path: str, filename: str):
-    """Loads a wide weight file, processes percentages, checks against 100%.
+    """Loads a wide weight file, converts decimal values to percentages, checks against 100%.
 
     Args:
         data_folder_path (str): The absolute path to the data folder.
@@ -91,17 +91,34 @@ def load_and_process_weight_data(data_folder_path: str, filename: str):
             # Iterate using the sorted original column names and the sorted display headers
             for original_date_col, display_date_header in zip(original_date_cols_sorted, date_headers_display):
                 original_value_str = str(df.loc[fund_code, original_date_col])
-                parsed_value_float = _parse_percentage(original_value_str)
+                # --- Updated Logic for Decimal Input ---
+                calculated_percentage = None
+                try:
+                    # Attempt to convert the raw value directly to float
+                    decimal_value = float(original_value_str)
+                    # Convert decimal to percentage
+                    calculated_percentage = decimal_value * 100.0
+                except (ValueError, TypeError):
+                    # Handle cases where the value is not a valid number
+                    logging.warning(f"Could not convert value to float for {fund_code} on {display_date_header} in {filename}: {original_value_str}")
+                    calculated_percentage = None # Ensure it remains None
+                # --- End Updated Logic ---
                 
                 is_100 = False
-                if parsed_value_float is not None:
-                    # Check if the value is within the tolerance range [99.99, 100.01]
-                    is_100 = abs(parsed_value_float - 100.0) <= 0.01
+                formatted_value_str = 'N/A' # Default if conversion fails or value is NaN
+
+                if calculated_percentage is not None:
+                    # Check if the calculated percentage is within the tolerance range
+                    tolerance = 0.01 # e.g., allows 99.99 to 100.01
+                    is_100 = abs(calculated_percentage - 100.0) <= tolerance
+                    # Format the calculated percentage as a string with 2 decimal places
+                    formatted_value_str = f"{calculated_percentage:.2f}%"
                 
+                # Store the formatted percentage string and the boolean check result
                 processed_data[fund_code][display_date_header] = {
-                    'value_str': original_value_str if not pd.isna(original_value_str) else 'N/A',
+                    'value_percent_str': formatted_value_str, 
                     'is_100': is_100,
-                    'parsed_value': parsed_value_float # Keep for potential future use/debugging
+                    # 'parsed_value': parsed_value_float # Keep for potential future use/debugging
                 }
                 
         return processed_data, date_headers_display
