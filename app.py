@@ -78,9 +78,9 @@ def create_app():
             backupCount=backup_count
         )
         file_handler.setFormatter(log_formatter)
-        file_handler.setLevel(logging.INFO) # Log INFO and higher to file
+        file_handler.setLevel(logging.DEBUG) # Log DEBUG and higher to file
         app.logger.addHandler(file_handler)
-        app.logger.info(f"File logging configured to: {log_file_path}")
+        app.logger.info(f"File logging configured to: {log_file_path} (Level: DEBUG)")
     except Exception as e:
         app.logger.error(f"Failed to configure file logging to {log_file_path}: {e}", exc_info=True)
 

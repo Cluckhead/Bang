@@ -7,7 +7,10 @@ from flask import Blueprint, render_template, request, current_app, jsonify, url
 import pandas as pd
 import os
 import logging
-import math # Add math for pagination calculation
+import math # Add math import for pagination calculation
+from pathlib import Path
+import re
+from datetime import datetime
 
 # Assuming security_processing and utils are in the parent directory or configured in PYTHONPATH
 try:
@@ -23,83 +26,177 @@ except ImportError:
     from ..utils import parse_fund_list
     from ..config import COLOR_PALETTE
 
+# Import utils module properly
+try: 
+    from utils import _is_date_like # Try direct import
+except ImportError:
+    # Define our own function if import fails
+    def _is_date_like(column_name):
+        """Check if a column name looks like a date.
+        Returns True for formats like: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, etc."""
+        if not isinstance(column_name, str):
+            return False
+        
+        # Match common date formats in column names
+        date_patterns = [
+            r'\d{2}/\d{2}/\d{4}',  # DD/MM/YYYY
+            r'\d{2}-\d{2}-\d{4}',  # DD-MM-YYYY
+            r'\d{4}/\d{2}/\d{2}',  # YYYY/MM/DD
+            r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
+            r'\d{1,2}/\d{1,2}/\d{2,4}',  # D/M/YY or D/M/YYYY
+            r'\d{1,2}-\d{1,2}-\d{2,4}',  # D-M-YY or D-M-YYYY
+        ]
+        
+        # Return True if any pattern matches
+        return any(re.search(pattern, column_name) for pattern in date_patterns)
+
 
 comparison_bp = Blueprint('comparison_bp', __name__,
                         template_folder='../templates',
                         static_folder='../static')
 
 # Configure logging
-log = logging.getLogger(__name__)
+# log = logging.getLogger(__name__)
 
 PER_PAGE_COMPARISON = 50 # Items per page for comparison summary
 
 # --- Data Loading and Processing ---
 
-def load_weights_and_held_status(data_folder_path: str, weights_filename='w_secs.csv'):
-    """Loads weights data and determines the latest held status for each security ID.
+def load_weights_and_held_status(data_folder: str, weights_filename: str = 'w_secs.csv', id_col_override: str = 'ISIN') -> pd.Series:
+    """
+    Loads the weights file (e.g., w_secs.csv), identifies the latest date,
+    and returns a boolean Series indicating which securities (indexed by ISIN)
+    have a non-zero weight on that date (i.e., are currently held).
 
     Args:
-        data_folder_path (str): The absolute path to the data folder.
-        weights_filename (str, optional): The name of the weights file. Defaults to 'w_secs.csv'.
+        data_folder: The absolute path to the data directory.
+        weights_filename: The name of the weights file.
+        id_col_override: The specific column name in the weights file expected to contain the ISINs for joining.
 
     Returns:
-        pd.Series: Series indexed by Security ID indicating held status (True/False).
-                   Returns an empty Series on error.
+        A pandas Series where the index is the Security ID (ISIN) and the value
+        is True if the security is held on the latest date, False otherwise.
+        Returns an empty Series if the file cannot be loaded or processed.
     """
-    if not data_folder_path:
-        log.error("No data_folder_path provided to load_weights_and_held_status.")
+    current_app.logger.info(f"--- Entering load_weights_and_held_status for {weights_filename} ---")
+    weights_filepath = Path(data_folder) / weights_filename
+    if not weights_filepath.exists():
+        current_app.logger.warning(f"Weights file not found: {weights_filepath}")
         return pd.Series(dtype=bool)
 
-    weights_filepath = os.path.join(data_folder_path, weights_filename)
-    log.info(f"Loading weights data from: {weights_filepath}")
+    try:
+        current_app.logger.info(f"Loading weights data from: {weights_filepath}")
+        # Load without setting index initially to easily find date/ID columns
+        weights_df = pd.read_csv(weights_filepath, low_memory=False)
+        weights_df.columns = weights_df.columns.str.strip() # Clean column names
 
-    # Pass the full path to the data loading function
-    df_weights, _ = load_and_process_security_data(weights_filename, data_folder_path)
+        # --- Identify Date and ID columns ---
+        date_col = next((col for col in weights_df.columns if 'date' in col.lower()), None)
+        # Prioritize the explicitly provided id_col_override, then look for ISIN/SecurityID
+        id_col_in_file = id_col_override if id_col_override in weights_df.columns else \
+                         next((col for col in weights_df.columns if col.lower() in ['isin', 'securityid']), None)
 
-    if df_weights.empty:
-        log.warning(f"Weights file '{weights_filepath}' is empty or failed to load.")
-        return pd.Series(dtype=bool)
-
-    # --- Check index and columns AFTER loading --- 
-    if df_weights.index.nlevels != 2:
-        log.error(f"Weights file '{weights_filepath}' did not have the expected 2 index levels (Date, ID) after processing.")
-        return pd.Series(dtype=bool)
+        # Check for ID column - required
+        if not id_col_in_file:
+            current_app.logger.error(f"Could not automatically identify ID column in {weights_filepath}. Columns found: {weights_df.columns.tolist()}")
+            return pd.Series(dtype=bool)
         
-    # Get index names dynamically
-    date_level_name, id_level_name = df_weights.index.names
-    log.info(f"Weights file index levels identified: Date='{date_level_name}', ID='{id_level_name}'")
+        current_app.logger.info(f"Weights file ID column identified: '{id_col_in_file}'")
 
-    # Reset index to access Date and ID as columns
-    df_weights = df_weights.reset_index()
+        # --- Identify and Melt Date Columns ---
+        date_columns = [col for col in weights_df.columns if _is_date_like(col)]
+        
+        if not date_columns:
+            # If no date-like columns were found and no explicit date column exists
+            if not date_col:
+                current_app.logger.error(f"No date column or date-like columns found in {weights_filepath}")
+                return pd.Series(dtype=bool)
+                
+            # Try to use the explicitly found date column
+            current_app.logger.info(f"No date-like columns found. Attempting to use explicit date column: '{date_col}'")
+            try:
+                weights_df[date_col] = pd.to_datetime(weights_df[date_col], errors='coerce')
+                if weights_df[date_col].isnull().all():
+                    raise ValueError("Date column parsing failed.")
+                # If successful, proceed as if it was a long-format file from the start
+                value_col = next((col for col in weights_df.columns if col.lower() == 'value'), 'Value') # Assume a 'Value' column exists
+                if value_col not in weights_df.columns:
+                    # If no obvious value column, assume last column is value
+                    value_col = weights_df.columns[-1]
+                    current_app.logger.warning(f"No 'Value' column found in long-format weights file, assuming last column '{value_col}' holds weights.")
 
-    # Check if required columns are present AFTER resetting index
-    required_cols = [date_level_name, id_level_name, 'Value']
-    missing_cols = [col for col in required_cols if col not in df_weights.columns]
-    
-    if missing_cols:
-        log.error(f"Weights file '{weights_filepath}' is missing required columns after processing and index reset: {missing_cols}. Available columns: {df_weights.columns.tolist()}")
+                # Rename for consistency
+                weights_df = weights_df.rename(columns={date_col: 'Date', id_col_in_file: 'ISIN', value_col: 'Value'})
+                weights_df['Value'] = pd.to_numeric(weights_df['Value'], errors='coerce')
+
+            except Exception as e:
+                current_app.logger.error(f"Failed to process weights file {weights_filepath} as long format after date column detection failed: {e}")
+                return pd.Series(dtype=bool)
+        else:
+            current_app.logger.info(f"Found {len(date_columns)} date-like columns in {weights_filename}: {date_columns[:5]}{'...' if len(date_columns) > 5 else ''}")
+            # Wide format: Melt the DataFrame
+            id_vars = [col for col in weights_df.columns if col not in date_columns]
+            melted_weights = weights_df.melt(id_vars=id_vars, value_vars=date_columns, var_name='Date', value_name='Value')
+
+            # Attempt to convert 'Date' column to datetime objects after melting
+            melted_weights['Date'] = pd.to_datetime(melted_weights['Date'], errors='coerce')
+            melted_weights['Value'] = pd.to_numeric(melted_weights['Value'], errors='coerce')
+
+            # Rename the identified ID column to 'ISIN' for consistency
+            melted_weights = melted_weights.rename(columns={id_col_in_file: 'ISIN'})
+            weights_df = melted_weights # Use the melted df going forward
+
+
+        # Find the latest date in the entire dataset
+        latest_date = weights_df['Date'].max()
+        if pd.isna(latest_date):
+            current_app.logger.warning(f"Could not determine the latest date in {weights_filepath}.")
+            return pd.Series(dtype=bool)
+        current_app.logger.info(f"Latest date in weights file '{weights_filepath}': {latest_date}")
+
+        # Filter for the latest date and where Value is not NaN and > 0
+        latest_weights = weights_df[(weights_df['Date'] == latest_date) & (weights_df['Value'].notna()) & (weights_df['Value'] > 0)].copy()
+
+        # --- Determine Held Status using the correct ID column ---
+        # We now use the *renamed* 'ISIN' column, which originally came from id_col_in_file (our target)
+        held_status_col = 'ISIN'
+        if held_status_col not in latest_weights.columns:
+             current_app.logger.error(f"The target ID column '{held_status_col}' (derived from '{id_col_in_file}') not found after processing {weights_filepath}. Columns: {latest_weights.columns.tolist()}")
+             return pd.Series(dtype=bool)
+
+        current_app.logger.info(f"Using '{held_status_col}' column from {weights_filename} for held_status index.")
+
+        # Create the boolean Series: index is the ISIN, value is True
+        # Drop duplicates in case a security appears multiple times on the same date (e.g., different funds)
+        held_ids = latest_weights.drop_duplicates(subset=[held_status_col])[held_status_col]
+        held_status = pd.Series(True, index=held_ids)
+        held_status.index.name = 'ISIN' # Ensure the index name is 'ISIN' for merging
+
+        # --- Logging for Debugging ---
+        current_app.logger.debug(f"Weights data before setting index (first 5 rows using '{held_status_col}'):\n{latest_weights[[held_status_col, 'Value']].head().to_string()}")
+        sample_values = latest_weights[held_status_col].unique()[:5]
+        current_app.logger.debug(f"Sample values from '{held_status_col}' column to be used for index: {sample_values}")
+
+        # This renaming logic is now less critical as we set the index correctly, but keep for consistency check
+        if held_status.index.name != id_col_override:
+             current_app.logger.warning(f"Renaming held_status index from '{held_status.index.name}' to '{id_col_override}' to ensure merge compatibility.")
+             held_status.index.name = id_col_override # Explicitly set to ISIN for clarity
+
+        current_app.logger.debug(f"Resulting held_status Series index name after potential rename: '{held_status.index.name}'")
+        current_app.logger.debug(f"Held status index preview (first 5 values): {held_status.index[:5].tolist()}")
+        current_app.logger.debug(f"Held status values preview (first 5): {held_status.head().to_dict()}")
+        current_app.logger.info(f"Determined held status for {len(held_status)} IDs based on weights on {latest_date}.")
+
+        return held_status
+
+    except Exception as e:
+        current_app.logger.error(f"Error loading or processing weights file {weights_filepath}: {e}", exc_info=True)
         return pd.Series(dtype=bool)
-
-    # Find the latest date in the weights data using the dynamic date column name
-    latest_date = df_weights[date_level_name].max()
-    if pd.isna(latest_date):
-        log.warning(f"Could not determine the latest date in '{weights_filepath}'.")
-        return pd.Series(dtype=bool)
-
-    log.info(f"Latest date in weights file '{weights_filepath}': {latest_date}")
-
-    # Filter for the latest date using the dynamic date column name
-    latest_weights = df_weights[df_weights[date_level_name] == latest_date]
-    
-    # Set index using the dynamic ID column name and check weight > 0
-    held_status = latest_weights.set_index(id_level_name)['Value'] > 0
-    held_status.name = 'is_held' # Name the series for easier merging later
-
-    log.info(f"Determined held status for {len(held_status)} IDs based on weights on {latest_date}.")
-    return held_status
 
 
 def load_comparison_data(data_folder_path: str, file1='sec_spread.csv', file2='sec_spreadSP.csv'):
+    log = current_app.logger # Use app logger
+    log.info(f"--- Entering load_comparison_data: {file1}, {file2} ---") # ENTRY LOG
     """Loads, processes, merges data from two security spread files, and gets held status.
 
     Args:
@@ -118,7 +215,9 @@ def load_comparison_data(data_folder_path: str, file1='sec_spread.csv', file2='s
 
     # Pass the absolute data folder path to the loading functions
     df1, static_cols1 = load_and_process_security_data(file1, data_folder_path)
+    log.info(f"Loaded {file1}. Shape: {df1.shape if not df1.empty else 'Empty'}. Static cols: {static_cols1}")
     df2, static_cols2 = load_and_process_security_data(file2, data_folder_path)
+    log.info(f"Loaded {file2}. Shape: {df2.shape if not df2.empty else 'Empty'}. Static cols: {static_cols2}")
 
     # Reset index to make Date and ID columns accessible
     if not df1.empty:
@@ -127,7 +226,8 @@ def load_comparison_data(data_folder_path: str, file1='sec_spread.csv', file2='s
         df2 = df2.reset_index()
 
     # Load held status, passing the data folder path
-    held_status = load_weights_and_held_status(data_folder_path) # Uses default 'w_secs.csv'
+    held_status = load_weights_and_held_status(data_folder_path)
+    log.info(f"Loaded held_status. Is empty: {held_status.empty}")
 
     if df1.empty or df2.empty:
         log.warning(f"One or both dataframes are empty. File1 empty: {df1.empty}, File2 empty: {df2.empty}")
@@ -174,10 +274,13 @@ def load_comparison_data(data_folder_path: str, file1='sec_spread.csv', file2='s
 
     log.info(f"Successfully merged data. Shape: {merged_df.shape}")
     # Return held_status along with other data
+    log.info(f"--- Exiting load_comparison_data. Merged shape: {merged_df.shape if not merged_df.empty else 'Empty'}. ID col: {id_col_name} ---") # EXIT LOG
     return merged_df, static_data, common_static_cols, id_col_name, held_status
 
 
 def calculate_comparison_stats(merged_df, static_data, id_col):
+    log = current_app.logger # Use app logger
+    log.info(f"--- Entering calculate_comparison_stats. Input shape: {merged_df.shape if not merged_df.empty else 'Empty'} ---") # ENTRY LOG
     """Calculates comparison statistics for each security.
 
     Args:
@@ -286,265 +389,246 @@ def calculate_comparison_stats(merged_df, static_data, id_col):
          log.warning(f"Could not merge static data back. ID column '{id_col}' missing from static_data ({id_col in static_data.columns}) or summary_df ({id_col in summary_df.columns}).")
 
     log.info(f"Finished calculating stats. Summary shape: {summary_df.shape}")
+    log.info(f"--- Exiting calculate_comparison_stats. Output shape: {summary_df.shape if summary_df is not None and not summary_df.empty else 'Empty'} ---") # EXIT LOG
     return summary_df
 
 
 # --- Routes ---
 
+@comparison_bp.route('/comparison/logtest')
+def log_test():
+    current_app.logger.info("--- !!! HIT /comparison/logtest ROUTE !!! ---")
+    return "Log test route executed. Check instance/app.log.", 200
+
 @comparison_bp.route('/comparison/summary')
 def summary():
-    """Displays the comparison summary page with server-side filtering, sorting, and pagination."""
-    log.info("--- Starting Comparison Summary Request ---")
-    # Retrieve the configured absolute data folder path
-    data_folder = current_app.config['DATA_FOLDER']
-    if not data_folder:
-        current_app.logger.error("DATA_FOLDER is not configured in the application.")
-        return "Internal Server Error: Data folder not configured", 500
-
-    # --- Get Request Parameters ---
+    current_app.logger.info("--- Starting Spread Comparison Summary Request ---")
+    data_folder = current_app.config.get('DATA_FOLDER', './Data')
     page = request.args.get('page', 1, type=int)
-    sort_by = request.args.get('sort_by', 'Change_Correlation') # Default sort
-    sort_order = request.args.get('sort_order', 'desc').lower()
-    if sort_order not in ['asc', 'desc']:
-        sort_order = 'desc'
-    ascending = sort_order == 'asc'
+    sort_by = request.args.get('sort_by', 'Max_Abs_Diff') # Default sort
+    sort_order = request.args.get('sort_order', 'desc')
+    # Get filters from query string (e.g., ?filter_Type=Corp&filter_Currency=USD)
+    active_filters = {k.replace('filter_', ''): v for k, v in request.args.items() if k.startswith('filter_') and v}
+    # Get show_sold status
+    show_sold_str = request.args.get('show_sold', 'false') # Default to false (only show held)
+    show_sold = show_sold_str.lower() == 'true'
 
-    # NEW: Get holding status filter (default to 'false' -> show only held)
-    show_sold = request.args.get('show_sold', 'false').lower() == 'true'
-    log.info(f"Show Sold filter: {show_sold}")
+    current_app.logger.info(f"Request Params: Page={page}, SortBy={sort_by}, Order={sort_order}, Filters={active_filters}, ShowSold={show_sold}")
 
-    # Get active filters (ensuring keys are correct)
-    active_filters = {k.replace('filter_', ''): v 
-                      for k, v in request.args.items() 
-                      if k.startswith('filter_') and v}
-    log.info(f"Request Params: Page={page}, SortBy={sort_by}, Order={sort_order}, Filters={active_filters}, ShowSold={show_sold}")
+    # --- Load Weights/Held Status ---
+    # Ensure we use the 'ISIN' column from w_secs.csv
+    held_status = load_weights_and_held_status(data_folder, id_col_override='ISIN')
+    if held_status.empty:
+        current_app.logger.warning("Could not load held status information for comparison.")
 
-    # --- Load and Prepare Data --- 
-    # Capture the actual ID column name and held status returned by the load function
-    merged_data, static_data, static_cols, actual_id_col, held_status = load_comparison_data(data_folder)
-        
-    if actual_id_col is None:
-        log.error("Failed to get ID column name during data loading.")
-        return "Error loading comparison data: Could not determine ID column.", 500
+    # --- Load and Process Comparison Data ---
+    file1='sec_spread.csv'
+    file2='sec_spreadSP.csv'
+    id_col_name_actual = 'ISIN' # Assume ISIN as default/target
 
-    # Pass the actual ID column name to the stats calculation function
-    summary_stats = calculate_comparison_stats(merged_data, static_data, id_col=actual_id_col)
+    try:
+        current_app.logger.info(f"Loading comparison data: {file1} and {file2} from {data_folder}")
+        # Use helper function to load, standardize, and identify columns
+        merged_df, static_data, static_cols_actual, id_col_name_actual, held_status_loaded = load_comparison_data(
+            data_folder, file1, file2)
 
-    if summary_stats.empty:
-         # Log reason if possible
-         if merged_data.empty:
-             log.info("Merged data was empty, no stats calculated.")
-         else:
-             log.warning("Merged data was present, but calculation resulted in empty stats DataFrame.")
-        
-         # Render with message if empty even before filtering
-         return render_template('comparison_page.html',
-                                table_data=[],
-                                columns_to_display=[],
-                                id_column_name=actual_id_col,
-                                filter_options={},
-                                active_filters={},
-                                current_sort_by=sort_by,
-                                current_sort_order=sort_order,
-                                pagination=None,
-                                show_sold=show_sold, # Pass filter status
-                                message="No comparison data available.")
+        if merged_df.empty:
+            raise ValueError("Failed to load one or both comparison files.")
 
-    # --- Merge Held Status --- 
-    if not held_status.empty and actual_id_col in summary_stats.columns:
-        summary_stats = pd.merge(summary_stats, held_status, left_on=actual_id_col, right_index=True, how='left')
-        # Fill NaN in 'is_held' with False (assume not held if not in weights file/latest date)
-        summary_stats['is_held'] = summary_stats['is_held'].fillna(False)
-        log.info(f"Merged held status. Stats shape: {summary_stats.shape}")
-    else:
-        log.warning("Could not merge held status. Weights data might be missing or empty, or ID column mismatch.")
-        summary_stats['is_held'] = False # Assume all are not held if merge fails
+        current_app.logger.info(f"Actual ID column identified for comparison data: '{id_col_name_actual}'")
+        current_app.logger.info(f"Calculating comparison statistics using ID column: {id_col_name_actual}...")
 
-    # --- Apply Holding Status Filter --- 
-    original_count = len(summary_stats)
-    if not show_sold:
-        summary_stats = summary_stats[summary_stats['is_held'] == True]
-        log.info(f"Applied 'Show Held Only' filter. Kept {len(summary_stats)} out of {original_count} securities.")
-    else:
-        log.info("Skipping 'Show Held Only' filter (show_sold is True).")
+        # Calculate stats using the identified columns
+        summary_stats = calculate_comparison_stats(merged_df, static_data, id_col=id_col_name_actual)
+        current_app.logger.info(f"Finished calculating stats. Summary shape: {summary_stats.shape}")
 
-    # If filtering by holding status resulted in empty df, render with message
-    if summary_stats.empty:
-         log.info("No securities remaining after applying holding status filter.")
-         return render_template('comparison_page.html',
-                                table_data=[],
-                                columns_to_display=[actual_id_col] + static_cols, # Show basic cols
-                                id_column_name=actual_id_col,
-                                filter_options={}, # Filters not relevant now
-                                active_filters={},
-                                current_sort_by=sort_by,
-                                current_sort_order=sort_order,
-                                pagination=None,
-                                show_sold=show_sold, # Pass filter status
-                                message="No currently held securities found.")
+        # Prepare filter options based on actual static columns found in the summary
+        filter_options = {col: sorted(summary_stats[col].dropna().unique().tolist()) 
+                          for col in static_cols_actual if col in summary_stats.columns}
 
-    # --- Collect Filter Options (From Dataset *After* Holding Filter) --- 
-    filter_options = {}
-    # Use static_cols identified earlier
-    potential_filter_cols = static_cols 
-    for col in potential_filter_cols:
-        if col in summary_stats.columns:
-            # Get unique non-NA values from the *potentially filtered* stats df
-            unique_vals = summary_stats[col].dropna().unique().tolist()
-            # Basic type check and sort if possible - Improved Robust Sorting Key
-            try:
-                unique_vals = sorted(unique_vals, key=lambda x: \
-                    (0, float(x)) if isinstance(x, bool) else \
-                    (0, x) if isinstance(x, (int, float)) else \
-                    (0, float(x)) if isinstance(x, str) and x.replace('.', '', 1).lstrip('-').isdigit() else \
-                    (1, str(x)) if isinstance(x, str) else \
-                    (2, str(x)) # Fallback for other types, sort as string
-                )
-            except (TypeError, ValueError) as e:
-                log.warning(f"Type error or value error during sorting unique values for column '{col}': {e}. Falling back to simple string sort.")
+        # --- Merge Held Status ---
+        if not held_status.empty and id_col_name_actual in summary_stats.columns:
+            # Ensure merge keys are the same type (convert to string as a safe bet)
+            if summary_stats[id_col_name_actual].dtype != held_status.index.dtype:
+                current_app.logger.info(f"Converted merge keys to string. Original dtypes: summary_stats['{id_col_name_actual}']: {summary_stats[id_col_name_actual].dtype}, held_status.index: {held_status.index.dtype}")
                 try:
-                     unique_vals = sorted(str(x) for x in unique_vals)
-                except Exception as final_sort_err:
-                    log.error(f"Final string sort failed for column '{col}': {final_sort_err}")
-                    # Keep original unsorted list if all else fails
-            if unique_vals:
-                filter_options[col] = unique_vals
-    final_filter_options = dict(sorted(filter_options.items())) # Sort filter dropdowns alphabetically
-
-    # --- Apply Static Column Filtering (on potentially pre-filtered data) ---
-    filtered_stats = summary_stats.copy()
-    if active_filters:
-        log.info(f"Applying static column filters: {active_filters}")
-        for col, value in active_filters.items():
-            if col in filtered_stats.columns and value:
-                # Ensure comparison is robust (e.g., string comparison)
-                try:
-                    filtered_stats = filtered_stats[filtered_stats[col].astype(str).str.lower() == str(value).lower()]
+                    summary_stats[id_col_name_actual] = summary_stats[id_col_name_actual].astype(str)
+                    held_status.index = held_status.index.astype(str)
                 except Exception as e:
-                    log.warning(f"Could not apply filter on column '{col}' with value '{value}'. Error: {e}")
-        log.info(f"Stats shape after static filtering: {filtered_stats.shape}")
-    else:
-         log.info("No active static column filters.")
+                     current_app.logger.error(f"Failed to convert merge keys to string: {e}")
 
-    # If filtering resulted in empty df, render with message
-    if filtered_stats.empty:
-         log.info("No data remaining after applying static column filters.")
-         return render_template('comparison_page.html',
-                                table_data=[],
-                                columns_to_display=[actual_id_col] + static_cols, # Show basic cols
-                                id_column_name=actual_id_col,
-                                filter_options=final_filter_options, # Still show filter options
-                                active_filters=active_filters,
-                                current_sort_by=sort_by,
-                                current_sort_order=sort_order,
-                                pagination=None,
-                                show_sold=show_sold, # Pass filter status
-                                message="No data matches the current filters.")
+            current_app.logger.info(f"Attempting to merge held_status (index name: '{held_status.index.name}') with comparison summary_stats on column '{id_col_name_actual}'")
+            debug_cols_before = summary_stats.columns.tolist()
+            current_app.logger.debug(f"summary_stats columns before merge: {debug_cols_before}")
+            current_app.logger.debug(f"held_status index preview before merge: {held_status.index[:5].tolist()}")
+            current_app.logger.debug(f"summary_stats ID column ('{id_col_name_actual}') preview before merge: {summary_stats[id_col_name_actual].unique()[:5].tolist()}")
+            
+            # Rename the Series when merging
+            summary_stats = pd.merge(summary_stats, held_status.rename('is_held'), 
+                                    left_on=id_col_name_actual, right_index=True, how='left')
+            
+            debug_cols_after = summary_stats.columns.tolist()
+            current_app.logger.debug(f"Columns after merge attempt: {debug_cols_after}")
+            held_count = summary_stats['is_held'].notna().sum()
+            current_app.logger.info(f"Merged held status. Comparison stats shape: {summary_stats.shape}. 'is_held' column has {held_count} non-NA values.")
+            
+            if held_count > 0:
+                current_app.logger.debug(f"Preview of 'is_held' after merge (first 5 non-NA): {summary_stats[summary_stats['is_held'].notna()]['is_held'].head().to_dict()}")
+            else:
+                current_app.logger.debug("Preview of 'is_held' after merge (first 5 non-NA): {}")
+            
+            # Fill NaN in 'is_held'
+            if 'is_held' in summary_stats.columns:
+                summary_stats['is_held'] = summary_stats['is_held'].fillna(False)
+                current_app.logger.info("Filled NA in 'is_held' with False for comparison summary.")
+            else:
+                current_app.logger.error("'is_held' column not found after comparison merge!")
+                summary_stats['is_held'] = False # Add the column as False if merge failed entirely
 
-    # --- Apply Sorting ---
-    # Sort the filtered data
-    if sort_by in filtered_stats.columns:
-        log.info(f"Sorting by '{sort_by}' {sort_order}")
-        if pd.api.types.is_numeric_dtype(filtered_stats[sort_by]):
-             filtered_stats = filtered_stats.sort_values(by=sort_by, ascending=ascending, na_position='last')
         else:
-             filtered_stats = filtered_stats.sort_values(by=sort_by, ascending=ascending, na_position='last', key=lambda col: col.astype(str).str.lower())
-    else:
-        log.warning(f"Sort column '{sort_by}' not found in filtered data. Defaulting to ID sort.")
-        sort_by = actual_id_col 
-        sort_order = 'asc'
-        ascending = True
-        filtered_stats = filtered_stats.sort_values(by=sort_by, ascending=ascending, na_position='last')
+            current_app.logger.warning("Skipping merge with held_status: held_status is empty or ID column mismatch.")
+            summary_stats['is_held'] = False # Assume not held if we can't merge
 
-    # --- Define Columns to Display ---
-    # Identify fund columns 
-    fund_cols = sorted([col for col in static_cols if 'fund' in col.lower() and col != actual_id_col])
-    other_static_cols = sorted([col for col in static_cols if col != actual_id_col and col not in fund_cols])
-    calculated_cols = sorted([col for col in summary_stats.columns # Use summary_stats to get all potential cols
-                             if col not in static_cols and col != actual_id_col and
-                             col not in ['Start_Date_Orig', 'End_Date_Orig', 'Start_Date_New', 'End_Date_New',
-                                          'NaN_Count_Orig', 'NaN_Count_New', 'Total_Points',
-                                          'Overall_Start_Date', 'Overall_End_Date', 'is_held']]) # Exclude is_held too
+        # --- Apply Filters ---
+        filtered_stats = summary_stats.copy()
+        # Apply holding filter first if needed
+        if not show_sold:
+             held_count_before = len(filtered_stats)
+             filtered_stats = filtered_stats[filtered_stats['is_held'] == True]
+             held_count_after = len(filtered_stats)
+             current_app.logger.info(f"Applied 'Show Held Only' filter. Kept {held_count_after} out of {held_count_before} securities.")
+             if held_count_after == 0:
+                 current_app.logger.warning("No securities remaining after applying holding status filter.")
 
-    columns_to_display = [actual_id_col] + other_static_cols + calculated_cols + fund_cols
-    log.debug(f"Columns to display: {columns_to_display}")
+        # Apply other active filters
+        for col, value in active_filters.items():
+            if col in filtered_stats.columns:
+                count_before = len(filtered_stats)
+                try:
+                    # Try direct comparison first
+                    filtered_stats = filtered_stats[filtered_stats[col] == value]
+                except TypeError:
+                     try:
+                         # If direct comparison fails (mixed types), try converting both to string
+                         filtered_stats = filtered_stats[filtered_stats[col].astype(str) == str(value)]
+                         current_app.logger.warning(f"Applied filter {col}={value} after converting column to string due to type mismatch.")
+                     except Exception as e_filter:
+                         current_app.logger.error(f"Could not apply filter {col}={value}: {e_filter}")
+                count_after = len(filtered_stats)
+                current_app.logger.info(f"Applied filter: {col} == '{value}'. Kept {count_after}/{count_before} rows.")
 
-    # --- Pagination ---
-    total_items = len(filtered_stats)
-    # This check is now redundant due to earlier checks, but keep for safety
-    if total_items == 0:
-         log.info("Pagination step: No items remain after all filtering/sorting.") 
-         return render_template('comparison_page.html',
-                                table_data=[],
-                                columns_to_display=columns_to_display, \
-                                id_column_name=actual_id_col,
-                                filter_options=final_filter_options,
-                                active_filters=active_filters,
-                                current_sort_by=sort_by,
-                                current_sort_order=sort_order,
-                                pagination=None,
-                                show_sold=show_sold, # Pass filter status
-                                message="No data matches the current criteria.")
+        # --- Handle No Data ---
+        if filtered_stats.empty:
+            message = "No comparison data available matching the current filters."
+            # Try to provide a more helpful message
+            if not show_sold and 'is_held' in summary_stats.columns and summary_stats['is_held'].any(): # Check if any securities were held *before* filtering
+                 message = "No *currently held* securities match the other filters. Try enabling 'Show Sold Securities'."
+            elif not active_filters and not show_sold:
+                  message = "No currently held securities found in the comparison data. Try enabling 'Show Sold Securities'."
+            elif not active_filters and show_sold:
+                   message = "No comparison data found in the source files."
 
-    safe_per_page = max(1, PER_PAGE_COMPARISON)
-    total_pages = math.ceil(total_items / safe_per_page)
-    total_pages = max(1, total_pages) 
-    page = max(1, min(page, total_pages)) 
-    start_index = (page - 1) * safe_per_page
-    end_index = start_index + safe_per_page
-    log.info(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Per page={safe_per_page}")
-    
-    page_window = 2
-    start_page_display = max(1, page - page_window)
-    end_page_display = min(total_pages, page + page_window)
-    
-    paginated_stats = filtered_stats.iloc[start_index:end_index]
+            current_app.logger.warning(message)
+            return render_template('comparison_page.html',
+                                   table_data=[],
+                                   columns_to_display=[],
+                                   id_column_name=id_col_name_actual,
+                                   message=message,
+                                   pagination=None,
+                                   current_sort_by=sort_by,
+                                   current_sort_order=sort_order,
+                                   filter_options=filter_options,
+                                   active_filters=active_filters,
+                                   show_sold=show_sold)
 
-    # --- Prepare Data for Template ---
-    paginated_stats = paginated_stats[[col for col in columns_to_display if col in paginated_stats.columns]]
-    table_data_list = paginated_stats.to_dict(orient='records')
-    for row in table_data_list:
-        for key, value in row.items():
-            if pd.isna(value):
-                row[key] = None
+        # --- Sorting ---
+        if sort_by in filtered_stats.columns:
+            try:
+                # Define numeric columns for proper sorting
+                numeric_cols = ['Level_Correlation', 'Change_Correlation', 'Mean_Abs_Diff', 'Max_Abs_Diff', 'Max_Orig', 'Min_Orig', 'Max_New', 'Min_New']
+                if sort_by in numeric_cols:
+                    filtered_stats[sort_by] = pd.to_numeric(filtered_stats[sort_by], errors='coerce')
+                    # Ensure NaNs are handled consistently
+                    na_position = 'last' if sort_order == 'asc' else 'first' # Sort NaNs last for asc, first for desc
+                    filtered_stats = filtered_stats.sort_values(by=sort_by, ascending=(sort_order == 'asc'), na_position=na_position)
+                else:
+                     # Sort non-numeric columns case-insensitively
+                     filtered_stats = filtered_stats.sort_values(by=sort_by, ascending=(sort_order == 'asc'), key=lambda col: col.astype(str).str.lower())
+                current_app.logger.info(f"Sorted data by '{sort_by}' ({sort_order}).")
+            except Exception as e:
+                current_app.logger.error(f"Error sorting data by {sort_by}: {e}")
+        
+        # --- Pagination ---
+        per_page = 50 # Number of items per page
+        total_items = len(filtered_stats)
+        total_pages = math.ceil(total_items / per_page)
+        total_pages = max(1, total_pages)
+        page = max(1, min(page, total_pages))
+        start_index = (page - 1) * per_page
+        end_index = start_index + per_page
+        paginated_data = filtered_stats.iloc[start_index:end_index]
+        current_app.logger.info(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Displaying items {start_index}-{end_index-1}")
 
-    pagination_context = {
-        'page': page,
-        'per_page': safe_per_page,
-        'total_pages': total_pages,
-        'total_items': total_items,
-        'has_prev': page > 1,
-        'has_next': page < total_pages,
-        'prev_num': page - 1,
-        'next_num': page + 1,
-        'start_page_display': start_page_display, \
-        'end_page_display': end_page_display,     \
-        # Function to generate URLs for pagination links, preserving ALL filters including show_sold
-        'url_for_page': lambda p: url_for('comparison_bp.summary', 
-                                          page=p, 
-                                          sort_by=sort_by, 
-                                          sort_order=sort_order, 
-                                          show_sold=str(show_sold).lower(), # Pass holding status
-                                          **{f'filter_{k}': v for k, v in active_filters.items()})
-    }
+        page_window = 2
+        start_page_display = max(1, page - page_window)
+        end_page_display = min(total_pages, page + page_window)
 
-    return render_template('comparison_page.html',
-                           table_data=table_data_list,
-                           columns_to_display=columns_to_display,
-                           id_column_name=actual_id_col,
-                           filter_options=final_filter_options, # Use sorted options
-                           active_filters=active_filters,
-                           current_sort_by=sort_by,
-                           current_sort_order=sort_order,
-                           pagination=pagination_context,
-                           show_sold=show_sold, # Pass holding filter status
-                           message=None)
+        # Create pagination context dictionary
+        pagination = {
+            'page': page,
+            'per_page': per_page,
+            'total_items': total_items,
+            'total_pages': total_pages,
+            'has_prev': page > 1,
+            'has_next': page < total_pages,
+            'prev_num': page - 1,
+            'next_num': page + 1,
+            'start_page_display': start_page_display,
+            'end_page_display': end_page_display,
+            # Function to generate URLs for pagination links, preserving state
+            'url_for_page': lambda p: url_for('comparison_bp.summary', 
+                                            page=p, 
+                                            sort_by=sort_by, 
+                                            sort_order=sort_order, 
+                                            show_sold=str(show_sold).lower(),
+                                            **{f'filter_{k}': v for k, v in active_filters.items()})
+        }
+
+        # Convert paginated data to list of dicts for the template
+        table_data_dict = paginated_data.to_dict(orient='records')
+
+        # Define columns to display in the summary table (ensure they exist in the data)
+        columns_to_display = [id_col_name_actual, 'Type', 'Currency', 'Funds', 'Level_Correlation', 'Change_Correlation', 'Mean_Abs_Diff', 'Max_Abs_Diff', 'Same_Date_Range', 'is_held']
+        columns_to_display = [col for col in columns_to_display if col in paginated_data.columns]
+
+
+        current_app.logger.info(f"Rendering comparison summary page {page}/{pagination['total_pages']} with {len(table_data_dict)} rows.")
+        return render_template('comparison_page.html',
+                               table_data=table_data_dict,
+                               columns_to_display=columns_to_display,
+                               id_column_name=id_col_name_actual, # Pass the actual ID column name
+                               pagination=pagination,
+                               current_sort_by=sort_by,
+                               current_sort_order=sort_order,
+                               filter_options=filter_options,
+                               active_filters=active_filters,
+                               show_sold=show_sold,
+                               message=None) # Clear message if data is found
+
+    except FileNotFoundError as e:
+        current_app.logger.error(f"Comparison file not found: {e}", exc_info=True)
+        flash(f"Error: Required comparison file not found ({e.filename}). Please check the Data folder.", 'danger')
+        return render_template('comparison_page.html', table_data=[], columns_to_display=[], pagination=None, message=f"Error: Could not find file {e.filename}.", id_column_name='ISIN', filter_options={}, active_filters={}, show_sold=show_sold)
+    except Exception as e:
+        current_app.logger.error(f"Error generating comparison summary: {e}", exc_info=True)
+        flash(f"An unexpected error occurred during comparison: {e}", 'danger')
+        return render_template('comparison_page.html', table_data=[], columns_to_display=[], pagination=None, message=f"An unexpected error occurred: {e}", id_column_name='ISIN', filter_options={}, active_filters={}, show_sold=show_sold)
 
 
 @comparison_bp.route('/comparison/details/<path:security_id>')
 def comparison_details(security_id):
     """Displays side-by-side historical charts for a specific security."""
-    log.info(f"--- Starting Comparison Detail Request for Security ID: {security_id} ---")
+    current_app.logger.info(f"--- Starting Comparison Detail Request for Security ID: {security_id} ---")
     # Retrieve the configured absolute data folder path
     data_folder = current_app.config['DATA_FOLDER']
     if not data_folder:
@@ -555,10 +639,10 @@ def comparison_details(security_id):
         # Pass the absolute data folder path here
         merged_df, static_data, common_static_cols, id_col, _ = load_comparison_data(data_folder)
         if merged_df.empty:
-            log.warning("Merged data is empty, cannot show details.")
+            current_app.logger.warning("Merged data is empty, cannot show details.")
             return "Error: Could not load comparison data.", 404
         if id_col is None or id_col not in merged_df.columns:
-             log.error(f"ID column ('{id_col}') not found in merged data for details view.")
+             current_app.logger.error(f"ID column ('{id_col}') not found in merged data for details view.")
              return "Error: Could not identify security ID column in data.", 500
 
         # Filter using the actual ID column name
@@ -619,5 +703,5 @@ def comparison_details(security_id):
 
 
     except Exception as e:
-        log.exception(f"Error generating comparison details page for {security_id}.")
+        current_app.logger.exception(f"Error generating comparison details page for {security_id}.")
         return f"An error occurred: {e}", 500 
