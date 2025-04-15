@@ -59,6 +59,15 @@ This application provides a web interface to load, process, and check financial 
     *   Simulate API calls to fetch data via the `/get_data` page.
     *   Run a data cleanup process via a button on the `/get_data` page.
 *   **Handling Special Characters in IDs:** Security IDs can contain special characters, including slashes (`/`, `\\`), spaces, and symbols (`#`). The application uses the `urlencode` filter in templates to create safe URLs and the `<path:security_id>` converter in Flask routes to capture these IDs correctly. **Note:** Inside view functions receiving such IDs, especially when comparing against data (e.g., filtering a DataFrame), it may be necessary to explicitly decode the `security_id` variable using `urllib.parse.unquote(security_id)` to ensure it matches the format stored in the data source.
+*   **Attribution Residuals Chart Page (Planned):**
+    *   Visualizes residuals over time for attribution data.
+    *   Two charts: one for Benchmark, one for Portfolio. Each chart shows both original (Prod) and S&P data.
+    *   Includes a date range slider (with two handles) to select the period shown.
+    *   Toggle to switch between net and absolute residuals. Each day is shown as a bar on the x-axis.
+    *   Cumulative net residuals are shown as a line chart (aggregated sum over time, net only).
+    *   All the same filters as the summary page (fund, date range, group/characteristic, characteristic value) apply to the charts.
+    *   Data is joined with `w_secs.csv` on ISIN, using the same logic as the summary page.
+    *   Charts will be implemented using the same JavaScript charting approach as other pages (see Metric and Fund Detail pages for reference).
 
 ## File Structure Overview
 

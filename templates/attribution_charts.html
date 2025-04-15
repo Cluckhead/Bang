@@ -1,0 +1,315 @@
+{#
+    Purpose: Attribution Residuals Chart Page. Visualizes residuals over time for Benchmark and Portfolio.
+    - Two charts: Benchmark and Portfolio, each with bars for residuals (Prod and S&P) and a line for cumulative net residuals.
+    - Toggle for net/absolute residuals.
+    - Date range slider (two handles).
+    - Filters for fund, characteristic, characteristic value.
+    - Uses Chart.js for rendering.
+#}
+
+{% extends "base.html" %}
+
+{% block title %}Attribution Residuals Charts{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h1>Attribution Residuals Charts</h1>
+    <p class="text-muted">Visualize residuals over time for Benchmark and Portfolio. Use the filters and controls to explore the data.</p>
+
+    <!-- Filters -->
+    <form method="get" class="row g-3 align-items-end mb-4" id="filter-form">
+        <div class="col-md-3">
+            <label for="fund-select" class="form-label">Fund</label>
+            <select class="form-select" id="fund-select" name="fund" onchange="this.form.submit()">
+                <option value="" {% if not selected_fund %}selected{% endif %}>All Funds</option>
+                {% for fund in available_funds %}
+                    <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="characteristic-select" class="form-label">Group by Characteristic</label>
+            <select class="form-select" id="characteristic-select" name="characteristic" onchange="this.form.submit()">
+                {% for char in available_characteristics %}
+                    <option value="{{ char }}" {% if char == selected_characteristic %}selected{% endif %}>{{ char }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="characteristic-value-select" class="form-label">Filter by {{ selected_characteristic }}</label>
+            <select class="form-select" id="characteristic-value-select" name="characteristic_value" onchange="this.form.submit()">
+                <option value="" {% if not selected_characteristic_value %}selected{% endif %}>All</option>
+                {% for val in available_characteristic_values %}
+                    <option value="{{ val }}" {% if val == selected_characteristic_value %}selected{% endif %}>{{ val }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    <!-- Net/Absolute Toggle -->
+    <div class="mb-3">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="absToggle" {% if abs_toggle_default %}checked{% endif %}>
+            <label class="form-check-label" for="absToggle">Show Absolute Residuals</label>
+        </div>
+    </div>
+
+    <!-- Date Range Slider -->
+    <div class="mb-4">
+        <label for="date-range-slider" class="form-label">Date Range</label>
+        <div>
+            <input type="range" class="form-range" id="date-range-slider" min="0" max="0" value="0" step="1">
+            <input type="range" class="form-range" id="date-range-slider-end" min="0" max="0" value="0" step="1">
+            <div class="d-flex justify-content-between">
+                <span id="start-date-label"></span>
+                <span id="end-date-label"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row">
+        <div class="col-md-2"></div>
+        <div class="col-md-8 mb-5">
+            <h3>Portfolio Residuals</h3>
+            <canvas id="portChart" height="120"></canvas>
+        </div>
+        <div class="col-md-2"></div>
+    </div>
+    <div class="row">
+        <div class="col-md-2"></div>
+        <div class="col-md-8 mb-5">
+            <h3>Benchmark Residuals</h3>
+            <canvas id="benchChart" height="120"></canvas>
+        </div>
+        <div class="col-md-2"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Parse chart data from backend
+const chartDataBench = JSON.parse({{ chart_data_bench_json|tojson|safe }});
+const chartDataPort = JSON.parse({{ chart_data_port_json|tojson|safe }});
+
+// Helper: get date labels
+function getDateLabels(data) {
+    return data.map(d => d.date);
+}
+
+// Helper: get values for a key
+function getValues(data, key) {
+    return data.map(d => d[key]);
+}
+
+// Chart state
+let showAbs = {{ 'true' if abs_toggle_default else 'false' }};
+let benchData = chartDataBench;
+let portData = chartDataPort;
+let dateLabels = getDateLabels(benchData);
+let sliderMin = 0;
+let sliderMax = dateLabels.length - 1;
+let sliderStart = 0;
+let sliderEnd = dateLabels.length - 1;
+
+// DOM elements
+const absToggle = document.getElementById('absToggle');
+const sliderStartEl = document.getElementById('date-range-slider');
+const sliderEndEl = document.getElementById('date-range-slider-end');
+const startDateLabel = document.getElementById('start-date-label');
+const endDateLabel = document.getElementById('end-date-label');
+
+// Chart.js chart instances
+let benchChart, portChart;
+
+function renderCharts() {
+    // Slice data for selected date range
+    const dataSlice = (data) => data.slice(sliderStart, sliderEnd + 1);
+    const benchSlice = dataSlice(benchData);
+    const portSlice = dataSlice(portData);
+    const labels = getDateLabels(benchSlice);
+    // Datasets
+    let benchBarProd, benchBarSP, benchLineProd, benchLineSP;
+    let portBarProd, portBarSP, portLineProd, portLineSP;
+    if (showAbs) {
+        benchBarProd = getValues(benchSlice, 'abs_residual_prod');
+        benchBarSP = getValues(benchSlice, 'abs_residual_sp');
+        portBarProd = getValues(portSlice, 'abs_residual_prod');
+        portBarSP = getValues(portSlice, 'abs_residual_sp');
+        // Cumulative not shown for abs
+        benchLineProd = benchLineSP = portLineProd = portLineSP = null;
+    } else {
+        benchBarProd = getValues(benchSlice, 'residual_prod');
+        benchBarSP = getValues(benchSlice, 'residual_sp');
+        portBarProd = getValues(portSlice, 'residual_prod');
+        portBarSP = getValues(portSlice, 'residual_sp');
+        benchLineProd = getValues(benchSlice, 'cum_residual_prod');
+        benchLineSP = getValues(benchSlice, 'cum_residual_sp');
+        portLineProd = getValues(portSlice, 'cum_residual_prod');
+        portLineSP = getValues(portSlice, 'cum_residual_sp');
+    }
+    // Destroy old charts
+    if (benchChart) benchChart.destroy();
+    if (portChart) portChart.destroy();
+    // Benchmark chart
+    benchChart = new Chart(document.getElementById('benchChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Residual (Prod)',
+                    data: benchBarProd,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Residual (S&P)',
+                    data: benchBarSP,
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                },
+                // Cumulative lines (only for net)
+                ...(showAbs ? [] : [
+                    {
+                        label: 'Cumulative Residual (Prod)',
+                        data: benchLineProd,
+                        type: 'line',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        fill: false,
+                        yAxisID: 'y',
+                        tension: 0.2
+                    },
+                    {
+                        label: 'Cumulative Residual (S&P)',
+                        data: benchLineSP,
+                        type: 'line',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        fill: false,
+                        yAxisID: 'y',
+                        tension: 0.2
+                    }
+                ])
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' },
+                title: { display: false }
+            },
+            scales: {
+                x: { stacked: false },
+                y: { stacked: false, beginAtZero: true }
+            }
+        }
+    });
+    // Portfolio chart
+    portChart = new Chart(document.getElementById('portChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Residual (Prod)',
+                    data: portBarProd,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Residual (S&P)',
+                    data: portBarSP,
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                },
+                ...(showAbs ? [] : [
+                    {
+                        label: 'Cumulative Residual (Prod)',
+                        data: portLineProd,
+                        type: 'line',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        fill: false,
+                        yAxisID: 'y',
+                        tension: 0.2
+                    },
+                    {
+                        label: 'Cumulative Residual (S&P)',
+                        data: portLineSP,
+                        type: 'line',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        fill: false,
+                        yAxisID: 'y',
+                        tension: 0.2
+                    }
+                ])
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' },
+                title: { display: false }
+            },
+            scales: {
+                x: { stacked: false },
+                y: { stacked: false, beginAtZero: true }
+            }
+        }
+    });
+}
+
+// Slider logic
+function updateSliderLimits() {
+    dateLabels = getDateLabels(benchData);
+    sliderMin = 0;
+    sliderMax = dateLabels.length - 1;
+    sliderStartEl.min = sliderMin;
+    sliderStartEl.max = sliderMax;
+    sliderEndEl.min = sliderMin;
+    sliderEndEl.max = sliderMax;
+    sliderStartEl.value = sliderStart;
+    sliderEndEl.value = sliderEnd;
+    startDateLabel.textContent = dateLabels[sliderStart] || '';
+    endDateLabel.textContent = dateLabels[sliderEnd] || '';
+}
+
+sliderStartEl.addEventListener('input', function() {
+    sliderStart = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    sliderEnd = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    updateSliderLimits();
+    renderCharts();
+});
+sliderEndEl.addEventListener('input', function() {
+    sliderStart = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    sliderEnd = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    updateSliderLimits();
+    renderCharts();
+});
+
+absToggle.addEventListener('change', function() {
+    showAbs = absToggle.checked;
+    renderCharts();
+});
+
+// Initialize
+function init() {
+    absToggle.checked = showAbs;
+    sliderStart = 0;
+    sliderEnd = dateLabels.length - 1;
+    updateSliderLimits();
+    renderCharts();
+}
+window.addEventListener('DOMContentLoaded', init);
+</script>
+{% endblock %} 

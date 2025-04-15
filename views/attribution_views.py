@@ -3,9 +3,10 @@
 # for each fund and day, for two cases: Benchmark and Portfolio, with both Prod and S&P columns.
 # Residuals are calculated as L0 Total - (L1 Rates + L1 Credit + L1 FX), with L1s computed from L2s.
 
-from flask import Blueprint, render_template, current_app, request
+from flask import Blueprint, render_template, current_app, request, jsonify
 import pandas as pd
 import os
+import json
 
 attribution_bp = Blueprint('attribution_bp', __name__, url_prefix='/attribution')
 
@@ -69,6 +70,10 @@ def attribution_summary():
     end_date_str = request.args.get('end_date', default=None, type=str)
     selected_level = request.args.get('level', default='L0', type=str)
     selected_characteristic_value = request.args.get('characteristic_value', default='', type=str)
+
+    # Default to first fund if none selected
+    if not selected_fund and available_funds:
+        selected_fund = available_funds[0]
 
     # Parse date range
     start_date = pd.to_datetime(start_date_str, errors='coerce') if start_date_str else min_date
@@ -228,4 +233,179 @@ def attribution_summary():
         selected_level=selected_level,
         available_characteristic_values=available_characteristic_values,
         selected_characteristic_value=selected_characteristic_value
+    )
+
+@attribution_bp.route('/charts')
+def attribution_charts():
+    """
+    Attribution Residuals Chart Page: Shows residuals over time for Benchmark and Portfolio (Prod and S&P),
+    with filters and grouping as in the summary view. Data is prepared for JS charts.
+    """
+    data_folder = current_app.config['DATA_FOLDER']
+    file_path = os.path.join(data_folder, 'att_factors.csv')
+    if not os.path.exists(file_path):
+        return "att_factors.csv not found", 404
+
+    # Load data
+    df = pd.read_csv(file_path)
+    df.columns = df.columns.str.strip()
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df = df.dropna(subset=['Date', 'Fund'])
+
+    # --- Load w_secs.csv and extract static characteristics ---
+    wsecs_path = os.path.join(data_folder, 'w_secs.csv')
+    wsecs = pd.read_csv(wsecs_path)
+    wsecs.columns = wsecs.columns.str.strip()
+    static_cols = [col for col in wsecs.columns if col not in ['ISIN'] and not _is_date_like(col)]
+    wsecs_static = wsecs.drop_duplicates(subset=['ISIN'])[['ISIN'] + static_cols]
+
+    # --- Characteristic selection ---
+    available_characteristics = static_cols
+    selected_characteristic = request.args.get('characteristic', default='Type', type=str)
+    if selected_characteristic not in available_characteristics:
+        selected_characteristic = available_characteristics[0] if available_characteristics else None
+    selected_characteristic_value = request.args.get('characteristic_value', default='', type=str)
+
+    # Join att_factors with w_secs static info
+    df = df.merge(wsecs_static, on='ISIN', how='left')
+
+    # Get available funds and date range for UI
+    available_funds = sorted(df['Fund'].dropna().unique())
+    min_date = df['Date'].min()
+    max_date = df['Date'].max()
+
+    # Get filter parameters from query string
+    selected_fund = request.args.get('fund', default='', type=str)
+    start_date_str = request.args.get('start_date', default=None, type=str)
+    end_date_str = request.args.get('end_date', default=None, type=str)
+
+    # Default to first fund if none selected
+    if not selected_fund and available_funds:
+        selected_fund = available_funds[0]
+
+    # Parse date range
+    start_date = pd.to_datetime(start_date_str, errors='coerce') if start_date_str else min_date
+    end_date = pd.to_datetime(end_date_str, errors='coerce') if end_date_str else max_date
+
+    # Compute available values for the selected characteristic
+    if selected_characteristic:
+        available_characteristic_values = sorted(df[selected_characteristic].dropna().unique())
+    else:
+        available_characteristic_values = []
+
+    # Filter by characteristic value if set
+    if selected_characteristic and selected_characteristic_value:
+        df = df[df[selected_characteristic] == selected_characteristic_value]
+
+    # Filter by fund
+    if selected_fund:
+        df = df[df['Fund'] == selected_fund]
+
+    # Filter by date range
+    df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
+
+    # Helper: L2 column names for each group
+    l2_credit = [
+        'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted'
+    ]
+    l2_rates = [
+        'Rates Carry Daily', 'Rates Convexity Daily', 'Rates Curve Daily', 'Rates Duration Daily', 'Rates Roll Daily'
+    ]
+    l2_fx = [
+        'FX Carry Daily', 'FX Change Daily'
+    ]
+
+    def sum_l2s(row, prefix):
+        credit = sum([row.get(f'{prefix}{col}', 0) for col in l2_credit])
+        rates = sum([row.get(f'{prefix}{col}', 0) for col in l2_rates])
+        fx = sum([row.get(f'{prefix}{col}', 0) for col in l2_fx])
+        return credit, rates, fx
+
+    def compute_residual(row, l0_col, l2_prefix):
+        l0 = row.get(l0_col, 0)
+        credit, rates, fx = sum_l2s(row, l2_prefix)
+        l1_total = credit + rates + fx
+        return l0 - l1_total
+
+    # Group by Date (and characteristic if grouping)
+    group_cols = ['Date']
+    if selected_characteristic:
+        group_cols.append(selected_characteristic)
+
+    # Prepare time series data for charts
+    chart_data_bench = []
+    chart_data_port = []
+    # Sort by date for cumulative
+    for group_keys, group in df.groupby(group_cols):
+        if selected_characteristic:
+            date, char_val = group_keys
+        else:
+            date, = group_keys
+            char_val = None
+        # Aggregate residuals for this day (sum over all ISINs)
+        bench_prod_res = group.apply(lambda row: compute_residual(row, 'L0 Bench Total Daily', 'L2 Bench '), axis=1)
+        bench_sp_res = group.apply(lambda row: compute_residual(row, 'L0 Bench Total Daily', 'SPv3_L2 Bench '), axis=1)
+        port_prod_res = group.apply(lambda row: compute_residual(row, 'L0 Port Total Daily ', 'L2 Port '), axis=1)
+        port_sp_res = group.apply(lambda row: compute_residual(row, 'L0 Port Total Daily ', 'SPv3_L2 Port '), axis=1)
+        # Net and abs
+        bench_prod = bench_prod_res.sum()
+        bench_sp = bench_sp_res.sum()
+        port_prod = port_prod_res.sum()
+        port_sp = port_sp_res.sum()
+        bench_prod_abs = bench_prod_res.abs().sum()
+        bench_sp_abs = bench_sp_res.abs().sum()
+        port_prod_abs = port_prod_res.abs().sum()
+        port_sp_abs = port_sp_res.abs().sum()
+        chart_data_bench.append({
+            'date': date.strftime('%Y-%m-%d'),
+            'residual_prod': bench_prod,
+            'residual_sp': bench_sp,
+            'abs_residual_prod': bench_prod_abs,
+            'abs_residual_sp': bench_sp_abs
+        })
+        chart_data_port.append({
+            'date': date.strftime('%Y-%m-%d'),
+            'residual_prod': port_prod,
+            'residual_sp': port_sp,
+            'abs_residual_prod': port_prod_abs,
+            'abs_residual_sp': port_sp_abs
+        })
+    # Sort by date
+    chart_data_bench = sorted(chart_data_bench, key=lambda x: x['date'])
+    chart_data_port = sorted(chart_data_port, key=lambda x: x['date'])
+    # Add cumulative net residuals
+    cum_bench_prod = 0
+    cum_bench_sp = 0
+    cum_port_prod = 0
+    cum_port_sp = 0
+    for d in chart_data_bench:
+        cum_bench_prod += d['residual_prod']
+        cum_bench_sp += d['residual_sp']
+        d['cum_residual_prod'] = cum_bench_prod
+        d['cum_residual_sp'] = cum_bench_sp
+    for d in chart_data_port:
+        cum_port_prod += d['residual_prod']
+        cum_port_sp += d['residual_sp']
+        d['cum_residual_prod'] = cum_port_prod
+        d['cum_residual_sp'] = cum_port_sp
+
+    # Pass as JSON for JS charts
+    chart_data_bench_json = json.dumps(chart_data_bench)
+    chart_data_port_json = json.dumps(chart_data_port)
+
+    return render_template(
+        'attribution_charts.html',
+        chart_data_bench_json=chart_data_bench_json,
+        chart_data_port_json=chart_data_port_json,
+        available_funds=available_funds,
+        selected_fund=selected_fund,
+        min_date=min_date,
+        max_date=max_date,
+        start_date=start_date,
+        end_date=end_date,
+        available_characteristics=available_characteristics,
+        selected_characteristic=selected_characteristic,
+        available_characteristic_values=available_characteristic_values,
+        selected_characteristic_value=selected_characteristic_value,
+        abs_toggle_default=False
     ) 
