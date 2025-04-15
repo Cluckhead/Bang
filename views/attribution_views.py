@@ -408,4 +408,175 @@ def attribution_charts():
         available_characteristic_values=available_characteristic_values,
         selected_characteristic_value=selected_characteristic_value,
         abs_toggle_default=False
+    )
+
+@attribution_bp.route('/radar')
+def attribution_radar():
+    """
+    Attribution Radar Chart Page: Aggregates L1 or L2 factors (plus residual) for Portfolio and Benchmark
+    for a single fund, over a selected date range and characteristic. Data is prepared for radar charts.
+    """
+    data_folder = current_app.config['DATA_FOLDER']
+    file_path = os.path.join(data_folder, 'att_factors.csv')
+    if not os.path.exists(file_path):
+        return "att_factors.csv not found", 404
+
+    # Load data
+    df = pd.read_csv(file_path)
+    df.columns = df.columns.str.strip()
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df = df.dropna(subset=['Date', 'Fund'])
+
+    # --- Load w_secs.csv and extract static characteristics ---
+    wsecs_path = os.path.join(data_folder, 'w_secs.csv')
+    wsecs = pd.read_csv(wsecs_path)
+    wsecs.columns = wsecs.columns.str.strip()
+    static_cols = [col for col in wsecs.columns if col not in ['ISIN'] and not _is_date_like(col)]
+    wsecs_static = wsecs.drop_duplicates(subset=['ISIN'])[['ISIN'] + static_cols]
+
+    # --- Characteristic selection ---
+    available_characteristics = static_cols
+    selected_characteristic = request.args.get('characteristic', default='Type', type=str)
+    if selected_characteristic not in available_characteristics:
+        selected_characteristic = available_characteristics[0] if available_characteristics else None
+    selected_characteristic_value = request.args.get('characteristic_value', default='', type=str)
+
+    # Join att_factors with w_secs static info
+    df = df.merge(wsecs_static, on='ISIN', how='left')
+
+    # Get available funds and date range for UI
+    available_funds = sorted(df['Fund'].dropna().unique())
+    min_date = df['Date'].min()
+    max_date = df['Date'].max()
+
+    # Get filter parameters from query string
+    selected_fund = request.args.get('fund', default='', type=str)
+    start_date_str = request.args.get('start_date', default=None, type=str)
+    end_date_str = request.args.get('end_date', default=None, type=str)
+    selected_level = request.args.get('level', default='L2', type=str)  # Default to L2
+
+    # Default to first fund if none selected
+    if not selected_fund and available_funds:
+        selected_fund = available_funds[0]
+
+    # Parse date range
+    start_date = pd.to_datetime(start_date_str, errors='coerce') if start_date_str else min_date
+    end_date = pd.to_datetime(end_date_str, errors='coerce') if end_date_str else max_date
+
+    # Compute available values for the selected characteristic
+    if selected_characteristic:
+        available_characteristic_values = sorted(df[selected_characteristic].dropna().unique())
+    else:
+        available_characteristic_values = []
+
+    # Filter by characteristic value if set
+    if selected_characteristic and selected_characteristic_value:
+        df = df[df[selected_characteristic] == selected_characteristic_value]
+
+    # Filter by fund (only one fund allowed)
+    if selected_fund:
+        df = df[df['Fund'] == selected_fund]
+
+    # Filter by date range
+    df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
+
+    # Helper: L2 column names for each group
+    l2_credit = [
+        'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted'
+    ]
+    l2_rates = [
+        'Rates Carry Daily', 'Rates Convexity Daily', 'Rates Curve Daily', 'Rates Duration Daily', 'Rates Roll Daily'
+    ]
+    l2_fx = [
+        'FX Carry Daily', 'FX Change Daily'
+    ]
+    l2_all = l2_credit + l2_rates + l2_fx
+
+    # L1 groupings
+    l1_groups = {
+        'Rates': l2_rates,
+        'Credit': l2_credit,
+        'FX': l2_fx
+    }
+
+    # --- Aggregation for Radar Chart ---
+    def sum_l2s_block(df_block, prefix, l2_cols):
+        return [df_block[f'{prefix}{col}'].sum() if f'{prefix}{col}' in df_block else 0 for col in l2_cols]
+
+    def sum_l1s_block(df_block, prefix):
+        return [df_block[[f'{prefix}{col}' for col in l2s if f'{prefix}{col}' in df_block]].sum().sum() for l2s in l1_groups.values()]
+
+    def compute_residual_block(df_block, l0_col, l2_prefix, l2_cols):
+        l0 = df_block[l0_col].sum() if l0_col in df_block else 0
+        l2_sum = sum([df_block[f'{l2_prefix}{col}'].sum() if f'{l2_prefix}{col}' in df_block else 0 for col in l2_cols])
+        return l0 - l2_sum
+
+    # Prepare radar data for Portfolio and Benchmark, Prod and S&P
+    radar_labels = []
+    port_prod = []
+    port_sp = []
+    bench_prod = []
+    bench_sp = []
+    residual_labels = ['Residual']
+
+    if selected_level == 'L1':
+        radar_labels = list(l1_groups.keys()) + residual_labels
+        # Portfolio
+        port_l1_prod = sum_l1s_block(df, 'L2 Port ')
+        port_l1_sp = sum_l1s_block(df, 'SPv3_L2 Port ')
+        port_resid_prod = compute_residual_block(df, 'L0 Port Total Daily ', 'L2 Port ', l2_all)
+        port_resid_sp = compute_residual_block(df, 'L0 Port Total Daily ', 'SPv3_L2 Port ', l2_all)
+        port_prod = port_l1_prod + [port_resid_prod]
+        port_sp = port_l1_sp + [port_resid_sp]
+        # Benchmark
+        bench_l1_prod = sum_l1s_block(df, 'L2 Bench ')
+        bench_l1_sp = sum_l1s_block(df, 'SPv3_L2 Bench ')
+        bench_resid_prod = compute_residual_block(df, 'L0 Bench Total Daily', 'L2 Bench ', l2_all)
+        bench_resid_sp = compute_residual_block(df, 'L0 Bench Total Daily', 'SPv3_L2 Bench ', l2_all)
+        bench_prod = bench_l1_prod + [bench_resid_prod]
+        bench_sp = bench_l1_sp + [bench_resid_sp]
+    else:  # L2 (default)
+        radar_labels = l2_all + residual_labels
+        # Portfolio
+        port_l2_prod = sum_l2s_block(df, 'L2 Port ', l2_all)
+        port_l2_sp = sum_l2s_block(df, 'SPv3_L2 Port ', l2_all)
+        port_resid_prod = compute_residual_block(df, 'L0 Port Total Daily ', 'L2 Port ', l2_all)
+        port_resid_sp = compute_residual_block(df, 'L0 Port Total Daily ', 'SPv3_L2 Port ', l2_all)
+        port_prod = port_l2_prod + [port_resid_prod]
+        port_sp = port_l2_sp + [port_resid_sp]
+        # Benchmark
+        bench_l2_prod = sum_l2s_block(df, 'L2 Bench ', l2_all)
+        bench_l2_sp = sum_l2s_block(df, 'SPv3_L2 Bench ', l2_all)
+        bench_resid_prod = compute_residual_block(df, 'L0 Bench Total Daily', 'L2 Bench ', l2_all)
+        bench_resid_sp = compute_residual_block(df, 'L0 Bench Total Daily', 'SPv3_L2 Bench ', l2_all)
+        bench_prod = bench_l2_prod + [bench_resid_prod]
+        bench_sp = bench_l2_sp + [bench_resid_sp]
+
+    # Prepare output for Chart.js radar chart
+    radar_data = {
+        'labels': radar_labels,
+        'portfolio': {
+            'prod': port_prod,
+            'sp': port_sp
+        },
+        'benchmark': {
+            'prod': bench_prod,
+            'sp': bench_sp
+        }
+    }
+
+    return render_template(
+        'attribution_radar.html',
+        radar_data_json=json.dumps(radar_data),
+        available_funds=available_funds,
+        selected_fund=selected_fund,
+        min_date=min_date,
+        max_date=max_date,
+        start_date=start_date,
+        end_date=end_date,
+        available_characteristics=available_characteristics,
+        selected_characteristic=selected_characteristic,
+        available_characteristic_values=available_characteristic_values,
+        selected_characteristic_value=selected_characteristic_value,
+        selected_level=selected_level
     ) 

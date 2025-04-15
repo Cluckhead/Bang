@@ -1,0 +1,232 @@
+{#
+    Purpose: Attribution Radar Chart Page. Visualizes aggregated L1 or L2 attribution factors (plus residual) for Portfolio and Benchmark as radar charts.
+    - Two radar charts: Portfolio and Benchmark, each with Prod and S&P datasets.
+    - Toggle for L1/L2 (default L2).
+    - Date range slider and filters for fund, characteristic, characteristic value.
+    - Uses Chart.js for rendering.
+#}
+
+{% extends "base.html" %}
+
+{% block title %}Attribution Radar Charts{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h1>Attribution Radar Charts</h1>
+    <p class="text-muted">Visualize aggregated attribution factors (L1 or L2 + Residual) for Portfolio and Benchmark as radar charts. Use the filters and controls to explore the data.</p>
+
+    <!-- Filters -->
+    <form method="get" class="row g-3 align-items-end mb-4" id="filter-form">
+        <div class="col-md-3">
+            <label for="fund-select" class="form-label">Fund</label>
+            <select class="form-select" id="fund-select" name="fund" onchange="this.form.submit()">
+                {% for fund in available_funds %}
+                    <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="characteristic-select" class="form-label">Group by Characteristic</label>
+            <select class="form-select" id="characteristic-select" name="characteristic" onchange="this.form.submit()">
+                {% for char in available_characteristics %}
+                    <option value="{{ char }}" {% if char == selected_characteristic %}selected{% endif %}>{{ char }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="characteristic-value-select" class="form-label">Filter by {{ selected_characteristic }}</label>
+            <select class="form-select" id="characteristic-value-select" name="characteristic_value" onchange="this.form.submit()">
+                <option value="" {% if not selected_characteristic_value %}selected{% endif %}>All</option>
+                {% for val in available_characteristic_values %}
+                    <option value="{{ val }}" {% if val == selected_characteristic_value %}selected{% endif %}>{{ val }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-center">
+            <label for="level-toggle" class="form-label me-2 mb-0">Attribution Level</label>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="level-toggle" name="level_toggle" {% if selected_level == 'L1' %}checked{% endif %} onchange="document.getElementById('level').value = this.checked ? 'L1' : 'L2'; this.form.submit();">
+                <label class="form-check-label" for="level-toggle" id="level-toggle-label">L2</label>
+            </div>
+            <input type="hidden" name="level" id="level" value="{{ selected_level }}">
+        </div>
+    
+        <!-- Hidden fields for date range -->
+        <input type="hidden" name="start_date" id="start_date" value="{{ start_date.strftime('%Y-%m-%d') }}">
+        <input type="hidden" name="end_date" id="end_date" value="{{ end_date.strftime('%Y-%m-%d') }}">
+    </form>
+
+    <!-- Date Range Slider -->
+    <div class="mb-4">
+        <label for="date-range-slider" class="form-label">Date Range</label>
+        <div>
+            <input type="range" class="form-range" id="date-range-slider" min="0" max="0" value="0" step="1">
+            <input type="range" class="form-range" id="date-range-slider-end" min="0" max="0" value="0" step="1">
+            <div class="d-flex justify-content-between">
+                <span id="start-date-label"></span>
+                <span id="end-date-label"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Radar Charts -->
+    <div class="row">
+        <div class="col-md-1"></div>
+        <div class="col-md-5 mb-5">
+            <h3>Portfolio Attribution</h3>
+            <canvas id="portfolioRadar" height="300"></canvas>
+        </div>
+        <div class="col-md-5 mb-5">
+            <h3>Benchmark Attribution</h3>
+            <canvas id="benchmarkRadar" height="300"></canvas>
+        </div>
+        <div class="col-md-1"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Parse radar data from backend
+const radarData = JSON.parse({{ radar_data_json|tojson|safe }});
+
+// Attribution Level Toggle Label
+const levelToggle = document.getElementById('level-toggle');
+const levelToggleLabel = document.getElementById('level-toggle-label');
+if (levelToggle && levelToggleLabel) {
+    levelToggleLabel.textContent = levelToggle.checked ? 'L1' : 'L2';
+    levelToggle.addEventListener('change', function() {
+        levelToggleLabel.textContent = this.checked ? 'L1' : 'L2';
+    });
+}
+
+// Date slider logic
+const minDate = new Date("{{ min_date.strftime('%Y-%m-%d') }}");
+const maxDate = new Date("{{ max_date.strftime('%Y-%m-%d') }}");
+const startDate = new Date("{{ start_date.strftime('%Y-%m-%d') }}");
+const endDate = new Date("{{ end_date.strftime('%Y-%m-%d') }}");
+
+// Generate all dates in range
+function getDateArray(start, end) {
+    const arr = [];
+    let dt = new Date(start);
+    while (dt <= end) {
+        arr.push(new Date(dt));
+        dt.setDate(dt.getDate() + 1);
+    }
+    return arr;
+}
+const allDates = getDateArray(minDate, maxDate);
+
+const sliderStartEl = document.getElementById('date-range-slider');
+const sliderEndEl = document.getElementById('date-range-slider-end');
+const startDateLabel = document.getElementById('start-date-label');
+const endDateLabel = document.getElementById('end-date-label');
+const startDateInput = document.getElementById('start_date');
+const endDateInput = document.getElementById('end_date');
+
+sliderStartEl.min = 0;
+sliderStartEl.max = allDates.length - 1;
+sliderEndEl.min = 0;
+sliderEndEl.max = allDates.length - 1;
+
+// Find initial slider positions
+let sliderStart = allDates.findIndex(d => d.getTime() === startDate.getTime());
+let sliderEnd = allDates.findIndex(d => d.getTime() === endDate.getTime());
+if (sliderStart === -1) sliderStart = 0;
+if (sliderEnd === -1) sliderEnd = allDates.length - 1;
+sliderStartEl.value = sliderStart;
+sliderEndEl.value = sliderEnd;
+
+function updateSliderLabels() {
+    startDateLabel.textContent = allDates[sliderStart].toISOString().slice(0, 10);
+    endDateLabel.textContent = allDates[sliderEnd].toISOString().slice(0, 10);
+}
+updateSliderLabels();
+
+sliderStartEl.addEventListener('input', function() {
+    sliderStart = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    sliderEnd = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    updateSliderLabels();
+    startDateInput.value = allDates[sliderStart].toISOString().slice(0, 10);
+    endDateInput.value = allDates[sliderEnd].toISOString().slice(0, 10);
+});
+sliderEndEl.addEventListener('input', function() {
+    sliderStart = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    sliderEnd = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    updateSliderLabels();
+    startDateInput.value = allDates[sliderStart].toISOString().slice(0, 10);
+    endDateInput.value = allDates[sliderEnd].toISOString().slice(0, 10);
+});
+
+sliderStartEl.addEventListener('change', function() { document.getElementById('filter-form').submit(); });
+sliderEndEl.addEventListener('change', function() { document.getElementById('filter-form').submit(); });
+
+// Render Radar Chart
+function renderRadarChart(canvasId, labels, prodData, spData, title) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    if (!ctx) return;
+    if (window[canvasId + '_chart']) {
+        window[canvasId + '_chart'].destroy();
+    }
+    window[canvasId + '_chart'] = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Prod',
+                    data: prodData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.0)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                    fill: false
+                },
+                {
+                    label: 'S&P',
+                    data: spData,
+                    backgroundColor: 'rgba(255, 99, 132, 0.0)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    pointBackgroundColor: 'rgba(255, 99, 132, 1)',
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' },
+                title: { display: true, text: title }
+            },
+            scales: {
+                r: {
+                    angleLines: { display: true },
+                    suggestedMin: null,
+                    suggestedMax: null
+                }
+            }
+        }
+    });
+}
+
+// On DOMContentLoaded, render both radar charts
+window.addEventListener('DOMContentLoaded', function() {
+    renderRadarChart(
+        'portfolioRadar',
+        radarData.labels,
+        radarData.portfolio.prod,
+        radarData.portfolio.sp,
+        'Portfolio Attribution'
+    );
+    renderRadarChart(
+        'benchmarkRadar',
+        radarData.labels,
+        radarData.benchmark.prod,
+        radarData.benchmark.sp,
+        'Benchmark Attribution'
+    );
+});
+</script>
+{% endblock %} 
