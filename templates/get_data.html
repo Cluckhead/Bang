@@ -74,8 +74,39 @@
                 <input type="date" class="form-control" id="endDate" name="end_date" value="{{ default_end_date }}" required>
                 <div class="form-text">Defaults to the previous business day.</div>
             </div>
+            <div class="col-md-4">
+                <label class="form-label">Date Range Mode:</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="date_mode" id="dateModeQuick" value="quick" checked>
+                    <label class="form-check-label" for="dateModeQuick">Use Days Back & End Date</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="date_mode" id="dateModeRange" value="range">
+                    <label class="form-check-label" for="dateModeRange">Use Custom Date Range</label>
+                </div>
+            </div>
         </div>
-
+        <div class="row mb-3" id="custom-date-range-row" style="display: none;">
+            <div class="col-md-4">
+                <label for="startDate" class="form-label">Start Date:</label>
+                <input type="date" class="form-control" id="startDate" name="start_date">
+            </div>
+            <div class="col-md-4">
+                <label for="customEndDate" class="form-label">End Date:</label>
+                <input type="date" class="form-control" id="customEndDate" name="custom_end_date">
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Data Write Mode:</label>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="write_mode" id="writeModeExpand" value="expand" checked>
+                <label class="form-check-label" for="writeModeExpand">Expand (append new data, overwrite overlaps)</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="write_mode" id="writeModeOverwrite" value="overwrite_all">
+                <label class="form-check-label" for="writeModeOverwrite">Run and Overwrite All (start every file from scratch)</label>
+            </div>
+        </div>
         <div class="mb-3">
             <label class="form-label">Select Funds:</label>
              <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="select-all-funds">Select All</button>
@@ -116,6 +147,7 @@
                         <th>File Name</th>
                         <th>Simulated Rows Returned</th>
                         <th>Simulated File Lines</th>
+                        <th>Last Written</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -136,6 +168,8 @@
 {% block scripts %}
 {{ super() }} {# Include scripts from base.html #}
 <script>
+// .SYNOPSIS
+//     JavaScript for Get Data via API page. Handles form logic, date range and write mode selection, API calls, and results table updates.
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('get-data-form');
     const statusArea = document.getElementById('status-area');
@@ -153,18 +187,36 @@ document.addEventListener('DOMContentLoaded', function() {
     const fundCheckboxes = document.querySelectorAll('.fund-checkbox');
     const selectAllButton = document.getElementById('select-all-funds');
     const deselectAllButton = document.getElementById('deselect-all-funds');
+    const dateModeQuick = document.getElementById('dateModeQuick');
+    const dateModeRange = document.getElementById('dateModeRange');
+    const customDateRangeRow = document.getElementById('custom-date-range-row');
+    const startDateInput = document.getElementById('startDate');
+    const customEndDateInput = document.getElementById('customEndDate');
+    const writeModeExpand = document.getElementById('writeModeExpand');
+    const writeModeOverwrite = document.getElementById('writeModeOverwrite');
+
+    // Show/hide custom date range row based on radio selection
+    function updateDateRangeVisibility() {
+        if (dateModeRange.checked) {
+            customDateRangeRow.style.display = '';
+        } else {
+            customDateRangeRow.style.display = 'none';
+        }
+    }
+    dateModeQuick.addEventListener('change', updateDateRangeVisibility);
+    dateModeRange.addEventListener('change', updateDateRangeVisibility);
+    updateDateRangeVisibility(); // Initial state
 
     // Select/Deselect All Funds buttons
     selectAllButton.addEventListener('click', () => {
         fundCheckboxes.forEach(checkbox => checkbox.checked = true);
     });
-
     deselectAllButton.addEventListener('click', () => {
         fundCheckboxes.forEach(checkbox => checkbox.checked = false);
     });
 
     // --- Function to handle the API call logic ---
-    async function handleApiCall(overwriteMode = false) {
+    async function handleApiCall(forceOverwriteButton = false) {
         // Clear previous results and errors
         statusArea.style.display = 'none';
         resultsTableBody.innerHTML = '';
@@ -182,51 +234,68 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get selected funds
         const selectedFunds = Array.from(document.querySelectorAll('input[name="funds"]:checked'))
                                  .map(cb => cb.value);
-
-        // Basic client-side validation
         if (selectedFunds.length === 0) {
             fundSelectionError.classList.remove('d-none');
-            return; // Stop submission
+            return;
         }
 
-        const daysBack = document.getElementById('daysBack').value;
-        const endDate = document.getElementById('endDate').value;
-
-        if (!endDate) {
-             errorMessageDiv.textContent = 'Please select an End Date.';
-             errorMessageDiv.style.display = 'block';
-            return; // Stop submission
+        // Date mode and values
+        const dateMode = dateModeRange.checked ? 'range' : 'quick';
+        let startDate = null, customEndDate = null, daysBack = null, endDate = null;
+        if (dateMode === 'range') {
+            startDate = startDateInput.value;
+            customEndDate = customEndDateInput.value;
+            if (!startDate || !customEndDate) {
+                errorMessageDiv.textContent = 'Please select both Start Date and End Date for the custom range.';
+                errorMessageDiv.style.display = 'block';
+                return;
+            }
+        } else {
+            daysBack = document.getElementById('daysBack').value;
+            endDate = document.getElementById('endDate').value;
+            if (!endDate) {
+                errorMessageDiv.textContent = 'Please select an End Date.';
+                errorMessageDiv.style.display = 'block';
+                return;
+            }
         }
+
+        // Write mode
+        const writeMode = writeModeOverwrite.checked ? 'overwrite_all' : 'expand';
 
         // Show status area and indicate processing
         statusArea.style.display = 'block';
-        statusMessage.textContent = `Starting ${overwriteMode ? 'overwrite' : 'simulation/merge'}...`;
+        statusMessage.textContent = `Starting ${writeMode === 'overwrite_all' ? 'overwrite' : 'expand/merge'}...`;
         progressBar.classList.add('progress-bar-animated');
         progressBar.classList.remove('bg-success', 'bg-danger');
-        progressBar.style.width = '5%'; // Initial small progress
+        progressBar.style.width = '5%';
         progressBar.textContent = '5%';
 
         try {
-            // Prepare request body, including the overwrite_mode flag
+            // Prepare request body
             const requestBody = {
-                days_back: parseInt(daysBack, 10),
-                end_date: endDate,
-                funds: selectedFunds,
-                overwrite_mode: overwriteMode // Add the flag here
+                date_mode: dateMode,
+                write_mode: writeMode,
+                funds: selectedFunds
             };
+            if (dateMode === 'range') {
+                requestBody.start_date = startDate;
+                requestBody.custom_end_date = customEndDate;
+            } else {
+                requestBody.days_back = parseInt(daysBack, 10);
+                requestBody.end_date = endDate;
+            }
 
             const response = await fetch('{{ url_for("api_bp.run_api_calls") }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(requestBody) // Send the body with the flag
+                body: JSON.stringify(requestBody)
             });
 
             const result = await response.json();
-
-            // Stop animation
-             progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.remove('progress-bar-animated');
 
             if (response.ok && (result.status === 'completed' || result.status === 'completed_with_errors')) {
                 statusMessage.textContent = result.message;
@@ -234,53 +303,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 progressBar.textContent = '100%';
                 progressBar.classList.add(result.status === 'completed_with_errors' ? 'bg-warning' : 'bg-success');
 
-                // Populate results table
-                resultsTableBody.innerHTML = ''; // Clear any potential previous entries
+                // Populate results table (add Last Written column)
+                resultsTableBody.innerHTML = '';
                 if (result.summary && result.summary.length > 0) {
                     result.summary.forEach(item => {
-                        // Determine row content based on real vs simulated
                         let rowsCellContent = 'N/A';
                         let linesCellContent = 'N/A';
-                        if (item.actual_rows !== undefined && item.actual_rows !== null) { // Real API mode was used
+                        if (item.actual_rows !== undefined && item.actual_rows !== null) {
                             rowsCellContent = item.actual_rows;
                             linesCellContent = item.actual_lines !== undefined ? item.actual_lines : (rowsCellContent > 0 ? rowsCellContent + 1 : 0);
-                        } else if (item.simulated_rows !== undefined && item.simulated_rows !== null) { // Simulated mode was used
+                        } else if (item.simulated_rows !== undefined && item.simulated_rows !== null) {
                             rowsCellContent = item.simulated_rows;
                             linesCellContent = item.simulated_lines !== undefined ? item.simulated_lines : (rowsCellContent > 0 ? rowsCellContent + 1 : 0);
                         }
-
-                        // Define fundCode. Prefer 'fund_code' if present, else derive from 'query_id' if possible
                         let fundCodeForRerun = item.fund_code || null;
-                        // Basic attempt to extract from query_id if needed (adjust regex/logic if format differs)
                         if (!fundCodeForRerun && item.query_id && typeof item.query_id === 'string') {
-                            const match = item.query_id.match(/some_pattern_to_extract_fund_code/); // Replace with actual pattern if applicable
+                            const match = item.query_id.match(/some_pattern_to_extract_fund_code/);
                             if (match && match[1]) {
                                 fundCodeForRerun = match[1];
                             }
                         }
-
                         const rerunButtonHtml = fundCodeForRerun
                             ? `<button class="btn btn-sm btn-outline-primary rerun-button" data-fund-code="${fundCodeForRerun}">Rerun</button>`
-                            : `<span class="text-muted">Rerun N/A</span>`; // No rerun if fund code unknown
-
+                            : `<span class="text-muted">Rerun N/A</span>`;
                         const row = `<tr data-query-id="${item.query_id}">
                                         <td>${item.query_id}</td>
                                         <td>${item.file_name}</td>
                                         <td>${rowsCellContent}</td>
                                         <td>${linesCellContent}</td>
+                                        <td>${item.last_written ? item.last_written : 'N/A'}</td>
                                         <td><span class="badge ${item.status.includes('OK') || item.status.includes('Saved') || item.status.includes('Simulated') ? 'bg-success' : (item.status.includes('Warning') ? 'bg-warning' : 'bg-danger')}">${item.status}</span></td>
                                         <td>${rerunButtonHtml}</td>
                                      </tr>`;
                         resultsTableBody.innerHTML += row;
                     });
                 } else {
-                    resultsTableBody.innerHTML = '<tr><td colspan="6">No summary data returned.</td></tr>'; // colspan is 6 now
+                    resultsTableBody.innerHTML = '<tr><td colspan="7">No summary data returned.</td></tr>';
                 }
-                 errorMessageDiv.style.display = 'none'; // Hide error div if successful
-                 cleanupButton.style.display = 'inline-block';
-
+                errorMessageDiv.style.display = 'none';
+                cleanupButton.style.display = 'inline-block';
             } else {
-                // Handle errors reported by the server (e.g., validation errors, file not found)
                 statusMessage.textContent = 'Processing failed.';
                 progressBar.style.width = '100%';
                 progressBar.textContent = 'Error';
@@ -289,7 +351,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 errorMessageDiv.style.display = 'block';
             }
         } catch (error) {
-            // Handle network errors or issues with the fetch itself
             console.error("Fetch error:", error);
             progressBar.classList.remove('progress-bar-animated');
             progressBar.style.width = '100%';
@@ -304,14 +365,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Event Listener for the original "Simulate API Calls" button (which is type="submit") ---
     form.addEventListener('submit', function(event) {
-        event.preventDefault(); // Prevent traditional form submission
-        handleApiCall(false); // Call the handler function with overwriteMode = false
+        event.preventDefault();
+        handleApiCall(false);
     });
-
-    // --- Event Listener for the new "Run and Overwrite Data" button ---
     runOverwriteButton.addEventListener('click', function() {
-        // No need for event.preventDefault() as it's not a submit button
-        handleApiCall(true); // Call the handler function with overwriteMode = true
+        handleApiCall(true);
     });
 
     // Add event listener for the Rerun buttons using event delegation
