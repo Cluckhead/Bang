@@ -48,6 +48,15 @@
                 {% endfor %}
             </select>
         </div>
+        <div class="col-md-3">
+            <label for="characteristic-value-select" class="form-label">Filter by {{ selected_characteristic }}</label>
+            <select class="form-select" id="characteristic-value-select" name="characteristic_value" onchange="this.form.submit()">
+                <option value="" {% if not selected_characteristic_value %}selected{% endif %}>All</option>
+                {% for val in available_characteristic_values %}
+                    <option value="{{ val }}" {% if val == selected_characteristic_value %}selected{% endif %}>{{ val }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="col-md-6">
             <label for="date-range-slider" class="form-label">Date Range</label>
             <div>
@@ -156,9 +165,8 @@
                         </tr>
                         {% endfor %}
                     </tbody>
-                    <!-- Totals row omitted for L1/L2 for simplicity -->
-                    {% if selected_level == 'L0' or selected_level == None %}
                     <tfoot>
+                        {% if (selected_level == 'L0' or selected_level == None) and benchmark_results %}
                         <tr class="table-secondary fw-bold">
                             <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
                             <td>{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_Prod')) }}</td>
@@ -166,8 +174,26 @@
                             <td>{{ '%.6f'|format(benchmark_results|sum(attribute='AbsResidual_Prod')) }}</td>
                             <td>{{ '%.6f'|format(benchmark_results|sum(attribute='AbsResidual_SP')) }}</td>
                         </tr>
+                        {% elif selected_level == 'L1' and benchmark_results %}
+                        <tr class="table-secondary fw-bold">
+                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
+                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1Rates_Prod')) }}</td>
+                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1Rates_SP')) }}</td>
+                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1Credit_Prod')) }}</td>
+                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1Credit_SP')) }}</td>
+                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1FX_Prod')) }}</td>
+                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1FX_SP')) }}</td>
+                        </tr>
+                        {% elif selected_level == 'L2' and benchmark_results %}
+                        <tr class="table-secondary fw-bold">
+                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
+                            {% for key in benchmark_results[0].L2ProdKeys %}
+                                <td>{{ '%.6f'|format(benchmark_results|map(attribute='L2Prod')|map(attribute=key)|sum) }}</td>
+                                <td>{{ '%.6f'|format(benchmark_results|map(attribute='L2SP')|map(attribute=key)|sum) }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endif %}
                     </tfoot>
-                    {% endif %}
                 </table>
             </div>
         </div>
@@ -253,8 +279,8 @@
                         </tr>
                         {% endfor %}
                     </tbody>
-                    {% if selected_level == 'L0' or selected_level == None %}
                     <tfoot>
+                        {% if (selected_level == 'L0' or selected_level == None) and portfolio_results %}
                         <tr class="table-secondary fw-bold">
                             <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
                             <td>{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_Prod')) }}</td>
@@ -262,8 +288,26 @@
                             <td>{{ '%.6f'|format(portfolio_results|sum(attribute='AbsResidual_Prod')) }}</td>
                             <td>{{ '%.6f'|format(portfolio_results|sum(attribute='AbsResidual_SP')) }}</td>
                         </tr>
+                        {% elif selected_level == 'L1' and portfolio_results %}
+                        <tr class="table-secondary fw-bold">
+                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
+                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1Rates_Prod')) }}</td>
+                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1Rates_SP')) }}</td>
+                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1Credit_Prod')) }}</td>
+                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1Credit_SP')) }}</td>
+                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1FX_Prod')) }}</td>
+                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1FX_SP')) }}</td>
+                        </tr>
+                        {% elif selected_level == 'L2' and portfolio_results %}
+                        <tr class="table-secondary fw-bold">
+                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
+                            {% for key in portfolio_results[0].L2ProdKeys %}
+                                <td>{{ '%.6f'|format(portfolio_results|map(attribute='L2Prod')|map(attribute=key)|sum) }}</td>
+                                <td>{{ '%.6f'|format(portfolio_results|map(attribute='L2SP')|map(attribute=key)|sum) }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endif %}
                     </tfoot>
-                    {% endif %}
                 </table>
             </div>
         </div>

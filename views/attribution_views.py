@@ -68,6 +68,7 @@ def attribution_summary():
     start_date_str = request.args.get('start_date', default=None, type=str)
     end_date_str = request.args.get('end_date', default=None, type=str)
     selected_level = request.args.get('level', default='L0', type=str)
+    selected_characteristic_value = request.args.get('characteristic_value', default='', type=str)
 
     # Parse date range
     start_date = pd.to_datetime(start_date_str, errors='coerce') if start_date_str else min_date
@@ -104,6 +105,12 @@ def attribution_summary():
     benchmark_results = []
     portfolio_results = []
 
+    # Compute available values for the selected characteristic
+    if selected_characteristic:
+        available_characteristic_values = sorted(df[selected_characteristic].dropna().unique())
+    else:
+        available_characteristic_values = []
+
     for group_keys, group in df.groupby(group_cols):
         if selected_characteristic:
             date, fund, char_val = group_keys
@@ -114,6 +121,11 @@ def attribution_summary():
             continue
         if not (start_date <= date <= end_date):
             continue
+
+        # Filter by characteristic value if set
+        if selected_characteristic and selected_characteristic_value:
+            if char_val != selected_characteristic_value:
+                continue
 
         # L0: Residuals and Abs Residuals
         if selected_level == 'L0' or not selected_level:
@@ -213,5 +225,7 @@ def attribution_summary():
         end_date=end_date,
         available_characteristics=available_characteristics,
         selected_characteristic=selected_characteristic,
-        selected_level=selected_level
+        selected_level=selected_level,
+        available_characteristic_values=available_characteristic_values,
+        selected_characteristic_value=selected_characteristic_value
     ) 
