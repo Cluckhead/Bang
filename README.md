@@ -25,6 +25,30 @@ This application provides a web interface to load, process, and check financial 
 *   **Weight Check:** Load fund (`w_Funds.csv`) and benchmark (`w_Bench.csv`) weight files and display them side-by-side, highlighting any daily weights that are not exactly 100% via `/weights/check`.
 *   **Security Weight Analysis:** Load security weights (`w_secs.csv`) which use ISIN as the primary identifier, providing security-level weight information across multiple dates.
 *   **Yield Curve Analysis:** Load yield curve data (`curves.csv`), check for potential inconsistencies (e.g., monotonicity, anomalous daily changes) and display curve charts per currency via `/curve/summary` and `/curve/details/<currency>`.
+*   **Attribution Residuals Summary:**
+    *   Accessed via the navigation bar under Checks & Comparisons → Attribution Residuals.
+    *   Loads `att_factors.csv` and displays, for each fund and date, the sum of attribution residuals and absolute residuals for two cases:
+        - **Benchmark** (shows both Prod and S&P columns)
+        - **Portfolio** (shows both Prod and S&P columns)
+    *   **3-way toggle (L0, L1, L2):** At the top of the page, a toggle lets you switch between three levels of detail:
+        - **L0:** Shows residuals and absolute residuals (Prod and S&P) for each group. This is the default view.
+        - **L1:** Shows aggregated L1 Rates, L1 Credit, and L1 FX values (Prod and S&P) for each group.
+        - **L2:** Shows all L2 values (Prod and S&P) side by side for each group, with each L2 factor as a separate column pair.
+    *   **Unified two-line table header:** All tables use a two-line header. The first line groups columns by type (e.g., Residual, Abs Residual, L1 Rates, etc.) and the second line shows 'Prod' and 'S&P' for each group, making it clear which value is which.
+    *   Each table includes the columns:
+        - Date
+        - Fund
+        - (Group by characteristic, e.g., Type, Country Of Risk, etc.)
+        - For L0: Residual (Prod/S&P), Abs Residual (Prod/S&P)
+        - For L1: L1 Rates (Prod/S&P), L1 Credit (Prod/S&P), L1 FX (Prod/S&P)
+        - For L2: All L2 factors (Prod/S&P for each)
+    *   Residual is calculated as: `L0 Total - (L1 Rates + L1 Credit + L1 FX)` where L1s are the sum of their L2 components (see formulas below).
+    *   **Absolute Residual** is the sum of the absolute value of the residuals at the security (ISIN) level for each group.
+    *   Includes filters for Fund, Date Range (with a slider UI), and a dropdown to group by a static characteristic from `w_secs.csv`.
+    *   Each table includes a totals row showing the sum of Residual and Absolute Residual for the filtered rows (L0 only).
+    *   **Perfect attribution** is when the residual is zero.
+    *   **Subtle color coding:** For each row, the Residual and Abs Residual cells are colored green if the Prod value is closer to zero, red if the S&P value is closer, for quick visual comparison (L0 only).
+    *   Useful for quickly identifying attribution errors and their magnitude.
 *   **Data Comparison:**
     *   Compare two spread files (`sec_spread.csv` vs `sec_spreadSP.csv`) via `/comparison/summary`.
     *   Compare two duration files (`sec_duration.csv` vs `sec_durationSP.csv`) via `/duration_comparison/summary`.
@@ -67,6 +91,7 @@ graph TD
     D --> D10(spread_duration_comparison_views.py);
     D --> D11(curve_views.py);
     D --> D12(issue_views.py);
+    D --> D13(attribution_views.py);
 
     E --> E1(base.html);
     E --> E2(index.html);
@@ -87,6 +112,7 @@ graph TD
     E --> E17(curve_summary.html);
     E --> E18(curve_details.html);
     E --> E19(issues_page.html);
+    E --> E20(attribution_summary.html);
 
     F --> F1(js);
     F1 --> F1a(main.js);
@@ -113,6 +139,7 @@ graph TD
     G --> G10(curves.csv);
     G --> G11(data_issues.csv);
     G --> G12(w_secs.csv);
+    G --> G13(att_factors.csv);
 
     H --> H1(config.py);
     H --> H2(utils.py);
@@ -140,6 +167,14 @@ graph TD
 *   `w_secs.csv`: Wide format file containing security weights across multiple dates. Uses ISIN as the primary identifier column, along with other security attributes like Security Name, Funds, Type, etc. This file provides the security weight data referenced in various parts of the application, particularly for security-level analysis.
 *   `curves.csv`: Contains yield curve data (Date, Currency Code, Term, Daily Value). Used by the Yield Curve Check feature.
 *   **`data_issues.csv`**: Stores a log of reported data issues. Columns: `IssueID`, `DateRaised`, `RaisedBy`, `FundImpacted`, `DataSource`, `IssueDate`, `Description`, `Status` ('Open'/'Closed'), `DateClosed`, `ClosedBy`, `ResolutionComment`.
+*   `att_factors.csv`: Raw attribution data for the attribution system. Used by the Attribution Residuals Summary page. Contains L0, L2 factors for both Production and S&P (SPv3_) for Bench and Portfolio. Residuals are calculated as:
+    - `L0 Total = L1 Rates Total + L1 Credit Total + L1 FX Total + L1 Residual`
+    - `L1 Rates Total = L2 Rates Carry Daily + L2 Rates Convexity Daily + L2 Rates Curve Daily + L2 Rates Duration Daily + L2 Rates Roll Daily`
+    - `L1 Credit Total = L2 Credit Carry Daily + L2 Credit Convexity Daily + L2 Credit Defaulted Daily + L2 Credit Spread Change Daily`
+    - `L1 FX Total = L2 FX Carry Daily + L2 FX Change Daily`
+    - `L1 Residual = L0 Total - (L1 Rates + L1 Credit + L1 FX)`
+    - **Perfect attribution**: residual = 0
+    - The page shows both the sum of residuals and the sum of absolute residuals (summed at the ISIN/security level) for each fund/date/case.
 
 ## Python Files
 
@@ -348,6 +383,27 @@ These modules contain the Flask Blueprints defining the application's routes.
     *   `/issues` (GET/POST): Renders `issues_page.html`. Displays separate tables for open and closed issues. Handles the form submission for adding a new issue.
     *   `/issues/close` (POST): Handles the form submission (via modal) to mark an issue as closed, recording the closer and resolution comment.
 
+### `views/attribution_views.py` (`attribution_bp`)
+*   **Purpose:** Handles the Attribution Residuals Summary page.
+*   **Routes:**
+    *   `/attribution`: Renders `attribution_summary.html`. Loads `att_factors.csv` and displays, for each fund and date, the sum of attribution residuals and absolute residuals for two cases:
+        - **Benchmark** (shows both Prod and S&P columns)
+        - **Portfolio** (shows both Prod and S&P columns)
+    *   Each table includes the columns:
+        - Date
+        - Fund
+        - (Group by characteristic, e.g., Type, Country Of Risk, etc.)
+        - For L0: Residual (Prod/S&P), Abs Residual (Prod/S&P)
+        - For L1: L1 Rates (Prod/S&P), L1 Credit (Prod/S&P), L1 FX (Prod/S&P)
+        - For L2: All L2 factors (Prod/S&P for each)
+    *   Residual is calculated as: `L0 Total - (L1 Rates + L1 Credit + L1 FX)` where L1s are the sum of their L2 components (see formulas below).
+    *   **Absolute Residual** is the sum of the absolute value of the residuals at the security (ISIN) level for each group.
+    *   Includes filters for Fund, Date Range (with a slider UI), and a dropdown to group by a static characteristic from `w_secs.csv`.
+    *   Each table includes a totals row showing the sum of Residual and Absolute Residual for the filtered rows (L0 only).
+    *   **Perfect attribution** is when the residual is zero.
+    *   **Subtle color coding:** For each row, the Residual and Abs Residual cells are colored green if the Prod value is closer to zero, red if the S&P value is closer, for quick visual comparison (L0 only).
+    *   Useful for quickly identifying attribution errors and their magnitude.
+
 ## HTML Templates (`templates/`)
 
 *   **`base.html`:** Main layout, includes Bootstrap, navbar, common structure. All other templates extend this.
@@ -371,3 +427,4 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`curve_summary.html`:** Displays a summary table of the yield curve inconsistency checks for the latest date across all currencies.
 *   **`curve_details.html`:** Shows a line chart of the yield curve for a specific currency and provides a date selector to view historical curves. Includes JavaScript for Chart.js rendering.
 *   **`issues_page.html`:** UI for tracking data issues. Includes a form to raise new issues and tables to display open and closed issues, with functionality to close open ones via a modal.
+*   **`attribution_summary.html`:** Displays the Attribution Residuals Summary page.

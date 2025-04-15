@@ -120,6 +120,7 @@ def create_app():
     # --- End import new blueprints ---
     from views.curve_views import curve_bp # Import the new blueprint
     from views.issue_views import issue_bp # Import the issue tracking blueprint
+    from views.attribution_views import attribution_bp # Import the attribution blueprint
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
@@ -135,6 +136,7 @@ def create_app():
     # --- End register new blueprints ---
     app.register_blueprint(curve_bp) # Register the new blueprint
     app.register_blueprint(issue_bp) # Register the issue tracking blueprint
+    app.register_blueprint(attribution_bp) # Register the attribution blueprint
 
     app.logger.info("Registered Blueprints:")
     app.logger.info(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
@@ -151,6 +153,7 @@ def create_app():
     # --- End print new blueprints ---
     app.logger.info(f"- {curve_bp.name} (prefix: {curve_bp.url_prefix})") # Log registration
     app.logger.info(f"- {issue_bp.name} (prefix: {issue_bp.url_prefix})") # Log registration for issues
+    app.logger.info(f"- {attribution_bp.name} (prefix: {attribution_bp.url_prefix})") # Log registration for attribution
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')
