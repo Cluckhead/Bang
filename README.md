@@ -1,4 +1,4 @@
-**Important Note on Date Formats:**
+**Important Nnte on Date Formats:**
 
 Throughout this application, date processing logic (especially when identifying date columns in input files) should be flexible. Aim to handle common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and `YYYY-MM-DDTHH:MM:SS` where appropriate, particularly during initial data loading and column identification steps. While pre-processing steps might standardize dates to `YYYY-MM-DD`, initial parsing should be robust.
 
