@@ -367,8 +367,8 @@ These modules contain the Flask Blueprints defining the application's routes.
 ### `views/api_views.py` (`api_bp`)
 *   **Purpose:** Handling the API simulation page interactions.
 *   **Routes:**
-    *   `/get_data`: Renders `get_data.html` (GET). Shows data file statuses, fund selection, and date inputs.
-    *   `/run-api-calls`: Handles the POST request from `get_data.html` to simulate API calls based on `QueryMap.csv`. Reads data, merges/overwrites based on `overwrite_mode` flag, and saves to `Data/` folder.
+    *   `/get_data`: Renders `get_data.html` (GET). Shows data file statuses, fund selection, and date inputs. Allows selection of date range mode (quick vs. custom) and data write mode (expand/overwrite vs. overwrite all).
+    *   `/run-api-calls`: Handles the POST request from `get_data.html` to simulate API calls based on `QueryMap.csv`. Reads data, merges/overwrites based on selected `write_mode` and date range, saves to `Data/` folder, and returns a summary including the last written timestamp.
     *   `/rerun-api-call`: Handles POST requests to rerun a single API call for a specific fund.
 *   **Key Features:**
     *   Dynamic column detection looks for identifiers like 'Code', 'Fund Code', 'security id', 'SecurityID', 'Security Name'.
@@ -423,7 +423,7 @@ These modules contain the Flask Blueprints defining the application's routes.
 *   **`security_details_page.html`:** Detail page for a single security (charts).
 *   **`fund_duration_details.html`:** Table showing security duration changes for a specific fund.
 *   **`exclusions_page.html`:** UI for managing security exclusions.
-*   **`get_data.html`:** UI for API simulation. Includes data status table, fund selection, date inputs, status/results area, and buttons for simulation, overwrite, and cleanup.
+*   **`get_data.html`:** UI for API simulation. Includes data status table, fund selection, date inputs (with options for quick or custom range), data write mode selection, status/results area (including last written timestamp), and buttons for simulation, overwrite, and cleanup.
 *   **`comparison_page.html`:** Comparison summary table. Includes filter form, sortable headers, table body, and pagination controls.
 *   **`comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread).
 *   **`fund_detail_page.html`:** Displays multiple charts for different metrics for a single fund.
