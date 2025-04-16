@@ -58,9 +58,9 @@
     </div>
     {# --- End Display Data File Statuses --- #}
 
-    <h2>Get Data via Simulated API (Rex)</h2>
-    <p>Select funds and date range to simulate retrieving data using the Rex API.</p>
-    <p>The simulated API calls will be printed in the terminal where the Flask app is running.</p>
+    <h2>Get Data via API</h2>
+    <p>Select funds and date range to retrieve and process data using the API.</p>
+    <p>The API calls and processing will be printed in the terminal where the Flask app is running.</p>
 
     <form id="get-data-form">
         <div class="row mb-3">
@@ -127,7 +127,7 @@
              <div class="form-text text-danger d-none" id="fund-selection-error">Please select at least one fund.</div>
         </div>
 
-        <button type="submit" class="btn btn-primary">Simulate API Calls</button>
+        <button type="submit" class="btn btn-primary">Run API Calls</button>
         <button type="button" id="run-overwrite-button" class="btn btn-warning ms-2">Run and Overwrite Data</button>
         <button type="button" id="run-cleanup-button" class="btn btn-secondary ms-2">Run Data Cleanup</button>
     </form>
@@ -145,8 +145,8 @@
                     <tr>
                         <th>Query ID</th>
                         <th>File Name</th>
-                        <th>Simulated Rows Returned</th>
-                        <th>Simulated File Lines</th>
+                        <th>Rows Returned</th>
+                        <th>File Lines</th>
                         <th>Last Written</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -332,7 +332,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <td>${rowsCellContent}</td>
                                         <td>${linesCellContent}</td>
                                         <td>${item.last_written ? item.last_written : 'N/A'}</td>
-                                        <td><span class="badge ${item.status.includes('OK') || item.status.includes('Saved') || item.status.includes('Simulated') ? 'bg-success' : (item.status.includes('Warning') ? 'bg-warning' : 'bg-danger')}">${item.status}</span></td>
+                                        <td><span class="badge ${item.status.includes('OK') || item.status.includes('Saved') ? 'bg-success' : (item.status.includes('Warning') ? 'bg-warning' : 'bg-danger')}">${item.status}</span></td>
                                         <td>${rerunButtonHtml}</td>
                                      </tr>`;
                         resultsTableBody.innerHTML += row;
@@ -363,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     // --- End of API call handler function ---
 
-    // --- Event Listener for the original "Simulate API Calls" button (which is type="submit") ---
+    // --- Event Listener for the original "Run API Calls" button (which is type="submit") ---
     form.addEventListener('submit', function(event) {
         event.preventDefault();
         handleApiCall(false);
@@ -411,34 +411,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const result = await response.json();
 
-                if (response.ok && result.status.includes('OK')) {
-                    // Update the specific row in the table
-                    cells[2].textContent = result.simulated_rows !== undefined ? result.simulated_rows : 'N/A'; // Simulated Rows
-                    cells[3].textContent = result.simulated_lines !== undefined ? result.simulated_lines : 'N/A'; // Simulated Lines
-                    cells[4].innerHTML = `<span class="badge bg-success">${result.status}</span>`; // Status
-
-                    // Optional: Add a temporary success indicator
+                // Use actual_rows/actual_lines as default, fallback to simulated if not present
+                if (response.ok && result.status && result.status.includes('OK')) {
+                    cells[2].textContent = result.actual_rows !== undefined ? result.actual_rows : (result.simulated_rows !== undefined ? result.simulated_rows : 'N/A');
+                    cells[3].textContent = result.actual_lines !== undefined ? result.actual_lines : (result.simulated_lines !== undefined ? result.simulated_lines : 'N/A');
+                    cells[4].innerHTML = `<span class="badge bg-success">${result.status}</span>`;
                     button.textContent = 'Rerun Success';
-                    setTimeout(() => { button.textContent = 'Rerun'; }, 2000); // Reset after 2s
-
+                    setTimeout(() => { button.textContent = 'Rerun'; }, 2000);
                 } else {
-                    // Handle error - update status cell, show message
                     cells[4].innerHTML = `<span class="badge bg-danger">Error</span>`;
                     console.error("Rerun failed:", result.message || 'Unknown error');
-                    // Optionally display error details near the row or in the main error area
-                     button.textContent = 'Rerun Failed';
-                     setTimeout(() => { button.textContent = 'Rerun'; }, 3000); // Reset after 3s
+                    button.textContent = 'Rerun Failed';
+                    setTimeout(() => { button.textContent = 'Rerun'; }, 3000);
                 }
 
             } catch (error) {
                 console.error("Rerun fetch error:", error);
-                 cells[4].innerHTML = `<span class="badge bg-danger">Network Error</span>`;
-                 button.textContent = 'Rerun Error';
-                 setTimeout(() => { button.textContent = 'Rerun'; }, 3000); // Reset after 3s
-                // Optionally display error details
+                cells[4].innerHTML = `<span class="badge bg-danger">Network Error</span>`;
+                button.textContent = 'Rerun Error';
+                setTimeout(() => { button.textContent = 'Rerun'; }, 3000);
             } finally {
-                 button.disabled = false; // Re-enable button
-                 // Remove any temporary status indicators if needed
+                button.disabled = false;
             }
         }
     });
@@ -446,16 +439,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add event listener for the new Cleanup button
     cleanupButton.addEventListener('click', async function() {
         cleanupStatus.textContent = 'Starting cleanup process...';
-        cleanupStatus.className = 'mt-2 alert alert-info'; // Show feedback
-        cleanupButton.disabled = true; // Disable button while running
+        cleanupStatus.className = 'mt-2 alert alert-info';
+        cleanupButton.disabled = true;
 
         try {
-            const response = await fetch('/run-cleanup', { // Call the new endpoint
+            const response = await fetch('/run-cleanup', {
                 method: 'POST',
                  headers: {
-                    'Content-Type': 'application/json', // Optional: Send empty JSON or adjust endpoint
+                    'Content-Type': 'application/json',
                 },
-                // body: JSON.stringify({}) // Optional: Send empty JSON or adjust endpoint
             });
 
             const result = await response.json();
@@ -473,7 +465,7 @@ document.addEventListener('DOMContentLoaded', function() {
             cleanupStatus.textContent = 'Failed to trigger cleanup process. Network error or server unreachable.';
             cleanupStatus.className = 'mt-2 alert alert-danger';
         } finally {
-             cleanupButton.disabled = false; // Re-enable button
+             cleanupButton.disabled = false;
         }
     });
 });

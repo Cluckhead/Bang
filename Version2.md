@@ -1,3 +1,6 @@
+
+
+
 Python Unit testing
 Attribution Errors
 Join comparison views .py files get rid of duplication
@@ -17,8 +20,29 @@ add ability to link Jira tickets
 Name Drop down on issues
 redo navigation bar
 Every PY file fhould be below 500 lines
+Add a checks sum calculation for each security to see if needs rerunning.
 
+New Features https://gemini.google.com/app/6c64ecfa19410785
 
+Load up the dataframes in the background to speed up the page
+Fix teh Status Bar
+Add SQLite with enhanced file locking
+Static completeness checks
+Update requirements file
+Watch list for securities - Gregs issue
+
+Utilise TAVU
+Add no fund as an option in the fund drop down of teh issues page
+add rimes as an issue on the issues page
+Exclude NaN values from the zscore calculations and teh first page where there is no S&P data
+speed up comparision views by using the backend to pre calc pages
+Filter by fund Group
+Crete an IVP upload File
+Bring in PCLID key
+Create upload process
+Add Is distressed  as a filter
+Improve Fake TQS data
+Fund Optimation Algorithm
 
 
 
