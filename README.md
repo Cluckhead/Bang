@@ -1,6 +1,8 @@
-**Important Nnte on Date Formats:**
+**Important Note on Date Formats:**
 
 Throughout this application, date processing logic (especially when identifying date columns in input files) should be flexible. Aim to handle common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and `YYYY-MM-DDTHH:MM:SS` where appropriate, particularly during initial data loading and column identification steps. While pre-processing steps might standardize dates to `YYYY-MM-DD`, initial parsing should be robust.
+
+ISIN is used as the primary identifier for securities, and is stored in the `w_secs.csv` file.
 
 ---
 
@@ -11,63 +13,40 @@ This application provides a web interface to load, process, and check financial 
 ## Features
 
 *   **Time-Series Metric Analysis:** Load `ts_*.csv` files, view latest changes, Z-scores, and historical data charts for various metrics per fund.
-    *   Optionally loads corresponding `sp_ts_*.csv` files (if they exist) to provide comparison data (e.g., S&P data) on the same charts.
-    *   Includes a toggle switch on the **Metric Detail Page** (`/metric/<metric_name>`) to show/hide this comparison data.
-*   **Security-Level Analysis:** Load wide-format `sec_*.csv` files, view latest changes and Z-scores across securities, and drill down into historical charts (Value, Price, Duration) for individual securities.
-    *   **Performance:** Uses server-side pagination, filtering (search, dropdowns), and sorting for improved performance with large datasets.
-*   **Fund-Specific Views:** Analyze data aggregated or filtered by specific funds.
-    *   General Fund Overview (`/fund/<fund_code>`): Displays all available time-series metric charts for a single fund.
-        *   Optionally loads corresponding `sp_ts_*.csv` files for comparison data.
-        *   Includes a toggle switch to show/hide this comparison data.
-    *   Fund Duration Details (`/fund/duration_details/<fund_code>`): Shows duration changes for securities held by a specific fund.
-*   **Security Exclusions:** Maintain a list of securities to temporarily exclude from the main Security Summary page (`/security/summary`). Exclusions can have start/end dates and comments.
-*   **Data Issue Tracking:** Provides a dedicated page (`/issues`) to log, view, and manage data issues found in various sources (S&P, Production, Pi, IVP, Benchmark). Tracks who raised the issue, when, the impacted fund, the data source, the date the issue occurred, a description, and resolution details (who closed it, when, and comments). Issues are stored in `Data/data_issues.csv`.
-*   **Weight Check:** Load fund (`w_Funds.csv`) and benchmark (`w_Bench.csv`) weight files and display them side-by-side, highlighting any daily weights that are not exactly 100% via `/weights/check`.
-*   **Security Weight Analysis:** Load security weights (`w_secs.csv`) which use ISIN as the primary identifier, providing security-level weight information across multiple dates.
-*   **Yield Curve Analysis:** Load yield curve data (`curves.csv`), check for potential inconsistencies (e.g., monotonicity, anomalous daily changes) and display curve charts per currency via `/curve/summary` and `/curve/details/<currency>`.
-*   **Attribution Residuals Summary:**
-    *   Accessed via the navigation bar under Checks & Comparisons → Attribution Residuals.
-    *   Loads `att_factors.csv` and displays, for each fund and date, the sum of attribution residuals and absolute residuals for two cases:
-        - **Benchmark** (shows both Prod and S&P columns)
-        - **Portfolio** (shows both Prod and S&P columns)
-    *   **3-way toggle (L0, L1, L2):** At the top of the page, a toggle lets you switch between three levels of detail:
-        - **L0:** Shows residuals and absolute residuals (Prod and S&P) for each group. This is the default view.
-        - **L1:** Shows aggregated L1 Rates, L1 Credit, and L1 FX values (Prod and S&P) for each group.
-        - **L2:** Shows all L2 values (Prod and S&P) side by side for each group, with each L2 factor as a separate column pair.
-    *   **Unified two-line table header:** All tables use a two-line header. The first line groups columns by type (e.g., Residual, Abs Residual, L1 Rates, etc.) and the second line shows 'Prod' and 'S&P' for each group, making it clear which value is which.
-    *   Each table includes the columns:
-        - Date
-        - Fund
-        - (Group by characteristic, e.g., Type, Country Of Risk, etc.)
-        - For L0: Residual (Prod/S&P), Abs Residual (Prod/S&P)
-        - For L1: L1 Rates (Prod/S&P), L1 Credit (Prod/S&P), L1 FX (Prod/S&P)
-        - For L2: All L2 factors (Prod/S&P for each)
-    *   Residual is calculated as: `L0 Total - (L1 Rates + L1 Credit + L1 FX)` where L1s are the sum of their L2 components (see formulas below).
-    *   **Absolute Residual** is the sum of the absolute value of the residuals at the security (ISIN) level for each group.
-    *   Includes filters for Fund, Date Range (with a slider UI), and a dropdown to group by a static characteristic from `w_secs.csv`.
-    *   Each table includes a totals row showing the sum of Residual and Absolute Residual for the filtered rows (L0 only).
-    *   **Perfect attribution** is when the residual is zero.
-    *   **Subtle color coding:** For each row, the Residual and Abs Residual cells are colored green if the Prod value is closer to zero, red if the S&P value is closer, for quick visual comparison (L0 only).
-    *   Useful for quickly identifying attribution errors and their magnitude.
+    *   Optionally loads corresponding `sp_ts_*.csv` files for comparison data
+    *   Route: `/metric/<metric_name>` (with toggle switch to show/hide comparison data)
+
+*   **Security-Level Analysis:** Load wide-format `sec_*.csv` files, view latest changes and Z-scores across securities, and drill down into historical charts.
+    *   Server-side pagination, filtering (search, dropdowns), and sorting
+    *   Routes: `/security/summary` (main page), `/security/details/<metric_name>/<security_id>` (detail view)
+
+*   **Fund-Specific Views:**
+    *   General Fund Overview (`/fund/<fund_code>`): All metrics with comparison data toggle
+    *   Fund Duration Details (`/fund/duration_details/<fund_code>`): Duration changes for securities
+
+*   **Security Exclusions:** Manage exclusion list via `/exclusions` (stored in `Data/exclusions.csv`)
+
+*   **Data Issue Tracking:** Log, view, and manage data issues via `/issues` (stored in `Data/data_issues.csv`)
+
+*   **Weight Check:** Compare fund and benchmark weights via `/weights/check`
+
+*   **Yield Curve Analysis:** Check curve inconsistencies via `/curve/summary` and `/curve/details/<currency>`
+
+*   **Attribution Residuals Summary:** Analyze attribution data via `/attribution`
+    *   3-way toggle (L0, L1, L2) for different detail levels
+    *   Compares Production vs S&P data for both Benchmark and Portfolio cases
+    *   Color-coded cells to highlight discrepancies
+
 *   **Data Comparison:**
-    *   Compare two spread files (`sec_spread.csv` vs `sec_spreadSP.csv`) via `/comparison/summary`.
-    *   Compare two duration files (`sec_duration.csv` vs `sec_durationSP.csv`) via `/duration_comparison/summary`.
-    *   Compare two spread duration files (`sec_Spread duration.csv` vs `sec_Spread durationSP.csv`) via `/spread_duration_comparison/summary`.
-    *   All comparison pages include summary statistics and side-by-side detail charts.
-    *   **Performance:** Uses server-side pagination, filtering, and sorting for summary views.
-*   **Data Simulation & Management:**
-    *   Simulate API calls to fetch data via the `/get_data` page.
-    *   Run a data cleanup process via a button on the `/get_data` page.
-*   **Handling Special Characters in IDs:** Security IDs can contain special characters, including slashes (`/`, `\\`), spaces, and symbols (`#`). The application uses the `urlencode` filter in templates to create safe URLs and the `<path:security_id>` converter in Flask routes to capture these IDs correctly. **Note:** Inside view functions receiving such IDs, especially when comparing against data (e.g., filtering a DataFrame), it may be necessary to explicitly decode the `security_id` variable using `urllib.parse.unquote(security_id)` to ensure it matches the format stored in the data source.
-*   **Attribution Residuals Chart Page (Planned):**
-    *   Visualizes residuals over time for attribution data.
-    *   Two charts: one for Benchmark, one for Portfolio. Each chart shows both original (Prod) and S&P data.
-    *   Includes a date range slider (with two handles) to select the period shown.
-    *   Toggle to switch between net and absolute residuals. Each day is shown as a bar on the x-axis.
-    *   Cumulative net residuals are shown as a line chart (aggregated sum over time, net only).
-    *   All the same filters as the summary page (fund, date range, group/characteristic, characteristic value) apply to the charts.
-    *   Data is joined with `w_secs.csv` on ISIN, using the same logic as the summary page.
-    *   Charts will be implemented using the same JavaScript charting approach as other pages (see Metric and Fund Detail pages for reference).
+    *   Spread: `/comparison/summary` and `/comparison/details/<security_id>`
+    *   Duration: `/duration_comparison/summary` and `/duration_comparison/details/<security_id>`
+    *   Spread Duration: `/spread_duration_comparison/summary` and `/spread_duration_comparison/details/<security_id>`
+
+*   **Data Simulation & Management:** API simulation via `/get_data`
+
+*   **Special Character Handling:** Security IDs with special characters are URL-encoded in templates and decoded in view functions using `urllib.parse.unquote(security_id)`
+
+*   **Planned Feature - Attribution Residuals Chart:** Time-series visualization of attribution residuals
 
 ## File Structure Overview
 
@@ -96,6 +75,9 @@ graph TD
     D --> D6(comparison_views.py);
     D --> D7(weight_views.py);
     D --> D8(api_views.py);
+    D8 --> D8a(api_core.py);
+    D8 --> D8b(api_routes_data.py);
+    D8 --> D8c(api_routes_call.py);
     D --> D9(duration_comparison_views.py);
     D --> D10(spread_duration_comparison_views.py);
     D --> D11(curve_views.py);
@@ -160,280 +142,100 @@ graph TD
     E --> F;
 ```
 
-## Data Files (`Data/`)
+## Application Components
 
-*   `ts_*.csv`: Time-series data, indexed by Date and Code (Fund/Benchmark).
-*   `sp_ts_*.csv`: (Optional) Secondary/comparison time-series data, corresponding to `ts_*.csv` files. Used on Metric and Fund Detail pages.
-*   `sec_*.csv`: Security-level data, typically wide format with dates as columns.
-*   `pre_*.csv`: Input files for the `process_data.py` script. This script processes these files and saves the output as `sec_*.csv`, overwriting any existing files with the same name.
-*   `new_*.csv`: Output files from the `process_data.py` script.
-*   **`exclusions.csv`**: Stores the list of excluded securities. Contains columns: `SecurityID`, `AddDate`, `EndDate`, `Comment`.
-*   `QueryMap.csv`: Maps query IDs to filenames for the API simulation.
-*   `FundList.csv`: Contains fund codes and metadata used on the API simulation page.
-*   `Dates.csv`: May exist for specific configurations or helper data.
-*   `w_Funds.csv`: Wide format file containing daily fund weights (expected to be 100%). Used by the Weight Check page.
-*   `w_Bench.csv`: Wide format file containing daily benchmark weights (expected to be 100%). Used by the Weight Check page.
-*   `w_secs.csv`: Wide format file containing security weights across multiple dates. Uses ISIN as the primary identifier column, along with other security attributes like Security Name, Funds, Type, etc. This file provides the security weight data referenced in various parts of the application, particularly for security-level analysis.
-*   `curves.csv`: Contains yield curve data (Date, Currency Code, Term, Daily Value). Used by the Yield Curve Check feature.
-*   **`data_issues.csv`**: Stores a log of reported data issues. Columns: `IssueID`, `DateRaised`, `RaisedBy`, `FundImpacted`, `DataSource`, `IssueDate`, `Description`, `Status` ('Open'/'Closed'), `DateClosed`, `ClosedBy`, `ResolutionComment`.
-*   `att_factors.csv`: Raw attribution data for the attribution system. Used by the Attribution Residuals Summary page. Contains L0, L2 factors for both Production and S&P (SPv3_) for Bench and Portfolio. Residuals are calculated as:
-    - `L0 Total = L1 Rates Total + L1 Credit Total + L1 FX Total + L1 Residual`
-    - `L1 Rates Total = L2 Rates Carry Daily + L2 Rates Convexity Daily + L2 Rates Curve Daily + L2 Rates Duration Daily + L2 Rates Roll Daily`
-    - `L1 Credit Total = L2 Credit Carry Daily + L2 Credit Convexity Daily + L2 Credit Defaulted Daily + L2 Credit Spread Change Daily`
-    - `L1 FX Total = L2 FX Carry Daily + L2 FX Change Daily`
-    - `L1 Residual = L0 Total - (L1 Rates + L1 Credit + L1 FX)`
-    - **Perfect attribution**: residual = 0
-    - The page shows both the sum of residuals and the sum of absolute residuals (summed at the ISIN/security level) for each fund/date/case.
+### Data Files (`Data/`)
 
-## Python Files
+| File | Description |
+|------|-------------|
+| `ts_*.csv` | Time-series data indexed by Date and Code (Fund/Benchmark) |
+| `sp_ts_*.csv` | (Optional) Secondary/comparison time-series data corresponding to `ts_*.csv` |
+| `sec_*.csv` | Security-level data in wide format (dates as columns) |
+| `pre_*.csv` | Input files for the `process_data.py` script |
+| `new_*.csv` | Output files from the `process_data.py` script |
+| `exclusions.csv` | Excluded securities list (`SecurityID`, `AddDate`, `EndDate`, `Comment`) |
+| `QueryMap.csv` | Maps query IDs to filenames for API simulation |
+| `FundList.csv` | Fund codes and metadata for the API simulation page |
+| `Dates.csv` | Configuration data for specific use cases |
+| `w_Funds.csv` | Daily fund weights (expected to be 100%) |
+| `w_Bench.csv` | Daily benchmark weights (expected to be 100%) |
+| `w_secs.csv` | Security weights with ISIN as primary identifier |
+| `curves.csv` | Yield curve data (Date, Currency Code, Term, Daily Value) |
+| `data_issues.csv` | Issue tracking log (ID, dates, users, details, resolution) |
+| `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P |
 
-### `app.py`
-*   **Purpose:** Defines the main entry point and structure for the Simple Data Checker Flask web application. It utilizes the Application Factory pattern (`create_app`) to initialize and configure the Flask app.
-*   **Key Responsibilities:**
-    *   Creating the Flask application instance.
-    *   Setting up basic configuration (like the secret key).
-    *   Ensuring necessary folders (like the instance folder) exist.
-    *   Registering all Blueprints (e.g., `main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`, `comparison_bp`, `duration_comparison_bp`, `spread_duration_comparison_bp`, `api_bp`, `weight_bp`) from the `views` directory.
-    *   Includes an endpoint (`/run-cleanup`) to trigger the `process_data.py` script.
-    *   Providing a conditional block (`if __name__ == '__main__':`) to run the development server.
-*   **Functions:**
-    *   `create_app()`: Factory function to create and configure the Flask app.
-    *   `run_cleanup()`: Endpoint to run the cleanup script.
-    *   `hello()`: Simple test route (can be removed).
+### Python Core Modules
 
-### `config.py`
-*   **Purpose:** Defines configuration variables for the Simple Data Checker application.
-*   **Variables:**
-    *   `DATA_FOLDER`: Specifies the directory containing data files.
-    *   `COLOR_PALETTE`: Defines a list of colors for chart lines.
+| File | Purpose | Key Functions |
+|------|---------|--------------|
+| `app.py` | Application entry point using Flask factory pattern | `create_app()`, `run_cleanup()` |
+| `config.py` | Configuration variables | `DATA_FOLDER`, `COLOR_PALETTE` |
+| `data_loader.py` | Load and preprocess time-series data | `load_and_process_data()`, `_find_column()` |
+| `metric_calculator.py` | Calculate statistical metrics | `calculate_latest_metrics()`, `_calculate_column_stats()` |
+| `process_data.py` | Preprocess CSV files | `process_csv_file()`, `main()` |
+| `security_processing.py` | Process security-level data | `load_and_process_security_data()`, `calculate_security_latest_metrics()` |
+| `utils.py` | Utility functions | `_is_date_like()`, `parse_fund_list()` |
+| `curve_processing.py` | Process yield curve data | `load_curve_data()`, `check_curve_inconsistencies()` |
+| `issue_processing.py` | Manage data issues | `add_issue()`, `close_issue()`, `load_issues()` |
 
-### `data_loader.py`
-*   **Purpose:** Responsible for loading and preprocessing data from time-series CSV files (`ts_*.csv`).
-*   **Key Features:**
-    *   Dynamically identifies 'Date' (using `Date` or `Position Date`), 'Code', and optional benchmark columns (using `Bench`).
-    *   Parses dates using pandas `to_datetime` (handles various formats).
-    *   Standardizes key column names (`Date`, `Code`, `Benchmark`).
-    *   Sets a MultiIndex (`Date`, `Code`).
-    *   Converts value columns to numeric using `pd.to_numeric(errors='coerce')`.
-    *   Logs progress and errors to `data_processing_errors.log`.
-*   **Functions:**
-    *   `_find_column(...)`: Helper to find columns by regex.
-    *   `load_and_process_data(...)`: Main function for loading and processing.
+### View Modules (`views/`)
 
-### `metric_calculator.py`
-*   **Purpose:** Provides functions for calculating statistical metrics (mean, max, min, latest value, change, Z-score) from preprocessed time-series data.
-*   **Key Features:**
-    *   Operates on DataFrames indexed by Date and Fund Code.
-    *   Calculates metrics for primary data (e.g., `ts_*.csv`) and optionally for secondary/comparison data (e.g., `sp_ts_*.csv`).
-    *   Handles fund and benchmark columns for both primary and secondary sources.
-    *   Handles `NaN` values gracefully.
-*   **Functions:**
-    *   `_calculate_column_stats(...)`: Helper for single-column stats.
-    *   `calculate_latest_metrics(...)`: Calculates latest metrics per fund for both primary and secondary data, sorted by max absolute primary Z-score.
+| Module | Purpose | Routes |
+|--------|---------|--------|
+| `main_views.py` | Main dashboard | `/` |
+| `metric_views.py` | Time-series metric details | `/metric/<metric_name>` |
+| `security_views.py` | Security-level data checks | `/security/summary`, `/security/details/<metric_name>/<security_id>` |
+| `fund_views.py` | Fund-specific views | `/fund/<fund_code>`, `/fund/duration_details/<fund_code>` |
+| `exclusion_views.py` | Security exclusion management | `/exclusions`, `/exclusions/remove` |
+| `comparison_views.py` | Spread comparison | `/comparison/summary`, `/comparison/details/<security_id>` |
+| `duration_comparison_views.py` | Duration comparison | `/duration_comparison/summary`, `/duration_comparison/details/<security_id>` |
+| `spread_duration_comparison_views.py` | Spread duration comparison | `/spread_duration_comparison/summary`, `/spread_duration_comparison/details/<security_id>` |
+| `api_views.py` | API simulation | `/get_data`, `/run-api-calls`, `/rerun-api-call` |
+| `weight_views.py` | Weight checking | `/weights/check` |
+| `curve_views.py` | Yield curve checking | `/curve/summary`, `/curve/details/<currency>` |
+| `issue_views.py` | Issue tracking | `/issues`, `/issues/close` |
+| `attribution_views.py` | Attribution analysis | `/attribution` |
 
-### `process_data.py`
-*   **Purpose:** Serves as a pre-processing step for specific CSV files (usually `pre_*.csv`), aggregating rows and handling duplicates. It outputs corresponding `sec_*.csv` files, overwriting existing ones.
-*   **Functions:**
-    *   `process_csv_file(...)`: Processes a single input file.
-    *   `main()`: Processes all `pre_*.csv` files in the `Data` directory.
+### HTML Templates (`templates/`)
 
-### `security_processing.py`
-*   **Purpose:** Handles loading, processing, and analysis of security-level data (usually `sec_*.csv`).
-*   **Key Features:**
-    *   Assumes wide format (dates as columns).
-    *   Dynamically identifies ID, static, and date columns (using `utils._is_date_like`).
-    *   Melts data into long format (Date, Security ID).
-    *   Robust type conversion (`pd.to_datetime`, `pd.to_numeric`, `errors='coerce'`).
-    *   Calculates latest metrics (Latest Value, Change, Mean, Max, Min, Change Z-Score) per security.
-*   **Functions:**
-    *   `_is_date_like(...)`: Moved to `utils.py`.
-    *   `load_and_process_security_data(...)`: Loads and melts wide-format data.
-    *   `calculate_security_latest_metrics(...)`: Calculates metrics on long-format data.
+| Template | Purpose | Key Features |
+|----------|---------|-------------|
+| `base.html` | Main layout | Bootstrap, navbar, common structure |
+| `index.html` | Dashboard | Metric links, Z-Score summary table |
+| `metric_page_js.html` | Time-series detail page | Toggle switch for SP data |
+| `securities_page.html` | Security summary table | Filter/search form, pagination |
+| `security_details_page.html` | Security detail page | Multiple charts (Value, Price, Duration) |
+| `fund_duration_details.html` | Fund duration details | Security duration changes table |
+| `exclusions_page.html` | Exclusion management | Add/remove security exclusions |
+| `get_data.html` | API simulation | Data status, fund selection, date inputs |
+| `comparison_page.html` | Comparison summary | Filter form, sortable table |
+| `comparison_details_page.html` | Detailed comparison | Side-by-side charts |
+| `fund_detail_page.html` | Fund metrics overview | Multiple charts with SP data toggle |
+| `weight_check.html` | Weight checking | Fund/benchmark weight comparison |
+| `*_comparison_*.html` | Various comparison pages | Similar structure to comparison templates |
+| `curve_summary.html` | Yield curve summary | Inconsistency check table |
+| `curve_details.html` | Yield curve details | Chart.js line chart with date selector |
+| `issues_page.html` | Issue tracking | Add/view/close issue forms and tables |
+| `attribution_summary.html` | Attribution summary | Multiple detail levels with comparison data |
 
-### `utils.py`
-*   **Purpose:** Contains common utility functions.
-*   **Functions:**
-    *   `_is_date_like(column_name)`: Checks if a column name resembles `YYYY-MM-DD` or `DD/MM/YYYY` format.
-    *   `parse_fund_list(fund_string)`: Parses a string like `'[FUND1,FUND2]'` into a list.
+### JavaScript Files (`static/js/`)
 
-### `curve_processing.py`
-*   **Purpose:** Handles loading, preprocessing, and analysis of yield curve data (`Data/curves.csv`).
-*   **Key Features:**
-    *   Loads data, parses dates.
-    *   Converts term strings (e.g., '7D', '1M') into an approximate number of days (`TermDays`) for plotting and sorting.
-    *   Checks for basic curve inconsistencies on the latest date:
-        *   Monotonicity check (identifies significant downward slopes).
-        *   Compares the shape of the daily change profile against the previous day to find anomalous jumps for specific terms.
-*   **Functions:**
-    *   `_term_to_days(...)`: Converts term string to days.
-    *   `load_curve_data(...)`: Loads and preprocesses the `curves.csv` file.
-    *   `get_latest_curve_date(...)`: Finds the most recent date in the loaded data.
-    *   `check_curve_inconsistencies(...)`: Performs the inconsistency checks and returns a summary dictionary.
+| File | Purpose | Key Features |
+|------|---------|-------------|
+| `main.js` | Main JS entry point | Initializes components |
+| `modules/ui/chartRenderer.js` | Render charts | Time-series, comparison charts |
+| `modules/ui/securityTableFilter.js` | Handle table filtering | Dynamic filter application |
+| `modules/ui/tableSorter.js` | Handle table sorting | Sort direction toggle |
+| `modules/ui/toggleSwitchHandler.js` | Handle toggle switches | Show/hide comparison data |
+| `modules/utils/helpers.js` | Utility functions | Common helper methods |
+| `modules/charts/timeSeriesChart.js` | Time-series chart creation | Chart.js configuration |
 
-### `issue_processing.py`
-*   **Purpose:** Handles loading, adding, and updating data issues stored in `Data/data_issues.csv`.
-*   **Key Features:**
-    *   Loads the CSV into a DataFrame, parsing dates.
-    *   Generates unique, sequential IDs (e.g., `ISSUE-001`) for new issues.
-    *   Provides functions to add a new issue (`add_issue`) and close an existing one (`close_issue`).
-    *   Loads the list of available funds from `Data/FundList.csv` for use in dropdowns.
-    *   Ensures the `data_issues.csv` file exists with correct headers.
-*   **Functions:**
-    *   `load_issues()`: Loads issues from CSV.
-    *   `_save_issues()`: Saves DataFrame to CSV.
-    *   `_generate_issue_id()`: Creates a new issue ID.
-    *   `add_issue()`: Adds a new record.
-    *   `close_issue()`: Updates a record to 'Closed' status with resolution details.
-    *   `load_fund_list()`: Gets fund codes from `FundList.csv`.
+### Attribution Data Calculation
 
-## View Modules (`views/`)
-
-These modules contain the Flask Blueprints defining the application's routes.
-
-### `views/main_views.py` (`main_bp`)
-*   **Purpose:** Main dashboard/index page.
-*   **Routes:**
-    *   `/`: Renders `index.html`, showing links to metric pages and a summary table of latest Z-Scores across all metrics and funds. Fund codes link to the general fund detail page (`/fund/<fund_code>`).
-
-### `views/metric_views.py` (`metric_bp`)
-*   **Purpose:** Detailed views for specific time-series metrics.
-*   **Routes:**
-    *   `/metric/<metric_name>`: Renders `metric_page_js.html`. Loads primary (`ts_*.csv`) and optional secondary (`sp_ts_*.csv`) data. Calculates metrics for both, prepares JSON data (including an `isSpData` flag in datasets), and passes it to the template. The JavaScript (`main.js`, `chartRenderer.js`) renders charts and handles the SP data toggle switch.
-
-### `views/security_views.py` (`security_bp`)
-*   **Purpose:** Security-level data checks.
-*   **Routes:**
-    *   `/security/summary`: Renders `securities_page.html`.
-        *   **Handles server-side pagination, filtering (search, static columns), and sorting.**
-        *   Loads spread data (`sec_Spread.csv`), applies filters/search/exclusions.
-        *   Calculates metrics, sorts data, and selects the current page.
-        *   Passes paginated data and metadata to the template.
-        *   Security IDs (using ISIN from `w_secs.csv`) link to the details page.
-    *   `/security/details/<metric_name>/<path:security_id>`: Renders `security_details_page.html`.
-        *   Shows historical charts for a specific security. The `security_id` from the URL (which is typically an ISIN) is decoded using `urllib.parse.unquote`.
-        *   **Data Loading:** Filters data primarily using the decoded `security_id` against the `ISIN` column/index in the relevant `sec_*.csv` files. If no data is found using `ISIN`, it attempts a fallback filter using the `Security Name` column.
-        *   Displays the requested base `metric_name` overlaid with Price (from `sec_Price.csv`).
-        *   Additionally displays separate charts for:
-            *   Duration (from `sec_Duration.csv`) overlaid with SP Duration (from `sec_DurationSP.csv`).
-            *   Spread Duration (from `sec_Spread duration.csv`) overlaid with SP Spread Duration (from `sec_Spread durationSP.csv`).
-            *   Spread (from `sec_Spread.csv`) overlaid with SP Spread (from `sec_SpreadSP.csv`).
-        *   SP data files are loaded if they exist.
-
-### `views/fund_views.py` (`fund_bp`)
-*   **Purpose:** Fund-specific views.
-*   **Routes:**
-    *   `/fund/duration_details/<fund_code>`: Renders `fund_duration_details.html`. Loads `sec_duration.csv`, filters by fund, calculates recent duration changes, and displays results.
-    *   `/fund/<fund_code>`: Renders `fund_detail_page.html`. Finds all primary `ts_*.csv` files and corresponding optional `sp_ts_*.csv` files. Loads data for the specified fund from both sources, adds an `isSpData` flag to datasets, and prepares data for rendering multiple time-series charts on a single page via JavaScript (`main.js`, `chartRenderer.js`), including an SP data toggle switch.
-
-### `views/exclusion_views.py` (`exclusion_bp`)
-*   **Purpose:** Managing the security exclusion list (`Data/exclusions.csv`).
-*   **Routes:**
-    *   `/exclusions` (GET/POST): Renders `exclusions_page.html` to view/add exclusions.
-    *   `/exclusions/remove` (POST): Removes an exclusion.
-
-### `views/comparison_views.py` (`comparison_bp`)
-*   **Purpose:** Comparing two spread files (`sec_spread.csv` vs. `sec_spreadSP.csv`).
-*   **Routes:**
-    *   `/comparison/summary`: Renders `comparison_page.html`.
-        *   **Handles server-side pagination, filtering (static columns), and sorting.**
-        *   Loads both files, calculates comparison statistics (correlation, diffs, date ranges).
-        *   Applies filters, sorts data, and selects the current page.
-        *   Passes paginated data and metadata to the template.
-        *   Uses the `id_column_name` variable to determine which column serves as the security identifier (typically ISIN).
-    *   `/comparison/details/<path:security_id>`: Renders `comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
-
-### `views/duration_comparison_views.py` (`duration_comparison_bp`)
-*   **Purpose:** Comparing two duration files (`sec_duration.csv` vs. `sec_durationSP.csv`).
-*   **Routes:**
-    *   `/duration_comparison/summary`: Renders `duration_comparison_page.html`.
-        *   Handles server-side pagination, filtering (static columns), and sorting.
-        *   Loads both files, calculates comparison statistics.
-        *   Applies filters, sorts data, and selects the current page.
-        *   Passes paginated data and metadata to the template.
-        *   Uses the `id_column_name` variable to determine which column serves as the security identifier (typically ISIN).
-    *   `/duration_comparison/details/<path:security_id>`: Renders `duration_comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
-
-### `views/spread_duration_comparison_views.py` (`spread_duration_comparison_bp`)
-*   **Purpose:** Comparing two spread duration files (`sec_Spread duration.csv` vs. `sec_Spread durationSP.csv`).
-*   **Routes:**
-    *   `/spread_duration_comparison/summary`: Renders `spread_duration_comparison_page.html`.
-        *   Handles server-side pagination, filtering (static columns), and sorting.
-        *   Loads both files, calculates comparison statistics.
-        *   Applies filters, sorts data, and selects the current page.
-        *   Passes paginated data and metadata to the template.
-        *   Uses the `id_column_name` variable to determine which column serves as the security identifier (typically ISIN).
-    *   `/spread_duration_comparison/details/<path:security_id>`: Renders `spread_duration_comparison_details_page.html`. Shows side-by-side historical charts for a specific security.
-
-### `views/api_views.py` (`api_bp`)
-*   **Purpose:** Handling the API simulation page interactions.
-*   **Routes:**
-    *   `/get_data`: Renders `get_data.html` (GET). Shows data file statuses, fund selection, and date inputs. Allows selection of date range mode (quick vs. custom) and data write mode (expand/overwrite vs. overwrite all).
-    *   `/run-api-calls`: Handles the POST request from `get_data.html` to simulate API calls based on `QueryMap.csv`. Reads data, merges/overwrites based on selected `write_mode` and date range, saves to `Data/` folder, and returns a summary including the last written timestamp.
-    *   `/rerun-api-call`: Handles POST requests to rerun a single API call for a specific fund.
-*   **Key Features:**
-    *   Dynamic column detection looks for identifiers like 'Code', 'Fund Code', 'security id', 'SecurityID', 'Security Name'.
-    *   When processing security-related files (like `w_secs.csv`), the system will look for ISIN in these column candidates.
-    *   Provides file status checking and robust handling of various file formats.
-
-### `views/weight_views.py` (`weight_bp`)
-*   **Purpose:** Handles the weight checking functionality.
-*   **Routes:**
-    *   `/weights/check`: Renders `weight_check_page.html`. Loads data from `w_Funds.csv` and `w_Bench.csv`, processes percentage values, checks if they equal 100%, and passes the processed data to the template for display.
-
-### `views/curve_views.py` (`curve_bp`)
-*   **Purpose:** Handles the yield curve checking views.
-*   **Routes:**
-    *   `/curve/summary`: Renders `curve_summary.html`. Loads curve data, runs inconsistency checks using `curve_processing.check_curve_inconsistencies`, and displays a summary table for all currencies.
-    *   `/curve/details/<currency>`: Renders `curve_details.html`. Displays a line chart of the yield curve for the specified `currency` on a selected date. Includes a dropdown to select and view curves for previous dates.
-
-### `views/issue_views.py` (`issue_bp`)
-*   **Purpose:** Handles the Data Issue Tracking page.
-*   **Routes:**
-    *   `/issues` (GET/POST): Renders `issues_page.html`. Displays separate tables for open and closed issues. Handles the form submission for adding a new issue.
-    *   `/issues/close` (POST): Handles the form submission (via modal) to mark an issue as closed, recording the closer and resolution comment.
-
-### `views/attribution_views.py` (`attribution_bp`)
-*   **Purpose:** Handles the Attribution Residuals Summary page.
-*   **Routes:**
-    *   `/attribution`: Renders `attribution_summary.html`. Loads `att_factors.csv` and displays, for each fund and date, the sum of attribution residuals and absolute residuals for two cases:
-        - **Benchmark** (shows both Prod and S&P columns)
-        - **Portfolio** (shows both Prod and S&P columns)
-    *   Each table includes the columns:
-        - Date
-        - Fund
-        - (Group by characteristic, e.g., Type, Country Of Risk, etc.)
-        - For L0: Residual (Prod/S&P), Abs Residual (Prod/S&P)
-        - For L1: L1 Rates (Prod/S&P), L1 Credit (Prod/S&P), L1 FX (Prod/S&P)
-        - For L2: All L2 factors (Prod/S&P for each)
-    *   Residual is calculated as: `L0 Total - (L1 Rates + L1 Credit + L1 FX)` where L1s are the sum of their L2 components (see formulas below).
-    *   **Absolute Residual** is the sum of the absolute value of the residuals at the security (ISIN) level for each group.
-    *   Includes filters for Fund, Date Range (with a slider UI), and a dropdown to group by a static characteristic from `w_secs.csv`.
-    *   Each table includes a totals row showing the sum of Residual and Absolute Residual for the filtered rows (L0 only).
-    *   **Perfect attribution** is when the residual is zero.
-    *   **Subtle color coding:** For each row, the Residual and Abs Residual cells are colored green if the Prod value is closer to zero, red if the S&P value is closer, for quick visual comparison (L0 only).
-    *   Useful for quickly identifying attribution errors and their magnitude.
-
-## HTML Templates (`templates/`)
-
-*   **`base.html`:** Main layout, includes Bootstrap, navbar, common structure. All other templates extend this.
-*   **`index.html`:** Dashboard page. Displays metric links and Z-Score summary table.
-*   **`metric_page_js.html`:** Detail page for a time-series metric (rendered via JS).
-    *   Includes a toggle switch (`#toggleSpData`) to show/hide secondary/SP comparison data on charts.
-*   **`securities_page.html`:** Security check summary table. Includes filter/search form, sortable headers, table body, and pagination controls.
-*   **`security_details_page.html`:** Detail page for a single security (charts).
-*   **`fund_duration_details.html`:** Table showing security duration changes for a specific fund.
-*   **`exclusions_page.html`:** UI for managing security exclusions.
-*   **`get_data.html`:** UI for API simulation. Includes data status table, fund selection, date inputs (with options for quick or custom range), data write mode selection, status/results area (including last written timestamp), and buttons for simulation, overwrite, and cleanup.
-*   **`comparison_page.html`:** Comparison summary table. Includes filter form, sortable headers, table body, and pagination controls.
-*   **`comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread).
-*   **`fund_detail_page.html`:** Displays multiple charts for different metrics for a single fund.
-    *   Includes a toggle switch (`#toggleSpData`) to show/hide secondary/SP comparison data on charts.
-*   **`weight_check.html`:** Placeholder page for weight checks.
-*   **`duration_comparison_page.html`:** Comparison summary table for Duration.
-*   **`duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Duration).
-*   **`spread_duration_comparison_page.html`:** Comparison summary table for Spread Duration.
-*   **`spread_duration_comparison_details_page.html`:** Side-by-side chart comparison for a single security (Spread Duration).
-*   **`curve_summary.html`:** Displays a summary table of the yield curve inconsistency checks for the latest date across all currencies.
-*   **`curve_details.html`:** Shows a line chart of the yield curve for a specific currency and provides a date selector to view historical curves. Includes JavaScript for Chart.js rendering.
-*   **`issues_page.html`:** UI for tracking data issues. Includes a form to raise new issues and tables to display open and closed issues, with functionality to close open ones via a modal.
-*   **`attribution_summary.html`:** Displays the Attribution Residuals Summary page.
+Attribution residuals are calculated using the following formulas:
+- `L0 Total = L1 Rates Total + L1 Credit Total + L1 FX Total + L1 Residual`
+- `L1 Rates Total = L2 Rates Carry Daily + L2 Rates Convexity Daily + L2 Rates Curve Daily + L2 Rates Duration Daily + L2 Rates Roll Daily`
+- `L1 Credit Total = L2 Credit Carry Daily + L2 Credit Convexity Daily + L2 Credit Defaulted Daily + L2 Credit Spread Change Daily`
+- `L1 FX Total = L2 FX Carry Daily + L2 FX Change Daily`
+- `L1 Residual = L0 Total - (L1 Rates + L1 Credit + L1 FX)`
+- Perfect attribution is achieved when residual = 0
