@@ -1,0 +1,156 @@
+{#
+    Purpose: Attribution Security-Level Page. Shows attribution data for each security (ISIN) for a selected date and fund.
+    Filters: date, fund, type, bench/portfolio, MTD, normalize. Pagination (50 per page).
+    Table columns: Security Name (linked), ISIN, Type, Returns (L0 Total), Original Residual, S&P Residual, Residual Diff, L1 values (Orig & S&P)
+#}
+{% extends 'base.html' %}
+
+{% block title %}Attribution Security-Level Check{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Attribution Security-Level Check</h2>
+    </div>
+    <p class="text-muted">Attribution data for each security. Filters and sorting are applied server-side. Returns = L0 Total.</p>
+
+    {# --- Filter Form --- #}
+    <form method="GET" action="{{ url_for('attribution_bp.attribution_security_page') }}" class="mb-3 p-3 border rounded bg-light" id="filter-form">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label for="date" class="form-label">Date</label>
+                <input type="date" name="date" id="date" class="form-control form-control-sm" value="{{ selected_date }}">
+            </div>
+            <div class="col-md-2">
+                <label for="fund" class="form-label">Fund</label>
+                <select name="fund" id="fund" class="form-select form-select-sm">
+                    {% for fund in available_funds %}
+                        <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="type" class="form-label">Type</label>
+                <select name="type" id="type" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    {% for t in available_types %}
+                        <option value="{{ t }}" {% if t == selected_type %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Benchmark/Portfolio</label>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="bench_or_port" name="bench_or_port" value="port" {% if bench_or_port == 'port' %}checked{% endif %} onchange="this.value = this.checked ? 'port' : 'bench'; this.form.submit();">
+                    <label class="form-check-label" for="bench_or_port">Portfolio</label>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Month-to-Date</label>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="mtd" name="mtd" value="on" {% if mtd %}checked{% endif %}>
+                    <label class="form-check-label" for="mtd">MTD</label>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Normalize</label>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="normalize" name="normalize" value="on" {% if normalize %}checked{% endif %}>
+                    <label class="form-check-label" for="normalize">Normalize</label>
+                </div>
+            </div>
+            <div class="col-md-auto">
+                <button class="btn btn-primary btn-sm" type="submit">Apply Filters</button>
+            </div>
+        </div>
+    </form>
+
+    {# --- Data Table Section --- #}
+    {% if rows %}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover table-sm small caption-top" id="attribution-table">
+            {% if pagination %}
+            <caption class="pb-1">
+                Displaying {{ rows|length }} of {{ pagination.total_items }} total securities. (Page {{ pagination.page }} of {{ pagination.total_pages }})
+            </caption>
+            {% endif %}
+            <thead class="table-light sticky-top">
+                <tr>
+                    <th>Security Name</th>
+                    <th>ISIN</th>
+                    <th>Type</th>
+                    <th>Returns (L0 Total)</th>
+                    <th>Original Residual</th>
+                    <th>S&amp;P Residual</th>
+                    <th>Residual Diff</th>
+                    {% for l1 in rows[0]['L1 Values'].keys() %}
+                        <th>L1 {{ l1 }} (Orig)</th>
+                        <th>L1 {{ l1 }} (S&amp;P)</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('security.security_details', metric_name='Attribution', security_id=row['ISIN']|urlencode) }}">
+                            {{ row['Security Name'] }}
+                        </a>
+                    </td>
+                    <td>{{ row['ISIN'] }}</td>
+                    <td>{{ row['Type'] }}</td>
+                    <td>{{ row['Returns']|round(6) }}</td>
+                    <td>{{ row['Original Residual']|round(6) }}</td>
+                    <td>{{ row["S&P Residual"]|round(6) }}</td>
+                    <td>{{ row['Residual Diff']|round(6) }}</td>
+                    {% for l1, vals in row['L1 Values'].items() %}
+                        <td>{{ vals[0]|round(6) }}</td>
+                        <td>{{ vals[1]|round(6) }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if pagination and pagination.total_pages > 1 %}
+        <nav aria-label="Attribution security data navigation">
+            <ul class="pagination pagination-sm justify-content-center">
+                <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                    <a class="page-link" href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                {% set start_page = pagination.start_page_display %}
+                {% set end_page = pagination.end_page_display %}
+                {% if start_page > 1 %}
+                    <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(1) }}">1</a></li>
+                    {% if start_page > 2 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endif %}
+                {% for p in range(start_page, end_page + 1) %}
+                    <li class="page-item {{ 'active' if p == pagination.page }}">
+                        <a class="page-link" href="{{ pagination.url_for_page(p) }}">{{ p }}</a>
+                    </li>
+                {% endfor %}
+                {% if end_page < pagination.total_pages %}
+                    {% if end_page < pagination.total_pages - 1 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                    <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(pagination.total_pages) }}">{{ pagination.total_pages }}</a></li>
+                {% endif %}
+                <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                    <a class="page-link" href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    {% endif %}
+    {% elif not rows %}
+        <div class="alert alert-info mt-3" role="alert">
+            No attribution data is currently available or matches the selected criteria.
+        </div>
+    {% endif %}
+</div>
+{% endblock %} 

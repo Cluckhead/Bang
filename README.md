@@ -162,7 +162,7 @@ graph TD
 | `w_secs.csv` | Security weights with ISIN as primary identifier |
 | `curves.csv` | Yield curve data (Date, Currency Code, Term, Daily Value) |
 | `data_issues.csv` | Issue tracking log (ID, dates, users, details, resolution) |
-| `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P |
+| `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P. **Note:** The `L0 Total` column represents the returns for each security/fund/date. |
 
 ### Python Core Modules
 

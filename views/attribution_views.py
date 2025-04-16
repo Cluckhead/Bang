@@ -3,7 +3,7 @@
 # for each fund and day, for two cases: Benchmark and Portfolio, with both Prod and S&P columns.
 # Residuals are calculated as L0 Total - (L1 Rates + L1 Credit + L1 FX), with L1s computed from L2s.
 
-from flask import Blueprint, render_template, current_app, request, jsonify
+from flask import Blueprint, render_template, current_app, request, jsonify, url_for
 import pandas as pd
 import os
 import json
@@ -522,15 +522,15 @@ def attribution_radar():
     if selected_level == 'L1':
         radar_labels = list(l1_groups.keys()) + residual_labels
         # Portfolio
-        port_l1_prod = sum_l1s_block(df, 'L2 Port ')
-        port_l1_sp = sum_l1s_block(df, 'SPv3_L2 Port ')
+        port_l1_prod = sum_l1s_block(df, 'L2 Port ', l2_all)
+        port_l1_sp = sum_l1s_block(df, 'SPv3_L2 Port ', l2_all)
         port_resid_prod = compute_residual_block(df, 'L0 Port Total Daily ', 'L2 Port ', l2_all)
         port_resid_sp = compute_residual_block(df, 'L0 Port Total Daily ', 'SPv3_L2 Port ', l2_all)
         port_prod = port_l1_prod + [port_resid_prod]
         port_sp = port_l1_sp + [port_resid_sp]
         # Benchmark
-        bench_l1_prod = sum_l1s_block(df, 'L2 Bench ')
-        bench_l1_sp = sum_l1s_block(df, 'SPv3_L2 Bench ')
+        bench_l1_prod = sum_l1s_block(df, 'L2 Bench ', l2_all)
+        bench_l1_sp = sum_l1s_block(df, 'SPv3_L2 Bench ', l2_all)
         bench_resid_prod = compute_residual_block(df, 'L0 Bench Total Daily', 'L2 Bench ', l2_all)
         bench_resid_sp = compute_residual_block(df, 'L0 Bench Total Daily', 'SPv3_L2 Bench ', l2_all)
         bench_prod = bench_l1_prod + [bench_resid_prod]
@@ -579,4 +579,184 @@ def attribution_radar():
         available_characteristic_values=available_characteristic_values,
         selected_characteristic_value=selected_characteristic_value,
         selected_level=selected_level
+    )
+
+@attribution_bp.route('/security')
+def attribution_security_page():
+    """
+    Attribution Security-Level Page: Shows attribution data for each security (ISIN) for a selected date and fund.
+    Supports filtering by date, fund, type, bench/portfolio toggle, MTD aggregation, normalization, and pagination.
+    Table columns: Security Name (linked), ISIN, Type, Returns (L0 Total), Original Residual, S&P Residual, Residual Diff, L1 values (Orig & S&P)
+    """
+    import numpy as np
+    from pandas.tseries.offsets import BDay
+    data_folder = current_app.config['DATA_FOLDER']
+    att_path = os.path.join(data_folder, 'att_factors.csv')
+    wsecs_path = os.path.join(data_folder, 'w_secs.csv')
+    if not os.path.exists(att_path) or not os.path.exists(wsecs_path):
+        return "Required data files not found", 404
+
+    # Load data
+    df = pd.read_csv(att_path)
+    df.columns = df.columns.str.strip()
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df = df.dropna(subset=['Date', 'Fund', 'ISIN'])
+    wsecs = pd.read_csv(wsecs_path)
+    wsecs.columns = wsecs.columns.str.strip()
+    static_cols = [col for col in wsecs.columns if col not in ['ISIN'] and not _is_date_like(col)]
+    wsecs_static = wsecs.drop_duplicates(subset=['ISIN'])[['ISIN'] + static_cols]
+
+    # --- UI Controls ---
+    # Date picker: default to previous business day
+    max_date = df['Date'].max()
+    prev_bday = (max_date if max_date is not pd.NaT else pd.Timestamp.today())
+    prev_bday = prev_bday if prev_bday.weekday() < 5 else prev_bday - BDay(1)
+    selected_date_str = request.args.get('date', default=prev_bday.strftime('%Y-%m-%d'), type=str)
+    selected_date = pd.to_datetime(selected_date_str, errors='coerce')
+    # Fund dropdown: default to first fund
+    available_funds = sorted(df['Fund'].dropna().unique())
+    selected_fund = request.args.get('fund', default=available_funds[0] if available_funds else '', type=str)
+    # Type filter
+    available_types = sorted(wsecs_static['Type'].dropna().unique())
+    selected_type = request.args.get('type', default='', type=str)
+    # Bench/Portfolio toggle
+    bench_or_port = request.args.get('bench_or_port', default='bench', type=str)  # 'bench' or 'port'
+    # MTD toggle
+    mtd = request.args.get('mtd', default='off', type=str) == 'on'
+    # Normalize toggle
+    normalize = request.args.get('normalize', default='off', type=str) == 'on'
+    # Pagination
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+
+    # --- Filter and Join Data ---
+    df = df[df['Fund'] == selected_fund]
+    if selected_type:
+        # Join to get type for filtering
+        df = df.merge(wsecs_static[['ISIN', 'Type']], on='ISIN', how='left')
+        df = df[df['Type'] == selected_type]
+    else:
+        df = df.merge(wsecs_static[['ISIN', 'Type']], on='ISIN', how='left')
+
+    # Date filtering/aggregation
+    if mtd:
+        # Get all dates in month up to selected_date
+        if selected_date is pd.NaT:
+            selected_date = max_date
+        month_start = selected_date.replace(day=1)
+        mtd_dates = pd.date_range(month_start, selected_date, freq='B')
+        df = df[df['Date'].isin(mtd_dates)]
+        # Fill missing days for each ISIN with zeros
+        all_isins = df['ISIN'].unique()
+        all_dates = mtd_dates
+        idx = pd.MultiIndex.from_product([all_isins, all_dates], names=['ISIN', 'Date'])
+        df = df.set_index(['ISIN', 'Date'])
+        df = df.reindex(idx, fill_value=0).reset_index().merge(df.reset_index(), on=['ISIN', 'Date'], how='left', suffixes=('', '_orig'))
+        # Use original columns where available, otherwise zeros
+        for col in df.columns:
+            if col.endswith('_orig'):
+                base = col[:-5]
+                df[base] = df[col].combine_first(df[base])
+        # Aggregate (sum) over month for each ISIN
+        group_cols = ['ISIN']
+        # Only sum numeric columns, keep first for non-numeric
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        agg_dict = {col: 'sum' for col in numeric_cols if col not in group_cols}
+        # For non-numeric columns (like 'Type', 'Security Name'), keep the first value
+        for col in ['Type', 'Security Name']:
+            if col in df.columns:
+                agg_dict[col] = 'first'
+        df = df.groupby(group_cols).agg(agg_dict).reset_index()
+        # Add back static info
+        df = df.merge(wsecs_static, on='ISIN', how='left')
+    else:
+        df = df[df['Date'] == selected_date]
+
+    # --- Normalization ---
+    if bench_or_port == 'bench':
+        weight_col = 'Bench Weight'
+        l0_col = 'L0 Bench Total Daily'
+        l1_prefix = 'L2 Bench '
+        l1_sp_prefix = 'SPv3_L2 Bench '
+    else:
+        weight_col = 'Port Exp Wgt'
+        l0_col = 'L0 Port Total Daily '
+        l1_prefix = 'L2 Port '
+        l1_sp_prefix = 'SPv3_L2 Port '
+    # L1 factor names
+    l1_factors = [
+        'Rates Carry Daily', 'Rates Convexity Daily', 'Rates Curve Daily', 'Rates Duration Daily', 'Rates Roll Daily',
+        'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted',
+        'FX Carry Daily', 'FX Change Daily'
+    ]
+    # Residual calculation
+    def calc_residual(row, l0, l1_prefix):
+        l1_sum = sum([row.get(f'{l1_prefix}{f}', 0) for f in l1_factors])
+        return row.get(l0, 0) - l1_sum
+    # Normalization
+    def norm(row, col, weight_col):
+        w = row.get(weight_col, 0)
+        v = row.get(col, 0)
+        if normalize and w:
+            return v / w
+        return v
+    # Prepare table rows
+    table_rows = []
+    for _, row in df.iterrows():
+        returns = norm(row, l0_col, weight_col)
+        orig_resid = calc_residual(row, l0_col, l1_prefix)
+        sp_resid = calc_residual(row, l0_col, l1_sp_prefix)
+        orig_resid = norm(row, None, weight_col) if normalize and weight_col else orig_resid
+        sp_resid = norm(row, None, weight_col) if normalize and weight_col else sp_resid
+        resid_diff = orig_resid - sp_resid
+        l1_vals = {f: (norm(row, f'{l1_prefix}{f}', weight_col), norm(row, f'{l1_sp_prefix}{f}', weight_col)) for f in l1_factors}
+        table_rows.append({
+            'Security Name': row.get('Security Name', ''),
+            'ISIN': row['ISIN'],
+            'Type': row.get('Type', ''),
+            'Returns': returns,
+            'Original Residual': orig_resid,
+            'S&P Residual': sp_resid,
+            'Residual Diff': resid_diff,
+            'L1 Values': l1_vals
+        })
+    # Sort by abs(Original Residual)
+    table_rows = sorted(table_rows, key=lambda r: abs(r['Original Residual']), reverse=True)
+    # Pagination
+    total_items = len(table_rows)
+    total_pages = max(1, (total_items + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_rows = table_rows[start:end]
+    # Pagination object for template
+    class Pagination:
+        def __init__(self, page, per_page, total_items):
+            self.page = page
+            self.per_page = per_page
+            self.total_items = total_items
+            self.total_pages = max(1, (total_items + per_page - 1) // per_page)
+            self.has_prev = page > 1
+            self.has_next = page < self.total_pages
+            self.prev_num = page - 1
+            self.next_num = page + 1
+            self.start_page_display = max(1, page - 2)
+            self.end_page_display = min(self.total_pages, page + 2)
+        def url_for_page(self, p):
+            args = request.args.to_dict()
+            args['page'] = p
+            return url_for('attribution_bp.attribution_security_page', **args)
+    pagination = Pagination(page, per_page, total_items)
+    return render_template(
+        'attribution_security_page.html',
+        rows=page_rows,
+        pagination=pagination,
+        available_funds=available_funds,
+        selected_fund=selected_fund,
+        available_types=available_types,
+        selected_type=selected_type,
+        selected_date=selected_date.strftime('%Y-%m-%d') if selected_date is not pd.NaT else '',
+        bench_or_port=bench_or_port,
+        mtd=mtd,
+        normalize=normalize
     ) 
