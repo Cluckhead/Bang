@@ -116,6 +116,19 @@ def attribution_summary():
     else:
         available_characteristic_values = []
 
+    # L1 factor groupings
+    l1_groups = {
+        'Rates': [
+            'Rates Carry Daily', 'Rates Convexity Daily', 'Rates Curve Daily', 'Rates Duration Daily', 'Rates Roll Daily'
+        ],
+        'Credit': [
+            'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted'
+        ],
+        'FX': [
+            'FX Carry Daily', 'FX Change Daily'
+        ]
+    }
+
     for group_keys, group in df.groupby(group_cols):
         if selected_characteristic:
             date, fund, char_val = group_keys
@@ -494,9 +507,15 @@ def attribution_radar():
 
     # L1 groupings
     l1_groups = {
-        'Rates': l2_rates,
-        'Credit': l2_credit,
-        'FX': l2_fx
+        'Rates': [
+            'Rates Carry Daily', 'Rates Convexity Daily', 'Rates Curve Daily', 'Rates Duration Daily', 'Rates Roll Daily'
+        ],
+        'Credit': [
+            'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted'
+        ],
+        'FX': [
+            'FX Carry Daily', 'FX Change Daily'
+        ]
     }
 
     # --- Aggregation for Radar Chart ---
@@ -689,6 +708,18 @@ def attribution_security_page():
         'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted',
         'FX Carry Daily', 'FX Change Daily'
     ]
+    # L1 groupings (must be in this scope)
+    l1_groups = {
+        'Rates': [
+            'Rates Carry Daily', 'Rates Convexity Daily', 'Rates Curve Daily', 'Rates Duration Daily', 'Rates Roll Daily'
+        ],
+        'Credit': [
+            'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted'
+        ],
+        'FX': [
+            'FX Carry Daily', 'FX Change Daily'
+        ]
+    }
     # Residual calculation
     def calc_residual(row, l0, l1_prefix):
         l1_sum = sum([row.get(f'{l1_prefix}{f}', 0) for f in l1_factors])
@@ -709,7 +740,12 @@ def attribution_security_page():
         orig_resid = norm(row, None, weight_col) if normalize and weight_col else orig_resid
         sp_resid = norm(row, None, weight_col) if normalize and weight_col else sp_resid
         resid_diff = orig_resid - sp_resid
-        l1_vals = {f: (norm(row, f'{l1_prefix}{f}', weight_col), norm(row, f'{l1_sp_prefix}{f}', weight_col)) for f in l1_factors}
+        # Calculate L1 values as sum of L2s for each group
+        l1_vals = {}
+        for l1_name, l2_list in l1_groups.items():
+            orig_sum = sum([norm(row, f'{l1_prefix}{l2}', weight_col) for l2 in l2_list])
+            sp_sum = sum([norm(row, f'{l1_sp_prefix}{l2}', weight_col) for l2 in l2_list])
+            l1_vals[l1_name] = (orig_sum, sp_sum)
         table_rows.append({
             'Security Name': row.get('Security Name', ''),
             'ISIN': row['ISIN'],

@@ -83,10 +83,12 @@
                     <th>Original Residual</th>
                     <th>S&amp;P Residual</th>
                     <th>Residual Diff</th>
-                    {% for l1 in rows[0]['L1 Values'].keys() %}
-                        <th>L1 {{ l1 }} (Orig)</th>
-                        <th>L1 {{ l1 }} (S&amp;P)</th>
-                    {% endfor %}
+                    <th>L1 Rates (Orig)</th>
+                    <th>L1 Rates (S&amp;P)</th>
+                    <th>L1 Credit (Orig)</th>
+                    <th>L1 Credit (S&amp;P)</th>
+                    <th>L1 FX (Orig)</th>
+                    <th>L1 FX (S&amp;P)</th>
                 </tr>
             </thead>
             <tbody>
@@ -99,14 +101,16 @@
                     </td>
                     <td>{{ row['ISIN'] }}</td>
                     <td>{{ row['Type'] }}</td>
-                    <td>{{ row['Returns']|round(6) }}</td>
-                    <td>{{ row['Original Residual']|round(6) }}</td>
-                    <td>{{ row["S&P Residual"]|round(6) }}</td>
-                    <td>{{ row['Residual Diff']|round(6) }}</td>
-                    {% for l1, vals in row['L1 Values'].items() %}
-                        <td>{{ vals[0]|round(6) }}</td>
-                        <td>{{ vals[1]|round(6) }}</td>
-                    {% endfor %}
+                    <td>{{ row['Returns']|round(3) }}</td>
+                    <td>{{ row['Original Residual']|round(3) }}</td>
+                    <td>{{ row["S&P Residual"]|round(3) }}</td>
+                    <td>{{ row['Residual Diff']|round(3) }}</td>
+                    <td>{{ row['L1 Values']['Rates'][0]|round(3) }}</td>
+                    <td>{{ row['L1 Values']['Rates'][1]|round(3) }}</td>
+                    <td>{{ row['L1 Values']['Credit'][0]|round(3) }}</td>
+                    <td>{{ row['L1 Values']['Credit'][1]|round(3) }}</td>
+                    <td>{{ row['L1 Values']['FX'][0]|round(3) }}</td>
+                    <td>{{ row['L1 Values']['FX'][1]|round(3) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
