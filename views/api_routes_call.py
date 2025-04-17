@@ -8,6 +8,7 @@ import pandas as pd
 from flask import request, current_app, jsonify
 import datetime
 import time
+import json
 
 # Import from our local modules
 from views.api_core import api_bp, _simulate_and_print_tqs_call, _fetch_real_tqs_data, _find_key_columns, USE_REAL_TQS_API
@@ -509,4 +510,77 @@ def rerun_api_call():
         return jsonify({"status": "error", "message": f"Required file not found: {fnf}"}), 500
     except Exception as e:
         current_app.logger.error(f"Unexpected error in /rerun-api-call: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": f"An unexpected error occurred: {e}"}), 500 
+        return jsonify({"status": "error", "message": f"An unexpected error occurred: {e}"}), 500
+
+def get_schedules_file():
+    return os.path.join(current_app.instance_path, 'schedules.json')
+
+def load_schedules():
+    file = get_schedules_file()
+    if not os.path.exists(file):
+        return []
+    try:
+        with open(file, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        current_app.logger.error(f"Error loading schedules: {e}", exc_info=True)
+        return []
+
+def save_schedules(schedules):
+    file = get_schedules_file()
+    try:
+        with open(file, 'w') as f:
+            json.dump(schedules, f)
+    except Exception as e:
+        current_app.logger.error(f"Error saving schedules: {e}", exc_info=True)
+
+@api_bp.route('/schedules', methods=['GET'])
+def list_schedules():
+    return jsonify(load_schedules())
+
+@api_bp.route('/schedules', methods=['POST'])
+def add_schedule():
+    data = request.get_json() or {}
+    schedule_time = data.get('schedule_time')
+    write_mode = data.get('write_mode')
+    date_mode = data.get('date_mode')
+    funds = data.get('funds')
+    if not schedule_time or not write_mode or not date_mode or not isinstance(funds, list) or not funds:
+        return jsonify({'message': 'Missing or invalid schedule fields'}), 400
+    if date_mode == 'quick':
+        days_back = data.get('days_back')
+        end_date = data.get('end_date')
+        if days_back is None or end_date is None:
+            return jsonify({'message': 'days_back and end_date are required for quick mode'}), 400
+    else:
+        start_date = data.get('start_date')
+        custom_end_date = data.get('custom_end_date')
+        if start_date is None or custom_end_date is None:
+            return jsonify({'message': 'start_date and custom_end_date are required for range mode'}), 400
+    schedules = load_schedules()
+    new_id = max((s['id'] for s in schedules), default=0) + 1
+    sched = {
+        'id': new_id,
+        'schedule_time': schedule_time,
+        'write_mode': write_mode,
+        'date_mode': date_mode,
+        'funds': funds
+    }
+    if date_mode == 'quick':
+        sched['days_back'] = int(days_back)
+        sched['end_date'] = end_date
+    else:
+        sched['start_date'] = start_date
+        sched['custom_end_date'] = custom_end_date
+    schedules.append(sched)
+    save_schedules(schedules)
+    return jsonify(sched), 201
+
+@api_bp.route('/schedules/<int:schedule_id>', methods=['DELETE'])
+def delete_schedule(schedule_id):
+    schedules = load_schedules()
+    new_list = [s for s in schedules if s['id'] != schedule_id]
+    if len(new_list) == len(schedules):
+        return jsonify({'message': 'Schedule not found'}), 404
+    save_schedules(new_list)
+    return '', 204 

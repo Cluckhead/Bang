@@ -20,6 +20,10 @@ from logging.handlers import RotatingFileHandler # Import handler
 # --- Add imports for the new route ---
 import subprocess
 import sys # To get python executable path
+import json
+import threading
+import time
+import datetime
 # --- End imports ---
 
 # Import configurations and utilities
@@ -196,6 +200,58 @@ def create_app():
             app.logger.error(f"Exception occurred while running cleanup script: {e}", exc_info=True)
             return jsonify({'status': 'error', 'message': f'An exception occurred: {e}'}), 500
     # --- End new route ---
+
+    # --- Scheduled API Calls: manual scheduler loop using threading ---
+    schedules_file = os.path.join(app.instance_path, 'schedules.json')
+    if not os.path.exists(schedules_file):
+        with open(schedules_file, 'w') as f:
+            json.dump([], f)
+
+    # Helper functions to load/save schedules
+    def load_schedules():
+        with open(schedules_file, 'r') as f:
+            return json.load(f)
+    def save_schedules(schedules):
+        with open(schedules_file, 'w') as f:
+            json.dump(schedules, f)
+
+    # Job runner function
+    def run_scheduled_job(schedule):
+        with app.app_context():
+            payload = {
+                'date_mode': schedule['date_mode'],
+                'write_mode': schedule['write_mode'],
+                'funds': schedule['funds']
+            }
+            if schedule['date_mode'] == 'quick':
+                payload['days_back'] = schedule['days_back']
+                payload['end_date'] = schedule['end_date']
+            else:
+                payload['start_date'] = schedule['start_date']
+                payload['custom_end_date'] = schedule['custom_end_date']
+            response = app.test_client().post('/run_api_calls', json=payload)
+            app.logger.info(f"Scheduled job {schedule['id']} executed. Status: {response.status_code}")
+
+    # Manual scheduling loop
+    def schedule_loop():
+        last_checked = None
+        while True:
+            now = datetime.datetime.now()
+            current_minute = now.replace(second=0, microsecond=0)
+            if current_minute != last_checked:
+                last_checked = current_minute
+                for sched in load_schedules():
+                    sched_time = datetime.datetime.strptime(sched['schedule_time'], '%H:%M').time()
+                    if sched_time.hour == now.hour and sched_time.minute == now.minute:
+                        try:
+                            run_scheduled_job(sched)
+                        except Exception as e:
+                            app.logger.error(f"Error running scheduled job {sched['id']}: {e}", exc_info=True)
+            time.sleep(1)
+
+    threading.Thread(target=schedule_loop, daemon=True).start()
+    app.logger.info("Started manual schedule loop thread")
+    # --- End manual scheduling ---
 
     return app
 

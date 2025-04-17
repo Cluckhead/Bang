@@ -9,7 +9,7 @@ Fund Groups
 Schedulers
 Revamp look use tail winds, 538 style graphs
 Speed up security level views, move processing to backend
-Get rid of the (Rex) refereneces and simulate
+
 S&P bad securities email
 Monitor of missing S&P data
 Add Security level checks - Min yield etc
@@ -44,6 +44,7 @@ Add Is distressed  as a filter
 Improve Fake TQS data
 Fund Optimation Algorithm
 
-
+done:
+Get rid of the (Rex) refereneces and simulate
 
 
