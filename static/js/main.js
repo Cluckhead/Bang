@@ -157,3 +157,77 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Add any other global initializations here
 });
+
+/**
+ * Updates the navbar status bar with progress or a cleanup button.
+ * @param {Object} opts - Options for the status bar.
+ * @param {number} [opts.current] - Current completed steps.
+ * @param {number} [opts.total] - Total steps.
+ * @param {string} [opts.text] - Status text.
+ * @param {boolean} [opts.complete] - If true, show cleanup button.
+ * @param {boolean} [opts.error] - If true, show error style.
+ */
+export function updateNavbarStatusBar({ current = 0, total = 0, text = '', complete = false, error = false } = {}) {
+    const bar = document.getElementById('navbar-status-bar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    if (complete) {
+        // Show cleanup button
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm btn-success';
+        btn.textContent = 'Run Data Clean up';
+        btn.onclick = async () => {
+            btn.disabled = true;
+            btn.textContent = 'Cleaning...';
+            try {
+                const resp = await fetch('/run-cleanup', { method: 'POST' });
+                const result = await resp.json();
+                if (resp.ok && result.status === 'success') {
+                    btn.textContent = 'Cleanup Complete!';
+                    setTimeout(() => { bar.innerHTML = ''; }, 3000);
+                } else {
+                    btn.textContent = 'Cleanup Failed';
+                    bar.innerHTML += `<span class='ms-2 text-danger'>${result.error || result.message || 'Error'}</span>`;
+                }
+            } catch (e) {
+                btn.textContent = 'Cleanup Error';
+                bar.innerHTML += `<span class='ms-2 text-danger'>Network error</span>`;
+            } finally {
+                setTimeout(() => { bar.innerHTML = ''; }, 5000);
+            }
+        };
+        bar.appendChild(btn);
+        return;
+    }
+    if (total > 0) {
+        // Show progress bar
+        const percent = Math.round((current / total) * 100);
+        const progressDiv = document.createElement('div');
+        progressDiv.className = 'progress';
+        progressDiv.style.height = '16px';
+        progressDiv.style.width = '70%';
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar progress-bar-striped' + (error ? ' bg-danger' : '');
+        progressBar.role = 'progressbar';
+        progressBar.style.width = percent + '%';
+        progressBar.ariaValueNow = percent;
+        progressBar.ariaValueMin = 0;
+        progressBar.ariaValueMax = 100;
+        progressBar.textContent = percent + '%';
+        progressDiv.appendChild(progressBar);
+        bar.appendChild(progressDiv);
+        // Status text
+        const statusText = document.createElement('span');
+        statusText.className = 'ms-2 small';
+        statusText.textContent = text || `Processing ${current}/${total}`;
+        bar.appendChild(statusText);
+    } else if (text) {
+        // Just show text
+        const statusText = document.createElement('span');
+        statusText.className = 'small';
+        statusText.textContent = text;
+        bar.appendChild(statusText);
+    } else {
+        bar.innerHTML = '';
+    }
+}

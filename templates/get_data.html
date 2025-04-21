@@ -251,7 +251,10 @@
 
 {% block scripts %}
 {{ super() }} {# Include scripts from base.html #}
-<script>
+<script type="module">
+// Import the navbar status bar updater from main.js
+import { updateNavbarStatusBar } from '/static/js/main.js';
+
 // .SYNOPSIS
 //     JavaScript for Get Data via API page. Handles form logic, date range and write mode selection, API calls, and results table updates.
 document.addEventListener('DOMContentLoaded', function() {
@@ -347,13 +350,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Write mode
         const writeMode = writeModeOverwrite.checked ? 'overwrite_all' : 'expand';
 
-        // Show status area and indicate processing
-        statusArea.style.display = 'block';
-        statusMessage.textContent = `Starting ${writeMode === 'overwrite_all' ? 'overwrite' : 'expand/merge'}...`;
-        progressBar.classList.add('progress-bar-animated');
-        progressBar.classList.remove('bg-success', 'bg-danger');
-        progressBar.style.width = '5%';
-        progressBar.textContent = '5%';
+        // --- New: Progress bar in navbar ---
+        updateNavbarStatusBar({ current: 0, total: 1, text: 'Preparing API calls...' });
 
         try {
             // Prepare request body
@@ -370,16 +368,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 requestBody.end_date = endDate;
             }
 
+            // --- New: Fetch the list of queries to determine total steps ---
+            // We'll get this from the backend response (summary.length)
+            let totalSteps = 1;
+            let completedSteps = 0;
+            // Start the API call
             const response = await fetch('{{ url_for("api_bp.run_api_calls") }}', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
             });
-
             const result = await response.json();
-            progressBar.classList.remove('progress-bar-animated');
+            // If we have a summary, update progress for each item
+            if (result.summary && Array.isArray(result.summary)) {
+                totalSteps = result.summary.length;
+                completedSteps = 0;
+                for (const item of result.summary) {
+                    completedSteps++;
+                    updateNavbarStatusBar({
+                        current: completedSteps,
+                        total: totalSteps,
+                        text: `Processing ${completedSteps}/${totalSteps}: ${item.file_name}`,
+                        error: item.status && item.status.toLowerCase().includes('error')
+                    });
+                    // Optionally, add a small delay for UI update
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                // When done, show cleanup button
+                updateNavbarStatusBar({ complete: true });
+            } else {
+                // Fallback: just show complete
+                updateNavbarStatusBar({ complete: true });
+            }
 
             if (response.ok && (result.status === 'completed' || result.status === 'completed_with_errors')) {
                 statusMessage.textContent = result.message;
@@ -435,6 +455,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 errorMessageDiv.style.display = 'block';
             }
         } catch (error) {
+            updateNavbarStatusBar({ text: 'Error during API calls', error: true });
             console.error("Fetch error:", error);
             progressBar.classList.remove('progress-bar-animated');
             progressBar.style.width = '100%';

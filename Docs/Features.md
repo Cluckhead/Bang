@@ -37,3 +37,38 @@ This feature allows users to compare two related security-level datasets side-by
     *   Provides 'All Funds' and 'No Funds' options in the fund selector.
     *   Added 'Rimes' as a potential data source.
 *   **Weight Check:** Compare fund and benchmark weights via `/weights/check`
+
+## Data Staleness Detection
+
+This feature monitors and identifies stale data in security files, helping users maintain data quality and reliability.
+
+### Core Functionality (`staleness_processing.py`)
+
+* **File Processing:** Automatically processes files with naming pattern `sec_*.csv` and `sp_sec_*.csv` in the configured data folder.
+* **Detection Methods:**
+  * **Placeholder Pattern Detection:** Identifies consecutive placeholder values (default: repeated values of 100) that indicate stale or missing data.
+  * **Time-based Staleness:** Flags securities where the last valid update is older than a configurable threshold (default: 5 days).
+* **Customizable Configuration:**
+  * Configurable placeholder values that indicate stale data
+  * Adjustable threshold for consecutive placeholders (default: 3)
+  * Configurable day threshold for time-based staleness (default: 5 days)
+* **Exclusion Support:** Ability to exclude specific securities from staleness analysis
+
+### Summary View (`/staleness/summary`)
+
+* Displays a table summarizing staleness statistics across all processed files
+* Shows metrics including:
+  * Latest date in each file
+  * Total securities count
+  * Count and percentage of stale securities
+  * Quick access to detailed views
+
+### Detail View (`/staleness/details/<file_name>`)
+
+* Provides an in-depth look at stale securities in a specific file
+* Lists each stale security with:
+  * Security ID and metadata (Name, Type, Currency, etc.)
+  * Last update date
+  * Days stale
+  * Staleness type (placeholder pattern or time-based)
+  * Number of consecutive placeholders (if applicable)

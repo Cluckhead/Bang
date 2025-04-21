@@ -15,9 +15,7 @@
 # Features v2
 - Exclude NaN values from the zscore calculations and the first page where there is no S&P data,Better handing in charts and z-scores when positioning is changing, need to run with real data 
 - Fix the Status Bar
-- Data Completeness Dashboard
-- Data Staleness Monitor
-- Utilise TAVU
+
 
 ### Features v2.1
 - Attribution Errors
