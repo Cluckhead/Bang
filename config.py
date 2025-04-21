@@ -6,16 +6,116 @@
 Configuration settings for the Flask application.
 """
 
-# Define the primary data directory.
-# This path is read by the `utils.get_data_folder_path` function during application startup.
-# - If this is an absolute path (e.g., 'C:/MyApp/Data', '/var/data'), it will be used directly.
-# - If this is a relative path (e.g., 'Data', '../SharedData'), it will be resolved
-#   to an absolute path relative to the application's root directory (determined by Flask's app.root_path
-#   or the script's location for standalone scripts).
-# **Use forward slashes (/) for paths, even on Windows, for consistency.**
-# If this variable is missing, empty, or the file doesn't exist, the utility function
-# will fall back to using 'Data' relative to the application root.
-DATA_FOLDER = 'Data'
+import os
+from pathlib import Path
+
+# Base directory of the application
+BASE_DIR = Path(__file__).resolve().parent
+
+# Data folder configuration
+# Use environment variable if set, otherwise default to 'Data' subdirectory
+DATA_FOLDER_NAME = os.environ.get('DATA_CHECKER_DATA_FOLDER', 'Data')
+DATA_FOLDER = os.path.join(BASE_DIR, DATA_FOLDER_NAME) # Absolute path
+
+# Define a list of distinct colors for chart lines
+# Add more colors if you expect more fund columns
+COLOR_PALETTE = [
+    '#1f77b4',  # Muted Blue
+    '#ff7f0e',  # Safety Orange
+    '#2ca02c',  # Cooked Asparagus Green
+    '#d62728',  # Brick Red
+    '#9467bd',  # Muted Purple
+    '#8c564b',  # Chestnut Brown
+    '#e377c2',  # Raspberry Yogurt Pink
+    '#7f7f7f',  # Middle Gray
+    '#bcbd22',  # Curry Yellow-Green
+    '#17becf'   # Blue-Teal
+]
+
+# --- NEW: Comparison Configuration ---
+# Defines the different types of security data comparisons available.
+# Keys are the identifier used in URLs (e.g., 'spread').
+# Values are dictionaries containing:
+#   - display_name: User-friendly name for titles and labels.
+#   - file1: The filename for the 'original' dataset.
+#   - file2: The filename for the 'new' or 'comparison' dataset.
+COMPARISON_CONFIG = {
+    'spread': {
+        'display_name': 'Spread',
+        'file1': 'sec_spread.csv',
+        'file2': 'sec_spreadSP.csv',
+        'value_label': 'Spread' # Label for the 'Value' column in charts/stats
+    },
+    'duration': {
+        'display_name': 'Duration',
+        'file1': 'sec_duration.csv',
+        'file2': 'sec_durationSP.csv',
+        'value_label': 'Duration'
+    },
+    'spread_duration': {
+        'display_name': 'Spread Duration',
+        'file1': 'sec_Spread duration.csv', # Note the space in filename
+        'file2': 'sec_Spread durationSP.csv', # Note the space in filename
+        'value_label': 'Spread Duration'
+    }
+    # Add new comparison types here in the future
+    # 'yield': {
+    #     'display_name': 'Yield',
+    #     'file1': 'sec_yield.csv',
+    #     'file2': 'sec_yieldSP.csv',
+    #     'value_label': 'Yield'
+    # }
+}
+
+# Logging configuration (optional, Flask's default logging can be used)
+LOGGING_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'formatter': 'standard',
+            'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'level': 'DEBUG',
+            'formatter': 'standard',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'instance', 'app.log'), # Log file path
+            'mode': 'a', # Append mode
+        },
+    },
+    'loggers': {
+        '': {  # root logger
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG', # Set root level to DEBUG to capture everything
+            'propagate': True
+        },
+        'werkzeug': { # Quieter logging for Werkzeug (Flask's development server)
+             'handlers': ['console', 'file'],
+             'level': 'INFO', # Or WARNING
+             'propagate': False
+         },
+         # You can add specific loggers for your modules if needed
+         #'app': {
+         #    'handlers': ['console', 'file'],
+         #    'level': 'DEBUG',
+         #    'propagate': False
+         #},
+    }
+}
+
+# --- Add comments explaining the purpose of this file ---
+# This file centralizes configuration settings for the Simple Data Checker application.
+# It defines paths, constants (like color palettes), and specific configurations
+# for different features, such as the data comparison types.
+# Using a central configuration file makes the application easier to manage and modify.
+# Environment variables can be used to override defaults (e.g., DATA_FOLDER).
 
 # Define a list of distinct colors for chart lines
 # Add more colors if you expect more fund columns

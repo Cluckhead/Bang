@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{# Base template for comparison summary pages #}
+{# Expects context variables:
+    - comparison_type (str): e.g., 'spread', 'duration' (used for URLs)
+    - display_name (str): e.g., 'Spread', 'Duration' (used for titles/labels)
+    - table_data (list[dict]): Data rows for the table.
+    - columns_to_display (list[str]): Column names to show in the table header/rows.
+    - id_column_name (str): The name of the column containing the security ID.
+    - pagination (dict): Pagination context object (page, total_pages, url_for_page, etc.).
+    - filter_options (dict): Available options for dropdown filters {col_name: [options]}.
+    - active_filters (dict): Currently active filters {col_name: value}.
+    - current_sort_by (str): Column name currently sorted by.
+    - current_sort_order (str): 'asc' or 'desc'.
+    - show_sold (bool): Whether sold securities are currently shown.
+    - message (str, optional): A message to display (e.g., for errors or no data).
+#}
+
+{% block title %}{{ display_name }} Comparison Summary{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4"> 
+    <h1>{{ display_name }} Comparison: Original vs. New</h1>
+    <p class="text-muted">Comparing {{ display_name.lower() }} between the two datasets. Click on a Security ID/Name to see details. Use filters or click column headers to sort. Pagination applied.</p>
+
+    {# Display message if any #}
+    {% if message %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
+    {# --- Filter Form --- #}
+    {% if filter_options %}
+    {# Use generic_comparison_bp.summary and pass comparison_type #}
+    <form method="GET" action="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="mb-3 p-3 border rounded bg-light" id="filter-form">
+        <h5>Filters</h5>
+        <div class="row g-2 align-items-end">
+            {% for column, options in filter_options.items() %}
+            <div class="col-md-2 mb-2">
+                <label for="filter-{{ column }}" class="form-label">{{ column.replace('_', ' ') | title }}</label>
+                <select id="filter-{{ column }}" name="filter_{{ column }}" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    {% for option in options %}
+                    {# Ensure comparison works correctly even if types differ (e.g., int filter value vs string option) #}
+                    <option value="{{ option }}" {% if active_filters.get(column) == option|string %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+            <div class="col-md-3 d-flex align-items-end">
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="showSoldToggle" name="show_sold" value="true" {% if show_sold %}checked{% endif %}>
+                    <label class="form-check-label" for="showSoldToggle"><small>Show Sold Securities</small></label>
+                </div>
+            </div>
+            <div class="col-md-auto">
+                <button type="submit" class="btn btn-primary btn-sm">Apply Filters</button>
+                {# Add a clear button only if filters or show_sold are active #}
+                {% if active_filters or not show_sold %}
+                 <a href="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="btn btn-secondary btn-sm">Clear Filters</a>
+                {% endif %}
+            </div>
+        </div>
+        {# Hidden fields to preserve current sort order when applying filters - page is implicitly reset #}
+        <input type="hidden" name="sort_by" value="{{ current_sort_by }}" id="currentSortBy">
+        <input type="hidden" name="sort_order" value="{{ current_sort_order }}" id="currentSortOrder">
+    </form>
+    {% endif %}
+
+    {# --- Data Table --- #}
+    <div class="table-responsive">
+        {# Use a generic table ID #}
+        <table class="table table-striped table-hover table-sm caption-top" id="generic-comparison-table">
+             {# Add table caption for summary #}
+             {% if pagination and pagination.total_items is defined %}
+             <caption class="pb-1">
+                 Displaying {{ table_data|length }} of {{ pagination.total_items }} total securities.
+                 (Page {{ pagination.page }} of {{ pagination.total_pages }})
+             </caption>
+             {% elif table_data %}
+             <caption class="pb-1">
+                 Displaying {{ table_data|length }} securities.
+             </caption>
+             {% endif %}
+            <thead class="table-light">
+                <tr>
+                    {# Loop through the columns passed from the view #}
+                    {% for col_name in columns_to_display %}
+                        {% set is_sort_col = (col_name == current_sort_by) %}
+                        {% set next_sort_order = 'asc' if is_sort_col and current_sort_order == 'desc' else 'desc' %}
+                        
+                        {# Base arguments, including current filters AND show_sold status #}
+                        {% set sort_args = request.args.to_dict() %}
+                        {# Remove page, add sort params #}
+                        {% set _ = sort_args.pop('page', None) %}
+                        {% set _ = sort_args.update({'sort_by': col_name, 'sort_order': next_sort_order}) %}
+                        
+                        {# Generate URL for this header using the generic route #}
+                        {% set sort_url = url_for('generic_comparison_bp.summary', comparison_type=comparison_type, **sort_args) %}
+                        
+                        {# Add classes for styling and JS (use generic class if needed) #}
+                        <th class="sortable {{ 'sorted-' + current_sort_order if is_sort_col else '' }}" 
+                            data-column-name="{{ col_name }}">
+                            <a href="{{ sort_url }}" class="text-decoration-none text-dark">
+                                {{ col_name.replace('_', ' ') | title }} 
+                                {% if is_sort_col %}
+                                    <span class="sort-indicator ms-1">{{ '▲' if current_sort_order == 'asc' else '▼' }}</span>
+                                {% endif %}
+                            </a>
+                        </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody id="generic-comparison-table-body">
+                {% set id_col = id_column_name %}
+                {% for row in table_data %}
+                <tr>
+                    {# Loop through the same columns to ensure order matches header #}
+                    {% for col_name in columns_to_display %}
+                        <td>
+                            {% if col_name == id_col %}
+                                {# Link to generic details page, ensuring security_id is urlencoded #}
+                                <a href="{{ url_for('generic_comparison_bp.details', comparison_type=comparison_type, security_id=row[id_col]|urlencode) }}">{{ row[id_col] }}</a>
+                            {% elif col_name in ['Level_Correlation', 'Change_Correlation'] and row[col_name] is not none and row[col_name]|string != 'nan' %}
+                                {# Format numeric correlations, handle potential non-numeric values gracefully #}
+                                {% set val = row[col_name] | float(default=none) %}
+                                {{ "%.4f"|format(val) if val is not none else 'N/A' }}
+                            {% elif col_name in ['Mean_Abs_Diff', 'Max_Abs_Diff'] and row[col_name] is not none and row[col_name]|string != 'nan' %}
+                                {% set val = row[col_name] | float(default=none) %}
+                                {{ "%.3f"|format(val) if val is not none else 'N/A' }} 
+                            {% elif col_name == 'Same_Date_Range' %}
+                                <span class="badge {{ 'bg-success' if row[col_name] else 'bg-warning' }}">{{ 'Yes' if row[col_name] else 'No' }}</span>
+                            {% elif col_name == 'is_held' %} {# Style the held status indicator #}
+                                 <span class="badge {{ 'bg-info' if row[col_name] else 'bg-secondary' }}">{{ 'Held' if row[col_name] else 'Sold' }}</span>
+                            {% elif col_name.endswith('_Date') and row[col_name] %}
+                                 {# Assume dates are datetime objects or strings - format if possible #}
+                                 {{ row[col_name].strftime('%Y-%m-%d') if row[col_name] is iterable and hasattr(row[col_name], 'strftime') else row[col_name] }} 
+                            {% elif row[col_name] is number %}
+                                {{ row[col_name]|round(3) }} {# General numeric formatting #}
+                            {% else %}
+                                {{ row[col_name] if row[col_name] is not none else '' }} {# Display strings or empty #}
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                </tr>
+                {% else %}
+                 {# Message is now shown above if table_data is empty #}
+                 {# Optional: Keep a row here if preferred #}
+                 {# <tr><td colspan="{{ columns_to_display|length }}" class="text-center">No comparison data available.</td></tr> #}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# --- Pagination Controls --- #}
+    {# Use the pagination object passed from the view, which contains url_for_page #}
+    {% if pagination and pagination.total_pages > 1 %}
+        <nav aria-label="{{ display_name }} comparison data navigation">
+            <ul class="pagination pagination-sm justify-content-center">
+                {# Previous Page Link #}
+                <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                    <a class="page-link pagination-link" href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" aria-label="Previous">&laquo;</a>
+                </li>
+
+                {# Page Number Links #}
+                 {% set start_page = pagination.start_page_display %}
+                 {% set end_page = pagination.end_page_display %}
+                 
+                 {% if start_page > 1 %}
+                     <li class="page-item"><a class="page-link pagination-link" href="{{ pagination.url_for_page(1) }}">1</a></li>
+                     {% if start_page > 2 %}
+                         <li class="page-item disabled"><span class="page-link">...</span></li>
+                     {% endif %}
+                 {% endif %}
+
+                 {% for p in range(start_page, end_page + 1) %}
+                    <li class="page-item {{ 'active' if p == pagination.page }}">
+                        <a class="page-link pagination-link" href="{{ pagination.url_for_page(p) }}">{{ p }}</a>
+                    </li>
+                {% endfor %}
+
+                 {% if end_page < pagination.total_pages %}
+                     {% if end_page < pagination.total_pages - 1 %}
+                         <li class="page-item disabled"><span class="page-link">...</span></li>
+                     {% endif %}
+                     <li class="page-item"><a class="page-link pagination-link" href="{{ pagination.url_for_page(pagination.total_pages) }}">{{ pagination.total_pages }}</a></li>
+                 {% endif %}
+
+                {# Next Page Link #}
+                <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                    <a class="page-link pagination-link" href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" aria-label="Next">&raquo;</a>
+                </li>
+            </ul>
+        </nav>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{# Removed the complex client-side JS for filters/sorting/pagination #}
+{# Relying purely on server-side generation of links with current state #}
+{# Add back simple JS if needed for things like toggle switch confirmation etc. #}
+{# Example: JS to handle the Show Sold toggle submitting the form #}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const showSoldToggle = document.getElementById('showSoldToggle');
+        const filterForm = document.getElementById('filter-form');
+        
+        if (showSoldToggle && filterForm) {
+            showSoldToggle.addEventListener('change', function() {
+                // When toggle changes, submit the form.
+                // The form already includes hidden fields for sort order.
+                // Page number is implicitly reset by form submission without 'page' arg.
+                filterForm.submit();
+            });
+        }
+    });
+</script>
+{% endblock %} 

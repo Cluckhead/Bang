@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{# Base template for comparison detail pages #}
+{# Expects context variables:
+    - comparison_type (str): e.g., 'spread', 'duration' (used for URLs)
+    - display_name (str): e.g., 'Spread', 'Duration' (used for titles/labels)
+    - value_label (str): Label for the specific value being compared (e.g., 'Spread', 'Duration')
+    - security_id (str): The decoded ID of the security being displayed.
+    - security_name (str): The display name for the security (might be same as ID or a specific name field).
+    - chart_data (dict): Data formatted for Chart.js (labels, datasets).
+    - stats (dict): Calculated comparison statistics for this security.
+    - id_column_name (str): The actual name of the ID column in the data.
+    - message (str, optional): A message to display (e.g., for errors).
+#}
+
+{% block title %}{{ display_name }} Comparison Details: {{ security_name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    
+    {# --- Header --- #}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3>{{ display_name }} Comparison Details</h3>
+            {# Display security ID and Name (if different) #}
+            <h5 class="text-muted">
+                {{ id_column_name }}: {{ security_id }}
+                {% if security_name and security_name != security_id %} | Name: {{ security_name }} {% endif %}
+            </h5>
+        </div>
+        {# Link back to the summary page for this comparison type #}
+        <a href="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="btn btn-outline-secondary btn-sm">&laquo; Back to {{ display_name }} Summary</a>
+    </div>
+
+    {# Display message if any #}
+    {% if message %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
+    {# --- Main Content: Chart and Stats --- #}
+    {% if chart_data and stats %}
+        <div class="row">
+            {# Chart Column #}
+            <div class="col-lg-8 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        {{ value_label }} Time Series Comparison
+                    </div>
+                    <div class="card-body">
+                        <canvas id="comparisonChart" style="height: 750px;"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            {# Stats Column #}
+            <div class="col-lg-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        Comparison Statistics
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group list-group-flush">
+                            {# Display key comparison stats #}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Level Correlation:
+                                <span class="badge bg-primary rounded-pill">{{ "%.4f"|format(stats.Level_Correlation|float) if stats.Level_Correlation is not none else 'N/A' }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Change Correlation:
+                                <span class="badge bg-primary rounded-pill">{{ "%.4f"|format(stats.Change_Correlation|float) if stats.Change_Correlation is not none else 'N/A' }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Mean Absolute Difference:
+                                <span class="badge bg-secondary rounded-pill">{{ "%.3f"|format(stats.Mean_Abs_Diff|float) if stats.Mean_Abs_Diff is not none else 'N/A' }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Max Absolute Difference:
+                                <span class="badge bg-secondary rounded-pill">{{ "%.3f"|format(stats.Max_Abs_Diff|float) if stats.Max_Abs_Diff is not none else 'N/A' }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Same Date Range:
+                                <span class="badge {{ 'bg-success' if stats.Same_Date_Range else 'bg-warning text-dark' }}">{{ 'Yes' if stats.Same_Date_Range else 'No' }}</span>
+                            </li>
+                            {# Optional: Display more stats if needed #}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Original Start Date:
+                                <span class="badge bg-light text-dark">{{ stats.Start_Date_Orig.strftime('%Y-%m-%d') if stats.Start_Date_Orig else 'N/A' }}</span>
+                            </li>
+                             <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Original End Date:
+                                <span class="badge bg-light text-dark">{{ stats.End_Date_Orig.strftime('%Y-%m-%d') if stats.End_Date_Orig else 'N/A' }}</span>
+                            </li>
+                             <li class="list-group-item d-flex justify-content-between align-items-center">
+                                New Start Date:
+                                <span class="badge bg-light text-dark">{{ stats.Start_Date_New.strftime('%Y-%m-%d') if stats.Start_Date_New else 'N/A' }}</span>
+                            </li>
+                             <li class="list-group-item d-flex justify-content-between align-items-center">
+                                New End Date:
+                                <span class="badge bg-light text-dark">{{ stats.End_Date_New.strftime('%Y-%m-%d') if stats.End_Date_New else 'N/A' }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Original NaN Count:
+                                <span class="badge bg-light text-dark">{{ stats.NaN_Count_Orig if stats.NaN_Count_Orig is not none else 'N/A' }} / {{ stats.Total_Points }}</span>
+                            </li>
+                             <li class="list-group-item d-flex justify-content-between align-items-center">
+                                New NaN Count:
+                                <span class="badge bg-light text-dark">{{ stats.NaN_Count_New if stats.NaN_Count_New is not none else 'N/A' }} / {{ stats.Total_Points }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                {# Display other static attributes if available #}
+                {# Define the list of keys already displayed in the stats section #}
+                {% set displayed_keys = [
+                    'Level_Correlation', 'Change_Correlation', 'Mean_Abs_Diff', 'Max_Abs_Diff', 
+                    'Same_Date_Range', 'Start_Date_Orig', 'End_Date_Orig', 'Start_Date_New', 
+                    'End_Date_New', 'NaN_Count_Orig', 'NaN_Count_New', 'Total_Points',
+                    'Overall_Start_Date', 'Overall_End_Date', 
+                    id_column_name, 
+                    'Security Name', 
+                    'is_held'
+                ] %}
+                {# Check if there are any other attributes to show BEFORE rendering the card #}
+                {% set show_other_attrs_card = false %}
+                {% for key, value in stats.items() %}
+                    {% if key not in displayed_keys and value is not none %}
+                        {% set show_other_attrs_card = true %}
+                    {% endif %}
+                {% endfor %}
+
+                {# Only render the card if there are attributes to show #}
+                {% if show_other_attrs_card %}
+                <div class="card mt-3">
+                    <div class="card-header">
+                        Other Security Attributes
+                    </div>
+                     <div class="card-body">
+                        <ul class="list-group list-group-flush">
+                             {# Loop again to display the attributes #}
+                             {% for key, value in stats.items() %}
+                                 {% if key not in displayed_keys and value is not none %}
+                                     <li class="list-group-item d-flex justify-content-between align-items-center">
+                                         {{ key.replace('_', ' ') | title }}:
+                                         <span class="text-end">{{ value }}</span>
+                                     </li>
+                                 {% endif %}
+                             {% endfor %}
+                         </ul>
+                    </div>
+                </div>
+                {% endif %}
+            </div> 
+        </div>
+    {% elif not message %}
+         {# Show default message if no specific error message and no data #}
+         <div class="alert alert-info">No data available to display for this security.</div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{# Check if chart_data is available before attempting to render #}
+{% if chart_data %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctx = document.getElementById('comparisonChart').getContext('2d');
+        // Get chart data passed from Flask view
+        const chartData = {{ chart_data | tojson }};
+        
+        const comparisonChart = new Chart(ctx, {
+            type: 'line',
+            data: chartData, // Use the data passed from the view
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: '{{ value_label }} Comparison: Original vs New' // Use value_label
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: '{{ value_label }}' // Use value_label
+                        }
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 1 // Smaller points for potentially dense data
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endif %}
+{% endblock %} 

@@ -116,15 +116,16 @@ def create_app():
     from views.fund_views import fund_bp
     from views.api_views import api_bp
     from views.exclusion_views import exclusion_bp
-    from views.comparison_views import comparison_bp
+    # from views.comparison_views import comparison_bp # OLD - Replaced by generic
     from views.weight_views import weight_bp
     # --- Import new blueprints ---
-    from views.duration_comparison_views import duration_comparison_bp
-    from views.spread_duration_comparison_views import spread_duration_comparison_bp
+    # from views.duration_comparison_views import duration_comparison_bp # OLD - Replaced by generic
+    # from views.spread_duration_comparison_views import spread_duration_comparison_bp # OLD - Replaced by generic
     # --- End import new blueprints ---
     from views.curve_views import curve_bp # Import the new blueprint
     from views.issue_views import issue_bp # Import the issue tracking blueprint
     from views.attribution_views import attribution_bp # Import the attribution blueprint
+    from views.generic_comparison_views import generic_comparison_bp # NEW Generic Comparison BP
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
@@ -132,15 +133,16 @@ def create_app():
     app.register_blueprint(fund_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(exclusion_bp)
-    app.register_blueprint(comparison_bp)
+    # app.register_blueprint(comparison_bp) # OLD - Replaced by generic
     app.register_blueprint(weight_bp)
     # --- Register new blueprints ---
-    app.register_blueprint(duration_comparison_bp)
-    app.register_blueprint(spread_duration_comparison_bp)
+    # app.register_blueprint(duration_comparison_bp) # OLD - Replaced by generic
+    # app.register_blueprint(spread_duration_comparison_bp) # OLD - Replaced by generic
     # --- End register new blueprints ---
     app.register_blueprint(curve_bp) # Register the new blueprint
     app.register_blueprint(issue_bp) # Register the issue tracking blueprint
     app.register_blueprint(attribution_bp) # Register the attribution blueprint
+    app.register_blueprint(generic_comparison_bp, url_prefix='/compare') # NEW - Register generic comparison with a base prefix
 
     app.logger.info("Registered Blueprints:")
     app.logger.info(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
@@ -149,15 +151,16 @@ def create_app():
     app.logger.info(f"- {fund_bp.name} (prefix: {fund_bp.url_prefix})")
     app.logger.info(f"- {api_bp.name} (prefix: {api_bp.url_prefix})")
     app.logger.info(f"- {exclusion_bp.name} (prefix: {exclusion_bp.url_prefix})")
-    app.logger.info(f"- {comparison_bp.name} (prefix: {comparison_bp.url_prefix})")
+    # app.logger.info(f"- {comparison_bp.name} (prefix: {comparison_bp.url_prefix})") # OLD
     app.logger.info(f"- {weight_bp.name} (prefix: {weight_bp.url_prefix})")
     # --- Print new blueprints ---
-    print(f"- {duration_comparison_bp.name} (prefix: {duration_comparison_bp.url_prefix})")
-    print(f"- {spread_duration_comparison_bp.name} (prefix: {spread_duration_comparison_bp.url_prefix})")
+    # print(f"- {duration_comparison_bp.name} (prefix: {duration_comparison_bp.url_prefix})") # OLD
+    # print(f"- {spread_duration_comparison_bp.name} (prefix: {spread_duration_comparison_bp.url_prefix})") # OLD
     # --- End print new blueprints ---
     app.logger.info(f"- {curve_bp.name} (prefix: {curve_bp.url_prefix})") # Log registration
     app.logger.info(f"- {issue_bp.name} (prefix: {issue_bp.url_prefix})") # Log registration for issues
     app.logger.info(f"- {attribution_bp.name} (prefix: {attribution_bp.url_prefix})") # Log registration for attribution
+    app.logger.info(f"- {generic_comparison_bp.name} (prefix: {generic_comparison_bp.url_prefix})") # Log NEW generic comparison
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')

@@ -20,6 +20,13 @@ This application provides a web interface to load, process, and check financial 
     *   Server-side pagination, filtering (search, dropdowns), and sorting
     *   Routes: `/security/summary` (main page), `/security/details/<metric_name>/<security_id>` (detail view)
 
+*   **Generic Data Comparison:** Compare pairs of security-level datasets (e.g., Spread vs SpreadSP, Duration vs DurationSP).
+    *   Configurable via `COMPARISON_CONFIG` in `config.py`.
+    *   Provides summary tables with comparison statistics (correlations, differences, date ranges).
+    *   Detail view with overlayed time-series charts.
+    *   Features server-side filtering (including held status), sorting, and pagination.
+    *   Routes: `/compare/<comparison_type>/summary`, `/compare/<comparison_type>/details/<security_id>`
+
 *   **Fund-Specific Views:**
     *   General Fund Overview (`/fund/<fund_code>`): All metrics with comparison data toggle
     *   Fund Duration Details (`/fund/duration_details/<fund_code>`): Duration changes for securities
@@ -36,11 +43,6 @@ This application provides a web interface to load, process, and check financial 
     *   3-way toggle (L0, L1, L2) for different detail levels
     *   Compares Production vs S&P data for both Benchmark and Portfolio cases
     *   Color-coded cells to highlight discrepancies
-
-*   **Data Comparison:**
-    *   Spread: `/comparison/summary` and `/comparison/details/<security_id>`
-    *   Duration: `/duration_comparison/summary` and `/duration_comparison/details/<security_id>`
-    *   Spread Duration: `/spread_duration_comparison/summary` and `/spread_duration_comparison/details/<security_id>`
 
 *   **Data Simulation & Management:** API simulation via `/get_data`
 
@@ -76,17 +78,15 @@ graph TD
     D --> D3(security_views.py);
     D --> D4(fund_views.py);
     D --> D5(exclusion_views.py);
-    D --> D6(comparison_views.py);
     D --> D7(weight_views.py);
     D --> D8(api_views.py);
     D8 --> D8a(api_core.py);
     D8 --> D8b(api_routes_data.py);
     D8 --> D8c(api_routes_call.py);
-    D --> D9(duration_comparison_views.py);
-    D --> D10(spread_duration_comparison_views.py);
     D --> D11(curve_views.py);
     D --> D12(issue_views.py);
     D --> D13(attribution_views.py);
+    D --> D14(generic_comparison_views.py);
 
     E --> E1(base.html);
     E --> E2(index.html);
@@ -96,18 +96,14 @@ graph TD
     E --> E6(fund_duration_details.html);
     E --> E7(exclusions_page.html);
     E --> E8(get_data.html);
-    E --> E9(comparison_page.html);
-    E --> E10(comparison_details_page.html);
     E --> E11(fund_detail_page.html);
     E --> E12(weight_check.html);
-    E --> E13(duration_comparison_page.html);
-    E --> E14(duration_comparison_details_page.html);
-    E --> E15(spread_duration_comparison_page.html);
-    E --> E16(spread_duration_comparison_details_page.html);
     E --> E17(curve_summary.html);
     E --> E18(curve_details.html);
     E --> E19(issues_page.html);
     E --> E20(attribution_summary.html);
+    E --> E21(comparison_summary_base.html);
+    E --> E22(comparison_details_base.html);
 
     F --> F1(js);
     F1 --> F1a(main.js);
@@ -154,7 +150,7 @@ graph TD
 |------|-------------|
 | `ts_*.csv` | Time-series data indexed by Date and Code (Fund/Benchmark) |
 | `sp_ts_*.csv` | (Optional) Secondary/comparison time-series data corresponding to `ts_*.csv` |
-| `sec_*.csv` | Security-level data in wide format (dates as columns) |
+| `sec_*.csv` | Security-level data in wide format (dates as columns). Used for Securities Check and Comparisons. |
 | `pre_*.csv` | Input files for the `process_data.py` script |
 | `new_*.csv` | Output files from the `process_data.py` script |
 | `exclusions.csv` | Excluded securities list (`SecurityID`, `AddDate`, `EndDate`, `Comment`) |
@@ -163,7 +159,7 @@ graph TD
 | `Dates.csv` | Configuration data for specific use cases |
 | `w_Funds.csv` | Daily fund weights (expected to be 100%) |
 | `w_Bench.csv` | Daily benchmark weights (expected to be 100%) |
-| `w_secs.csv` | Security weights with ISIN as primary identifier |
+| `w_secs.csv` | Security weights with ISIN as primary identifier. Used to determine currently held securities. |
 | `curves.csv` | Yield curve data (Date, Currency Code, Term, Daily Value) |
 | `data_issues.csv` | Issue tracking log (ID, dates, users, details, resolution) |
 | `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P. **Note:** The `L0 Total` column represents the returns for each security/fund/date. |
@@ -173,12 +169,12 @@ graph TD
 | File | Purpose | Key Functions |
 |------|---------|--------------|
 | `app.py` | Application entry point using Flask factory pattern | `create_app()`, `run_cleanup()` |
-| `config.py` | Configuration variables | `DATA_FOLDER`, `COLOR_PALETTE` |
+| `config.py` | Configuration variables | `DATA_FOLDER`, `COLOR_PALETTE`, `COMPARISON_CONFIG` |
 | `data_loader.py` | Load and preprocess time-series data | `load_and_process_data()`, `_find_column()` |
 | `metric_calculator.py` | Calculate statistical metrics | `calculate_latest_metrics()`, `_calculate_column_stats()` |
 | `process_data.py` | Preprocess CSV files | `process_csv_file()`, `main()` |
 | `security_processing.py` | Process security-level data | `load_and_process_security_data()`, `calculate_security_latest_metrics()` |
-| `utils.py` | Utility functions | `_is_date_like()`, `parse_fund_list()` |
+| `utils.py` | Utility functions | `_is_date_like()`, `parse_fund_list()`, `load_weights_and_held_status()` |
 | `curve_processing.py` | Process yield curve data | `load_curve_data()`, `check_curve_inconsistencies()` |
 | `issue_processing.py` | Manage data issues | `add_issue()`, `close_issue()`, `load_issues()` |
 | `weight_processing.py` | Process and clean weight files, replacing generic headers with dates from Dates.csv for fund, benchmark, and security weights. | `process_weight_file()` |
@@ -195,9 +191,7 @@ graph TD
 | `security_views.py` | Security-level data checks | `/security/summary`, `/security/details/<metric_name>/<security_id>` |
 | `fund_views.py` | Fund-specific views | `/fund/<fund_code>`, `/fund/duration_details/<fund_code>` |
 | `exclusion_views.py` | Security exclusion management | `/exclusions`, `/exclusions/remove` |
-| `comparison_views.py` | Spread comparison | `/comparison/summary`, `/comparison/details/<security_id>` |
-| `duration_comparison_views.py` | Duration comparison | `/duration_comparison/summary`, `/duration_comparison/details/<security_id>` |
-| `spread_duration_comparison_views.py` | Spread duration comparison | `/spread_duration_comparison/summary`, `/spread_duration_comparison/details/<security_id>` |
+| `generic_comparison_views.py` | **Generic comparison of two security datasets (e.g., Spread, Duration)** | `/compare/<comparison_type>/summary`, `/compare/<comparison_type>/details/<security_id>` |
 | `api_views.py` | API simulation | `/get_data`, `/run-api-calls`, `/rerun-api-call` |
 | `weight_views.py` | Weight checking | `/weights/check` |
 | `curve_views.py` | Yield curve checking | `/curve/summary`, `/curve/details/<currency>` |
@@ -216,11 +210,10 @@ graph TD
 | `fund_duration_details.html` | Fund duration details | Security duration changes table |
 | `exclusions_page.html` | Exclusion management | Add/remove security exclusions |
 | `get_data.html` | API simulation | Data status, fund selection, date inputs |
-| `comparison_page.html` | Comparison summary | Filter form, sortable table |
-| `comparison_details_page.html` | Detailed comparison | Side-by-side charts |
+| `comparison_summary_base.html` | **Generic comparison summary page** | Filter form, sortable table, pagination |
+| `comparison_details_base.html` | **Generic comparison details page** | Side-by-side charts, statistics display |
 | `fund_detail_page.html` | Fund metrics overview | Multiple charts with SP data toggle |
 | `weight_check.html` | Weight checking | Fund/benchmark weight comparison |
-| `*_comparison_*.html` | Various comparison pages | Similar structure to comparison templates |
 | `curve_summary.html` | Yield curve summary | Inconsistency check table |
 | `curve_details.html` | Yield curve details | Chart.js line chart with date selector |
 | `issues_page.html` | Issue tracking | Add/view/close issue forms and tables |
@@ -247,3 +240,35 @@ Attribution residuals are calculated using the following formulas:
 - `L1 FX Total = L2 FX Carry Daily + L2 FX Change Daily`
 - `L1 Residual = L0 Total - (L1 Rates + L1 Credit + L1 FX)`
 - Perfect attribution is achieved when residual = 0
+
+## Adding a New Comparison Type
+
+Thanks to the refactored generic comparison framework, adding a new comparison (e.g., Yield vs YieldSP) is straightforward:
+
+1.  **Ensure Data Files Exist:** Make sure the two security-level data files you want to compare exist in the `Data/` folder and follow the standard wide format (e.g., `Data/sec_yield.csv` and `Data/sec_yieldSP.csv`). They should have dates as columns and include an identifier column (like `ISIN`) and any relevant static attribute columns (like `Type`, `Currency`).
+2.  **Update Configuration:** Open `config.py` and add a new entry to the `COMPARISON_CONFIG` dictionary. The key will be used in the URL (e.g., `'yield'`). The value should be a dictionary containing:
+    *   `'display_name'`: The user-friendly name (e.g., `'Yield'`).
+    *   `'file1'`: The filename of the first dataset (e.g., `'sec_yield.csv'`).
+    *   `'file2'`: The filename of the second dataset (e.g., `'sec_yieldSP.csv'`).
+    *   `'value_label'`: The label to use for the data value on charts and axes (e.g., `'Yield'`).
+
+    ```python
+    # Example entry in config.py
+    COMPARISON_CONFIG = {
+        # ... existing entries ...
+        'yield': {
+            'display_name': 'Yield',
+            'file1': 'sec_yield.csv',
+            'file2': 'sec_yieldSP.csv',
+            'value_label': 'Yield'
+        }
+    }
+    ```
+
+3.  **Update Navigation:** Open `templates/base.html` and add a new list item (`<li>`) within the "Comparisons" dropdown section of the navigation bar. Point the link to the new summary page using `url_for`:
+
+    ```html
+    <li><a class="dropdown-item" href="{{ url_for('generic_comparison_bp.summary', comparison_type='yield') }}">Yield Comparison</a></li>
+    ```
+
+That's it! The `generic_comparison_views.py` module and the base templates (`comparison_summary_base.html`, `comparison_details_base.html`) will automatically handle the routing, data loading, statistics calculation, filtering, sorting, pagination, and rendering for the new comparison type based on the configuration.
