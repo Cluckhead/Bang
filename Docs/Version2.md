@@ -6,19 +6,19 @@
 
 # Code Structure
 - Python Unit testing
-- Join comparison views .py files get rid of duplication
 - Speed up security level views, move processing to backend
 - Get rid of div/0 debugs when looking at comparison
-- Every PY file fhould be below 500 lines
+- Every PY file should be below 500 lines
 - Update requirements file
 - Gemini Code Review score of >7
 
 # Features v2
+- Add a weights/Holdings chart to a comparison **[Done]**
 - Exclude NaN values from the zscore calculations and the first page where there is no S&P data
 - Fix the Status Bar
-- Add ability to link Jira tickets
 - Better handing in charts and z-scores when positioning is changing
-- Name Drop down on issues
+- Name Drop down on issues.
+- Add ability to link Jira tickets
 - Add no fund as an option in the fund drop down of the issues page
 - Add Rimes as an issue on the issues page
 - Data Completeness Dashboard

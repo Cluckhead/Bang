@@ -11,6 +11,7 @@
 import pandas as pd
 import math
 import logging
+import os # Added for path joining
 from flask import Blueprint, render_template, request, current_app, url_for, flash, abort
 from urllib.parse import unquote, urlencode # For handling security IDs with special chars
 
@@ -283,6 +284,156 @@ def calculate_generic_comparison_stats(merged_df, static_data, id_col):
     return summary_df
 
 
+# --- Helper function to process holdings data ---
+def get_holdings_for_security(security_id, chart_dates, data_folder):
+    """
+    Loads w_secs.csv and determines which funds held the given security on the specified dates.
+
+    Args:
+        security_id (str): The ISIN or identifier of the security.
+        chart_dates (list): A list of date strings ('YYYY-MM-DD') from the chart.
+        data_folder (str): Path to the Data folder.
+
+    Returns:
+        dict: A dictionary where keys are fund codes and values are lists of booleans
+              indicating hold status for each corresponding chart date.
+              Returns an empty dict if the security or file is not found, or on error.
+        list: The list of date strings used for the columns, confirms alignment.
+        str: An error message, if any.
+    """
+    log = current_app.logger
+    holdings_file = os.path.join(data_folder, 'w_secs.csv')
+    holdings_data = {}
+    error_message = None
+
+    try:
+        if not os.path.exists(holdings_file):
+            log.warning(f"Holdings file not found: {holdings_file}")
+            return holdings_data, chart_dates, "Holdings file (w_secs.csv) not found."
+
+        # Load the holdings file - assuming ISIN is the first column
+        # We need to be careful with date parsing here, as headers might be strings
+        df_holdings = pd.read_csv(holdings_file, low_memory=False)
+        log.info(f"Loaded w_secs.csv with columns: {df_holdings.columns.tolist()}")
+
+        # Identify potential date columns (heuristic: check format like DD/MM/YYYY or YYYY-MM-DD)
+        # and the ID column (assuming 'ISIN') and 'Funds' column
+        id_col_holding = 'ISIN' # Assuming this is the standard ID in w_secs
+        fund_col_holding = 'Funds'
+
+        if id_col_holding not in df_holdings.columns or fund_col_holding not in df_holdings.columns:
+            log.error(f"Missing required columns '{id_col_holding}' or '{fund_col_holding}' in {holdings_file}")
+            return holdings_data, chart_dates, f"Missing required columns in {holdings_file}."
+            
+        # Normalize security ID for comparison (e.g., convert to string)
+        df_holdings[id_col_holding] = df_holdings[id_col_holding].astype(str)
+        security_id_str = str(security_id)
+
+        # Filter for the specific security
+        sec_holdings = df_holdings[df_holdings[id_col_holding] == security_id_str].copy()
+
+        if sec_holdings.empty:
+            log.info(f"Security ID '{security_id_str}' not found in {holdings_file}")
+            # Not necessarily an error, just means no holdings data
+            return holdings_data, chart_dates, None 
+
+        log.info(f"Found {len(sec_holdings)} rows for security '{security_id_str}' in w_secs.csv.")
+
+        # Prepare chart dates (convert to expected format if needed, assuming 'YYYY-MM-DD')
+        # The chart_dates from chart_data['labels'] should already be 'YYYY-MM-DD' strings
+        holdings_cols = df_holdings.columns.tolist()
+        
+        # Try to match chart dates with columns in w_secs.csv, allowing for format variations
+        w_secs_date_map = {} # Map chart_date ('YYYY-MM-DD') to actual column name in w_secs
+        
+        # Attempt to parse w_secs columns as dates
+        parsed_cols = {}
+        for col in holdings_cols:
+            try:
+                # Try common formats, prioritise DD/MM/YYYY then YYYY-MM-DD
+                parsed_date = pd.to_datetime(col, format='%d/%m/%Y', errors='raise')
+                parsed_cols[parsed_date.strftime('%Y-%m-%d')] = col
+                continue # Move to next column if parsed
+            except (ValueError, TypeError):
+                 pass # Ignore if parsing fails with first format
+            try:
+                parsed_date = pd.to_datetime(col, format='%Y-%m-%d', errors='raise')
+                parsed_cols[parsed_date.strftime('%Y-%m-%d')] = col
+                continue
+            except (ValueError, TypeError):
+                 pass # Ignore other non-date-like columns silently
+                 
+        log.debug(f"Parsed w_secs columns: {parsed_cols}")
+
+        matched_dates_in_w_secs = []
+        unmatched_chart_dates = []
+
+        for chart_date_str in chart_dates: # Should be 'YYYY-MM-DD'
+            if chart_date_str in parsed_cols:
+                 w_secs_col_name = parsed_cols[chart_date_str]
+                 w_secs_date_map[chart_date_str] = w_secs_col_name
+                 matched_dates_in_w_secs.append(w_secs_col_name)
+            else:
+                 # Check if the raw chart_date_str matches any w_secs column directly (less robust)
+                 if chart_date_str in holdings_cols:
+                     w_secs_date_map[chart_date_str] = chart_date_str
+                     matched_dates_in_w_secs.append(chart_date_str)
+                     log.warning(f"Direct string match used for date: {chart_date_str}. Consider standardizing date formats.")
+                 else:
+                    unmatched_chart_dates.append(chart_date_str)
+                    w_secs_date_map[chart_date_str] = None # Mark as not found
+
+        if unmatched_chart_dates:
+             log.warning(f"Could not find matching columns in w_secs.csv for chart dates: {unmatched_chart_dates}. These dates will show as 'Not Held'.")
+             # We don't set error_message here, just log a warning and proceed
+
+        if not matched_dates_in_w_secs:
+             log.warning(f"No chart dates ({chart_dates}) found as columns in w_secs.csv. Cannot determine holdings.")
+             return holdings_data, chart_dates, "No chart dates found in holdings file columns."
+
+
+        # Process holdings for each fund found for this security
+        for fund_code, fund_group in sec_holdings.groupby(fund_col_holding):
+            if fund_group.empty:
+                continue
+            
+            # There might be multiple rows per fund if the data isn't clean,
+            # Aggregate or take the first row? Taking first for simplicity.
+            fund_row = fund_group.iloc[0]
+            
+            held_list = []
+            for chart_date_str in chart_dates:
+                w_secs_col = w_secs_date_map.get(chart_date_str)
+                is_held = False # Default to not held
+                if w_secs_col and w_secs_col in fund_row.index:
+                    # Check if the value for that date is not null/NaN/empty string AND greater than 0
+                    value = fund_row[w_secs_col]
+                    # Try converting to numeric, coercing errors to NaN
+                    numeric_value = pd.to_numeric(value, errors='coerce')
+                    # Check if it's a valid number and greater than 0
+                    if pd.notna(numeric_value) and numeric_value > 0:
+                        is_held = True
+                # else: date not found in w_secs columns or fund_row, or value is NaN/zero/empty, remains False
+                
+                held_list.append(is_held)
+            
+            holdings_data[fund_code] = held_list
+
+        log.info(f"Processed holdings for funds: {list(holdings_data.keys())} for security {security_id_str}")
+
+    except pd.errors.EmptyDataError:
+        log.warning(f"Holdings file {holdings_file} is empty.")
+        error_message = "Holdings file is empty."
+    except KeyError as e:
+         log.error(f"KeyError processing holdings file {holdings_file} for security {security_id_str}: {e}", exc_info=True)
+         error_message = f"Missing expected column in holdings file: {e}"
+    except Exception as e:
+        log.error(f"Error processing holdings for security {security_id_str}: {e}", exc_info=True)
+        error_message = f"An unexpected error occurred processing holdings: {e}"
+
+    return holdings_data, chart_dates, error_message
+
+
 # --- Routes ---
 
 @generic_comparison_bp.route('/<comparison_type>/summary')
@@ -529,111 +680,192 @@ def summary(comparison_type):
 
 @generic_comparison_bp.route('/<comparison_type>/details/<path:security_id>')
 def details(comparison_type, security_id):
-    """Displays the generic comparison details page with charts and stats."""
+    """Displays the detail page for a specific security comparison."""
     log = current_app.logger
-    # Decode the security_id which might contain URL-encoded characters (like '/')
-    decoded_security_id = unquote(security_id)
-    log.info(f"--- Starting Generic Comparison Detail Request: Type = {comparison_type}, Security ID = {decoded_security_id} (Original: {security_id}) ---")
+    
+    # The security_id parameter from the route IS the URL-encoded string
+    security_id_encoded = security_id 
+    try:
+        # URL decode the security ID - crucial for IDs with slashes, etc.
+        decoded_security_id = unquote(security_id_encoded)
+        log.info(f"--- Starting Generic Comparison Detail Request: Type = {comparison_type}, Decoded Security ID = '{decoded_security_id}' (Encoded: '{security_id_encoded}') ---")
+    except Exception as e:
+        log.error(f"Error decoding security ID '{security_id_encoded}': {e}")
+        # If decoding fails, we probably can't proceed meaningfully.
+        # Abort with a 400 Bad Request error.
+        abort(400, description="Invalid security ID format in URL.")
 
-    # --- Validate comparison_type and get config ---
+    # --- Validate comparison_type and get config --- 
+    # This part now runs only if decoding succeeded
     comp_config = COMPARISON_CONFIG.get(comparison_type)
     if not comp_config:
-        log.error(f"Invalid comparison_type requested for details: {comparison_type}")
+        log.error(f"Invalid comparison_type requested: {comparison_type}")
         abort(404, description=f"Comparison type '{comparison_type}' not found.")
 
     display_name = comp_config['display_name']
     file1 = comp_config['file1']
     file2 = comp_config['file2']
-    value_label = comp_config.get('value_label', display_name) # Get specific label or use display name
+    value_label = comp_config.get('value_label', 'Value') # Use specific label or default
+    log.info(f"Config loaded for '{comparison_type}': file1='{file1}', file2='{file2}', value_label='{value_label}'")
 
     # --- Load Data ---
     data_folder = current_app.config['DATA_FOLDER']
-    # Load all data first, then filter. This ensures we use the same data as the summary page.
-    merged_data, static_data, common_static_cols, actual_id_col = load_generic_comparison_data(data_folder, file1, file2)
+    # We need the merged data and the actual ID column name here
+    merged_data, static_data, _, actual_id_col = load_generic_comparison_data(data_folder, file1, file2)
 
     if actual_id_col is None or merged_data.empty:
-        log.warning(f"Failed to load base data for comparison type '{comparison_type}' details view.")
-        flash(f"Could not load base data for {display_name} comparison.", "warning")
-        return render_template('comparison_details_base.html', # Use new base template
-                               comparison_type=comparison_type, display_name=display_name,
-                               security_id=decoded_security_id, security_name=decoded_security_id,
-                               chart_data=None, stats=None, id_column_name='Security', # Default
-                               message=f"Could not load data for {display_name} comparison.")
+        flash(f"Could not load comparison data for type '{comparison_type}'.", "warning")
+        log.warning(f"Failed to load comparison data for {comparison_type}, rendering potentially empty detail page.")
+        # Render template with message even if data loading failed partially
+        return render_template('comparison_details_base.html',
+                               comparison_type=comparison_type,
+                               display_name=display_name,
+                               value_label=value_label,
+                               security_id=decoded_security_id,
+                               security_name=decoded_security_id, # Default if no static data
+                               chart_data=None,
+                               stats=None,
+                               id_column_name='Security', # Default
+                               message=f"Could not load data for comparison '{display_name}'.",
+                               holdings_data=None, # Added
+                               chart_dates=None    # Added
+                               )
 
-    log.info(f"Actual ID column for details '{comparison_type}': '{actual_id_col}'")
-
-    # --- Filter for the specific security ---
-    # Ensure type consistency for filtering if necessary (string comparison is safer)
+    # --- Filter for the Specific Security ---
+    log.debug(f"Filtering merged data for security ID '{decoded_security_id}' using column '{actual_id_col}'")
+    
+    # Robust filtering: convert both to string for comparison
     try:
-        if merged_data[actual_id_col].dtype != type(decoded_security_id):
-             log.info(f"Converting ID column '{actual_id_col}' to string for filtering.")
-             security_data = merged_data[merged_data[actual_id_col].astype(str) == str(decoded_security_id)].copy()
-        else:
-             security_data = merged_data[merged_data[actual_id_col] == decoded_security_id].copy()
+        merged_data[actual_id_col] = merged_data[actual_id_col].astype(str)
+        security_data = merged_data[merged_data[actual_id_col] == str(decoded_security_id)].copy() # Use decoded ID for filtering
+    except KeyError:
+         log.error(f"ID column '{actual_id_col}' not found in merged_data during filtering.")
+         security_data = pd.DataFrame() # Empty DF if column missing
     except Exception as e:
-        log.error(f"Error filtering security data for ID '{decoded_security_id}': {e}")
-        security_data = pd.DataFrame() # Ensure empty DF if error
+         log.error(f"Error filtering merged_data for security ID '{decoded_security_id}': {e}")
+         security_data = pd.DataFrame()
+
 
     if security_data.empty:
-        log.warning(f"No data found for Security ID '{decoded_security_id}' in {comparison_type} comparison.")
+        log.warning(f"No data found for Security ID '{decoded_security_id}' (using column '{actual_id_col}') in comparison type '{comparison_type}'.")
         return render_template('comparison_details_base.html',
-                               comparison_type=comparison_type, display_name=display_name,
-                               security_id=decoded_security_id, security_name=decoded_security_id,
-                               chart_data=None, stats=None, id_column_name=actual_id_col,
-                               message=f"{display_name} data not found for Security ID: {decoded_security_id}")
+                               comparison_type=comparison_type,
+                               display_name=display_name,
+                               value_label=value_label,
+                               security_id=decoded_security_id,
+                               security_name=decoded_security_id, # Attempt to get name below
+                               chart_data=None,
+                               stats=None,
+                               id_column_name=actual_id_col,
+                               message=f"No data found for {actual_id_col} '{decoded_security_id}' in {display_name} comparison.",
+                               holdings_data=None, # Added
+                               chart_dates=None    # Added
+                               )
 
-    # --- Get Static Data for this Security ---
-    # Filter the separate static_data DataFrame
-    sec_static_data_filtered = static_data[static_data[actual_id_col] == decoded_security_id]
-    sec_static_dict = sec_static_data_filtered.iloc[0].to_dict() if not sec_static_data_filtered.empty else {}
+    # --- Calculate Stats for this Security Only ---
+    # Use the generic stats function, but just for this security's data
+    # Need to get the static data row for *this* security
+    security_static_row = pd.DataFrame()
+    if not static_data.empty and actual_id_col in static_data.columns:
+         try:
+             # Convert both to string for reliable matching
+             static_data[actual_id_col] = static_data[actual_id_col].astype(str)
+             security_static_row = static_data[static_data[actual_id_col] == str(decoded_security_id)]
+         except Exception as e:
+             log.warning(f"Error getting static data row for '{decoded_security_id}': {e}")
 
-    # --- Recalculate Stats for Just This Security ---
-    # Pass the single-security data to the stats function
-    stats_df = calculate_generic_comparison_stats(security_data.copy(), sec_static_data_filtered, id_col=actual_id_col)
-    security_stats = stats_df.iloc[0].where(pd.notnull(stats_df.iloc[0]), None).to_dict() if not stats_df.empty else {}
-    
-    # Combine calculated stats with static data for display
-    # Calculated stats take precedence if names overlap
-    display_stats = {**sec_static_dict, **security_stats} 
+    # Run stats calculation - expects merged_df, static_data, id_col
+    # Pass the filtered security_data and its corresponding static row
+    stats_df = calculate_generic_comparison_stats(security_data, security_static_row, actual_id_col)
+
+    stats = {}
+    security_name = decoded_security_id # Default name is the ID
+    if not stats_df.empty:
+        stats = stats_df.iloc[0].to_dict()
+        # Convert Timestamps to strings for JSON serialization if needed, but stats uses them directly? Check template.
+        # Let's keep Timestamps for now, template handles formatting.
+        
+        # Attempt to get a more descriptive name if available (e.g., 'Security Name')
+        potential_name_col = 'Security Name' 
+        if potential_name_col in stats and pd.notna(stats[potential_name_col]):
+            security_name = stats[potential_name_col]
+            log.info(f"Found security name: '{security_name}' for ID '{decoded_security_id}'")
+        else:
+             log.info(f"Using ID '{decoded_security_id}' as name (Column '{potential_name_col}' not found or is null in stats).")
+    else:
+        log.warning(f"Could not calculate statistics for security {decoded_security_id}.")
+
 
     # --- Prepare Chart Data ---
-    security_data = security_data.sort_values(by='Date') # Ensure sorted by date
-    security_data['Date_Str'] = security_data['Date'].dt.strftime('%Y-%m-%d')
+    chart_data = None
+    chart_dates = [] # Initialize chart_dates
+    if not security_data.empty:
+        # Ensure Date column is datetime and sort
+        try:
+            security_data['Date'] = pd.to_datetime(security_data['Date'])
+            security_data = security_data.sort_values(by='Date')
+            chart_dates = security_data['Date'].dt.strftime('%Y-%m-%d').tolist() # Get dates for holdings table
+        except Exception as e:
+            log.error(f"Error processing dates for chart data for security {decoded_security_id}: {e}")
+            flash("Error processing dates for chart.", "danger")
+        else:
+             # Handle potential NaN values for JSON serialization in chart
+             value_orig_cleaned = security_data['Value_Orig'].where(pd.notna(security_data['Value_Orig']), None).tolist()
+             value_new_cleaned = security_data['Value_New'].where(pd.notna(security_data['Value_New']), None).tolist()
 
-    # Handle NaN -> None conversion for JSON compatibility
-    data_orig = security_data['Value_Orig'].where(pd.notna(security_data['Value_Orig']), None).tolist()
-    data_new = security_data['Value_New'].where(pd.notna(security_data['Value_New']), None).tolist()
-
-    chart_data = {
-        'labels': security_data['Date_Str'].tolist(),
-        'datasets': [
-            {
-                'label': f'Original {value_label}', # Use specific value label
-                'data': data_orig,
-                'borderColor': COLOR_PALETTE[0 % len(COLOR_PALETTE)],
-                'tension': 0.1,
-                'fill': False
-            },
-            {
-                'label': f'New {value_label}', # Use specific value label
-                'data': data_new,
-                'borderColor': COLOR_PALETTE[1 % len(COLOR_PALETTE)],
-                'tension': 0.1,
-                'fill': False
+             chart_data = {
+                 'labels': chart_dates, # Use the string-formatted dates
+                 'datasets': [
+                    {
+                        'label': f'Original {value_label}',
+                        'data': value_orig_cleaned,
+                        'borderColor': COLOR_PALETTE[0],
+                        'backgroundColor': COLOR_PALETTE[0] + '80', # Add transparency
+                        'fill': False,
+                        'tension': 0.1
+                    },
+                    {
+                        'label': f'New {value_label}',
+                        'data': value_new_cleaned,
+                        'borderColor': COLOR_PALETTE[1],
+                        'backgroundColor': COLOR_PALETTE[1] + '80',
+                        'fill': False,
+                        'tension': 0.1
+                    }
+                ]
             }
-        ]
-    }
+             log.info(f"Prepared chart data for {decoded_security_id} with {len(chart_dates)} dates.")
+    else:
+        log.warning(f"Security data is empty for {decoded_security_id}, cannot generate chart.")
 
-    # Determine the display name (use 'Security Name' if available, else the ID)
-    security_name_display = display_stats.get('Security Name', decoded_security_id)
+    # --- Get Holdings Data ---
+    holdings_data = {}
+    holdings_error = None
+    if chart_dates: # Only try to get holdings if we have dates from the chart
+        # Pass the *decoded* security ID to the helper function
+        holdings_data, _, holdings_error = get_holdings_for_security(decoded_security_id, chart_dates, data_folder)
+        if holdings_error:
+             flash(f"Note: Could not display fund holdings. {holdings_error}", "warning")
+             log.warning(f"Holdings Error for {decoded_security_id}: {holdings_error}")
+        if not holdings_data and not holdings_error:
+            log.info(f"No holdings information found in w_secs.csv for security {decoded_security_id}.")
+            # Optionally flash a message? Or just show an empty table? Showing empty table is fine.
+            # flash(f"No fund holdings information found for {decoded_security_id}.", "info")
+    else:
+         log.warning(f"Skipping holdings check for {decoded_security_id} because chart dates are missing.")
 
-    log.info(f"--- Successfully Prepared Data for Generic Comparison Details Template ({comparison_type}, {decoded_security_id}) ---")
-    return render_template('comparison_details_base.html', # Use new base template
+
+    # --- Render Template ---
+    return render_template('comparison_details_base.html',
                            comparison_type=comparison_type,
                            display_name=display_name,
-                           value_label=value_label, # Pass the value label for chart titles etc.
-                           security_id=decoded_security_id,
-                           security_name=security_name_display,
-                           chart_data=chart_data, # Pass as JSONifiable dict
-                           stats=display_stats, # Pass combined stats + static data
-                           id_column_name=actual_id_col) 
+                           value_label=value_label,
+                           security_id=decoded_security_id, # Pass decoded ID
+                           security_name=security_name, # Pass potentially better name
+                           chart_data=chart_data,
+                           stats=stats if stats else None, # Pass dict or None
+                           id_column_name=actual_id_col,
+                           message=None, # No error message if we got this far, warnings flashed
+                           holdings_data=holdings_data, # Pass holdings dict
+                           chart_dates=chart_dates      # Pass list of dates
+                           ) 

@@ -11,12 +11,15 @@
     - stats (dict): Calculated comparison statistics for this security.
     - id_column_name (str): The actual name of the ID column in the data.
     - message (str, optional): A message to display (e.g., for errors).
+    - holdings_data (dict): Dictionary containing fund holdings data.
+    - chart_dates (list): List of dates from the chart data.
 #}
 
 {% block title %}{{ display_name }} Comparison Details: {{ security_name }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+{# Use container-fluid for wider content area, px-4 for padding #}
+<div class="container-fluid px-4 mt-4">
     
     {# --- Header --- #}
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -43,21 +46,21 @@
     {# --- Main Content: Chart and Stats --- #}
     {% if chart_data and stats %}
         <div class="row">
-            {# Chart Column #}
-            <div class="col-lg-8 mb-4">
-                <div class="card">
+            {# Chart Column - Make wider #}
+            <div class="col-lg-9 mb-4">
+                <div class="card h-100"> {# Use h-100 to help align heights if needed #}
                     <div class="card-header">
                         {{ value_label }} Time Series Comparison
                     </div>
                     <div class="card-body">
-                        <canvas id="comparisonChart" style="height: 750px;"></canvas>
+                        <canvas id="comparisonChart"></canvas> {# Removed fixed height #}
                     </div>
                 </div>
             </div>
 
-            {# Stats Column #}
-            <div class="col-lg-4 mb-4">
-                <div class="card">
+            {# Stats Column - Keep narrower #}
+            <div class="col-lg-3 mb-4">
+                <div class="card h-100"> {# Use h-100 #}
                     <div class="card-header">
                         Comparison Statistics
                     </div>
@@ -155,6 +158,63 @@
                 {% endif %}
             </div> 
         </div>
+
+        {# --- Fund Holdings Over Time Table --- #}
+        {% if holdings_data and chart_dates %}
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        Fund Holdings Over Time (Based on Chart Dates)
+                    </div>
+                    <div class="card-body" style="width: 100%; overflow-x: auto;"> {# Added horizontal scroll #}
+                        <table class="table table-bordered table-sm text-center" style="table-layout: fixed; width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 100px; vertical-align: bottom;">Fund</th> {# Fixed width for fund column #}
+                                    {# Rotate date headers - make narrower - Simplified Styling - Adjusted for overlap #}
+                                    {% for date_str in chart_dates %}
+                                    <th style="width: 25px; height: 70px; vertical-align: bottom; text-align: center; padding: 0 1px;">
+                                        <span style="display: inline-block; transform: rotate(-75deg); transform-origin: center 5px; white-space: nowrap; font-size: 0.7em;">
+                                            {{ date_str[5:] }} {# Show only MM-DD #}
+                                        </span>
+                                    </th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {# Iterate through funds and their holding status list #}
+                                {% for fund, held_list in holdings_data.items() %}
+                                <tr>
+                                    <td class="fw-bold">{{ fund }}</td> {# Fund code in bold #}
+                                    {# Iterate through the boolean list for this fund #}
+                                    {% for is_held in held_list %}
+                                        {# Apply green if held, red if not held #}
+                                        <td class="{{ 'bg-success' if is_held else 'bg-danger' }}"></td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                         {# Optional: Add a message if holdings_data is empty but chart_dates exist #}
+                         {% if not holdings_data %}
+                         <p class="text-muted mt-2">No fund holdings information found for this security in w_secs.csv during the chart period.</p>
+                         {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% elif chart_data %} {# Show message only if chart exists but holdings don't #}
+        <div class="row mt-4">
+            <div class="col-12">
+                 <div class="alert alert-light" role="alert">
+                     Fund holdings information could not be loaded or is unavailable for the chart period.
+                 </div>
+            </div>
+        </div>
+        {% endif %}
+        {# --- End Fund Holdings Table --- #}
+
     {% elif not message %}
          {# Show default message if no specific error message and no data #}
          <div class="alert alert-info">No data available to display for this security.</div>
