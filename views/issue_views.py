@@ -5,10 +5,31 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 import issue_processing  # Use the new module
 import pandas as pd
 from datetime import datetime
+import os # Added to check for users.csv
 
 issue_bp = Blueprint('issue_bp', __name__, template_folder='templates')
 
-DATA_SOURCES = ["S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug"] # Define allowed sources
+DATA_SOURCES = ["S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug", "Rimes"] # Define allowed sources, added Rimes
+
+# Function to load users from CSV
+def load_users():
+    """Loads the list of users from users.csv."""
+    users_file = os.path.join('Data', 'users.csv')
+    if os.path.exists(users_file):
+        try:
+            users_df = pd.read_csv(users_file)
+            # Assuming the column name is 'Name'
+            if 'Name' in users_df.columns:
+                return users_df['Name'].dropna().tolist()
+            else:
+                print("Warning: 'Name' column not found in users.csv")
+                return [] # Return empty list if column not found
+        except Exception as e:
+            print(f"Error loading users from {users_file}: {e}")
+            return [] # Return empty list on error
+    else:
+        print(f"Warning: {users_file} not found.")
+        return [] # Return empty list if file not found
 
 @issue_bp.route('/issues', methods=['GET', 'POST'])
 def manage_issues():
@@ -16,6 +37,7 @@ def manage_issues():
     message = None
     message_type = 'info'
     available_funds = issue_processing.load_fund_list() # Get fund list for dropdown
+    users = load_users() # Load users for dropdowns
 
     if request.method == 'POST':
         # Process form for adding a new issue
@@ -23,15 +45,18 @@ def manage_issues():
             raised_by = request.form.get('raised_by')
             fund_impacted = request.form.get('fund_impacted')
             data_source = request.form.get('data_source')
-            # Handle date input carefully
             issue_date_str = request.form.get('issue_date')
             issue_date = pd.to_datetime(issue_date_str).date() if issue_date_str else None
-
             description = request.form.get('description')
+            jira_link = request.form.get('jira_link', None) # Get optional Jira link
 
             # Basic Validation
             if not raised_by or not fund_impacted or not data_source or not description or not issue_date:
                  raise ValueError("Missing required fields.")
+            # Check if user exists in the loaded list (optional, but good practice)
+            if raised_by not in users:
+                 print(f"Warning: Raised by user '{raised_by}' not found in users.csv. Allowing submission.")
+                 # Depending on requirements, you might want to raise ValueError here instead
             if data_source not in DATA_SOURCES:
                  raise ValueError("Invalid data source selected.")
 
@@ -41,7 +66,8 @@ def manage_issues():
                 fund_impacted=fund_impacted,
                 data_source=data_source,
                 issue_date=issue_date,
-                description=description
+                description=description,
+                jira_link=jira_link # Pass Jira link
             )
             message = f"Successfully added new issue (ID: {issue_id})."
             message_type = 'success'
@@ -68,6 +94,7 @@ def manage_issues():
                            closed_issues=closed_issues,
                            available_funds=available_funds,
                            data_sources=DATA_SOURCES,
+                           users=users # Pass users to template
                            )
 
 
@@ -78,16 +105,22 @@ def close_issue_route():
         issue_id = request.form.get('issue_id')
         closed_by = request.form.get('closed_by')
         resolution_comment = request.form.get('resolution_comment')
+        users = load_users() # Load users for validation
 
         if not issue_id or not closed_by or not resolution_comment:
              raise ValueError("Missing required fields for closing the issue.")
+
+        # Optional: Validate closed_by user
+        if closed_by not in users:
+            print(f"Warning: Closed by user '{closed_by}' not found in users.csv. Allowing closure.")
+            # Depending on requirements, you might want to raise ValueError here
 
         success = issue_processing.close_issue(issue_id, closed_by, resolution_comment)
 
         if success:
             flash(f"Issue {issue_id} marked as closed.", 'success')
         else:
-             flash(f"Failed to close issue {issue_id}. It might not exist.", 'warning')
+             flash(f"Failed to close issue {issue_id}. It might not exist or already be closed.", 'warning') # More specific message
 
     except ValueError as ve:
          flash(f"Error closing issue: {ve}", 'danger')

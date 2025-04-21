@@ -25,8 +25,13 @@
             <h4>Raise New Issue</h4>
             <form method="POST" action="{{ url_for('issue_bp.manage_issues') }}">
                 <div class="mb-3">
-                    <label for="raised_by" class="form-label">Raised By (Your Name/ID):</label>
-                    <input type="text" class="form-control" id="raised_by" name="raised_by" required>
+                    <label for="raised_by" class="form-label">Raised By:</label>
+                    <select class="form-select" id="raised_by" name="raised_by" required>
+                        <option value="" disabled selected>Select User</option>
+                        {% for user in users %}
+                            <option value="{{ user }}">{{ user }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="mb-3">
                     <label for="issue_date" class="form-label">Date of Issue:</label>
@@ -36,6 +41,8 @@
                     <label for="fund_impacted" class="form-label">Fund Impacted:</label>
                     <select class="form-select" id="fund_impacted" name="fund_impacted" required>
                         <option value="" disabled selected>Select a Fund</option>
+                        <option value="All Funds">All Funds</option>
+                        <option value="No Funds">No Funds</option>
                         {% for fund_code in available_funds %}
                             <option value="{{ fund_code }}">{{ fund_code }}</option>
                         {% endfor %}
@@ -45,14 +52,24 @@
                     <label class="form-label">Data Source:</label><br>
                     {% for source in data_sources %}
                         <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="data_source" id="source_{{ source|lower }}" value="{{ source }}" required>
-                            <label class="form-check-label" for="source_{{ source|lower }}">{{ source }}</label>
+                            <input class="form-check-input" type="radio" name="data_source" id="source_{{ source|lower|replace(' ', '_') }}" value="{{ source }}" required>
+                            <label class="form-check-label" for="source_{{ source|lower|replace(' ', '_') }}">{{ source }}</label>
                         </div>
                     {% endfor %}
+                    {% if 'Rimes' not in data_sources %}
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="data_source" id="source_rimes" value="Rimes" required>
+                            <label class="form-check-label" for="source_rimes">Rimes</label>
+                        </div>
+                    {% endif %}
                 </div>
                 <div class="mb-3">
                     <label for="description" class="form-label">Description of Issue:</label>
                     <textarea class="form-control" id="description" name="description" rows="4" required></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="jira_link" class="form-label">Jira Link (Optional):</label>
+                    <input type="text" class="form-control" id="jira_link" name="jira_link" placeholder="e.g., www.your-jira.com/browse/ISSUE-KEY or ISSUE-KEY">
                 </div>
                 <button type="submit" class="btn btn-primary">Raise Issue</button>
             </form>
@@ -73,6 +90,7 @@
                             <th>Fund</th>
                             <th>Source</th>
                             <th>Description</th>
+                            <th>Jira</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -86,6 +104,13 @@
                                 <td>{{ issue.FundImpacted }}</td>
                                 <td>{{ issue.DataSource }}</td>
                                 <td style="white-space: pre-wrap; word-wrap: break-word;">{{ issue.Description }}</td>
+                                <td>
+                                    {% if issue.JiraLink %}
+                                        <a href="{{ issue.JiraLink }}" target="_blank" rel="noopener noreferrer">Link</a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {# Button to trigger modal for closing #}
                                     <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#closeIssueModal-{{ issue.IssueID }}">
@@ -104,8 +129,13 @@
                                                     <div class="modal-body">
                                                         <input type="hidden" name="issue_id" value="{{ issue.IssueID }}">
                                                         <div class="mb-3">
-                                                            <label for="closed_by-{{ issue.IssueID }}" class="form-label">Closed By (Your Name/ID):</label>
-                                                            <input type="text" class="form-control" id="closed_by-{{ issue.IssueID }}" name="closed_by" required>
+                                                            <label for="closed_by-{{ issue.IssueID }}" class="form-label">Closed By:</label>
+                                                            <select class="form-select" id="closed_by-{{ issue.IssueID }}" name="closed_by" required>
+                                                                <option value="" disabled selected>Select User</option>
+                                                                {% for user in users %}
+                                                                    <option value="{{ user }}">{{ user }}</option>
+                                                                {% endfor %}
+                                                            </select>
                                                         </div>
                                                         <div class="mb-3">
                                                             <label for="resolution_comment-{{ issue.IssueID }}" class="form-label">Resolution Comment:</label>
@@ -148,6 +178,7 @@
                      <th>Fund</th>
                      <th>Source</th>
                      <th>Description</th>
+                     <th>Jira</th>
                      <th>Closed</th>
                      <th>By</th>
                      <th>Resolution</th>
@@ -163,6 +194,13 @@
                         <td>{{ issue.FundImpacted }}</td>
                         <td>{{ issue.DataSource }}</td>
                         <td style="white-space: pre-wrap; word-wrap: break-word;">{{ issue.Description }}</td>
+                        <td>
+                            {% if issue.JiraLink %}
+                                <a href="{{ issue.JiraLink }}" target="_blank" rel="noopener noreferrer">Link</a>
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
                         <td>{{ issue.DateClosed.strftime('%Y-%m-%d') if issue.DateClosed else 'N/A' }}</td>
                         <td>{{ issue.ClosedBy }}</td>
                         <td style="white-space: pre-wrap; word-wrap: break-word;">{{ issue.ResolutionComment }}</td>

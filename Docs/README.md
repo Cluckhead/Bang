@@ -24,6 +24,7 @@ This application provides a web interface to load, process, and check financial 
     *   Configurable via `COMPARISON_CONFIG` in `config.py`.
     *   Provides summary tables with comparison statistics (correlations, differences, date ranges).
     *   Detail view with overlayed time-series charts.
+    *   **Detail view also includes a Fund Holdings table showing which funds (from `w_secs.csv`) held the security on the dates displayed in the chart (Green = held with value > 0, Red = not held/zero/blank).**
     *   Features server-side filtering (including held status), sorting, and pagination.
     *   Routes: `/compare/<comparison_type>/summary`, `/compare/<comparison_type>/details/<security_id>`
 
@@ -34,6 +35,7 @@ This application provides a web interface to load, process, and check financial 
 *   **Security Exclusions:** Manage exclusion list via `/exclusions` (stored in `Data/exclusions.csv`)
 
 *   **Data Issue Tracking:** Log, view, and manage data issues via `/issues` (stored in `Data/data_issues.csv`)
+    *   Features user selection dropdowns (from `Data/users.csv`), an optional Jira link, and enhanced fund/source options.
 
 *   **Weight Check:** Compare fund and benchmark weights via `/weights/check`
 
@@ -131,6 +133,7 @@ graph TD
     G --> G11(data_issues.csv);
     G --> G12(w_secs.csv);
     G --> G13(att_factors.csv);
+    G --> G14(users.csv);
 
     H --> H1(config.py);
     H --> H2(utils.py);
@@ -161,8 +164,9 @@ graph TD
 | `w_Bench.csv` | Daily benchmark weights (expected to be 100%) |
 | `w_secs.csv` | Security weights with ISIN as primary identifier. Used to determine currently held securities. |
 | `curves.csv` | Yield curve data (Date, Currency Code, Term, Daily Value) |
-| `data_issues.csv` | Issue tracking log (ID, dates, users, details, resolution) |
+| `data_issues.csv` | Issue tracking log (ID, dates, users, details, resolution, Jira link) |
 | `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P. **Note:** The `L0 Total` column represents the returns for each security/fund/date. |
+| `users.csv` | List of users for issue tracking dropdowns (`Name` column) |
 
 ### Python Core Modules
 
@@ -176,7 +180,7 @@ graph TD
 | `security_processing.py` | Process security-level data | `load_and_process_security_data()`, `calculate_security_latest_metrics()` |
 | `utils.py` | Utility functions | `_is_date_like()`, `parse_fund_list()`, `load_weights_and_held_status()` |
 | `curve_processing.py` | Process yield curve data | `load_curve_data()`, `check_curve_inconsistencies()` |
-| `issue_processing.py` | Manage data issues | `add_issue()`, `close_issue()`, `load_issues()` |
+| `issue_processing.py` | Manage data issues (load, add, close) using `data_issues.csv` and `users.csv` | `add_issue()`, `close_issue()`, `load_issues()` |
 | `weight_processing.py` | Process and clean weight files, replacing generic headers with dates from Dates.csv for fund, benchmark, and security weights. | `process_weight_file()` |
 | `process_weights.py` | Batch process all weight files in Data/, converting pre_w_*.csv to w_*.csv with correct date headers. | `main()`, `process_weight_file_with_reversed_dates()`, `process_securities_file()` |
 | `process_w_secs.py` | Process pre_w_secs.csv to w_secs.csv, replacing weight columns with dates and preserving metadata columns. | `process_securities_file()` |
@@ -191,7 +195,7 @@ graph TD
 | `security_views.py` | Security-level data checks | `/security/summary`, `/security/details/<metric_name>/<security_id>` |
 | `fund_views.py` | Fund-specific views | `/fund/<fund_code>`, `/fund/duration_details/<fund_code>` |
 | `exclusion_views.py` | Security exclusion management | `/exclusions`, `/exclusions/remove` |
-| `generic_comparison_views.py` | **Generic comparison of two security datasets (e.g., Spread, Duration)** | `/compare/<comparison_type>/summary`, `/compare/<comparison_type>/details/<security_id>` |
+| `generic_comparison_views.py` | **Generic comparison of two security datasets (e.g., Spread, Duration). Loads data, calculates stats, handles filtering/sorting/pagination for summary, and prepares data (including fund holdings from `w_secs.csv`) for detail view.** | `/compare/<comparison_type>/summary`, `/compare/<comparison_type>/details/<security_id>` |
 | `api_views.py` | API simulation | `/get_data`, `/run-api-calls`, `/rerun-api-call` |
 | `weight_views.py` | Weight checking | `/weights/check` |
 | `curve_views.py` | Yield curve checking | `/curve/summary`, `/curve/details/<currency>` |
@@ -211,12 +215,12 @@ graph TD
 | `exclusions_page.html` | Exclusion management | Add/remove security exclusions |
 | `get_data.html` | API simulation | Data status, fund selection, date inputs |
 | `comparison_summary_base.html` | **Generic comparison summary page** | Filter form, sortable table, pagination |
-| `comparison_details_base.html` | **Generic comparison details page** | Side-by-side charts, statistics display |
+| `comparison_details_base.html` | **Generic comparison details page** | Side-by-side charts, statistics display, **fund holdings over time table** |
 | `fund_detail_page.html` | Fund metrics overview | Multiple charts with SP data toggle |
 | `weight_check.html` | Weight checking | Fund/benchmark weight comparison |
 | `curve_summary.html` | Yield curve summary | Inconsistency check table |
 | `curve_details.html` | Yield curve details | Chart.js line chart with date selector |
-| `issues_page.html` | Issue tracking | Add/view/close issue forms and tables |
+| `issues_page.html` | Issue tracking | Add/view/close issue forms and tables, user dropdowns, Jira link field |
 | `attribution_summary.html` | Attribution summary | Multiple detail levels with comparison data |
 
 ### JavaScript Files (`static/js/`)
