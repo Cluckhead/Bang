@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block title %}Error{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">An Error Occurred</h4>
+        <p>Sorry, the application encountered an error processing your request.</p>
+        <hr>
+        <p class="mb-0">Error details: <strong>{{ message|safe }}</strong></p>
+        {# Optionally add more debugging info here if needed in development #}
+    </div>
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">Go to Dashboard</a>
+</div>
+{% endblock %} 

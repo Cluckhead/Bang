@@ -123,6 +123,39 @@ def get_data_folder_path(app_root_path=None):
             logger.critical(f"CRITICAL: Failed even to resolve fallback path. Returning '.'. Error: {final_e}")
             return '.'
 
+# --- NEW: Function to load exclusions --- 
+def load_exclusions(exclusion_file_path):
+    """
+    Loads the exclusion data from the specified CSV file.
+
+    Args:
+        exclusion_file_path (str): The full path to the exclusions CSV file.
+
+    Returns:
+        pandas.DataFrame or None: A DataFrame containing the exclusion data 
+                                 if the file exists and is loaded successfully, 
+                                 otherwise None.
+    """
+    logger = logging.getLogger(__name__)
+    if not os.path.exists(exclusion_file_path):
+        logger.warning(f"Exclusion file not found: {exclusion_file_path}. Returning None.")
+        return None
+    try:
+        exclusions_df = pd.read_csv(exclusion_file_path, dtype=str) # Read all as string initially
+        # Optional: Convert date columns if needed, handle potential errors
+        # Example: 
+        # for col in ['AddDate', 'EndDate']:
+        #     if col in exclusions_df.columns:
+        #         exclusions_df[col] = pd.to_datetime(exclusions_df[col], errors='coerce')
+        logger.info(f"Successfully loaded exclusions from {exclusion_file_path}. Shape: {exclusions_df.shape}")
+        return exclusions_df
+    except pd.errors.EmptyDataError:
+        logger.warning(f"Exclusion file is empty: {exclusion_file_path}. Returning empty DataFrame.")
+        return pd.DataFrame() # Return an empty DataFrame for consistency
+    except Exception as e:
+        logger.error(f"Error loading exclusion file {exclusion_file_path}: {e}", exc_info=True)
+        return None
+
 # --- Moved from comparison_views.py --- Function to load weights and determine held status ---
 def load_weights_and_held_status(data_folder: str, weights_filename: str = 'w_secs.csv', id_col_override: str = 'ISIN') -> pd.Series:
     """

@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block title %}Data Staleness Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Data Staleness Dashboard</h1>
+    <p>Overview of potentially stale data in security files. Stale means the last update was more than the specified number of days before the file's latest date.</p>
+    
+    {# Form to change threshold #}
+    <form method="GET" action="{{ url_for('.dashboard') }}" class="row gx-2 gy-2 align-items-center mb-4 p-3 border rounded bg-light">
+        <div class="col-auto">
+            <label for="thresholdInput" class="form-label mb-0">Staleness Threshold (Days):</label>
+        </div>
+        <div class="col-auto">
+            <input type="number" class="form-control form-control-sm" id="thresholdInput" name="threshold" value="{{ current_threshold }}" min="0" style="width: 80px;">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm">Update View</button>
+        </div>
+        <div class="col-auto">
+             <small class="text-muted">(Default is {{ config.DEFAULT_STALENESS_THRESHOLD_DAYS }} days)</small>
+        </div>
+    </form>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for item in summary_data %}
+        <div class="col">
+            <div class="card h-100 {% if item.has_error %}border-danger{% elif item.stale_count > 0 %}border-warning{% else %}border-success{% endif %}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ item.filename }}</h5>
+                    {% if item.has_error %}
+                        <p class="card-text text-danger">Error processing this file.</p>
+                        <a href="#" class="btn btn-secondary disabled stretched-link">View Details</a>
+                    {% else %}
+                        <p class="card-text">
+                            Latest Date in File: <strong>{{ item.latest_date }}</strong><br>
+                            Securities Analyzed: {{ item.total_count }}<br>
+                            <span class="fw-bold {% if item.stale_count > 0 %}text-warning{% else %}text-success{% endif %}">
+                                Potentially Stale: {{ item.stale_count }}
+                            </span>
+                        </p>
+                        <a href="{{ item.details_url }}" class="btn btn-primary stretched-link">View Details</a>
+                    {% endif %}
+                </div>
+                <div class="card-footer {% if item.has_error %}bg-danger-subtle{% elif item.stale_count > 0 %}bg-warning-subtle{% else %}bg-success-subtle{% endif %}">
+                    <small class="text-muted">
+                        {% if item.has_error %}
+                            Processing Error
+                        {% elif item.stale_count > 0 %}
+                            {{ item.stale_count }} stale item(s) found (threshold: {{ current_threshold }} days)
+                        {% else %}
+                            No stale items found (threshold: {{ current_threshold }} days)
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <p class="text-info">No relevant data files (sec_*.csv, sp_sec_*.csv) found in the data directory.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endblock %} 

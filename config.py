@@ -17,6 +17,12 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_FOLDER_NAME = os.environ.get('DATA_CHECKER_DATA_FOLDER', 'Data')
 DATA_FOLDER = os.path.join(BASE_DIR, DATA_FOLDER_NAME) # Absolute path
 
+# Define the standard column name used for security identifiers (e.g., ISIN)
+ID_COLUMN = 'ISIN'
+
+# Define the filename for the exclusions list
+EXCLUSIONS_FILE = 'exclusions.csv'
+
 # Define a list of distinct colors for chart lines
 # Add more colors if you expect more fund columns
 COLOR_PALETTE = [

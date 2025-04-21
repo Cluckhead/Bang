@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}Stale Data Details: {{ filename }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>Stale Data Details</h1>
+        <a href="{{ url_for('staleness_bp.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+    
+    <h2>{{ filename }}</h2>
+    <p>Showing securities considered stale because their last update was more than <strong>{{ threshold }}</strong> day(s) before the latest date found in the file (<strong>{{ latest_date }}</strong>).</p>
+    <p>Total non-excluded securities analyzed in this file: <strong>{{ total_count }}</strong>.</p>
+
+    {# Form to change threshold #}
+    {# REMOVED - Threshold is now set on the dashboard #}
+    {# <form method="GET" action="{{ url_for('.details', filename=filename) }}" class="row gx-2 gy-2 align-items-center mb-3 p-3 border rounded bg-light">
+        <div class="col-auto">
+            <label for="thresholdInput" class="form-label mb-0">Staleness Threshold (Days):</label>
+        </div>
+        <div class="col-auto">
+            <input type="number" class="form-control form-control-sm" id="thresholdInput" name="threshold" value="{{ threshold }}" min="0" style="width: 80px;">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm">Update</button>
+        </div>
+    </form> #}
+
+    {# Table of stale securities #}
+    {% if stale_securities %}
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered table-hover table-sm small">
+            <thead class="table-light sticky-top" style="z-index: 1;">
+                <tr>
+                    {# Make ID Column clickable/sortable later if needed #}
+                    <th>{{ id_column }}</th> 
+                    {# Static columns from the file #}
+                    {% for col_name in static_columns %}
+                        <th>{{ col_name }}</th>
+                    {% endfor %}
+                    <th>Last Update Date</th>
+                    <th>Days Stale</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in stale_securities %}
+                <tr>
+                    {# Security ID - Link to details page #}
+                    <td>
+                        {% if item.details_url %}
+                            <a href="{{ item.details_url }}" target="_blank" title="View details for {{ item.id }}">{{ item.id }}</a>
+                        {% else %}
+                            {{ item.id }}
+                        {% endif %}
+                    </td>
+                    {# Display static info values #}
+                    {% for col_name in static_columns %}
+                        <td>{{ item.static_info.get(col_name, '') }}</td>
+                    {% endfor %}
+                    <td>{{ item.last_update }}</td>
+                    <td class="text-warning fw-bold">{{ item.days_stale }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {# Add pagination controls here if implemented later #}
+    {% else %}
+    <div class="alert alert-success" role="alert">
+        No securities found exceeding the {{ threshold }}-day staleness threshold in this file.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base.html #}
+{# Add specific JS for this page if needed, e.g., for client-side sorting/filtering #}
+{% endblock %} 
