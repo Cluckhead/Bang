@@ -46,7 +46,7 @@ This application provides a web interface to load, process, and check financial 
 
 *   **Special Character Handling:** Security IDs with special characters are URL-encoded in templates and decoded in view functions using `urllib.parse.unquote(security_id)`
 
-*   **Planned Feature - Attribution Residuals Chart:** Time-series visualization of attribution residuals
+*   **Attribution Residuals Chart:** Time-series visualization of attribution residuals
 
 ## File Structure Overview
 
