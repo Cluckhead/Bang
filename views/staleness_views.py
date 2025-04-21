@@ -50,6 +50,10 @@ def dashboard():
             # Basic check for error state
             data['has_error'] = isinstance(data.get('stale_count'), str) 
             summary_view_data.append(data)
+        
+        # Sort by stale count in descending order (most stale items first)
+        # Move error items to the end
+        summary_view_data.sort(key=lambda x: (x['has_error'], -1 * (x['stale_count'] if not x['has_error'] else 0)))
             
         return render_template('staleness_dashboard.html', summary_data=summary_view_data, current_threshold=threshold)
     except Exception as e:
@@ -85,8 +89,8 @@ def details(filename):
         )
         logging.info(f"Found {len(stale_securities)} stale securities in {filename} with threshold {threshold}.")
         
-        # TODO: Implement Sorting & Pagination if needed for large lists
-        # For now, pass the full list
+        # Sort by days_stale in descending order (most stale items first)
+        stale_securities.sort(key=lambda x: x['days_stale'], reverse=True)
 
         # Prepare static columns for table header (get from first item if available)
         static_columns = []
