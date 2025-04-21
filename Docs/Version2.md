@@ -12,9 +12,8 @@
 - Update requirements file
 - Gemini Code Review score of >7
 
-# Features v2
+# Features v2.2
 - Exclude NaN values from the zscore calculations and the first page where there is no S&P data,Better handing in charts and z-scores when positioning is changing, need to run with real data 
-- Fix the Status Bar
 
 
 ### Features v2.1

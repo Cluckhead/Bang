@@ -17,13 +17,13 @@ from urllib.parse import unquote, urlencode # For handling security IDs with spe
 
 # Import shared utilities and processing functions
 try:
-    from utils import load_weights_and_held_status # Moved here
+    from utils import load_weights_and_held_status, parse_fund_list # Import parse_fund_list for fund filter logic
     from security_processing import load_and_process_security_data # Keep using this standard loader
     from config import COMPARISON_CONFIG, COLOR_PALETTE # Import the new config
 except ImportError as e:
     logging.error(f"Error importing modules in generic_comparison_views: {e}")
     # Fallback imports if running standalone or structure differs (adjust path as needed)
-    from ..utils import load_weights_and_held_status
+    from ..utils import load_weights_and_held_status, parse_fund_list
     from ..security_processing import load_and_process_security_data
     from ..config import COMPARISON_CONFIG, COLOR_PALETTE
 
@@ -434,6 +434,28 @@ def get_holdings_for_security(security_id, chart_dates, data_folder):
     return holdings_data, chart_dates, error_message
 
 
+def load_fund_codes_from_csv(data_folder: str) -> list:
+    """
+    Loads the list of fund codes from FundList.csv in the given data folder.
+    Returns a sorted list of fund codes (strings). Returns empty list on error.
+    """
+    fund_list_path = os.path.join(data_folder, 'FundList.csv')
+    if not os.path.exists(fund_list_path):
+        current_app.logger.warning(f"FundList.csv not found at {fund_list_path}")
+        return []
+    try:
+        df = pd.read_csv(fund_list_path)
+        if 'Fund Code' in df.columns:
+            fund_codes = sorted(df['Fund Code'].dropna().astype(str).unique().tolist())
+            return fund_codes
+        else:
+            current_app.logger.warning(f"'Fund Code' column not found in FundList.csv at {fund_list_path}")
+            return []
+    except Exception as e:
+        current_app.logger.error(f"Error loading FundList.csv: {e}")
+        return []
+
+
 # --- Routes ---
 
 @generic_comparison_bp.route('/<comparison_type>/summary')
@@ -539,18 +561,23 @@ def summary(comparison_type):
     # --- Generate Filter Options (from data *after* holding filter) ---
     filter_options = {}
     if not summary_stats.empty:
-         # Use static_cols identified earlier, ensure they exist in the filtered summary_stats
+        # Use static_cols identified earlier, ensure they exist in the filtered summary_stats
         potential_filter_cols = [col for col in static_cols if col in summary_stats.columns and col != actual_id_col]
         log.debug(f"Potential filter columns: {potential_filter_cols}")
         for col in potential_filter_cols:
-            unique_vals = summary_stats[col].dropna().unique()
-            try:
-                # Attempt numeric sort first, then string sort
-                sorted_vals = sorted(unique_vals, key=lambda x: (isinstance(x, (int, float)), str(x).lower()))
-            except TypeError:
-                sorted_vals = sorted(unique_vals, key=str) # Fallback to string sort
-            if sorted_vals: # Only add if there are values
-                filter_options[col] = sorted_vals
+            # Special handling for 'Funds' column: use FundList.csv for dropdown, not unique values in data
+            if col == 'Funds':
+                fund_codes = load_fund_codes_from_csv(data_folder)
+                filter_options[col] = fund_codes
+            else:
+                unique_vals = summary_stats[col].dropna().unique()
+                try:
+                    # Attempt numeric sort first, then string sort
+                    sorted_vals = sorted(unique_vals, key=lambda x: (isinstance(x, (int, float)), str(x).lower()))
+                except TypeError:
+                    sorted_vals = sorted(unique_vals, key=str) # Fallback to string sort
+                if sorted_vals: # Only add if there are values
+                    filter_options[col] = sorted_vals
         filter_options = dict(sorted(filter_options.items())) # Sort filters alphabetically by column name
         log.info(f"Filter options generated: {list(filter_options.keys())}")
     else:
@@ -563,13 +590,18 @@ def summary(comparison_type):
         log.info(f"Applying static column filters: {active_filters}")
         for col, value in active_filters.items():
             if col in filtered_data.columns and value:
-                 try:
-                    # Ensure comparison is done as string for robustness
-                     filtered_data = filtered_data[filtered_data[col].astype(str).str.fullmatch(str(value), case=False, na=False)].copy() # Use .copy()
-                 except Exception as e:
-                     log.warning(f"Could not apply filter for column '{col}' value '{value}'. Error: {e}")
+                # Special handling for Funds filter: match if selected fund is in the parsed list
+                if col == 'Funds':
+                    # Use parse_fund_list to turn '[IG01,IG02]' into a list, then check if value is in list
+                    filtered_data = filtered_data[filtered_data['Funds'].apply(lambda x: value in parse_fund_list(x) if pd.notna(x) else False)].copy()
+                else:
+                    try:
+                        # Ensure comparison is done as string for robustness
+                        filtered_data = filtered_data[filtered_data[col].astype(str).str.fullmatch(str(value), case=False, na=False)].copy() # Use .copy()
+                    except Exception as e:
+                        log.warning(f"Could not apply filter for column '{col}' value '{value}'. Error: {e}")
             else:
-                 log.warning(f"Filter column '{col}' not in data or value is empty. Skipping filter.")
+                log.warning(f"Filter column '{col}' not in data or value is empty. Skipping filter.")
         log.info(f"Data shape after static filtering: {filtered_data.shape}")
 
 
