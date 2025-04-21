@@ -22,7 +22,7 @@ redo navigation bar
 Every PY file fhould be below 500 lines
 Add a checks sum calculation for each security to see if needs rerunning.
 
-New Features https://gemini.google.com/app/6c64ecfa19410785
+New Features https://gemini.googplease make teh necceassy backend changes toole.com/app/6c64ecfa19410785
 
 Load up the dataframes in the background to speed up the page
 Fix teh Status Bar

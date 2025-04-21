@@ -549,14 +549,13 @@ def add_schedule():
         return jsonify({'message': 'Missing or invalid schedule fields'}), 400
     if date_mode == 'quick':
         days_back = data.get('days_back')
-        end_date = data.get('end_date')
-        if days_back is None or end_date is None:
-            return jsonify({'message': 'days_back and end_date are required for quick mode'}), 400
+        if days_back is None:
+            return jsonify({'message': 'days_back is required for quick mode'}), 400
     else:
-        start_date = data.get('start_date')
-        custom_end_date = data.get('custom_end_date')
-        if start_date is None or custom_end_date is None:
-            return jsonify({'message': 'start_date and custom_end_date are required for range mode'}), 400
+        start_offset = data.get('start_offset')
+        end_offset = data.get('end_offset')
+        if start_offset is None or end_offset is None:
+            return jsonify({'message': 'start_offset and end_offset are required for range mode'}), 400
     schedules = load_schedules()
     new_id = max((s['id'] for s in schedules), default=0) + 1
     sched = {
@@ -568,12 +567,10 @@ def add_schedule():
     }
     if date_mode == 'quick':
         sched['days_back'] = int(days_back)
-        sched['end_date'] = end_date
     else:
-        sched['start_date'] = start_date
-        sched['custom_end_date'] = custom_end_date
-    schedules.append(sched)
-    save_schedules(schedules)
+        sched['start_offset'] = int(start_offset)
+        sched['end_offset'] = int(end_offset)
+    save_schedules(schedules + [sched])
     return jsonify(sched), 201
 
 @api_bp.route('/schedules/<int:schedule_id>', methods=['DELETE'])

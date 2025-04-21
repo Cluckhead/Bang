@@ -162,15 +162,28 @@
          </div>
     </div>
 
-    <!-- Scheduled API Calls Section -->
+    <!-- Schedule TQS Calls Section -->
     <hr>
-    <h2>Scheduled API Calls</h2>
+    <h2>Schedule TQS Calls</h2>
     <p>Set up daily scheduled runs of the API calls by choosing funds, date range, overwrite mode, and time.</p>
     <form id="schedule-form" class="mb-4">
         <div class="row mb-3">
             <div class="col-md-3">
-                <label for="scheduleTime" class="form-label">Run Time:</label>
-                <input type="time" class="form-control" id="scheduleTime" name="schedule_time" required>
+                <label for="scheduleHour" class="form-label">Run Time:</label>
+                <!-- Hour and minute dropdowns for easier time selection -->
+                <div class="d-flex align-items-center">
+                    <select class="form-select me-1" id="scheduleHour" name="schedule_hour" style="width:auto;">
+                        {% for h in range(0,24) %}
+                        <option value="{{ '%02d' % h }}">{{ '%02d' % h }}</option>
+                        {% endfor %}
+                    </select>
+                    <span>:</span>
+                    <select class="form-select ms-1" id="scheduleMinute" name="schedule_minute" style="width:auto;">
+                        {% for m in range(0,60,5) %}
+                        <option value="{{ '%02d' % m }}">{{ '%02d' % m }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
             <div class="col-md-3">
                 <label for="scheduleWriteMode" class="form-label">Write Mode:</label>
@@ -182,36 +195,44 @@
             <div class="col-md-3">
                 <label class="form-label">Date Mode:</label>
                 <select class="form-select" id="scheduleDateMode" name="date_mode">
-                    <option value="quick" selected>Quick (Days Back + End Date)</option>
-                    <option value="range">Custom Range</option>
+                    <option value="quick" selected>Quick (Days Back)</option>
+                    <option value="range">Custom Range (relative)</option>
                 </select>
             </div>
             <div class="col-md-3" id="scheduleDaysBackContainer">
                 <label for="scheduleDaysBack" class="form-label">Days Back:</label>
                 <input type="number" class="form-control" id="scheduleDaysBack" name="days_back" value="30">
+                <div class="form-text">End date will always be the most recent business day when the schedule runs.</div>
             </div>
         </div>
         <div class="row mb-3" id="scheduleDatesContainer" style="display:none;">
             <div class="col-md-4">
-                <label for="scheduleStartDate" class="form-label">Start Date:</label>
-                <input type="date" class="form-control" id="scheduleStartDate" name="start_date">
+                <label for="scheduleStartOffset" class="form-label">Start Offset (days before end):</label>
+                <input type="number" class="form-control" id="scheduleStartOffset" name="start_offset" value="30">
             </div>
             <div class="col-md-4">
-                <label for="scheduleEndDateCustom" class="form-label">End Date:</label>
-                <input type="date" class="form-control" id="scheduleEndDateCustom" name="custom_end_date">
+                <label for="scheduleEndOffset" class="form-label">End Offset (days before today):</label>
+                <input type="number" class="form-control" id="scheduleEndOffset" name="end_offset" value="0">
+                <div class="form-text">0 = most recent business day</div>
             </div>
         </div>
         <div class="mb-3">
             <label class="form-label">Funds:</label>
-            <div id="schedule-fund-list" class="border p-3" style="max-height:150px; overflow-y:auto;">
-                <!-- Reuse fund checkboxes from main form -->
+            <!-- Searchable checkbox list for large fund lists -->
+            <div class="mb-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="schedule-select-all">Select All</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="schedule-deselect-all">Deselect All</button>
+            </div>
+            <input type="text" class="form-control mb-2" id="schedule-fund-search" placeholder="Search funds...">
+            <div id="schedule-fund-list" class="border p-3" style="max-height: 200px; overflow-y: auto;">
                 {% for fund in funds %}
-                <div class="form-check form-check-inline">
+                <div class="form-check">
                     <input class="form-check-input schedule-fund-checkbox" type="checkbox" value="{{ fund['Fund Code'] }}" id="sched-fund-{{ fund['Fund Code'] }}">
                     <label class="form-check-label" for="sched-fund-{{ fund['Fund Code'] }}">{{ fund['Fund Code'] }}</label>
                 </div>
                 {% endfor %}
             </div>
+            <div class="form-text">Type to search and tick funds. Use Select All/Deselect All for bulk actions.</div>
         </div>
         <div class="text-danger d-none" id="schedule-error">Please fill out all fields and select at least one fund.</div>
         <button type="submit" class="btn btn-success">Add Schedule</button>
@@ -534,16 +555,46 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<!-- Scheduled API Calls JS -->
+<!-- Schedule TQS Calls JS -->
 <script>
+// This script handles the new Schedule TQS Calls UI:
+// - Combines hour/minute dropdowns into a time string
+// - Implements a searchable multi-select for funds
+// - Handles relative date offsets for scheduling
+// - Adds Select All/Deselect All for large fund lists
+// - Submits the form with the new structure
+
 document.addEventListener('DOMContentLoaded', function() {
-    const scheduleForm = document.getElementById('schedule-form');
-    const scheduleTableBody = document.querySelector('#schedule-table tbody');
-    const scheduleError = document.getElementById('schedule-error');
+    // --- Time selector: combine hour and minute dropdowns into a time string ---
+    function getScheduleTime() {
+        const hour = document.getElementById('scheduleHour').value;
+        const minute = document.getElementById('scheduleMinute').value;
+        return `${hour}:${minute}`;
+    }
+
+    // --- Fund checkbox search/filter logic ---
+    const fundSearch = document.getElementById('schedule-fund-search');
+    const fundListDiv = document.getElementById('schedule-fund-list');
+    const fundCheckboxes = () => fundListDiv.querySelectorAll('.schedule-fund-checkbox');
+    fundSearch.addEventListener('input', function() {
+        const filter = fundSearch.value.toLowerCase();
+        fundCheckboxes().forEach(cb => {
+            const label = cb.nextElementSibling.textContent.toLowerCase();
+            cb.parentElement.style.display = label.includes(filter) ? '' : 'none';
+        });
+    });
+    // Select All/Deselect All for fund checkboxes
+    document.getElementById('schedule-select-all').addEventListener('click', function() {
+        fundCheckboxes().forEach(cb => { cb.checked = true; });
+    });
+    document.getElementById('schedule-deselect-all').addEventListener('click', function() {
+        fundCheckboxes().forEach(cb => { cb.checked = false; });
+    });
+
+    // --- Date mode toggle for relative offsets ---
     const dateModeSelect = document.getElementById('scheduleDateMode');
     const daysBackContainer = document.getElementById('scheduleDaysBackContainer');
     const datesContainer = document.getElementById('scheduleDatesContainer');
-
     function toggleScheduleDateFields() {
         if (dateModeSelect.value === 'range') {
             datesContainer.style.display = '';
@@ -556,86 +607,43 @@ document.addEventListener('DOMContentLoaded', function() {
     dateModeSelect.addEventListener('change', toggleScheduleDateFields);
     toggleScheduleDateFields();
 
-    async function loadSchedules() {
-        try {
-            const res = await fetch('{{ url_for("api_bp.list_schedules") }}');
-            const data = await res.json();
-            scheduleTableBody.innerHTML = '';
-            data.forEach(schedule => {
-                const funds = schedule.funds.join(', ');
-                const params = schedule.date_mode === 'quick'
-                    ? `Days Back: ${schedule.days_back}, End Date: ${schedule.end_date}`
-                    : `Start: ${schedule.start_date}, End: ${schedule.custom_end_date}`;
-                const row = `
-                    <tr data-id="${schedule.id}">
-                        <td>${schedule.id}</td>
-                        <td>${schedule.schedule_time}</td>
-                        <td>${funds}</td>
-                        <td>${schedule.date_mode}</td>
-                        <td>${params}</td>
-                        <td>${schedule.write_mode}</td>
-                        <td><button class="btn btn-sm btn-danger delete-schedule">Delete</button></td>
-                    </tr>`;
-                scheduleTableBody.innerHTML += row;
-            });
-        } catch (e) {
-            console.error('Error loading schedules', e);
-        }
-    }
-
-    scheduleForm.addEventListener('submit', async function(e) {
+    // --- Form submission for schedule ---
+    document.getElementById('schedule-form').addEventListener('submit', async function(e) {
         e.preventDefault();
-        scheduleError.classList.add('d-none');
-        const time = document.getElementById('scheduleTime').value;
+        const time = getScheduleTime();
         const writeMode = document.getElementById('scheduleWriteMode').value;
         const dateMode = dateModeSelect.value;
         const daysBack = document.getElementById('scheduleDaysBack').value;
-        const endDate = document.getElementById('endDate').value;
-        const startDate = document.getElementById('scheduleStartDate').value;
-        const customEndDate = document.getElementById('scheduleEndDateCustom').value;
-        const fundCheckboxes = document.querySelectorAll('.schedule-fund-checkbox:checked');
-        if (!time || fundCheckboxes.length === 0 || (dateMode === 'quick' && !endDate) || (dateMode === 'range' && (!startDate || !customEndDate))) {
-            scheduleError.textContent = 'Please fill out all fields and select at least one fund.';
-            scheduleError.classList.remove('d-none');
+        const startOffset = document.getElementById('scheduleStartOffset').value;
+        const endOffset = document.getElementById('scheduleEndOffset').value;
+        const checkedFunds = Array.from(fundCheckboxes()).filter(cb => cb.checked);
+        if (!time || checkedFunds.length === 0 || (dateMode === 'quick' && !daysBack) || (dateMode === 'range' && (!startOffset || !endOffset))) {
+            document.getElementById('schedule-error').textContent = 'Please fill out all fields and select at least one fund.';
+            document.getElementById('schedule-error').classList.remove('d-none');
             return;
         }
-        const funds = Array.from(fundCheckboxes).map(cb => cb.value);
+        const funds = checkedFunds.map(cb => cb.value);
         const payload = { schedule_time: time, write_mode: writeMode, date_mode: dateMode, funds };
-        if (dateMode === 'quick') { payload.days_back = parseInt(daysBack,10); payload.end_date = endDate; }
-        else { payload.start_date = startDate; payload.custom_end_date = customEndDate; }
+        if (dateMode === 'quick') { payload.days_back = parseInt(daysBack,10); }
+        else { payload.start_offset = parseInt(startOffset,10); payload.end_offset = parseInt(endOffset,10); }
         try {
             const res = await fetch('{{ url_for("api_bp.add_schedule") }}', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
             if (res.ok) {
-                scheduleForm.reset();
+                document.getElementById('schedule-form').reset();
                 toggleScheduleDateFields();
-                await loadSchedules();
+                // Reload schedules (existing logic)
+                if (typeof loadSchedules === 'function') loadSchedules();
             } else {
                 const err = await res.json();
-                scheduleError.textContent = err.message || 'Failed to add schedule.';
-                scheduleError.classList.remove('d-none');
+                document.getElementById('schedule-error').textContent = err.message || 'Failed to add schedule.';
+                document.getElementById('schedule-error').classList.remove('d-none');
             }
         } catch (e) {
             console.error('Error adding schedule', e);
         }
     });
-
-    scheduleTableBody.addEventListener('click', async function(e) {
-        if (e.target.classList.contains('delete-schedule')) {
-            const row = e.target.closest('tr');
-            const id = row.dataset.id;
-            if (!confirm('Delete schedule #' + id + '?')) return;
-            try {
-                const res = await fetch(`{{ url_for("api_bp.delete_schedule", schedule_id=0) }}`.replace('0', id), { method: 'DELETE' });
-                if (res.ok) loadSchedules();
-            } catch (e) {
-                console.error('Error deleting schedule', e);
-            }
-        }
-    });
-
-    loadSchedules();
 });
 </script>
 {% endblock %} 

@@ -66,6 +66,10 @@ graph TD
     C --> C4(process_data.py);
     C --> C5(curve_processing.py);
     C --> C6(issue_processing.py);
+    C --> C7(weight_processing.py);
+    C --> C8(data_validation.py);
+    C --> C9(process_w_secs.py);
+    C --> C10(process_weights.py);
 
     D --> D1(main_views.py);
     D --> D2(metric_views.py);
@@ -177,6 +181,10 @@ graph TD
 | `utils.py` | Utility functions | `_is_date_like()`, `parse_fund_list()` |
 | `curve_processing.py` | Process yield curve data | `load_curve_data()`, `check_curve_inconsistencies()` |
 | `issue_processing.py` | Manage data issues | `add_issue()`, `close_issue()`, `load_issues()` |
+| `weight_processing.py` | Process and clean weight files, replacing generic headers with dates from Dates.csv for fund, benchmark, and security weights. | `process_weight_file()` |
+| `process_weights.py` | Batch process all weight files in Data/, converting pre_w_*.csv to w_*.csv with correct date headers. | `main()`, `process_weight_file_with_reversed_dates()`, `process_securities_file()` |
+| `process_w_secs.py` | Process pre_w_secs.csv to w_secs.csv, replacing weight columns with dates and preserving metadata columns. | `process_securities_file()` |
+| `data_validation.py` | Validate structure and content of DataFrames before saving, checking columns and types by file type. | `validate_data()` |
 
 ### View Modules (`views/`)
 

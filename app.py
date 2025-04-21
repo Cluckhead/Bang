@@ -223,12 +223,25 @@ def create_app():
                 'write_mode': schedule['write_mode'],
                 'funds': schedule['funds']
             }
+            # Calculate dates at runtime based on relative offsets
+            import pandas as pd
+            from pandas.tseries.offsets import BDay
+            import datetime
+            today = pd.Timestamp(datetime.datetime.now().date())
+            most_recent_bd = today if today.weekday() < 5 else today - BDay(1) # fallback: today if weekday, else previous business day
             if schedule['date_mode'] == 'quick':
-                payload['days_back'] = schedule['days_back']
-                payload['end_date'] = schedule['end_date']
+                days_back = schedule['days_back']
+                end_date = (most_recent_bd - BDay(0)).date()
+                start_date = end_date - pd.Timedelta(days=days_back)
+                payload['days_back'] = days_back
+                payload['end_date'] = end_date.strftime('%Y-%m-%d')
             else:
-                payload['start_date'] = schedule['start_date']
-                payload['custom_end_date'] = schedule['custom_end_date']
+                start_offset = schedule['start_offset']
+                end_offset = schedule['end_offset']
+                end_date = (most_recent_bd - BDay(end_offset)).date()
+                start_date = end_date - pd.Timedelta(days=(start_offset - end_offset))
+                payload['start_date'] = start_date.strftime('%Y-%m-%d')
+                payload['custom_end_date'] = end_date.strftime('%Y-%m-%d')
             response = app.test_client().post('/run_api_calls', json=payload)
             app.logger.info(f"Scheduled job {schedule['id']} executed. Status: {response.status_code}")
 
