@@ -37,10 +37,13 @@ def is_placeholder_value(value, placeholder_values=None):
     """
     if placeholder_values is None:
         placeholder_values = DEFAULT_PLACEHOLDER_VALUES
-        
+    
+    # Check for common string placeholders (case-insensitive)
+    if isinstance(value, str):
+        if value.strip().lower() in {'n/a', 'na', '', 'null', 'none'}:
+            return True
     if pd.isna(value):
         return True
-        
     try:
         # Try to convert to numeric for comparison
         numeric_value = float(value)
@@ -52,7 +55,6 @@ def is_placeholder_value(value, placeholder_values=None):
     except (ValueError, TypeError):
         # If value can't be converted to numeric, it's not our placeholder
         pass
-        
     return False
 
 def get_staleness_summary(data_folder=DATA_FOLDER, exclusions_df=None, threshold_days=DEFAULT_STALENESS_THRESHOLD_DAYS):

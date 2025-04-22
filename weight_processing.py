@@ -113,6 +113,11 @@ def process_weight_file(input_path: str, output_path: str, dates_path: Optional[
             data_cols = original_cols[1:]
             if len(data_cols) > len(dates):
                 logger.warning(f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only.")
+                # Truncate data columns to match the number of dates
+                keep_cols = [id_col] + data_cols[:len(dates)]
+                df = df[keep_cols]
+                data_cols = data_cols[:len(dates)]
+                # Now len(data_cols) == len(dates)
                 dates = dates[:len(data_cols)]
             elif len(data_cols) < len(dates):
                 logger.warning(f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates.")
@@ -134,6 +139,10 @@ def process_weight_file(input_path: str, output_path: str, dates_path: Optional[
             data_cols = original_cols[meta_end_idx:]
             if len(data_cols) > len(dates):
                 logger.warning(f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only.")
+                # Truncate data columns to match the number of dates
+                keep_cols = metadata_cols + data_cols[:len(dates)]
+                df = df[keep_cols]
+                data_cols = data_cols[:len(dates)]
                 dates = dates[:len(data_cols)]
             elif len(data_cols) < len(dates):
                 logger.warning(f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates.")
@@ -150,6 +159,10 @@ def process_weight_file(input_path: str, output_path: str, dates_path: Optional[
             data_cols = original_cols[1:]
             if len(data_cols) > len(dates):
                 logger.warning(f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only.")
+                # Truncate data columns to match the number of dates
+                keep_cols = [id_col] + data_cols[:len(dates)]
+                df = df[keep_cols]
+                data_cols = data_cols[:len(dates)]
                 dates = dates[:len(data_cols)]
             elif len(data_cols) < len(dates):
                 logger.warning(f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates.")
