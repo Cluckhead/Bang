@@ -1,7 +1,7 @@
 # views/issue_views.py
 # Purpose: Defines the Flask Blueprint and routes for the Data Issue Tracking feature.
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 import issue_processing  # Use the new module
 import pandas as pd
 from datetime import datetime
@@ -22,13 +22,13 @@ def load_users():
             if 'Name' in users_df.columns:
                 return users_df['Name'].dropna().tolist()
             else:
-                print("Warning: 'Name' column not found in users.csv")
+                current_app.logger.warning("Warning: 'Name' column not found in users.csv")
                 return [] # Return empty list if column not found
         except Exception as e:
-            print(f"Error loading users from {users_file}: {e}")
+            current_app.logger.error(f"Error loading users from {users_file}: {e}")
             return [] # Return empty list on error
     else:
-        print(f"Warning: {users_file} not found.")
+        current_app.logger.warning(f"Warning: {users_file} not found.")
         return [] # Return empty list if file not found
 
 @issue_bp.route('/issues', methods=['GET', 'POST'])
@@ -55,7 +55,7 @@ def manage_issues():
                  raise ValueError("Missing required fields.")
             # Check if user exists in the loaded list (optional, but good practice)
             if raised_by not in users:
-                 print(f"Warning: Raised by user '{raised_by}' not found in users.csv. Allowing submission.")
+                 current_app.logger.warning(f"Warning: Raised by user '{raised_by}' not found in users.csv. Allowing submission.")
                  # Depending on requirements, you might want to raise ValueError here instead
             if data_source not in DATA_SOURCES:
                  raise ValueError("Invalid data source selected.")
@@ -112,7 +112,7 @@ def close_issue_route():
 
         # Optional: Validate closed_by user
         if closed_by not in users:
-            print(f"Warning: Closed by user '{closed_by}' not found in users.csv. Allowing closure.")
+            current_app.logger.warning(f"Warning: Closed by user '{closed_by}' not found in users.csv. Allowing closure.")
             # Depending on requirements, you might want to raise ValueError here
 
         success = issue_processing.close_issue(issue_id, closed_by, resolution_comment)

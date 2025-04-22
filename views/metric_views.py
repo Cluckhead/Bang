@@ -34,8 +34,8 @@ def metric_page(metric_name):
     latest_date_overall = pd.Timestamp.min # Initialize
 
     try:
-        print(f"--- Processing metric: {metric_name} ---")
-        print(f"Primary file: {primary_filename}, Secondary file: {secondary_filename}")
+        current_app.logger.info(f"--- Processing metric: {metric_name} ---")
+        current_app.logger.info(f"Primary file: {primary_filename}, Secondary file: {secondary_filename}")
         
         # Load Data (Primary and Secondary)
         load_result: LoadResult = load_and_process_data(primary_filename, secondary_filename)
@@ -51,14 +51,14 @@ def metric_page(metric_name):
                  current_app.logger.error(f"Error: Primary data file not found: {primary_filepath}")
                  return f"Error: Data file for metric '{metric_name}' (expected: '{primary_filename}') not found.", 404
             else:
-                 print(f"Error: Failed to process primary data file: {primary_filename}")
+                 current_app.logger.error(f"Error: Failed to process primary data file: {primary_filename}")
                  return f"Error: Could not process required data for metric '{metric_name}' (file: {primary_filename}). Check file format or logs.", 500
 
         # --- Determine Combined Metadata --- 
         all_dfs = [df for df in [primary_df, secondary_df] if df is not None and not df.empty]
         if not all_dfs:
              # Should be caught by primary check, but safeguard
-            print(f"Error: No valid data loaded for {metric_name}")
+            current_app.logger.error(f"Error: No valid data loaded for {metric_name}")
             return f"Error: No data found for metric '{metric_name}'.", 404
 
         try:
@@ -66,17 +66,17 @@ def metric_page(metric_name):
             latest_date_overall = combined_index.get_level_values(0).max()
             latest_date_str = latest_date_overall.strftime('%Y-%m-%d')
         except Exception as idx_err:
-            print(f"Error combining indices or getting latest date for {metric_name}: {idx_err}")
+            current_app.logger.error(f"Error combining indices or getting latest date for {metric_name}: {idx_err}")
             # Fallback or re-raise? Let's try to proceed if possible, using primary date
             latest_date_overall = primary_df.index.get_level_values(0).max()
             latest_date_str = latest_date_overall.strftime('%Y-%m-%d')
-            print(f"Warning: Using latest date from primary data only: {latest_date_str}")
+            current_app.logger.warning(f"Warning: Using latest date from primary data only: {latest_date_str}")
 
         secondary_data_available = secondary_df is not None and not secondary_df.empty and sec_fund_cols is not None
-        print(f"Secondary data available for {metric_name}: {secondary_data_available}")
+        current_app.logger.info(f"Secondary data available for {metric_name}: {secondary_data_available}")
         
         # --- Calculate Metrics --- 
-        print(f"Calculating metrics for {metric_name}...")
+        current_app.logger.info(f"Calculating metrics for {metric_name}...")
         latest_metrics = calculate_latest_metrics(
             primary_df=primary_df,
             primary_fund_cols=pri_fund_cols,
@@ -89,7 +89,7 @@ def metric_page(metric_name):
 
         # --- Handle Empty Metrics Result --- 
         if latest_metrics.empty:
-            print(f"Warning: Metric calculation returned empty DataFrame for {metric_name}. Rendering page with no fund data.")
+            current_app.logger.warning(f"Warning: Metric calculation returned empty DataFrame for {metric_name}. Rendering page with no fund data.")
             missing_latest = pd.DataFrame()
             json_payload = {
                 "metadata": {
@@ -110,7 +110,7 @@ def metric_page(metric_name):
                            missing_funds=missing_latest)
 
         # --- Identify Missing Funds (based on primary data) --- 
-        print(f"Identifying potentially missing latest data for {metric_name}...")
+        current_app.logger.info(f"Identifying potentially missing latest data for {metric_name}...")
         primary_cols_for_check = []
         if pri_bench_col:
             primary_cols_for_check.append(pri_bench_col)
@@ -128,11 +128,11 @@ def metric_page(metric_name):
         if check_cols_for_missing:
             missing_latest = latest_metrics[latest_metrics[check_cols_for_missing].isna().any(axis=1)]
         else:
-            print(f"Warning: No primary Z-Score or Latest Value columns found for {metric_name} to check for missing data.")
+            current_app.logger.warning(f"Warning: No primary Z-Score or Latest Value columns found for {metric_name} to check for missing data.")
             missing_latest = pd.DataFrame(index=latest_metrics.index) # Assume none are missing if no check cols
 
         # --- Prepare Data Structure for JavaScript --- 
-        print(f"Preparing chart and metric data for JavaScript for {metric_name}...")
+        current_app.logger.info(f"Preparing chart and metric data for JavaScript for {metric_name}...")
         funds_data_for_js = {}
         fund_codes_in_metrics = latest_metrics.index
         primary_df_index = primary_df.index
@@ -165,7 +165,7 @@ def metric_page(metric_name):
                     primary_labels = primary_dt_index.strftime('%Y-%m-%d').tolist()
                 else:
                     primary_labels = fund_hist_primary.index.astype(str).tolist()
-                    print(f"Warning: Primary index for {fund_code} is not DatetimeIndex.")
+                    current_app.logger.warning(f"Warning: Primary index for {fund_code} is not DatetimeIndex.")
 
             # --- Get Secondary Historical Data ---
             fund_hist_secondary = None
@@ -178,17 +178,17 @@ def metric_page(metric_name):
                          try:
                              if isinstance(fund_hist_secondary_raw.index, pd.DatetimeIndex):
                                  fund_hist_secondary = fund_hist_secondary_raw.reindex(primary_dt_index)
-                                 print(f"Successfully reindexed secondary data for {fund_code}.")
+                                 current_app.logger.info(f"Successfully reindexed secondary data for {fund_code}.")
                              else:
-                                 print(f"Warning: Cannot reindex - Secondary index for {fund_code} is not DatetimeIndex after filtering.")
+                                 current_app.logger.warning(f"Warning: Cannot reindex - Secondary index for {fund_code} is not DatetimeIndex after filtering.")
                          except Exception as reindex_err:
-                             print(f"Warning: Reindexing secondary data for {fund_code} failed: {reindex_err}. Chart may be misaligned.")
+                             current_app.logger.warning(f"Warning: Reindexing secondary data for {fund_code} failed: {reindex_err}. Chart may be misaligned.")
                              fund_hist_secondary = fund_hist_secondary_raw # Use unaligned as fallback
                     else:
-                         print(f"Warning: Cannot reindex secondary for {fund_code} - Primary DatetimeIndex unavailable.")
+                         current_app.logger.warning(f"Warning: Cannot reindex secondary for {fund_code} - Primary DatetimeIndex unavailable.")
                          fund_hist_secondary = fund_hist_secondary_raw # Use unaligned as fallback
                 else:
-                    print(f"Warning: Secondary index for {fund_code} is not DatetimeIndex.")
+                    current_app.logger.warning(f"Warning: Secondary index for {fund_code} is not DatetimeIndex.")
                     fund_hist_secondary = fund_hist_secondary_raw # Use raw if not datetime
 
             # --- Prepare Main Chart Datasets (Primary Data) ---
@@ -361,7 +361,7 @@ def metric_page(metric_name):
             "funds": funds_data_for_js # Use the new structure
         }
 
-        print(f"--- Completed processing metric: {metric_name} ---")
+        current_app.logger.info(f"--- Completed processing metric: {metric_name} ---")
 
         return render_template('metric_page_js.html',
                                metric_name=metric_name,
@@ -371,13 +371,13 @@ def metric_page(metric_name):
                                error_message=None) # Explicitly set error to None on success
 
     except FileNotFoundError as e:
-        print(f"Error: File not found during processing for {metric_name}. Details: {e}")
+        current_app.logger.error(f"Error: File not found during processing for {metric_name}. Details: {e}")
         traceback.print_exc()
         error_msg = f"Error: Required data file not found for metric '{metric_name}'. {e}"
         return render_template('metric_page_js.html', metric_name=metric_name, charts_data_json='{}', latest_date='N/A', missing_funds=pd.DataFrame(), error_message=error_msg), 404
 
     except Exception as e:
-        print(f"Error processing metric page for {metric_name} (Fund: {fund_code}): {e}")
+        current_app.logger.error(f"Error processing metric page for {metric_name} (Fund: {fund_code}): {e}")
         traceback.print_exc() # Log the full traceback to console/log file
         error_msg = f"An error occurred while processing metric '{metric_name}'. Please check the server logs for details. Error: {e}"
         # Attempt to render template with error message

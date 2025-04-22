@@ -33,7 +33,7 @@ def fund_duration_details(fund_code):
     current_app.logger.info(f"--- Requesting Duration Details for Fund: {fund_code} --- File: {data_filepath}")
 
     if not os.path.exists(data_filepath):
-        print(f"Error: Duration file '{duration_filename}' not found.")
+        current_app.logger.error(f"Error: Duration file '{duration_filename}' not found.")
         return f"Error: Data file '{duration_filename}' not found.", 404
 
     try:
@@ -44,7 +44,7 @@ def fund_duration_details(fund_code):
         # Define ID column (specific to this file/route)
         id_col_name = 'ISIN'
         if id_col_name not in all_cols:
-            print(f"Error: Expected ID column '{id_col_name}' not found in {duration_filename}.")
+            current_app.logger.error(f"Error: Expected ID column '{id_col_name}' not found in {duration_filename}.")
             return f"Error: Required ID column '{id_col_name}' not found in '{duration_filename}'.", 500
 
         # 2. Identify static and date columns dynamically
@@ -60,11 +60,11 @@ def fund_duration_details(fund_code):
             else:
                 static_cols.append(col) # Treat others as static
 
-        print(f"Dynamically identified Static Cols: {static_cols}")
-        print(f"Dynamically identified Date Cols (first 5): {date_cols[:5]}...")
+        current_app.logger.info(f"Dynamically identified Static Cols: {static_cols}")
+        current_app.logger.info(f"Dynamically identified Date Cols (first 5): {date_cols[:5]}...")
 
         if not date_cols or len(date_cols) < 2:
-             print("Error: Not enough date columns found in duration file to calculate change.")
+             current_app.logger.error("Error: Not enough date columns found in duration file to calculate change.")
              return f"Error: Insufficient date columns in '{duration_filename}' to calculate change.", 500
 
         # Now read the full data
@@ -74,7 +74,7 @@ def fund_duration_details(fund_code):
         # Ensure the Funds column exists (still needed for filtering)
         funds_col = 'Funds' # Keep this assumption for now as it's key to filtering
         if funds_col not in static_cols:
-             print(f"Warning: Expected column '{funds_col}' for filtering not found among static columns.")
+             current_app.logger.warning(f"Warning: Expected column '{funds_col}' for filtering not found among static columns.")
              # Decide how to handle this - error or proceed without fund filtering? Let's error for now.
              return f"Error: Required column '{funds_col}' for fund filtering not found.", 500
 
@@ -83,9 +83,9 @@ def fund_duration_details(fund_code):
             # Check and sort date columns using the correct YYYY-MM-DD format
             pd.to_datetime(date_cols, format='%Y-%m-%d', errors='raise')
             date_cols = sorted(date_cols, key=lambda d: pd.to_datetime(d, format='%Y-%m-%d'))
-            print(f"Identified and sorted date columns (YYYY-MM-DD): {date_cols[-5:]} (last 5 shown)")
+            current_app.logger.info(f"Identified and sorted date columns (YYYY-MM-DD): {date_cols[-5:]} (last 5 shown)")
         except ValueError:
-            print("Warning: Could not parse all date columns using YYYY-MM-DD format. Using original order.")
+            current_app.logger.warning("Warning: Could not parse all date columns using YYYY-MM-DD format. Using original order.")
             # Fallback remains, but hopefully won't be needed as often
 
         # Identify last two date columns based on sorted list (or original if parsing failed)
@@ -93,7 +93,7 @@ def fund_duration_details(fund_code):
             return f"Error: Insufficient valid date columns in '{duration_filename}' to calculate change after sorting attempt.", 500
         last_date_col = date_cols[-1]
         second_last_date_col = date_cols[-2]
-        print(f"Using dates for change calculation: {second_last_date_col} and {last_date_col}")
+        current_app.logger.info(f"Using dates for change calculation: {second_last_date_col} and {last_date_col}")
 
         # Ensure the relevant date columns are numeric for calculation
         df[last_date_col] = pd.to_numeric(df[last_date_col], errors='coerce')
@@ -114,10 +114,10 @@ def fund_duration_details(fund_code):
         new_contribution_cols = []
 
         if not os.path.exists(weights_filepath):
-            print(f"Warning: Weight file '{weights_filename}' not found. Skipping duration contribution calculation.")
+            current_app.logger.warning(f"Warning: Weight file '{weights_filename}' not found. Skipping duration contribution calculation.")
         else:
             try:
-                print(f"Loading weight file: {weights_filename}")
+                current_app.logger.info(f"Loading weight file: {weights_filename}")
                 weights_df = pd.read_csv(weights_filepath, encoding='utf-8')
                 weights_df.columns = weights_df.columns.str.strip()
 
@@ -132,9 +132,9 @@ def fund_duration_details(fund_code):
                     second_last_date_dt = pd.to_datetime(second_last_date_col, format='%Y-%m-%d')
                     last_date_col_weights_fmt = last_date_dt.strftime('%d/%m/%Y')
                     second_last_date_col_weights_fmt = second_last_date_dt.strftime('%d/%m/%Y')
-                    print(f"Looking for weight columns: {last_date_col_weights_fmt}, {second_last_date_col_weights_fmt}")
+                    current_app.logger.info(f"Looking for weight columns: {last_date_col_weights_fmt}, {second_last_date_col_weights_fmt}")
                 except ValueError:
-                     print(f"Error: Could not convert duration dates ({last_date_col}, {second_last_date_col}) to datetime objects for weight lookup. Skipping contribution.")
+                     current_app.logger.error(f"Error: Could not convert duration dates ({last_date_col}, {second_last_date_col}) to datetime objects for weight lookup. Skipping contribution.")
                      last_date_col_weights_fmt = None # Ensure it skips if conversion fails
 
                 # Check using the formatted date strings
@@ -143,21 +143,21 @@ def fund_duration_details(fund_code):
                     required_weight_cols.extend([last_date_col_weights_fmt, second_last_date_col_weights_fmt])
                 else:
                     # Skip if dates couldn't be formatted
-                    print(f"Skipping weight check due to date format conversion error.")
+                    current_app.logger.warning(f"Skipping weight check due to date format conversion error.")
                     all_cols_exist = False
                 
                 all_cols_exist = all(col in weights_df.columns for col in required_weight_cols)
 
                 if not all_cols_exist:
                     missing_cols = [col for col in required_weight_cols if col not in weights_df.columns]
-                    print(f"Warning: Weight file '{weights_filename}' is missing required columns (needed: {required_weight_cols}, missing: {missing_cols}). Skipping contribution calculation.")
+                    current_app.logger.warning(f"Warning: Weight file '{weights_filename}' is missing required columns (needed: {required_weight_cols}, missing: {missing_cols}). Skipping contribution calculation.")
                 else:
-                    print(f"Filtering weights for fund: {fund_code}")
+                    current_app.logger.info(f"Filtering weights for fund: {fund_code}")
                     # Filter weights by fund code (assuming direct match in 'Funds' column)
                     fund_weights_df = weights_df[weights_df[weight_fund_col] == fund_code].copy()
 
                     if fund_weights_df.empty:
-                        print(f"Warning: No weights found for fund '{fund_code}' in {weights_filename}. Contribution will be zero.")
+                        current_app.logger.warning(f"Warning: No weights found for fund '{fund_code}' in {weights_filename}. Contribution will be zero.")
                         # Create empty df with correct columns to avoid merge errors later if we still want zero cols
                         weights_to_merge = pd.DataFrame(columns=[weight_id_col, 'Weight Last Date', 'Weight Second Last Date'])
                         weights_to_merge = weights_to_merge.astype({weight_id_col: 'object', 'Weight Last Date': 'float64', 'Weight Second Last Date': 'float64'})
@@ -174,7 +174,7 @@ def fund_duration_details(fund_code):
                         weights_to_merge['Weight Second Last Date'] = pd.to_numeric(weights_to_merge['Weight Second Last Date'], errors='coerce')
 
                     # Merge weights with filtered duration data
-                    print(f"Merging duration data with weights on '{weight_id_col}'")
+                    current_app.logger.info(f"Merging duration data with weights on '{weight_id_col}'")
                     filtered_df = pd.merge(filtered_df, weights_to_merge, on=weight_id_col, how='left')
 
                     # Fill missing weights with 0 and calculate contribution
@@ -191,15 +191,15 @@ def fund_duration_details(fund_code):
 
                     contribution_calculated = True
                     new_contribution_cols = [contrib_second_last_col, contrib_last_col, contrib_change_col]
-                    print("Duration contribution calculated successfully.")
+                    current_app.logger.info("Duration contribution calculated successfully.")
 
             except Exception as weight_err:
-                 print(f"Error processing weight file '{weights_filename}': {weight_err}. Skipping contribution calculation.")
+                 current_app.logger.error(f"Error processing weight file '{weights_filename}': {weight_err}. Skipping contribution calculation.")
                  traceback.print_exc()
         # --- End Weight Data Processing ---
 
         if filtered_df.empty:
-            print(f"No securities found for fund '{fund_code}' in {duration_filename} after initial filtering.")
+            current_app.logger.info(f"No securities found for fund '{fund_code}' in {duration_filename} after initial filtering.")
             # Render a template indicating no data found for this fund
             return render_template('fund_duration_details.html',
                                    fund_code=fund_code,
@@ -208,7 +208,7 @@ def fund_duration_details(fund_code):
                                    id_col_name=None,
                                    message=f"No securities found held by fund '{fund_code}' in {duration_filename}.")
 
-        print(f"Found {len(filtered_df)} securities for fund '{fund_code}'. Calculating duration changes...")
+        current_app.logger.info(f"Found {len(filtered_df)} securities for fund '{fund_code}'. Calculating duration changes...")
 
         # 4. Calculate 1-day Duration Change (already done if contribution wasn't skipped)
         change_col_name = '1 Day Duration Change'
@@ -217,7 +217,7 @@ def fund_duration_details(fund_code):
 
         # 5. Sort by Duration Change (descending, NaN last)
         filtered_df.sort_values(by=change_col_name, ascending=False, na_position='last', inplace=True)
-        print(f"Sorted securities by {change_col_name}.")
+        current_app.logger.info(f"Sorted securities by {change_col_name}.")
 
         # 6. Prepare data for template
         # Define base display columns
@@ -245,7 +245,7 @@ def fund_duration_details(fund_code):
                  if pd.isna(value):
                      row[key] = None
 
-        print(f"Final column order for display: {final_col_order}")
+        current_app.logger.info(f"Final column order for display: {final_col_order}")
 
         return render_template('fund_duration_details.html',
                                fund_code=fund_code,
@@ -257,7 +257,7 @@ def fund_duration_details(fund_code):
     except FileNotFoundError:
          return f"Error: Data file '{duration_filename}' not found.", 404
     except Exception as e:
-        print(f"Error processing duration details for fund {fund_code}: {e}")
+        current_app.logger.error(f"Error processing duration details for fund {fund_code}: {e}")
         traceback.print_exc()
         return f"An error occurred processing duration details for fund {fund_code}: {e}", 500
 

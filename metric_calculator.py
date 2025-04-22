@@ -16,36 +16,8 @@ import os # Needed for logging setup
 from typing import List, Dict, Any, Tuple, Optional
 
 # --- Logging Setup ---
-# Use the same log file as data_loader
-LOG_FILENAME = 'data_processing_errors.log'
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-
-# Get the logger for the current module
+# Use the centralized logger configured by the Flask app (no handlers or setup here)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-# Prevent adding handlers multiple times (especially if imported by other modules)
-if not logger.handlers:
-    # Console Handler (INFO and above)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch_formatter = logging.Formatter(LOG_FORMAT)
-    ch.setFormatter(ch_formatter)
-    logger.addHandler(ch)
-
-    # File Handler (WARNING and above)
-    try:
-        # Create log file path relative to this file's location
-        log_filepath = os.path.join(os.path.dirname(__file__), '..', LOG_FILENAME)
-        fh = logging.FileHandler(log_filepath, mode='a')
-        fh.setLevel(logging.WARNING)
-        fh_formatter = logging.Formatter(LOG_FORMAT)
-        fh.setFormatter(fh_formatter)
-        logger.addHandler(fh)
-    except Exception as e:
-        # Log to stderr if file logging setup fails
-        import sys
-        print(f"Error setting up file logging for metric_calculator: {e}", file=sys.stderr)
 # --- End Logging Setup ---
 
 # Configure logging (can be configured globally elsewhere if part of a larger app)

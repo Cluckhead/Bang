@@ -280,26 +280,26 @@ def check_curve_inconsistencies(df):
 
 if __name__ == '__main__':
     # Example usage when run directly:
-    print("Running curve_processing.py directly...")
+    logger.info("Running curve_processing.py directly...")
     logger.info("--- Starting Standalone Execution ---")
 
-    print("Loading curve data...")
+    logger.info("Loading curve data...")
     curve_df = load_curve_data()
 
     if not curve_df.empty:
-        print("\nCurve data loaded successfully.")
+        logger.info("\nCurve data loaded successfully.")
         latest_dt = get_latest_curve_date(curve_df)
-        print(f"\nLatest Date found: {latest_dt.strftime('%Y-%m-%d') if latest_dt else 'N/A'}")
+        logger.info(f"\nLatest Date found: {latest_dt.strftime('%Y-%m-%d') if latest_dt else 'N/A'}")
 
-        print("\nChecking for inconsistencies on latest date...")
+        logger.info("\nChecking for inconsistencies on latest date...")
         inconsistency_summary = check_curve_inconsistencies(curve_df)
 
-        print("\n--- Inconsistency Summary ---")
+        logger.info("\n--- Inconsistency Summary ---")
         if inconsistency_summary:
             for currency, issues in inconsistency_summary.items():
-                print(f"  {currency}: {', '.join(issues)}")
+                logger.info(f"  {currency}: {', '.join(issues)}")
         else:
-            print("  No inconsistencies detected or data was insufficient for checks.")
+            logger.info("  No inconsistencies detected or data was insufficient for checks.")
 
         # Example: Get data for a specific currency and date
         if latest_dt:
@@ -309,14 +309,13 @@ if __name__ == '__main__':
                 idx = pd.IndexSlice
                 usd_latest = curve_df.loc[idx[test_currency, latest_dt, :]]
                 # Reset index to get TermDays as a column for printing
-                print(f"\n{test_currency} Curve on latest date ({latest_dt.strftime('%Y-%m-%d')}):")
-                print(usd_latest.reset_index()[['Term', 'TermDays', 'Value']].sort_values('TermDays').to_string())
+                logger.info(f"\n{test_currency} Curve on latest date ({latest_dt.strftime('%Y-%m-%d')}):\n" + usd_latest.reset_index()[['Term', 'TermDays', 'Value']].sort_values('TermDays').to_string())
             except KeyError:
-                print(f"\n{test_currency} data not found for the latest date.")
+                logger.warning(f"\n{test_currency} data not found for the latest date.")
             except Exception as e:
-                 print(f"\nError retrieving {test_currency} data: {e}")
+                logger.error(f"\nError retrieving {test_currency} data: {e}")
 
     else:
-        print("\nFailed to load or process curve data.")
+        logger.error("\nFailed to load or process curve data.")
 
     logger.info("--- Finished Standalone Execution ---") 

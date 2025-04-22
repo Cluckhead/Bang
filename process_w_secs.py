@@ -9,11 +9,7 @@ import pandas as pd
 import logging
 import re
 
-# Configure basic logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Logging is now handled centrally by the Flask app factory in app.py
 logger = logging.getLogger(__name__)
 
 def process_securities_file():

@@ -17,7 +17,7 @@ staleness_bp = Blueprint('staleness_bp', __name__, template_folder='../templates
 @staleness_bp.route('/staleness/dashboard')
 def dashboard():
     """Displays the staleness dashboard with summary counts for each file type."""
-    logging.info("Accessing staleness dashboard.")
+    current_app.logger.info("Accessing staleness dashboard.")
     try:
         # Get staleness threshold from query parameters, default to constant
         threshold_str = request.args.get('threshold', str(DEFAULT_STALENESS_THRESHOLD_DAYS))
@@ -27,7 +27,7 @@ def dashboard():
                 threshold = 0 # Prevent negative thresholds
         except ValueError:
             threshold = DEFAULT_STALENESS_THRESHOLD_DAYS
-            logging.warning(f"Invalid threshold value '{threshold_str}' provided to dashboard, using default {threshold}.")
+            current_app.logger.warning(f"Invalid threshold value '{threshold_str}' provided to dashboard, using default {threshold}.")
         
         # Load exclusions once for the summary
         exclusions_path = os.path.join(current_app.config['DATA_FOLDER'], EXCLUSIONS_FILE)
@@ -39,7 +39,7 @@ def dashboard():
             exclusions_df=exclusions_df,
             threshold_days=threshold
         )
-        logging.info(f"Staleness summary generated: {len(summary_data)} files processed with threshold {threshold}.")
+        current_app.logger.info(f"Staleness summary generated: {len(summary_data)} files processed with threshold {threshold}.")
         
         # Prepare data for template (e.g., add detail URLs with threshold)
         summary_view_data = []
@@ -57,14 +57,14 @@ def dashboard():
             
         return render_template('staleness_dashboard.html', summary_data=summary_view_data, current_threshold=threshold)
     except Exception as e:
-        logging.error(f"Error generating staleness dashboard: {e}", exc_info=True)
+        current_app.logger.error(f"Error generating staleness dashboard: {e}", exc_info=True)
         # Render a simple error message or redirect
         return render_template('error.html', message="Could not generate staleness dashboard."), 500
 
 @staleness_bp.route('/staleness/details/<path:filename>')
 def details(filename):
     """Displays the detailed list of stale securities for a specific file."""
-    logging.info(f"Accessing staleness details for file: {filename}")
+    current_app.logger.info(f"Accessing staleness details for file: {filename}")
     try:
         # Get staleness threshold from query parameters (now set by dashboard link), default if missing
         threshold_str = request.args.get('threshold', str(DEFAULT_STALENESS_THRESHOLD_DAYS))
@@ -74,7 +74,7 @@ def details(filename):
                 threshold = 0 # Prevent negative thresholds
         except ValueError:
             threshold = DEFAULT_STALENESS_THRESHOLD_DAYS
-            logging.warning(f"Invalid threshold value '{threshold_str}', using default {threshold}.")
+            current_app.logger.warning(f"Invalid threshold value '{threshold_str}', using default {threshold}.")
 
         # Load exclusions
         exclusions_path = os.path.join(current_app.config['DATA_FOLDER'], EXCLUSIONS_FILE)
@@ -87,7 +87,7 @@ def details(filename):
             data_folder=current_app.config['DATA_FOLDER'],
             exclusions_df=exclusions_df
         )
-        logging.info(f"Found {len(stale_securities)} stale securities in {filename} with threshold {threshold}.")
+        current_app.logger.info(f"Found {len(stale_securities)} stale securities in {filename} with threshold {threshold}.")
         
         # Sort by days_stale in descending order (most stale items first)
         stale_securities.sort(key=lambda x: x['days_stale'], reverse=True)
@@ -119,5 +119,5 @@ def details(filename):
             id_column=ID_COLUMN # Pass the ID column name for the template
         )
     except Exception as e:
-        logging.error(f"Error generating staleness details for {filename}: {e}", exc_info=True)
+        current_app.logger.error(f"Error generating staleness details for {filename}: {e}", exc_info=True)
         return render_template('error.html', message=f"Could not generate staleness details for {filename}."), 500 

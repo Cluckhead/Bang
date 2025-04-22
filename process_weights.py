@@ -10,12 +10,9 @@ import pandas as pd
 import re
 from weight_processing import process_weight_file
 
-# Configure basic logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Logging is now handled centrally by the Flask app factory in app.py
 logger = logging.getLogger(__name__)
+# --- End Logging Setup ---
 
 def process_securities_file(input_path, output_path, dates_path):
     """

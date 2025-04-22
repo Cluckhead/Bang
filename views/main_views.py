@@ -61,7 +61,7 @@ def index():
     # Store the unique combined column names for the summary table header
     processed_summary_columns = []
 
-    print("Starting Change Z-score aggregation for dashboard (ts_ files only)...")
+    current_app.logger.info("Starting Change Z-score aggregation for dashboard (ts_ files only)...")
 
     # Iterate using the filenames with prefix
     for metric_filename in metric_filenames:
@@ -70,7 +70,7 @@ def index():
         display_name = metric_filename[3:]
 
         try:
-            print(f"Processing {filename}...")
+            current_app.logger.info(f"Processing {filename}...")
             # Unpack all 6 values, but only use the primary ones for the dashboard summary
             # Pass the absolute data folder path to the loader
             df, fund_cols, benchmark_col, _sec_df, _sec_fund_cols, _sec_bench_col = load_and_process_data(
@@ -80,12 +80,12 @@ def index():
 
             # Check if data loading failed (df will be None)
             if df is None:
-                 print(f"Warning: Failed to load data for {filename}. Skipping.")
+                 current_app.logger.warning(f"Warning: Failed to load data for {filename}. Skipping.")
                  continue # Skip this file if loading failed
 
             # Skip if no benchmark AND no fund columns identified
             if not benchmark_col and not fund_cols:
-                 print(f"Warning: No benchmark or fund columns identified in {filename}. Skipping.")
+                 current_app.logger.warning(f"Warning: No benchmark or fund columns identified in {filename}. Skipping.")
                  continue
 
             # Calculate metrics using the current function
@@ -100,10 +100,10 @@ def index():
                     columns_to_check.extend(fund_cols)
 
                 if not columns_to_check:
-                    print(f"Warning: No columns to check for Z-scores in {filename} despite loading data.")
+                    current_app.logger.warning(f"Warning: No columns to check for Z-scores in {filename} despite loading data.")
                     continue
 
-                print(f"Checking for Z-scores for columns: {columns_to_check} in metric {display_name}")
+                current_app.logger.info(f"Checking for Z-scores for columns: {columns_to_check} in metric {display_name}")
                 found_z_for_metric = False
                 for original_col_name in columns_to_check:
                     z_score_col_name = f'{original_col_name} Change Z-Score'
@@ -120,22 +120,22 @@ def index():
                         if summary_col_name not in processed_summary_columns:
                              processed_summary_columns.append(summary_col_name)
                         found_z_for_metric = True
-                        print(f"  -> Extracted: {summary_col_name}")
+                        current_app.logger.info(f"  -> Extracted: {summary_col_name}")
                     else:
-                        print(f"  -> Z-score column '{z_score_col_name}' not found.")
+                        current_app.logger.info(f"  -> Z-score column '{z_score_col_name}' not found.")
 
                 if not found_z_for_metric:
-                    print(f"Warning: No Z-score columns found for any checked column in metric {display_name} (from {filename}).")
+                    current_app.logger.warning(f"Warning: No Z-score columns found for any checked column in metric {display_name} (from {filename}).")
 
             else:
-                 print(f"Warning: Could not calculate latest_metrics for {filename}. Skipping Z-score extraction.")
+                 current_app.logger.warning(f"Warning: Could not calculate latest_metrics for {filename}. Skipping Z-score extraction.")
 
         except FileNotFoundError:
-            print(f"Error: Data file '{filename}' not found.")
+            current_app.logger.error(f"Error: Data file '{filename}' not found.")
         except ValueError as ve:
-            print(f"Value Error processing {metric_filename}: {ve}") # Log with filename
+            current_app.logger.error(f"Value Error processing {metric_filename}: {ve}") # Log with filename
         except Exception as e:
-            print(f"Error processing {metric_filename} during dashboard aggregation: {e}") # Log with filename
+            current_app.logger.error(f"Error processing {metric_filename} during dashboard aggregation: {e}") # Log with filename
             traceback.print_exc()
 
     # Combine all Z-score Series/DataFrames into one
@@ -149,10 +149,10 @@ def index():
              summary_df = summary_df[cols_available_in_summary]
              # Update the list of columns to only those actually present
              processed_summary_columns = cols_available_in_summary
-        print("Successfully combined Change Z-scores.")
-        print(f"Summary DF columns: {summary_df.columns.tolist()}")
+        current_app.logger.info("Successfully combined Change Z-scores.")
+        current_app.logger.info(f"Summary DF columns: {summary_df.columns.tolist()}")
     else:
-        print("No Change Z-scores could be extracted for the summary.")
+        current_app.logger.info("No Change Z-scores could be extracted for the summary.")
 
     return render_template('index.html',
                            metrics=metric_display_names, # Still used for top-level metric links

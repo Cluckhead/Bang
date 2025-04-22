@@ -8,9 +8,8 @@ import pandas as pd
 from flask import Blueprint, render_template, request, redirect, url_for, current_app
 from datetime import datetime
 import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging is now handled centrally by the Flask app factory in app.py
+logger = logging.getLogger(__name__)
 
 # Define the Blueprint
 exclusion_bp = Blueprint('exclusion_bp', __name__, template_folder='../templates')
@@ -32,7 +31,7 @@ def load_exclusions(data_folder_path: str):
         list[dict]: A list of dictionaries representing the exclusions, or [] if error.
     """
     if not data_folder_path:
-        logging.error("No data_folder_path provided to load_exclusions.")
+        logger.error("No data_folder_path provided to load_exclusions.")
         return []
     exclusions_path = os.path.join(data_folder_path, EXCLUSIONS_FILE)
     try:
@@ -46,10 +45,10 @@ def load_exclusions(data_folder_path: str):
             df = df.sort_values(by='AddDate', ascending=False)
             return df.to_dict('records')
         else:
-            logging.info(f"'{EXCLUSIONS_FILE}' is empty or does not exist. Returning empty list.")
+            logger.info(f"'{EXCLUSIONS_FILE}' is empty or does not exist. Returning empty list.")
             return []
     except Exception as e:
-        logging.error(f"Error loading exclusions from {exclusions_path}: {e}")
+        logger.error(f"Error loading exclusions from {exclusions_path}: {e}")
         return [] # Return empty list on error
 
 def load_available_securities(data_folder_path: str):
@@ -62,7 +61,7 @@ def load_available_securities(data_folder_path: str):
         list[str]: A sorted list of unique available security IDs, or [] if error.
     """
     if not data_folder_path:
-        logging.error("No data_folder_path provided to load_available_securities.")
+        logger.error("No data_folder_path provided to load_available_securities.")
         return []
     securities_file_path = os.path.join(data_folder_path, SECURITIES_SOURCE_FILE)
     try:
@@ -75,13 +74,13 @@ def load_available_securities(data_folder_path: str):
             security_ids.sort() # Sort for dropdown consistency
             return security_ids
         else:
-            logging.warning(f"Securities source file '{SECURITIES_SOURCE_FILE}' not found at {securities_file_path}.")
+            logger.warning(f"Securities source file '{SECURITIES_SOURCE_FILE}' not found at {securities_file_path}.")
             return []
     except KeyError:
-        logging.error(f"Column '{SECURITY_ID_COLUMN}' not found in '{SECURITIES_SOURCE_FILE}'. Cannot load available securities.")
+        logger.error(f"Column '{SECURITY_ID_COLUMN}' not found in '{SECURITIES_SOURCE_FILE}'. Cannot load available securities.")
         return []
     except Exception as e:
-        logging.error(f"Error loading available securities from {securities_file_path}: {e}")
+        logger.error(f"Error loading available securities from {securities_file_path}: {e}")
         return []
 
 def add_exclusion(data_folder_path: str, security_id, end_date_str, comment):
@@ -97,13 +96,13 @@ def add_exclusion(data_folder_path: str, security_id, end_date_str, comment):
         tuple[bool, str]: (Success status, Message)
     """
     if not data_folder_path:
-        logging.error("No data_folder_path provided to add_exclusion.")
+        logger.error("No data_folder_path provided to add_exclusion.")
         return False, "Internal Server Error: Data folder path not configured."
     exclusions_path = os.path.join(data_folder_path, EXCLUSIONS_FILE)
     try:
         # Basic validation
         if not security_id or not comment:
-            logging.warning("Attempted to add exclusion with missing SecurityID or Comment.")
+            logger.warning("Attempted to add exclusion with missing SecurityID or Comment.")
             return False, "Security ID and Comment are required."
 
         add_date = datetime.now().strftime('%Y-%m-%d')
@@ -123,10 +122,10 @@ def add_exclusion(data_folder_path: str, security_id, end_date_str, comment):
         write_header = not file_exists or is_empty
 
         new_exclusion.to_csv(exclusions_path, mode='a', header=write_header, index=False)
-        logging.info(f"Added exclusion for SecurityID: {security_id}")
+        logger.info(f"Added exclusion for SecurityID: {security_id}")
         return True, "Exclusion added successfully."
     except Exception as e:
-        logging.error(f"Error adding exclusion to {exclusions_path}: {e}")
+        logger.error(f"Error adding exclusion to {exclusions_path}: {e}")
         return False, "An error occurred while saving the exclusion."
 
 def remove_exclusion(data_folder_path: str, security_id_to_remove, add_date_str_to_remove):
@@ -141,12 +140,12 @@ def remove_exclusion(data_folder_path: str, security_id_to_remove, add_date_str_
         tuple[bool, str]: (Success status, Message)
     """
     if not data_folder_path:
-        logging.error("No data_folder_path provided to remove_exclusion.")
+        logger.error("No data_folder_path provided to remove_exclusion.")
         return False, "Internal Server Error: Data folder path not configured."
     exclusions_path = os.path.join(data_folder_path, EXCLUSIONS_FILE)
     try:
         if not os.path.exists(exclusions_path) or os.path.getsize(exclusions_path) == 0:
-            logging.warning(f"Attempted to remove exclusion, but '{EXCLUSIONS_FILE}' is empty or does not exist.")
+            logger.warning(f"Attempted to remove exclusion, but '{EXCLUSIONS_FILE}' is empty or does not exist.")
             return False, "Exclusion file is empty or missing."
 
         df = pd.read_csv(exclusions_path)
@@ -164,16 +163,16 @@ def remove_exclusion(data_folder_path: str, security_id_to_remove, add_date_str_
         df_filtered = df[~((df['SecurityID'] == security_id_to_remove) & (df['AddDate'] == add_date_str_to_remove))]
 
         if len(df_filtered) == original_count:
-            logging.warning(f"Exclusion entry for SecurityID '{security_id_to_remove}' with AddDate '{add_date_str_to_remove}' not found for removal.")
+            logger.warning(f"Exclusion entry for SecurityID '{security_id_to_remove}' with AddDate '{add_date_str_to_remove}' not found for removal.")
             return False, "Exclusion entry not found."
 
         # Overwrite the CSV with the filtered data
         df_filtered.to_csv(exclusions_path, index=False)
-        logging.info(f"Removed exclusion entry for SecurityID: {security_id_to_remove}, AddDate: {add_date_str_to_remove}")
+        logger.info(f"Removed exclusion entry for SecurityID: {security_id_to_remove}, AddDate: {add_date_str_to_remove}")
         return True, "Exclusion removed successfully."
 
     except Exception as e:
-        logging.error(f"Error removing exclusion from {exclusions_path}: {e}")
+        logger.error(f"Error removing exclusion from {exclusions_path}: {e}")
         return False, "An error occurred while removing the exclusion."
 
 @exclusion_bp.route('/exclusions', methods=['GET', 'POST'])
@@ -234,7 +233,7 @@ def remove_exclusion_route():
     if not security_id or not add_date_str:
         # Handle missing identifiers (shouldn't happen with hidden fields but good practice)
         # Redirect back with an error message (using flash or query params)
-        logging.warning("Remove exclusion attempt missing SecurityID or AddDate.")
+        logger.warning("Remove exclusion attempt missing SecurityID or AddDate.")
         # For simplicity, redirect back to the main page; flash messages would be better
         return redirect(url_for('exclusion_bp.manage_exclusions'))
 

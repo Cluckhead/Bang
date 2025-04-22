@@ -40,15 +40,15 @@ def get_active_exclusions(data_folder_path: str):
                 if end_date is None or end_date >= today:
                     active_exclusions.add(security_id)
         except Exception as e:
-            print(f"Error processing exclusion record {ex}: {e}") # Use logging in production
+            current_app.logger.error(f"Error processing exclusion record {ex}: {e}")
 
-    print(f"Found {len(active_exclusions)} active exclusions: {active_exclusions}")
+    current_app.logger.info(f"Found {len(active_exclusions)} active exclusions: {active_exclusions}")
     return active_exclusions
 
 @security_bp.route('/summary')
 def securities_page():
     """Renders a page summarizing potential issues in security-level data, with server-side pagination, filtering, and sorting."""
-    print("\n--- Starting Security Data Processing (Paginated) ---")
+    current_app.logger.info("\n--- Starting Security Data Processing (Paginated) ---")
 
     # Retrieve the configured absolute data folder path
     data_folder = current_app.config['DATA_FOLDER']
@@ -72,7 +72,7 @@ def securities_page():
         for key, value in request.args.items() 
         if key.startswith('filter_') and value # Ensure value is not empty
     }
-    print(f"Request Params: Page={page}, Search='{search_term}', SortBy='{sort_by}', SortOrder='{sort_order}', Filters={active_filters}")
+    current_app.logger.info(f"Request Params: Page={page}, Search='{search_term}', SortBy='{sort_by}', SortOrder='{sort_order}', Filters={active_filters}")
 
     # --- Load Base Data ---
     spread_filename = "sec_Spread.csv"
@@ -81,23 +81,23 @@ def securities_page():
     filter_options = {} # To store all possible options for filter dropdowns
     
     if not os.path.exists(data_filepath):
-        print(f"Error: The required file '{spread_filename}' not found.")
+        current_app.logger.error(f"Error: The required file '{spread_filename}' not found.")
         return render_template('securities_page.html', message=f"Error: Required data file '{spread_filename}' not found.", securities_data=[], pagination=None)
 
     try:
-        print(f"Loading and processing file: {spread_filename}")
+        current_app.logger.info(f"Loading and processing file: {spread_filename}")
         # Pass the absolute data folder path
         df_long, static_cols = load_and_process_security_data(spread_filename, data_folder)
 
         if df_long is None or df_long.empty:
-            print(f"Skipping {spread_filename} due to load/process errors or empty data.")
+            current_app.logger.warning(f"Skipping {spread_filename} due to load/process errors or empty data.")
             return render_template('securities_page.html', message=f"Error loading or processing '{spread_filename}'.", securities_data=[], pagination=None)
         
-        print("Calculating latest metrics...")
+        current_app.logger.info("Calculating latest metrics...")
         combined_metrics_df = calculate_security_latest_metrics(df_long, static_cols)
 
         if combined_metrics_df.empty:
-            print(f"No metrics calculated for {spread_filename}.")
+            current_app.logger.warning(f"No metrics calculated for {spread_filename}.")
             return render_template('securities_page.html', message=f"Could not calculate metrics from '{spread_filename}'.", securities_data=[], pagination=None)
         
         # Define ID column name
@@ -112,7 +112,7 @@ def securities_page():
         else:
             # Fallback or error if ISIN isn't found
             old_id_col = combined_metrics_df.index.name or 'Security ID'
-            print(f"Warning: ID column '{id_col_name}' not found. Falling back to '{old_id_col}'.")
+            current_app.logger.warning(f"Warning: ID column '{id_col_name}' not found. Falling back to '{old_id_col}'.")
             if old_id_col in combined_metrics_df.index.names:
                  combined_metrics_df.index.name = old_id_col
                  combined_metrics_df.reset_index(inplace=True)
@@ -120,7 +120,7 @@ def securities_page():
             elif old_id_col in combined_metrics_df.columns:
                  id_col_name = old_id_col
             else:
-                 print(f"Error: Cannot find a usable ID column ('{id_col_name}' or fallback '{old_id_col}') in {spread_filename}.")
+                 current_app.logger.error(f"Error: Cannot find a usable ID column ('{id_col_name}' or fallback '{old_id_col}') in {spread_filename}.")
                  return render_template('securities_page.html', message=f"Error: Cannot identify securities in {spread_filename}.", securities_data=[], pagination=None)
 
         # Store the original unfiltered dataframe's columns 
@@ -128,7 +128,7 @@ def securities_page():
         # combined_metrics_df.reset_index(inplace=True) # Reset index to make ID a regular column - ALREADY DONE OR ID IS A COLUMN
 
         # --- Collect Filter Options (from the full dataset BEFORE filtering) ---
-        print("Collecting filter options...")
+        current_app.logger.info("Collecting filter options...")
         # Ensure ID column is not treated as a filterable static column
         current_static_in_df = [col for col in static_cols if col in combined_metrics_df.columns and col != id_col_name]
         for col in current_static_in_df:
@@ -143,11 +143,11 @@ def securities_page():
 
 
         # --- Apply Filtering Steps Sequentially ---
-        print("Applying filters...")
+        current_app.logger.info("Applying filters...")
         # 1. Search Term Filter (on ID column - now ISIN)
         if search_term:
             combined_metrics_df = combined_metrics_df[combined_metrics_df[id_col_name].astype(str).str.contains(search_term, case=False, na=False)]
-            print(f"Applied search term '{search_term}'. Rows remaining: {len(combined_metrics_df)}")
+            current_app.logger.info(f"Applied search term '{search_term}'. Rows remaining: {len(combined_metrics_df)}")
 
         # 2. Active Exclusions Filter (should still work if exclusions use SecurityID/Name, adapt if needed)
         try:
@@ -161,9 +161,9 @@ def securities_page():
             
             if active_exclusion_ids:
                  combined_metrics_df = combined_metrics_df[~combined_metrics_df[exclusion_col_to_check].astype(str).isin(active_exclusion_ids)]
-                 print(f"Applied {len(active_exclusion_ids)} exclusions based on '{exclusion_col_to_check}'. Rows remaining: {len(combined_metrics_df)}")
+                 current_app.logger.info(f"Applied {len(active_exclusion_ids)} exclusions based on '{exclusion_col_to_check}'. Rows remaining: {len(combined_metrics_df)}")
         except Exception as e:
-            print(f"Warning: Error loading or applying exclusions: {e}")
+            current_app.logger.warning(f"Warning: Error loading or applying exclusions: {e}")
 
         # 3. Dynamic Filters (from request args)
         if active_filters:
@@ -171,13 +171,13 @@ def securities_page():
                 if col in combined_metrics_df.columns:
                     # Ensure consistent type for comparison, handle NaNs
                     combined_metrics_df = combined_metrics_df[combined_metrics_df[col].astype(str) == str(value)]
-                    print(f"Applied filter '{col}={value}'. Rows remaining: {len(combined_metrics_df)}")
+                    current_app.logger.info(f"Applied filter '{col}={value}'. Rows remaining: {len(combined_metrics_df)}")
                 else:
-                     print(f"Warning: Filter column '{col}' not found in DataFrame.")
+                     current_app.logger.warning(f"Warning: Filter column '{col}' not found in DataFrame.")
 
         # --- Handle Empty DataFrame After Filtering ---
         if combined_metrics_df.empty:
-            print("No data matches the specified filters.")
+            current_app.logger.warning("No data matches the specified filters.")
             message = "No securities found matching the current criteria."
             if search_term:
                 message += f" Search term: '{search_term}'."
@@ -196,7 +196,7 @@ def securities_page():
                                    current_sort_order=sort_order)
 
         # --- Apply Sorting ---
-        print(f"Applying sort: By='{sort_by}', Order='{sort_order}'")
+        current_app.logger.info(f"Applying sort: By='{sort_by}', Order='{sort_order}'")
         
         # Default sort column if not provided or invalid
         effective_sort_by = sort_by
@@ -204,7 +204,7 @@ def securities_page():
         if sort_by not in combined_metrics_df.columns:
              # Default to sorting by absolute Z-score if 'sort_by' is invalid or not provided
              if 'Change Z-Score' in combined_metrics_df.columns:
-                 print(f"'{sort_by}' not valid or not provided. Defaulting sort to 'Abs Change Z-Score' {sort_order}")
+                 current_app.logger.info(f"'{sort_by}' not valid or not provided. Defaulting sort to 'Abs Change Z-Score' {sort_order}")
                  # Calculate Abs Z-Score temporarily for sorting
                  combined_metrics_df['_abs_z_score_'] = combined_metrics_df['Change Z-Score'].fillna(0).abs()
                  effective_sort_by = '_abs_z_score_'
@@ -213,7 +213,7 @@ def securities_page():
                       sort_order = 'desc' 
                  is_default_sort = True
              else:
-                  print("Warning: Cannot apply default sort, 'Change Z-Score' missing.")
+                  current_app.logger.warning("Warning: Cannot apply default sort, 'Change Z-Score' missing.")
                   effective_sort_by = id_col_name # Fallback sort
                   sort_order = 'asc'
         
@@ -222,9 +222,9 @@ def securities_page():
         try:
             # Use na_position='last' to handle NaNs consistently
             combined_metrics_df.sort_values(by=effective_sort_by, ascending=ascending_order, inplace=True, na_position='last', key=lambda col: col.astype(str).str.lower() if col.dtype == 'object' else col)
-            print(f"Sorted by '{effective_sort_by}', {sort_order}.")
+            current_app.logger.info(f"Sorted by '{effective_sort_by}', {sort_order}.")
         except Exception as e:
-             print(f"Error during sorting by {effective_sort_by}: {e}. Falling back to sorting by ID.")
+             current_app.logger.error(f"Error during sorting by {effective_sort_by}: {e}. Falling back to sorting by ID.")
              combined_metrics_df.sort_values(by=id_col_name, ascending=True, inplace=True, na_position='last')
              sort_by = id_col_name # Update sort_by to reflect fallback
              sort_order = 'asc'
@@ -246,7 +246,7 @@ def securities_page():
         start_index = (page - 1) * safe_per_page
         end_index = start_index + safe_per_page
         
-        print(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Per page={safe_per_page}")
+        current_app.logger.info(f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Per page={safe_per_page}")
         
         # Calculate page numbers to display in pagination controls (e.g., show 2 pages before and after current)
         page_window = 2 # Number of pages to show before/after current page
@@ -277,7 +277,7 @@ def securities_page():
         other_cols = [col for col in paginated_df.columns if col not in final_col_order]
         final_col_order.extend(other_cols) # Add any remaining columns
 
-        print(f"Final column order for display: {final_col_order}")
+        current_app.logger.info(f"Final column order for display: {final_col_order}")
 
 
         # Create pagination context for the template
@@ -303,7 +303,7 @@ def securities_page():
 
 
     except Exception as e:
-        print(f"!!! Unexpected error during security page processing: {e}")
+        current_app.logger.error(f"!!! Unexpected error during security page processing: {e}")
         traceback.print_exc()
         return render_template('securities_page.html', 
                                message=f"An unexpected error occurred: {e}", 
@@ -350,7 +350,7 @@ def security_details(metric_name, security_id):
     """
     # <<< ADDED: Decode the security_id to handle potential URL encoding (e.g., %2F for /)
     decoded_security_id = unquote(security_id)
-    print(f"--- Requesting Security Details: Metric='{metric_name}', Decoded ID='{decoded_security_id}' ---")
+    current_app.logger.info(f"--- Requesting Security Details: Metric='{metric_name}', Decoded ID='{decoded_security_id}' ---")
 
     data_folder = current_app.config['DATA_FOLDER']
     all_dates = set()
@@ -360,11 +360,11 @@ def security_details(metric_name, security_id):
     # --- Helper function to load, filter, and extract data ---
     def load_filter_and_extract(filename, security_id_to_filter, id_column_name='ISIN'): # <<< CHANGED default ID column
         """Loads a sec_*.csv file, filters by security ID, and returns the long-format series."""
-        print(f"Loading file: {filename}")
+        current_app.logger.info(f"Loading file: {filename}")
         # Construct absolute path
         filepath = os.path.join(data_folder, filename)
         if not os.path.exists(filepath):
-            print(f"Warning: File not found - {filename}")
+            current_app.logger.warning(f"Warning: File not found - {filename}")
             return None, set(), {} # Return None for data, empty set for dates, empty dict for static
 
         try:
@@ -372,17 +372,17 @@ def security_details(metric_name, security_id):
             df_long, static_cols = load_and_process_security_data(filename, data_folder)
 
             if df_long is None or df_long.empty:
-                print(f"Warning: No data loaded from {filename}")
+                current_app.logger.warning(f"Warning: No data loaded from {filename}")
                 return None, set(), {}
 
             # Ensure the ID column is available for filtering
             # security_processing should have already set the index to 'ISIN' or made it a column
             if id_column_name not in df_long.index.names and id_column_name not in df_long.columns:
-                 print(f"Error: ID column '{id_column_name}' not found in processed data from {filename}.")
+                 current_app.logger.error(f"Error: ID column '{id_column_name}' not found in processed data from {filename}.")
                  # Attempt to find the index name if it wasn't 'ISIN'
                  fallback_id_col = df_long.index.name
                  if fallback_id_col and fallback_id_col in df_long.index.names:
-                     print(f"Attempting filter using index name: '{fallback_id_col}'")
+                     current_app.logger.info(f"Attempting filter using index name: '{fallback_id_col}'")
                      id_column_name = fallback_id_col # Use the actual index name
                  else:
                      return None, set(), {} # Cannot filter
@@ -398,10 +398,10 @@ def security_details(metric_name, security_id):
                          level_index = df_long.index.names.index(id_column_name)
                          filtered_df = df_long[df_long.index.get_level_values(level_index) == security_id_to_filter]
                     except ValueError:
-                         print(f"Error: Level '{id_column_name}' not found in MultiIndex.")
+                         current_app.logger.error(f"Error: Level '{id_column_name}' not found in MultiIndex.")
                          return None, set(), {}
                     except KeyError: # Handle case where the specific ID doesn't exist in the index level
-                        print(f"Warning: Security ID '{security_id_to_filter}' not found in index level '{id_column_name}' of {filename}.")
+                        current_app.logger.warning(f"Warning: Security ID '{security_id_to_filter}' not found in index level '{id_column_name}' of {filename}.")
                         filtered_df = pd.DataFrame() # Empty DataFrame
                 else: # Single index (shouldn't happen if processed correctly, but handle defensively)
                      filtered_df = df_long.loc[[security_id_to_filter]]
@@ -410,23 +410,23 @@ def security_details(metric_name, security_id):
                  filtered_df = df_long[df_long[id_column_name] == security_id_to_filter]
             else:
                  # This case should have been caught earlier, but included for safety
-                 print(f"Error: Cannot filter - ID column '{id_column_name}' not found.")
+                 current_app.logger.error(f"Error: Cannot filter - ID column '{id_column_name}' not found.")
                  return None, set(), {}
 
 
             # Check if filtering yielded results
             if filtered_df.empty:
-                 print(f"Warning: No data found for {id_column_name}='{security_id_to_filter}' in {filename}")
+                 current_app.logger.warning(f"Warning: No data found for {id_column_name}='{security_id_to_filter}' in {filename}")
                  # Try alternative common ID column 'Security Name' if ISIN failed and it exists
                  alt_id_col = 'Security Name'
                  if id_column_name == 'ISIN' and alt_id_col in df_long.columns:
-                    print(f"--> Retrying filter with '{alt_id_col}'...")
+                    current_app.logger.info(f"--> Retrying filter with '{alt_id_col}'...")
                     filtered_df = df_long[df_long[alt_id_col] == security_id_to_filter]
                     if filtered_df.empty:
-                         print(f"Warning: No data found for {alt_id_col}='{security_id_to_filter}' either.")
+                         current_app.logger.warning(f"Warning: No data found for {alt_id_col}='{security_id_to_filter}' either.")
                          return None, set(), {}
                     else:
-                        print(f"Found data using '{alt_id_col}'.")
+                        current_app.logger.info(f"Found data using '{alt_id_col}'.")
                         id_column_name = alt_id_col # Update the effective ID column used
                  else:
                      # Still empty after initial filter, and no/failed retry
@@ -441,9 +441,9 @@ def security_details(metric_name, security_id):
                  potential_value_cols = [col for col in filtered_df.columns if col not in static_cols and col != id_column_name]
                  if potential_value_cols:
                      value_col_name = potential_value_cols[0]
-                     print(f"Using '{value_col_name}' as value column.")
+                     current_app.logger.info(f"Using '{value_col_name}' as value column.")
                  else:
-                     print(f"Error: Could not determine the value column in {filename}.")
+                     current_app.logger.error(f"Error: Could not determine the value column in {filename}.")
                      return None, set(), {}
 
 
@@ -456,7 +456,7 @@ def security_details(metric_name, security_id):
                      # Reset the index, set 'Date' as the main index
                      filtered_df = filtered_df.reset_index().set_index('Date')
                  else:
-                     print(f"Error: Cannot find 'Date' index or column in {filename}.")
+                     current_app.logger.error(f"Error: Cannot find 'Date' index or column in {filename}.")
                      return None, set(), {}
 
             # Extract the series and dates
@@ -476,10 +476,10 @@ def security_details(metric_name, security_id):
             return data_series, dates, local_static_info
 
         except KeyError as e:
-             print(f"Warning: KeyError accessing data for {id_column_name}='{security_id_to_filter}' in {filename}. Likely missing ID. Error: {e}")
+             current_app.logger.warning(f"Warning: KeyError accessing data for {id_column_name}='{security_id_to_filter}' in {filename}. Likely missing ID. Error: {e}")
              return None, set(), {}
         except Exception as e:
-            print(f"Error processing file {filename} for {id_column_name}='{security_id_to_filter}': {e}")
+            current_app.logger.error(f"Error processing file {filename} for {id_column_name}='{security_id_to_filter}': {e}")
             import traceback
             traceback.print_exc() # Print full traceback for debugging
             return None, set(), {}
@@ -537,7 +537,7 @@ def security_details(metric_name, security_id):
 
     # --- Prepare Data for Chart.js ---
     if not all_dates:
-        print("No dates found across any datasets. Cannot generate chart labels.")
+        current_app.logger.warning("No dates found across any datasets. Cannot generate chart labels.")
         # Render template with error message or indication of no data
         return render_template('security_details_page.html',
                                security_id=decoded_security_id,
@@ -556,7 +556,7 @@ def security_details(metric_name, security_id):
     # Helper to prepare dataset structure for Chart.js
     def prepare_dataset(df_series, label, color, y_axis_id='y'):
         if df_series is None or df_series.empty:
-            print(f"Cannot prepare dataset for '{label}': DataFrame is None or empty.")
+            current_app.logger.warning(f"Cannot prepare dataset for '{label}': DataFrame is None or empty.")
              # Return structure with null data matching the length of labels
             return {
                 'label': label,
@@ -604,7 +604,7 @@ def security_details(metric_name, security_id):
 
     # Primary Chart Datasets (Metric + Price)
     chart_data['primary_datasets'] = [] # <<< Initialize the list here
-    print(f"DEBUG: COLOR_PALETTE contents just before use: {COLOR_PALETTE}") # <<< ADDED DEBUG PRINT
+    current_app.logger.info(f"DEBUG: COLOR_PALETTE contents just before use: {COLOR_PALETTE}") # <<< ADDED DEBUG PRINT
     if metric_series is not None:
         chart_data['primary_datasets'].append(
             prepare_dataset(metric_series, metric_name, COLOR_PALETTE[0], 'y')
@@ -639,7 +639,7 @@ def security_details(metric_name, security_id):
     chart_data_json = json.dumps(chart_data, default=replace_nan_with_none, indent=4) # Use helper for NaN->null
 
 
-    print(f"Rendering security details page for {decoded_security_id}")
+    current_app.logger.info(f"Rendering security details page for {decoded_security_id}")
     # Pass the decoded ID to the template
     return render_template('security_details_page.html',
                            security_id=decoded_security_id, 

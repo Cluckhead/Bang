@@ -3,14 +3,14 @@
 ## Phase 1: Foundational Refactoring & Cleanup
 
 ### Step 1.1: Centralize Logging
-- **1.1.1** (`app.py`): Finalize centralized logging in `create_app` with `app.logger`, `RotatingFileHandler`, and `StreamHandler`.
+- **1.1.1** (`app.py`): Finalize centralized logging in `create_app` with `app.logger`, `RotatingFileHandler`, and `StreamHandler`. [complete]
 - **1.1.2**: Remove standalone logging setups (e.g., `logging.basicConfig`, manual handlers) from:
   - `metric_calculator.py`
   - `process_data.py`
   - `process_weights.py`
   - `process_w_secs.py`
-  - `security_processing.py`
-- **1.1.3**: Replace all `print()` debug/log statements with logger calls (`current_app.logger` or `logging.getLogger(__name__).<level>`) in:
+  - `security_processing.py` [complete]
+- **1.1.3**: Replace all `print()` debug/log statements with logger calls (`current_app.logger` or `logging.getLogger(__name__).<level>`) in: [complete]
   - `app.py`, `curve_processing.py`, `issue_processing.py`, `metric_calculator.py`, `process_data.py`, `process_weights.py`, `process_w_secs.py`, `security_processing.py`
   - All view modules under `views/` (e.g., `api_core.py`, `api_routes_*`, `attribution_views.py`, `comparison_views.py`, etc.)
   - `weight_processing.py`

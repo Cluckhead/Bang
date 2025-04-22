@@ -16,9 +16,8 @@ except ImportError:
     DATA_FOLDER = "Data"
     ID_COLUMN = "ISIN"
 
-# Setup logging
-logging.basicConfig(level=logging.ERROR, 
-                   format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging is now handled centrally by the Flask app factory in app.py
+logger = logging.getLogger(__name__)
 
 # Constants
 DEFAULT_STALENESS_THRESHOLD_DAYS = 5
@@ -96,10 +95,10 @@ def get_staleness_summary(data_folder=DATA_FOLDER, exclusions_df=None, threshold
                         'stale_count': stale_count,
                         'stale_percentage': round(stale_count / total_count * 100, 1) if total_count > 0 else 0
                     }
-                    logging.debug(f"File {filename}: Found {stale_count} stale out of {total_count} securities")
+                    logger.debug(f"File {filename}: Found {stale_count} stale out of {total_count} securities")
                     
                 except Exception as e:
-                    logging.error(f"Error processing file {filename}: {e}", exc_info=True)
+                    logger.error(f"Error processing file {filename}: {e}", exc_info=True)
                     # Add error info to summary
                     summary[filename] = {
                         'metric_name': filename.replace('.csv', ''),
@@ -109,7 +108,7 @@ def get_staleness_summary(data_folder=DATA_FOLDER, exclusions_df=None, threshold
                         'stale_percentage': 'Error'
                     }
     except Exception as e:
-        logging.error(f"Error generating staleness summary: {e}", exc_info=True)
+        logger.error(f"Error generating staleness summary: {e}", exc_info=True)
         
     return summary
 
@@ -142,7 +141,7 @@ def get_stale_securities_details(filename, threshold_days=DEFAULT_STALENESS_THRE
         # Check if ID column exists
         if ID_COLUMN not in df.columns:
             id_column = df.columns[0]  # Fallback to first column
-            logging.info(f"ID column '{ID_COLUMN}' not found in {filename}, using {id_column} instead.")
+            logger.info(f"ID column '{ID_COLUMN}' not found in {filename}, using {id_column} instead.")
         else:
             id_column = ID_COLUMN
         
@@ -159,7 +158,7 @@ def get_stale_securities_details(filename, threshold_days=DEFAULT_STALENESS_THRE
                 date_obj = datetime.strptime(col, '%d/%m/%Y')
                 date_objects.append(date_obj)
             except ValueError:
-                logging.warning(f"Column {col} in {filename} doesn't appear to be a date.")
+                logger.warning(f"Column {col} in {filename} doesn't appear to be a date.")
                 date_objects.append(None)
         
         # Find the latest date in the file
@@ -262,9 +261,9 @@ def get_stale_securities_details(filename, threshold_days=DEFAULT_STALENESS_THRE
                             'consecutive_placeholders': 0
                         })
             
-        logging.info(f"[{filename} - Details] Found {len(stale_securities)} stale securities.")
+        logger.info(f"[{filename} - Details] Found {len(stale_securities)} stale securities.")
     except Exception as e:
-        logging.error(f"Error analyzing file {filename}: {e}", exc_info=True)
+        logger.error(f"Error analyzing file {filename}: {e}", exc_info=True)
         raise
     
     return stale_securities, latest_date, total_count 

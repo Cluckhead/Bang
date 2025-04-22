@@ -28,9 +28,7 @@ from utils import get_data_folder_path
 
 # Get the logger instance. Assumes logging is configured elsewhere (e.g., by Flask app or calling script).
 logger = logging.getLogger(__name__)
-
-# --- Removed logging setup block --- 
-# Logging is now handled centrally by the Flask app factory in app.py or by the script runner.
+# --- End Logging Setup ---
 
 # Removed DATES_FILE_PATH constant - path is now determined dynamically in main()
 
