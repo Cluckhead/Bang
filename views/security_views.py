@@ -17,6 +17,7 @@ from config import COLOR_PALETTE # Keep palette
 from security_processing import load_and_process_security_data, calculate_security_latest_metrics
 # Import the exclusion loading function
 from views.exclusion_views import load_exclusions # Only import load_exclusions
+from utils import replace_nan_with_none
 
 # Define the blueprint
 security_bp = Blueprint('security', __name__, url_prefix='/security')
@@ -324,19 +325,6 @@ def securities_page():
                            current_sort_by=sort_by,
                            current_sort_order=sort_order,
                            message=None) # Clear any previous error message if successful
-
-# --- Helper Function to Replace NaN --- 
-def replace_nan_with_none(obj):
-    """Recursively replaces np.nan with None in a nested structure (dicts, lists)."""
-    if isinstance(obj, dict):
-        return {k: replace_nan_with_none(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [replace_nan_with_none(elem) for elem in obj]
-    # Check specifically for pandas/numpy NaN values
-    elif pd.isna(obj) and isinstance(obj, (float, np.floating)):
-        return None
-    else:
-        return obj
 
 @security_bp.route('/security/details/<metric_name>/<path:security_id>')
 def security_details(metric_name, security_id):

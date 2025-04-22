@@ -6,6 +6,7 @@ import pandas as pd
 import traceback
 import logging
 from flask import Blueprint, render_template, current_app
+from utils import _is_date_like
 
 # Define the blueprint
 weight_bp = Blueprint('weight', __name__, url_prefix='/weights')
@@ -20,18 +21,6 @@ def _parse_percentage(value):
     except (ValueError, TypeError):
         logging.warning(f"Could not parse percentage value: {value}")
         return None # Indicate parsing failure
-
-def _is_date_like_column(col_name):
-    """Checks if a column name matches YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS format."""
-    try:
-        # Attempt to parse using pandas with flexible inference first
-        # errors='raise' will fail if it's not recognizable as a date/datetime
-        pd.to_datetime(col_name, errors='raise')
-        # Optionally, add more specific format checks if needed, but `to_datetime` is quite good
-        # e.g., check if it matches common regex patterns if `to_datetime` is too broad
-        return True
-    except (ValueError, TypeError):
-        return False
 
 def load_and_process_weight_data(data_folder_path: str, filename: str):
     """Loads a wide weight file, converts decimal values to percentages, checks against 100%.
@@ -64,7 +53,7 @@ def load_and_process_weight_data(data_folder_path: str, filename: str):
             return None, []
         
         # Identify date columns based on ISO format
-        date_cols = [col for col in df.columns if _is_date_like_column(col)]
+        date_cols = [col for col in df.columns if _is_date_like(col)]
         if not date_cols:
             logging.warning(f"No date-like columns found in {filename}")
             return None, []

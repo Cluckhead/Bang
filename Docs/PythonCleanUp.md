@@ -27,7 +27,7 @@
   - Thresholds `-0.5`, `3`, `0.2` from `curve_processing.py` [complete]
 - **1.2.5**: Update code in `views/issue_views.py` and `curve_processing.py` to read these values from `current_app.config`. [complete]
 
-### Step 1.3: Refactor Utilities (DRY Principle)
+### Step 1.3: Refactor Utilities (DRY Principle) [complete]
 - **1.3.1**: Consolidate `_is_date_like` logic by importing it from `utils` in:
   - `views/attribution_views.py`, `comparison_views.py`, `duration_comparison_views.py`, `spread_duration_comparison_views.py`, `weight_processing.py`, `views/weight_views.py`
 - **1.3.2**: Move `replace_nan_with_none` from `views/security_views.py` to `utils.py` and update imports.

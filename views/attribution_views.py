@@ -7,22 +7,9 @@ from flask import Blueprint, render_template, current_app, request, jsonify, url
 import pandas as pd
 import os
 import json
+from utils import _is_date_like
 
 attribution_bp = Blueprint('attribution_bp', __name__, url_prefix='/attribution')
-
-def _is_date_like(column_name):
-    import re
-    if not isinstance(column_name, str):
-        return False
-    date_patterns = [
-        r'\d{2}/\d{2}/\d{4}',  # DD/MM/YYYY
-        r'\d{2}-\d{2}-\d{4}',  # DD-MM-YYYY
-        r'\d{4}/\d{2}/\d{2}',  # YYYY/MM/DD
-        r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
-        r'\d{1,2}/\d{1,2}/\d{2,4}',  # D/M/YY or D/M/YYYY
-        r'\d{1,2}-\d{1,2}-\d{2,4}',  # D-M-YY or D-M-YYYY
-    ]
-    return any(re.search(pattern, column_name) for pattern in date_patterns)
 
 @attribution_bp.route('/summary')
 def attribution_summary():

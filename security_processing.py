@@ -15,6 +15,7 @@ import numpy as np
 import re # For checking date-like column headers
 import logging
 import traceback
+from utils import _is_date_like
 # Note: Does not import current_app, relies on caller to pass the path.
 
 # Get the logger instance. Assumes Flask app has configured logging.
@@ -24,19 +25,6 @@ logger = logging.getLogger(__name__)
 # Logging is now handled centrally by the Flask app factory in app.py
 
 # Removed DATA_FOLDER constant - path is now passed to functions
-
-def _is_date_like(column_name):
-    """Check if a column name looks like a common date format.
-
-    Recognizes formats like YYYY-MM-DD, YYYY/MM/DD, MM/DD/YYYY, M/D/YYYY, YYYYMMDD.
-    """
-    col_str = str(column_name)
-    # Regex to match common date patterns
-    # - YYYY[-/]MM[-/]DD
-    # - MM[-/]DD[-/]YYYY (allows 1-2 digits for M, D and 2 or 4 for Y)
-    # - YYYYMMDD
-    pattern = r'^(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/](\d{4}|\d{2})|\d{8})$'
-    return bool(re.match(pattern, col_str))
 
 def load_and_process_security_data(filename: str, data_folder_path: str):
     """Loads security data, identifies static/date columns, and melts to long format."""

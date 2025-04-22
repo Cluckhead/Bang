@@ -11,6 +11,7 @@ import os
 import logging
 from pathlib import Path # Added pathlib
 from flask import current_app # Added current_app
+import numpy as np
 
 # Configure logging
 # Removed basicConfig - logging is now configured centrally in app.py
@@ -316,6 +317,19 @@ def load_weights_and_held_status(data_folder: str, weights_filename: str = 'w_se
         logger.error(f"Error loading or processing weights file {weights_filepath}: {e}", exc_info=True)
         return pd.Series(dtype=bool)
 
+def replace_nan_with_none(obj):
+    """Recursively replaces np.nan with None in a nested structure (dicts, lists).
+    Useful for preparing data for JSON serialization where NaN is not valid.
+    """
+    if isinstance(obj, dict):
+        return {k: replace_nan_with_none(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [replace_nan_with_none(elem) for elem in obj]
+    # Check specifically for pandas/numpy NaN values
+    elif pd.isna(obj) and isinstance(obj, (float, np.floating)):
+        return None
+    else:
+        return obj
 
 # Example usage (for testing purposes, typically called from app.py or scripts)
 # if __name__ == '__main__':
