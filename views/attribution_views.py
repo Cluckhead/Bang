@@ -8,6 +8,7 @@ import pandas as pd
 import os
 import json
 from utils import _is_date_like
+from .attribution_processing import sum_l2s_block, sum_l1s_block, compute_residual_block, calc_residual, norm
 
 attribution_bp = Blueprint('attribution_bp', __name__, url_prefix='/attribution')
 
@@ -78,17 +79,18 @@ def attribution_summary():
     ]
     l2_all = l2_credit + l2_rates + l2_fx
 
-    def sum_l2s(row, prefix):
-        credit = sum([row.get(f'{prefix}{col}', 0) for col in l2_credit])
-        rates = sum([row.get(f'{prefix}{col}', 0) for col in l2_rates])
-        fx = sum([row.get(f'{prefix}{col}', 0) for col in l2_fx])
-        return credit, rates, fx
-
-    def compute_residual(row, l0_col, l2_prefix):
-        l0 = row.get(l0_col, 0)
-        credit, rates, fx = sum_l2s(row, l2_prefix)
-        l1_total = credit + rates + fx
-        return l0 - l1_total
+    # L1 factor groupings
+    l1_groups = {
+        'Rates': [
+            'Rates Carry Daily', 'Rates Convexity Daily', 'Rates Curve Daily', 'Rates Duration Daily', 'Rates Roll Daily'
+        ],
+        'Credit': [
+            'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted'
+        ],
+        'FX': [
+            'FX Carry Daily', 'FX Change Daily'
+        ]
+    }
 
     # Prepare results: group by Date, Fund, and selected characteristic
     group_cols = ['Date', 'Fund']
@@ -103,19 +105,6 @@ def attribution_summary():
     else:
         available_characteristic_values = []
 
-    # L1 factor groupings
-    l1_groups = {
-        'Rates': [
-            'Rates Carry Daily', 'Rates Convexity Daily', 'Rates Curve Daily', 'Rates Duration Daily', 'Rates Roll Daily'
-        ],
-        'Credit': [
-            'Credit Spread Change Daily', 'Credit Convexity Daily', 'Credit Carry Daily', 'Credit Defaulted'
-        ],
-        'FX': [
-            'FX Carry Daily', 'FX Change Daily'
-        ]
-    }
-
     for group_keys, group in df.groupby(group_cols):
         if selected_characteristic:
             date, fund, char_val = group_keys
@@ -126,18 +115,15 @@ def attribution_summary():
             continue
         if not (start_date <= date <= end_date):
             continue
-
-        # Filter by characteristic value if set
         if selected_characteristic and selected_characteristic_value:
             if char_val != selected_characteristic_value:
                 continue
-
         # L0: Residuals and Abs Residuals
         if selected_level == 'L0' or not selected_level:
-            bench_prod_res = group.apply(lambda row: compute_residual(row, 'L0 Bench Total Daily', 'L2 Bench '), axis=1)
-            bench_sp_res = group.apply(lambda row: compute_residual(row, 'L0 Bench Total Daily', 'SPv3_L2 Bench '), axis=1)
-            port_prod_res = group.apply(lambda row: compute_residual(row, 'L0 Port Total Daily ', 'L2 Port '), axis=1)
-            port_sp_res = group.apply(lambda row: compute_residual(row, 'L0 Port Total Daily ', 'SPv3_L2 Port '), axis=1)
+            bench_prod_res = group.apply(lambda row: calc_residual(row, 'L0 Bench Total Daily', 'L2 Bench ', l2_all), axis=1)
+            bench_sp_res = group.apply(lambda row: calc_residual(row, 'L0 Bench Total Daily', 'SPv3_L2 Bench ', l2_all), axis=1)
+            port_prod_res = group.apply(lambda row: calc_residual(row, 'L0 Port Total Daily ', 'L2 Port ', l2_all), axis=1)
+            port_sp_res = group.apply(lambda row: calc_residual(row, 'L0 Port Total Daily ', 'SPv3_L2 Port ', l2_all), axis=1)
             bench_prod = bench_prod_res.sum()
             bench_sp = bench_sp_res.sum()
             port_prod = port_prod_res.sum()
@@ -159,47 +145,35 @@ def attribution_summary():
                 row_info_port[selected_characteristic] = char_val
             benchmark_results.append(row_info_bench)
             portfolio_results.append(row_info_port)
-
         # L1: Show L1 Rates, Credit, FX (Prod and S&P)
         elif selected_level == 'L1':
-            # Aggregate L1s for Prod and S&P
-            bench_l1_credit_prod = group.apply(lambda row: sum([row.get(f'L2 Bench {col}', 0) for col in l2_credit]), axis=1).sum()
-            bench_l1_credit_sp = group.apply(lambda row: sum([row.get(f'SPv3_L2 Bench {col}', 0) for col in l2_credit]), axis=1).sum()
-            bench_l1_rates_prod = group.apply(lambda row: sum([row.get(f'L2 Bench {col}', 0) for col in l2_rates]), axis=1).sum()
-            bench_l1_rates_sp = group.apply(lambda row: sum([row.get(f'SPv3_L2 Bench {col}', 0) for col in l2_rates]), axis=1).sum()
-            bench_l1_fx_prod = group.apply(lambda row: sum([row.get(f'L2 Bench {col}', 0) for col in l2_fx]), axis=1).sum()
-            bench_l1_fx_sp = group.apply(lambda row: sum([row.get(f'SPv3_L2 Bench {col}', 0) for col in l2_fx]), axis=1).sum()
-            port_l1_credit_prod = group.apply(lambda row: sum([row.get(f'L2 Port {col}', 0) for col in l2_credit]), axis=1).sum()
-            port_l1_credit_sp = group.apply(lambda row: sum([row.get(f'SPv3_L2 Port {col}', 0) for col in l2_credit]), axis=1).sum()
-            port_l1_rates_prod = group.apply(lambda row: sum([row.get(f'L2 Port {col}', 0) for col in l2_rates]), axis=1).sum()
-            port_l1_rates_sp = group.apply(lambda row: sum([row.get(f'SPv3_L2 Port {col}', 0) for col in l2_rates]), axis=1).sum()
-            port_l1_fx_prod = group.apply(lambda row: sum([row.get(f'L2 Port {col}', 0) for col in l2_fx]), axis=1).sum()
-            port_l1_fx_sp = group.apply(lambda row: sum([row.get(f'SPv3_L2 Port {col}', 0) for col in l2_fx]), axis=1).sum()
+            bench_l1_prod = sum_l1s_block(group, 'L2 Bench ', l1_groups)
+            bench_l1_sp = sum_l1s_block(group, 'SPv3_L2 Bench ', l1_groups)
+            port_l1_prod = sum_l1s_block(group, 'L2 Port ', l1_groups)
+            port_l1_sp = sum_l1s_block(group, 'SPv3_L2 Port ', l1_groups)
             row_info_bench = {
                 'Date': date, 'Fund': fund,
-                'L1Rates_Prod': bench_l1_rates_prod, 'L1Rates_SP': bench_l1_rates_sp,
-                'L1Credit_Prod': bench_l1_credit_prod, 'L1Credit_SP': bench_l1_credit_sp,
-                'L1FX_Prod': bench_l1_fx_prod, 'L1FX_SP': bench_l1_fx_sp
+                'L1Rates_Prod': bench_l1_prod[0], 'L1Rates_SP': bench_l1_sp[0],
+                'L1Credit_Prod': bench_l1_prod[1], 'L1Credit_SP': bench_l1_sp[1],
+                'L1FX_Prod': bench_l1_prod[2], 'L1FX_SP': bench_l1_sp[2]
             }
             row_info_port = {
                 'Date': date, 'Fund': fund,
-                'L1Rates_Prod': port_l1_rates_prod, 'L1Rates_SP': port_l1_rates_sp,
-                'L1Credit_Prod': port_l1_credit_prod, 'L1Credit_SP': port_l1_credit_sp,
-                'L1FX_Prod': port_l1_fx_prod, 'L1FX_SP': port_l1_fx_sp
+                'L1Rates_Prod': port_l1_prod[0], 'L1Rates_SP': port_l1_sp[0],
+                'L1Credit_Prod': port_l1_prod[1], 'L1Credit_SP': port_l1_sp[1],
+                'L1FX_Prod': port_l1_prod[2], 'L1FX_SP': port_l1_sp[2]
             }
             if selected_characteristic:
                 row_info_bench[selected_characteristic] = char_val
                 row_info_port[selected_characteristic] = char_val
             benchmark_results.append(row_info_bench)
             portfolio_results.append(row_info_port)
-
         # L2: Show all L2 values (Prod and S&P) side by side
         elif selected_level == 'L2':
-            # For each L2, sum for group, for both Prod and S&P
-            l2prod = {col: group.apply(lambda row: row.get(f'L2 Bench {col}', 0), axis=1).sum() for col in l2_all}
-            l2sp = {col: group.apply(lambda row: row.get(f'SPv3_L2 Bench {col}', 0), axis=1).sum() for col in l2_all}
-            l2prod_port = {col: group.apply(lambda row: row.get(f'L2 Port {col}', 0), axis=1).sum() for col in l2_all}
-            l2sp_port = {col: group.apply(lambda row: row.get(f'SPv3_L2 Port {col}', 0), axis=1).sum() for col in l2_all}
+            l2prod = dict(zip(l2_all, sum_l2s_block(group, 'L2 Bench ', l2_all)))
+            l2sp = dict(zip(l2_all, sum_l2s_block(group, 'SPv3_L2 Bench ', l2_all)))
+            l2prod_port = dict(zip(l2_all, sum_l2s_block(group, 'L2 Port ', l2_all)))
+            l2sp_port = dict(zip(l2_all, sum_l2s_block(group, 'SPv3_L2 Port ', l2_all)))
             row_info_bench = {
                 'Date': date, 'Fund': fund,
                 'L2Prod': l2prod, 'L2SP': l2sp, 'L2ProdKeys': l2_all
@@ -315,18 +289,6 @@ def attribution_charts():
         'FX Carry Daily', 'FX Change Daily'
     ]
 
-    def sum_l2s(row, prefix):
-        credit = sum([row.get(f'{prefix}{col}', 0) for col in l2_credit])
-        rates = sum([row.get(f'{prefix}{col}', 0) for col in l2_rates])
-        fx = sum([row.get(f'{prefix}{col}', 0) for col in l2_fx])
-        return credit, rates, fx
-
-    def compute_residual(row, l0_col, l2_prefix):
-        l0 = row.get(l0_col, 0)
-        credit, rates, fx = sum_l2s(row, l2_prefix)
-        l1_total = credit + rates + fx
-        return l0 - l1_total
-
     # Group by Date (and characteristic if grouping)
     group_cols = ['Date']
     if selected_characteristic:
@@ -342,12 +304,10 @@ def attribution_charts():
         else:
             date, = group_keys
             char_val = None
-        # Aggregate residuals for this day (sum over all ISINs)
-        bench_prod_res = group.apply(lambda row: compute_residual(row, 'L0 Bench Total Daily', 'L2 Bench '), axis=1)
-        bench_sp_res = group.apply(lambda row: compute_residual(row, 'L0 Bench Total Daily', 'SPv3_L2 Bench '), axis=1)
-        port_prod_res = group.apply(lambda row: compute_residual(row, 'L0 Port Total Daily ', 'L2 Port '), axis=1)
-        port_sp_res = group.apply(lambda row: compute_residual(row, 'L0 Port Total Daily ', 'SPv3_L2 Port '), axis=1)
-        # Net and abs
+        bench_prod_res = group.apply(lambda row: calc_residual(row, 'L0 Bench Total Daily', 'L2 Bench ', l2_credit + l2_rates + l2_fx), axis=1)
+        bench_sp_res = group.apply(lambda row: calc_residual(row, 'L0 Bench Total Daily', 'SPv3_L2 Bench ', l2_credit + l2_rates + l2_fx), axis=1)
+        port_prod_res = group.apply(lambda row: calc_residual(row, 'L0 Port Total Daily ', 'L2 Port ', l2_credit + l2_rates + l2_fx), axis=1)
+        port_sp_res = group.apply(lambda row: calc_residual(row, 'L0 Port Total Daily ', 'SPv3_L2 Port ', l2_credit + l2_rates + l2_fx), axis=1)
         bench_prod = bench_prod_res.sum()
         bench_sp = bench_sp_res.sum()
         port_prod = port_prod_res.sum()
@@ -506,16 +466,7 @@ def attribution_radar():
     }
 
     # --- Aggregation for Radar Chart ---
-    def sum_l2s_block(df_block, prefix, l2_cols):
-        return [df_block[f'{prefix}{col}'].sum() if f'{prefix}{col}' in df_block else 0 for col in l2_cols]
-
-    def sum_l1s_block(df_block, prefix):
-        return [df_block[[f'{prefix}{col}' for col in l2s if f'{prefix}{col}' in df_block]].sum().sum() for l2s in l1_groups.values()]
-
-    def compute_residual_block(df_block, l0_col, l2_prefix, l2_cols):
-        l0 = df_block[l0_col].sum() if l0_col in df_block else 0
-        l2_sum = sum([df_block[f'{l2_prefix}{col}'].sum() if f'{l2_prefix}{col}' in df_block else 0 for col in l2_cols])
-        return l0 - l2_sum
+    # sum_l2s_block, sum_l1s_block, and compute_residual_block are now imported from attribution_processing
 
     # Prepare radar data for Portfolio and Benchmark, Prod and S&P
     radar_labels = []
@@ -727,7 +678,6 @@ def attribution_security_page():
         orig_resid = norm(row, None, weight_col) if normalize and weight_col else orig_resid
         sp_resid = norm(row, None, weight_col) if normalize and weight_col else sp_resid
         resid_diff = orig_resid - sp_resid
-        # Calculate L1 values as sum of L2s for each group
         l1_vals = {}
         for l1_name, l2_list in l1_groups.items():
             orig_sum = sum([norm(row, f'{l1_prefix}{l2}', weight_col) for l2 in l2_list])

@@ -14,6 +14,12 @@ import logging
 import os # Added for path joining
 from flask import Blueprint, render_template, request, current_app, url_for, flash, abort
 from urllib.parse import unquote, urlencode # For handling security IDs with special chars
+from .comparison_helpers import (
+    load_generic_comparison_data,
+    calculate_generic_comparison_stats,
+    get_holdings_for_security,
+    load_fund_codes_from_csv
+)
 
 # Import shared utilities and processing functions
 try:
@@ -35,113 +41,6 @@ generic_comparison_bp = Blueprint('generic_comparison_bp', __name__,
 PER_PAGE_COMPARISON = 50 # Items per page for summary view
 
 # --- Refactored Helper Functions ---
-
-def load_generic_comparison_data(data_folder_path: str, file1: str, file2: str):
-    """
-    Loads, processes, and merges data from two specified security data files.
-
-    Args:
-        data_folder_path (str): The absolute path to the data folder.
-        file1 (str): Filename for the first dataset (e.g., 'original').
-        file2 (str): Filename for the second dataset (e.g., 'new' or 'comparison').
-
-    Returns:
-        tuple: (merged_df, static_data, common_static_cols, id_col_name)
-               Returns (pd.DataFrame(), pd.DataFrame(), [], None) on error or if files are empty.
-               Note: held_status is loaded separately in the view function.
-    """
-    log = current_app.logger
-    log.info(f"--- Entering load_generic_comparison_data: {file1}, {file2} ---")
-
-    if not data_folder_path:
-        log.error("No data_folder_path provided to load_generic_comparison_data.")
-        return pd.DataFrame(), pd.DataFrame(), [], None
-
-    try:
-        # Load data using the standard security data processor
-        df1, static_cols1 = load_and_process_security_data(file1, data_folder_path)
-        df2, static_cols2 = load_and_process_security_data(file2, data_folder_path)
-
-        if df1.empty or df2.empty:
-            log.warning(f"One or both dataframes are empty after loading. File1 ({file1}) empty: {df1.empty}, File2 ({file2}) empty: {df2.empty}")
-            # Return empty structures, but don't raise an error here
-            return pd.DataFrame(), pd.DataFrame(), [], None
-
-        # --- Verify Index and Get Actual Names ---
-        if df1.index.nlevels != 2 or df2.index.nlevels != 2:
-            log.error(f"One or both dataframes ({file1}, {file2}) do not have the expected 2 index levels after loading.")
-            return pd.DataFrame(), pd.DataFrame(), [], None
-
-        # Get index names (assuming they are consistent between df1 and df2)
-        date_level_name, id_level_name = df1.index.names
-        log.info(f"Data index levels identified for {file1}/{file2}: Date='{date_level_name}', ID='{id_level_name}'")
-
-        # --- Reset Index ---
-        df1 = df1.reset_index()
-        df2 = df2.reset_index()
-        log.debug(f"Columns after reset for {file1}: {df1.columns.tolist()}")
-        log.debug(f"Columns after reset for {file2}: {df2.columns.tolist()}")
-        
-        # --- Check Required Columns (Post-Reset) ---
-        required_cols = [id_level_name, date_level_name, 'Value'] # 'Value' is the standard output name from loader
-        missing_cols_df1 = [col for col in required_cols if col not in df1.columns]
-        missing_cols_df2 = [col for col in required_cols if col not in df2.columns]
-
-        if missing_cols_df1 or missing_cols_df2:
-            log.error(f"Missing required columns after index reset. Df1 ({file1}) missing: {missing_cols_df1}, Df2 ({file2}) missing: {missing_cols_df2}")
-            return pd.DataFrame(), pd.DataFrame(), [], None
-
-        # --- Prepare for Merge ---
-        common_static_cols = list(set(static_cols1) & set(static_cols2))
-        # Remove the ID column name from static columns if present
-        if id_level_name in common_static_cols:
-            common_static_cols.remove(id_level_name)
-        # Ensure 'Value' isn't treated as a static column
-        if 'Value' in common_static_cols:
-            common_static_cols.remove('Value')
-        log.debug(f"Common static columns identified: {common_static_cols}")
-
-        try:
-            # Select necessary columns using the dynamically identified date and id names
-            df1_merge = df1[[id_level_name, date_level_name, 'Value'] + common_static_cols].rename(columns={'Value': 'Value_Orig'})
-            df2_merge = df2[[id_level_name, date_level_name, 'Value']].rename(columns={'Value': 'Value_New'})
-        except KeyError as e:
-            log.error(f"KeyError during merge preparation using names '{id_level_name}', '{date_level_name}': {e}. Df1 cols: {df1.columns.tolist()}, Df2 cols: {df2.columns.tolist()}")
-            return pd.DataFrame(), pd.DataFrame(), [], None
-
-        # --- Perform Merge and Calculate Changes ---
-        merged_df = pd.merge(df1_merge, df2_merge, on=[id_level_name, date_level_name], how='outer')
-        merged_df = merged_df.sort_values(by=[id_level_name, date_level_name])
-        
-        # Group by the dynamically identified ID column
-        merged_df['Change_Orig'] = merged_df.groupby(id_level_name)['Value_Orig'].diff()
-        merged_df['Change_New'] = merged_df.groupby(id_level_name)['Value_New'].diff()
-
-        # --- Extract Static Data ---
-        # Group by the identified ID column
-        # Use .first() instead of .last() for static data? Check original loader's intent. Assuming .last() is okay for now.
-        if common_static_cols:
-             static_data = merged_df.groupby(id_level_name)[common_static_cols].last().reset_index()
-        else:
-             static_data = pd.DataFrame({id_level_name: merged_df[id_level_name].unique()}) # Just get unique IDs if no static cols
-             log.info("No common static columns found between the two files.")
-
-
-        log.info(f"Successfully merged data for {file1}/{file2}. Shape: {merged_df.shape}")
-        # Return the dynamically identified ID column name
-        log.info(f"--- Exiting load_generic_comparison_data. Merged shape: {merged_df.shape}. ID col: {id_level_name} ---")
-        return merged_df, static_data, common_static_cols, id_level_name
-
-    except FileNotFoundError as e:
-        log.error(f"File not found during comparison data load: {e}")
-        flash(f"Error: Required comparison file not found ({e.filename}). Please check the Data folder.", 'danger')
-        # Reraise or return empty DFs? Returning empty for now.
-        return pd.DataFrame(), pd.DataFrame(), [], None
-    except Exception as e:
-        log.error(f"Error loading or processing generic comparison data ({file1}, {file2}): {e}", exc_info=True)
-        flash(f"An unexpected error occurred loading comparison data: {e}", 'danger')
-        return pd.DataFrame(), pd.DataFrame(), [], None
-
 
 # Calculate comparison stats function (seems largely reusable, maybe minor tweaks needed)
 # Keep it similar to the original version found in comparison_views.py etc.

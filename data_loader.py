@@ -4,18 +4,13 @@
 # set appropriate data types, and prepare the data in a pandas DataFrame format
 # suitable for further analysis and processing within the application.
 # It also supports loading a secondary file (e.g., prefixed with 'sp_') for comparison.
-# data_loader.py
-# This file is responsible for loading and preprocessing data from time-series CSV files (typically prefixed with `ts_`).
-# It includes functions to dynamically identify essential columns (Date, Code, Benchmark)
-# based on patterns, handle potential naming variations, parse dates (handling 'YYYY-MM-DD' and 'DD/MM/YYYY'),
-# standardize column names, set appropriate data types, and prepare the data in a pandas DataFrame format
-# suitable for further analysis within the application. It includes robust error handling and logging.
-# It now also supports loading and processing a secondary comparison file (e.g., sp_*.csv).
+#
+# Refactored: _process_single_file is now split into smaller helpers for clarity and maintainability.
 
 import pandas as pd
 import os
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 import re # Import regex for pattern matching
 from flask import current_app # Import current_app to access config
 
@@ -60,15 +55,86 @@ def _create_empty_dataframe(original_fund_val_col_names: List[str], benchmark_co
     value_cols = [col for col in expected_cols if col not in [STD_DATE_COL, STD_CODE_COL]]
     return pd.DataFrame(index=empty_index, columns=value_cols)
 
+def _find_columns_for_file(
+    original_cols: List[str],
+    filename_for_logging: str
+) -> Tuple[str, str, bool, Optional[str], List[str]]:
+    """
+    Identifies the actual date, code, and (optionally) benchmark columns, and fund value columns.
+    Returns:
+        actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names
+    """
+    date_pattern = r'\b(Position\s*)?Date\b'
+    actual_date_col = _find_column(date_pattern, original_cols, filename_for_logging, 'Date')
+    code_pattern = r'\b(Fund\s*)?Code\b'
+    actual_code_col = _find_column(code_pattern, original_cols, filename_for_logging, 'Code')
+    benchmark_col_present = False
+    actual_benchmark_col = None
+    try:
+        benchmark_pattern = r'\b(Benchmark|Bench)\b'
+        actual_benchmark_col = _find_column(benchmark_pattern, original_cols, filename_for_logging, 'Benchmark')
+        benchmark_col_present = True
+    except ValueError:
+        logger.info(f"No Benchmark column found in '{filename_for_logging}' matching pattern. Proceeding without benchmark.")
+    excluded_cols_for_funds = {actual_date_col, actual_code_col}
+    if benchmark_col_present and actual_benchmark_col:
+        excluded_cols_for_funds.add(actual_benchmark_col)
+    original_fund_val_col_names = [col for col in original_cols if col not in excluded_cols_for_funds]
+    return actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names
+
+def _parse_date_column(
+    df: pd.DataFrame,
+    date_col: str,
+    filename_for_logging: str
+) -> pd.Series:
+    """
+    Parses the date column robustly, trying default, then dayfirst=True if needed.
+    Returns the parsed date series.
+    """
+    date_series = df[date_col]
+    parsed_dates = pd.to_datetime(date_series, errors='coerce', dayfirst=None, yearfirst=None)
+    if parsed_dates.isnull().all() and len(date_series) > 0:
+        logger.warning(f"Initial date parsing failed for {filename_for_logging}. Trying with dayfirst=True.")
+        parsed_dates = pd.to_datetime(date_series, errors='coerce', dayfirst=True)
+        if parsed_dates.isnull().all() and len(date_series) > 0:
+            logger.error(f"Could not parse any dates in column '{date_col}' in file {filename_for_logging} even with dayfirst=True.")
+    nat_count = parsed_dates.isnull().sum()
+    total_count = len(parsed_dates)
+    success_count = total_count - nat_count
+    logger.info(f"Parsed {success_count}/{total_count} dates in {filename_for_logging}. ({nat_count} resulted in NaT).")
+    if nat_count > 0:
+        logger.warning(f"{nat_count} date values in '{date_col}' from {filename_for_logging} became NaT.")
+    return parsed_dates
+
+def _convert_value_columns(
+    df: pd.DataFrame,
+    value_cols: List[str],
+    benchmark_col_present: bool
+) -> List[str]:
+    """
+    Converts value columns (fund and benchmark) to numeric, returns the list of columns converted.
+    """
+    value_cols_to_convert = value_cols[:]
+    if benchmark_col_present:
+        value_cols_to_convert.append(STD_BENCHMARK_COL)
+    valid_cols_for_conversion = [col for col in value_cols_to_convert if col in df.columns]
+    if not valid_cols_for_conversion:
+        logger.error(f"No valid fund or benchmark value columns found to convert after processing.")
+        return []
+    df[valid_cols_for_conversion] = df[valid_cols_for_conversion].apply(pd.to_numeric, errors='coerce')
+    nan_check_cols = [col for col in valid_cols_for_conversion if col in df.columns]
+    if nan_check_cols and df[nan_check_cols].isnull().all().all():
+        logger.warning(f"All values in value columns {nan_check_cols} became NaN after conversion. Check data types.")
+    return valid_cols_for_conversion
+
 def _process_single_file(
     filepath: str,
     filename_for_logging: str
 ) -> Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
-    """Internal helper to load and process a single CSV file.
-
+    """
+    Internal helper to load and process a single CSV file.
     Handles finding columns, parsing dates, renaming, indexing, and type conversion.
     Returns None if the file is not found or critical processing steps fail.
-
     Returns:
         Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
                Processed DataFrame, list of original fund value column names,
@@ -77,44 +143,19 @@ def _process_single_file(
     """
     if not os.path.exists(filepath):
         logger.warning(f"File not found, skipping: {filepath}")
-        return None # Return None if file doesn't exist
-
+        return None
     try:
-        # Read only the header first
         header_df = pd.read_csv(filepath, nrows=0, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip')
         original_cols = [col.strip() for col in header_df.columns.tolist()]
         logger.info(f"Processing file: '{filename_for_logging}'. Original columns: {original_cols}")
-
-        # Dynamically find required columns
-        date_pattern = r'\b(Position\s*)?Date\b'
-        actual_date_col = _find_column(date_pattern, original_cols, filename_for_logging, 'Date')
-        code_pattern = r'\b(Fund\s*)?Code\b' # Allow 'Fund Code' or 'Code'
-        actual_code_col = _find_column(code_pattern, original_cols, filename_for_logging, 'Code')
-
-        benchmark_col_present = False
-        actual_benchmark_col = None
-        try:
-            benchmark_pattern = r'\b(Benchmark|Bench)\b' # Allow 'Benchmark' or 'Bench'
-            actual_benchmark_col = _find_column(benchmark_pattern, original_cols, filename_for_logging, 'Benchmark')
-            benchmark_col_present = True
-        except ValueError:
-            logger.info(f"No Benchmark column found in '{filename_for_logging}' matching pattern. Proceeding without benchmark.")
-
-        # Identify original fund value columns
-        excluded_cols_for_funds = {actual_date_col, actual_code_col}
-        if benchmark_col_present and actual_benchmark_col:
-            excluded_cols_for_funds.add(actual_benchmark_col)
-        original_fund_val_col_names = [col for col in original_cols if col not in excluded_cols_for_funds]
-
+        actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names = _find_columns_for_file(
+            original_cols, filename_for_logging
+        )
         if not original_fund_val_col_names and not benchmark_col_present:
-             logger.error(f"No fund value columns and no benchmark column identified in '{filename_for_logging}'. Cannot process.")
-             return None # Cannot proceed
-
-        # Read the full CSV
+            logger.error(f"No fund value columns and no benchmark column identified in '{filename_for_logging}'. Cannot process.")
+            return None
         df = pd.read_csv(filepath, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip', dtype={actual_date_col: str})
         df.columns = df.columns.str.strip()
-
-        # Rename columns
         rename_map = {
             actual_date_col: STD_DATE_COL,
             actual_code_col: STD_CODE_COL
@@ -123,75 +164,31 @@ def _process_single_file(
             rename_map[actual_benchmark_col] = STD_BENCHMARK_COL
         df.rename(columns=rename_map, inplace=True)
         logger.info(f"Renamed columns in '{filename_for_logging}': {list(rename_map.keys())} -> {list(rename_map.values())}")
-
-        # Robust Date Parsing
-        date_series = df[STD_DATE_COL]
-        parsed_dates = pd.to_datetime(date_series, errors='coerce', dayfirst=None, yearfirst=None) # Let pandas infer
-
-        # Check if all parsing failed
-        if parsed_dates.isnull().all() and len(date_series) > 0:
-             # Try again with dayfirst=True if initial inference failed
-            logger.warning(f"Initial date parsing failed for {filename_for_logging}. Trying with dayfirst=True.")
-            parsed_dates = pd.to_datetime(date_series, errors='coerce', dayfirst=True)
-            if parsed_dates.isnull().all() and len(date_series) > 0:
-                logger.error(f"Could not parse any dates in column '{STD_DATE_COL}' (original: '{actual_date_col}') in file {filename_for_logging} even with dayfirst=True.")
-                return None # Cannot proceed without valid dates
-
-        nat_count = parsed_dates.isnull().sum()
-        total_count = len(parsed_dates)
-        success_count = total_count - nat_count
-        logger.info(f"Parsed {success_count}/{total_count} dates in {filename_for_logging}. ({nat_count} resulted in NaT).")
-        if nat_count > 0:
-             logger.warning(f"{nat_count} date values in '{STD_DATE_COL}' from {filename_for_logging} became NaT.")
-
-        df[STD_DATE_COL] = parsed_dates
+        df[STD_DATE_COL] = _parse_date_column(df, STD_DATE_COL, filename_for_logging)
         original_row_count = len(df)
         df.dropna(subset=[STD_DATE_COL], inplace=True)
         rows_dropped = original_row_count - len(df)
         if rows_dropped > 0:
             logger.warning(f"Dropped {rows_dropped} rows from {filename_for_logging} due to failed date parsing.")
-
-        # Set Index
         if df.empty:
             logger.warning(f"DataFrame became empty after dropping rows with unparseable dates in {filename_for_logging}.")
-            # Return empty structure but indicate success in file processing up to this point
             empty_df = _create_empty_dataframe(original_fund_val_col_names, benchmark_col_present)
             final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
             return empty_df, original_fund_val_col_names, final_bm_col
-
         df.set_index([STD_DATE_COL, STD_CODE_COL], inplace=True)
-
-        # Convert value columns to numeric
-        value_cols_to_convert = original_fund_val_col_names[:]
-        if benchmark_col_present:
-            value_cols_to_convert.append(STD_BENCHMARK_COL)
-
-        valid_cols_for_conversion = [col for col in value_cols_to_convert if col in df.columns]
-        if not valid_cols_for_conversion:
-             logger.error(f"No valid fund or benchmark value columns found to convert in {filename_for_logging} after processing.")
-             # Return partially processed DF but log error
-             final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
-             return df, original_fund_val_col_names, final_bm_col # Return what we have
-
-        df[valid_cols_for_conversion] = df[valid_cols_for_conversion].apply(pd.to_numeric, errors='coerce')
-        nan_check_cols = [col for col in valid_cols_for_conversion if col in df.columns]
-        if nan_check_cols and df[nan_check_cols].isnull().all().all():
-            logger.warning(f"All values in value columns {nan_check_cols} became NaN after conversion in file {filename_for_logging}. Check data types.")
-
-
+        _convert_value_columns(df, original_fund_val_col_names, benchmark_col_present)
         final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present else None
         logger.info(f"Successfully processed file: '{filename_for_logging}'. Index: {df.index.names}. Columns: {df.columns.tolist()}")
         return df, original_fund_val_col_names, final_benchmark_col_name
-
     except FileNotFoundError:
         logger.error(f"File not found during processing: {filepath}")
-        return None # Handled above, but belt-and-suspenders
+        return None
     except ValueError as e:
         logger.error(f"Value error processing {filename_for_logging}: {e}")
-        return None # Return None on critical errors like missing columns
+        return None
     except Exception as e:
-        logger.exception(f"Unexpected error processing {filename_for_logging}: {e}") # Log full traceback
-        return None # Return None on unexpected errors
+        logger.exception(f"Unexpected error processing {filename_for_logging}: {e}")
+        return None
 
 # Simplified return type: focus on the dataframes and metadata needed downstream
 LoadResult = Tuple[
