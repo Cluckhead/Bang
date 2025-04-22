@@ -1,8 +1,5 @@
 # process_w_secs.py
-"""
-This script specifically processes the pre_w_secs.csv file to create w_secs.csv
-with dates from Dates.csv as the column headers for the weight values.
-"""
+# Purpose: Processes the pre_w_secs.csv file in a specified data folder (data_folder_path) to create w_secs.csv with dates from Dates.csv as the column headers for the weight values.
 
 import os
 import pandas as pd
@@ -12,23 +9,25 @@ import re
 # Logging is now handled centrally by the Flask app factory in app.py
 logger = logging.getLogger(__name__)
 
-def process_securities_file():
-    """Process the pre_w_secs.csv file to replace weight columns with dates."""
-    # Get paths
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(current_dir, 'Data')
-    input_path = os.path.join(data_dir, 'pre_w_secs.csv')
-    output_path = os.path.join(data_dir, 'w_secs.csv')
-    dates_path = os.path.join(data_dir, 'Dates.csv')
-    
+def process_securities_file(data_folder_path=None):
+    """Process the pre_w_secs.csv file in the specified data folder to replace weight columns with dates."""
+    # If no data_folder_path is provided, use the current behavior
+    if data_folder_path is None:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        data_folder_path = os.path.join(current_dir, 'Data')
+
+    input_path = os.path.join(data_folder_path, 'pre_w_secs.csv')
+    output_path = os.path.join(data_folder_path, 'w_secs.csv')
+    dates_path = os.path.join(data_folder_path, 'Dates.csv')
+
     if not os.path.exists(input_path):
         logger.error(f"Input file not found: {input_path}")
         return
-        
+
     if not os.path.exists(dates_path):
         logger.error(f"Dates file not found: {dates_path}")
         return
-    
+
     try:
         # Load the dates
         dates_df = pd.read_csv(dates_path)

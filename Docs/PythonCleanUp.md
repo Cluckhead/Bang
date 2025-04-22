@@ -15,7 +15,7 @@
   - All view modules under `views/` (e.g., `api_core.py`, `api_routes_*`, `attribution_views.py`, `comparison_views.py`, etc.)
   - `weight_processing.py`
 
-### Step 1.2: Centralize Configuration Access
+### Step 1.2: Centralize Configuration Access [complete]
 - **1.2.1**: Find direct imports of `DATA_FOLDER` in:
   - `issue_processing.py`
   - `process_weights.py` *(uses `current_dir`)*
@@ -24,8 +24,8 @@
 - **1.2.3**: Update view functions (e.g., `views/issue_views.py`) to pull `current_app.config['DATA_FOLDER']` and pass it to processing functions. Update `main()` in data scripts to use `utils.get_data_folder_path`.
 - **1.2.4**: Move configuration values to `config.py`:
   - `DATA_SOURCES` list from `views/issue_views.py`
-  - Thresholds `-0.5`, `3`, `0.2` from `curve_processing.py`
-- **1.2.5**: Update code in `views/issue_views.py` and `curve_processing.py` to read these values from `current_app.config`.
+  - Thresholds `-0.5`, `3`, `0.2` from `curve_processing.py` [complete]
+- **1.2.5**: Update code in `views/issue_views.py` and `curve_processing.py` to read these values from `current_app.config`. [complete]
 
 ### Step 1.3: Refactor Utilities (DRY Principle)
 - **1.3.1**: Consolidate `_is_date_like` logic by importing it from `utils` in:

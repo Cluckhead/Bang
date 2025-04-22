@@ -13,6 +13,7 @@ import numpy as np
 # Local imports
 # Removed: from config import DATA_FOLDER
 import logging # Import logging
+from config import CURVE_MONOTONICITY_DROP_THRESHOLD, CURVE_ANOMALY_STD_MULTIPLIER, CURVE_ANOMALY_ABS_THRESHOLD
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
@@ -211,10 +212,10 @@ def check_curve_inconsistencies(df):
 
             # --- Basic Check 1: Monotonicity ---
             diffs = latest_curve['Value'].diff()
-            large_drops = diffs[diffs < -0.5]
+            large_drops = diffs[diffs < CURVE_MONOTONICITY_DROP_THRESHOLD]
             if not large_drops.empty:
                 terms = latest_curve.loc[large_drops.index, 'Term'].tolist()
-                issue_msg = f"Potential non-monotonic drop(s) < -0.5 between terms near: {terms} on {latest_date.strftime('%Y-%m-%d')}"
+                issue_msg = f"Potential non-monotonic drop(s) < {CURVE_MONOTONICITY_DROP_THRESHOLD} between terms near: {terms} on {latest_date.strftime('%Y-%m-%d')}"
                 summary.setdefault(currency, []).append(issue_msg)
                 logger.warning(f"{currency}: {issue_msg}")
 
@@ -249,8 +250,8 @@ def check_curve_inconsistencies(df):
 
                         change_diff_std = merged['ChangeDiff'].std()
                         change_diff_mean = merged['ChangeDiff'].mean()
-                        threshold_std = np.nan_to_num(change_diff_mean + 3 * change_diff_std)
-                        threshold_abs = 0.2
+                        threshold_std = np.nan_to_num(change_diff_mean + CURVE_ANOMALY_STD_MULTIPLIER * change_diff_std)
+                        threshold_abs = CURVE_ANOMALY_ABS_THRESHOLD
                         final_threshold = max(abs(threshold_std), threshold_abs)
                         anomalous_jumps = merged[abs(merged['ChangeDiff'].fillna(0)) > final_threshold]
 

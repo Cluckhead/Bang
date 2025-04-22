@@ -1,26 +1,28 @@
 # issue_processing.py
-# Purpose: Handles loading, adding, and updating data issues stored in Data/data_issues.csv.
+# Purpose: Handles loading, adding, and updating data issues stored in a specified data folder (data_folder_path) rather than a hardcoded path.
 
 import pandas as pd
 import os
 from datetime import datetime
-from config import DATA_FOLDER
 
-ISSUES_FILE = os.path.join(DATA_FOLDER, 'data_issues.csv')
-FUND_LIST_FILE = os.path.join(DATA_FOLDER, 'FundList.csv')
+# Remove: from config import DATA_FOLDER
 
-# Define the expected columns, including the new JiraLink
+# Remove global file paths
+# ISSUES_FILE = os.path.join(DATA_FOLDER, 'data_issues.csv')
+# FUND_LIST_FILE = os.path.join(DATA_FOLDER, 'FundList.csv')
+
 REQUIRED_ISSUE_COLUMNS = [
     'IssueID', 'DateRaised', 'RaisedBy', 'FundImpacted', 'DataSource',
     'IssueDate', 'Description', 'JiraLink', 'Status', 'DateClosed', 'ClosedBy',
     'ResolutionComment'
 ]
 
-def load_issues():
-    """Loads the data issues from the CSV file into a pandas DataFrame."""
-    if os.path.exists(ISSUES_FILE):
+def load_issues(data_folder_path):
+    """Loads the data issues from the CSV file in the specified data folder into a pandas DataFrame."""
+    issues_file = os.path.join(data_folder_path, 'data_issues.csv')
+    if os.path.exists(issues_file):
         try:
-            df = pd.read_csv(ISSUES_FILE,
+            df = pd.read_csv(issues_file,
                              parse_dates=['DateRaised', 'DateClosed', 'IssueDate'])
 
             # --- Check and add missing columns --- 
@@ -42,9 +44,9 @@ def load_issues():
             # If columns were added, save the file back immediately
             if columns_added:
                 print("Saving issues file with newly added columns.")
-                _save_issues(df.copy()) # Save a copy to avoid modifying df used later
+                _save_issues(df.copy(), data_folder_path) # Save a copy to avoid modifying df used later
                 # Re-read after saving to ensure correct types
-                df = pd.read_csv(ISSUES_FILE,
+                df = pd.read_csv(issues_file,
                                  parse_dates=['DateRaised', 'DateClosed', 'IssueDate'])
 
             # Ensure Status exists and fill missing with 'Open' (redundant if using REQUIRED_ISSUE_COLUMNS check, but safe)
@@ -70,11 +72,12 @@ def load_issues():
             return pd.DataFrame(columns=REQUIRED_ISSUE_COLUMNS)
     else:
         # Return an empty DataFrame with correct columns if file doesn't exist
-        print(f"Issues file not found at {ISSUES_FILE}. Returning empty DataFrame.")
+        print(f"Issues file not found at {issues_file}. Returning empty DataFrame.")
         return pd.DataFrame(columns=REQUIRED_ISSUE_COLUMNS)
 
-def _save_issues(df):
-    """Saves the DataFrame back to the CSV file."""
+def _save_issues(df, data_folder_path):
+    """Saves the DataFrame back to the CSV file in the specified data folder."""
+    issues_file = os.path.join(data_folder_path, 'data_issues.csv')
     try:
         # Ensure all required columns exist before saving
         for col in REQUIRED_ISSUE_COLUMNS:
@@ -105,7 +108,7 @@ def _save_issues(df):
         for col in object_cols:
              df_to_save[col] = df_to_save[col].fillna('') # Replace NaN with empty string
 
-        df_to_save.to_csv(ISSUES_FILE, index=False)
+        df_to_save.to_csv(issues_file, index=False)
     except Exception as e:
         print(f"Error saving issues file: {e}")
 
@@ -130,10 +133,9 @@ def _generate_issue_id(existing_ids):
     new_num = max_num + 1
     return f"ISSUE-{new_num:03d}"
 
-def add_issue(raised_by, fund_impacted, data_source, issue_date, description, jira_link=None): # Added jira_link parameter
-    """Adds a new issue to the CSV file."""
-    df = load_issues()
-
+def add_issue(raised_by, fund_impacted, data_source, issue_date, description, jira_link=None, data_folder_path=None):
+    """Adds a new issue to the CSV file in the specified data folder."""
+    df = load_issues(data_folder_path)
     new_id = _generate_issue_id(df['IssueID'])
 
     new_issue = pd.DataFrame({
@@ -158,12 +160,12 @@ def add_issue(raised_by, fund_impacted, data_source, issue_date, description, ji
     new_issue = new_issue[REQUIRED_ISSUE_COLUMNS]
 
     df_updated = pd.concat([df, new_issue], ignore_index=True)
-    _save_issues(df_updated)
+    _save_issues(df_updated, data_folder_path)
     return new_id # Return the ID of the newly added issue
 
-def close_issue(issue_id, closed_by, resolution_comment):
-    """Marks an issue as closed in the CSV file."""
-    df = load_issues()
+def close_issue(issue_id, closed_by, resolution_comment, data_folder_path):
+    """Marks an issue as closed in the CSV file in the specified data folder."""
+    df = load_issues(data_folder_path)
 
     # Ensure IssueID is string for comparison
     df['IssueID'] = df['IssueID'].astype(str)
@@ -183,17 +185,18 @@ def close_issue(issue_id, closed_by, resolution_comment):
         df.loc[idx, 'DateClosed'] = datetime.now().date()
         df.loc[idx, 'ClosedBy'] = closed_by
         df.loc[idx, 'ResolutionComment'] = resolution_comment
-        _save_issues(df)
+        _save_issues(df, data_folder_path)
         return True
     else:
         print(f"Issue ID {issue_id_str} not found.")
         return False
 
-def load_fund_list():
-    """Loads the list of funds from FundList.csv."""
-    if os.path.exists(FUND_LIST_FILE):
+def load_fund_list(data_folder_path):
+    """Loads the list of funds from FundList.csv in the specified data folder."""
+    fund_list_file = os.path.join(data_folder_path, 'FundList.csv')
+    if os.path.exists(fund_list_file):
         try:
-            fund_df = pd.read_csv(FUND_LIST_FILE)
+            fund_df = pd.read_csv(fund_list_file)
             fund_code_col = None
             # Try common column names for fund codes
             potential_cols = ['FundCode', 'Code', 'Fund Code']
@@ -205,27 +208,24 @@ def load_fund_list():
             if fund_code_col:
                 return sorted(fund_df[fund_code_col].dropna().astype(str).unique().tolist())
             else:
-                 print(f"Warning: Could not find a suitable fund code column ({', '.join(potential_cols)}) in {FUND_LIST_FILE}")
+                 print(f"Warning: Could not find a suitable fund code column ({', '.join(potential_cols)}) in {fund_list_file}")
                  return [] # Return empty if column not found
         except Exception as e:
-            print(f"Error loading fund list from {FUND_LIST_FILE}: {e}")
+            print(f"Error loading fund list: {e}")
             return []
     else:
-        print(f"Warning: Fund list file not found at {FUND_LIST_FILE}")
+        print(f"Fund list file not found at {fund_list_file}. Returning empty DataFrame.")
         return []
 
 # --- Initial File Creation / Update Check --- 
-def initialize_issue_file():
-    """Creates the issues file with headers if it doesn't exist, or updates it if it's missing columns."""
-    if not os.path.exists(ISSUES_FILE):
-        print(f"Creating initial issues file: {ISSUES_FILE}")
-        # Create empty DataFrame with correct columns and save it
-        initial_df = pd.DataFrame(columns=REQUIRED_ISSUE_COLUMNS)
-        _save_issues(initial_df)
+def initialize_issue_file(data_folder_path):
+    """Initializes the issues file in the specified data folder if it does not exist."""
+    issues_file = os.path.join(data_folder_path, 'data_issues.csv')
+    if not os.path.exists(issues_file):
+        df = pd.DataFrame(columns=REQUIRED_ISSUE_COLUMNS)
+        _save_issues(df, data_folder_path)
+        print(f"Initialized new issues file at {issues_file}.")
     else:
-        # File exists, load it to check/add columns (load_issues handles this check now)
-        print(f"Checking existing issues file ({ISSUES_FILE}) for required columns...")
-        _ = load_issues() # Call load_issues to trigger column check and potential save
+        print(f"Issues file already exists at {issues_file}.")
 
-# Run the initialization check when the module is imported
-initialize_issue_file() 
+# (Removed call to initialize_issue_file(data_folder_path=None)) 

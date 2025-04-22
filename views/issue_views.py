@@ -6,10 +6,9 @@ import issue_processing  # Use the new module
 import pandas as pd
 from datetime import datetime
 import os # Added to check for users.csv
+from config import DATA_SOURCES # Import from config.py
 
 issue_bp = Blueprint('issue_bp', __name__, template_folder='templates')
-
-DATA_SOURCES = ["S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug", "Rimes"] # Define allowed sources, added Rimes
 
 # Function to load users from CSV
 def load_users():
@@ -36,7 +35,8 @@ def manage_issues():
     """Displays existing issues and handles adding new issues."""
     message = None
     message_type = 'info'
-    available_funds = issue_processing.load_fund_list() # Get fund list for dropdown
+    data_folder = current_app.config['DATA_FOLDER']
+    available_funds = issue_processing.load_fund_list(data_folder) # Pass data_folder_path
     users = load_users() # Load users for dropdowns
 
     if request.method == 'POST':
@@ -60,14 +60,14 @@ def manage_issues():
             if data_source not in DATA_SOURCES:
                  raise ValueError("Invalid data source selected.")
 
-
             issue_id = issue_processing.add_issue(
                 raised_by=raised_by,
                 fund_impacted=fund_impacted,
                 data_source=data_source,
                 issue_date=issue_date,
                 description=description,
-                jira_link=jira_link # Pass Jira link
+                jira_link=jira_link, # Pass Jira link
+                data_folder_path=data_folder # Pass data_folder_path
             )
             message = f"Successfully added new issue (ID: {issue_id})."
             message_type = 'success'
@@ -85,7 +85,7 @@ def manage_issues():
         # If error, fall through to render template again with message
 
     # For GET request or if POST had an error
-    issues_df = issue_processing.load_issues()
+    issues_df = issue_processing.load_issues(data_folder) # Pass data_folder_path
     open_issues = issues_df[issues_df['Status'] == 'Open'].sort_values(by='DateRaised', ascending=False).to_dict('records')
     closed_issues = issues_df[issues_df['Status'] == 'Closed'].sort_values(by='DateClosed', ascending=False).to_dict('records')
 
@@ -106,6 +106,7 @@ def close_issue_route():
         closed_by = request.form.get('closed_by')
         resolution_comment = request.form.get('resolution_comment')
         users = load_users() # Load users for validation
+        data_folder = current_app.config['DATA_FOLDER']
 
         if not issue_id or not closed_by or not resolution_comment:
              raise ValueError("Missing required fields for closing the issue.")
@@ -115,7 +116,7 @@ def close_issue_route():
             current_app.logger.warning(f"Warning: Closed by user '{closed_by}' not found in users.csv. Allowing closure.")
             # Depending on requirements, you might want to raise ValueError here
 
-        success = issue_processing.close_issue(issue_id, closed_by, resolution_comment)
+        success = issue_processing.close_issue(issue_id, closed_by, resolution_comment, data_folder) # Pass data_folder_path
 
         if success:
             flash(f"Issue {issue_id} marked as closed.", 'success')

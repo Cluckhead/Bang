@@ -130,4 +130,17 @@ COLOR_PALETTE = [
     '#6495ED', # CornflowerBlue
     '#DC143C', # Crimson
     '#00FFFF'  # Aqua
-] 
+]
+
+# Define allowed data sources for issue tracking and related features
+DATA_SOURCES = [
+    "S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug", "Rimes"
+]
+
+# --- Yield Curve Processing Thresholds ---
+# Threshold for detecting large non-monotonic drops in curve values (e.g., -0.5 means a drop > 0.5 is flagged)
+CURVE_MONOTONICITY_DROP_THRESHOLD = -0.5
+# Multiplier for standard deviation in anomaly detection (e.g., 3 means mean + 3*std)
+CURVE_ANOMALY_STD_MULTIPLIER = 3
+# Minimum absolute threshold for anomaly detection in curve change profile
+CURVE_ANOMALY_ABS_THRESHOLD = 0.2 

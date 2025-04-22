@@ -1,8 +1,5 @@
 # process_weights.py
-"""
-This script processes weight files by replacing duplicate headers with dates from Dates.csv.
-It directly processes pre_w_*.csv files to create corresponding w_*.csv files.
-"""
+# Purpose: Processes weight files in a specified data folder (data_folder_path) rather than a hardcoded path. Handles pre_w_Bench.csv, pre_w_Funds.csv, and pre_w_secs.csv to produce w_Bench.csv, w_Funds.csv, and w_secs.csv.
 
 import os
 import logging
@@ -185,41 +182,41 @@ def process_weight_file_with_reversed_dates(input_path, output_path, dates_path)
     except Exception as e:
         logger.error(f"Error processing weight file {input_path}: {e}", exc_info=True)
 
-def main():
-    """Process all weight files in the Data directory."""
-    # Get the current directory and data directory
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(current_dir, 'Data')
-    
+def main(data_folder_path=None):
+    """Process all weight files in the specified data directory."""
+    # If no data_folder_path is provided, use the current behavior
+    if data_folder_path is None:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        data_folder_path = os.path.join(current_dir, 'Data')
+
     # Path to Dates.csv
-    dates_path = os.path.join(data_dir, 'Dates.csv')
-    
+    dates_path = os.path.join(data_folder_path, 'Dates.csv')
+
     if not os.path.exists(dates_path):
         logger.error(f"Dates.csv not found at {dates_path}. Cannot proceed.")
         return
-    
+
     # Process fund and bench weight files
     weight_files = [
         ('pre_w_Bench.csv', 'w_Bench.csv'),
         ('pre_w_Funds.csv', 'w_Funds.csv')
     ]
-    
+
     # Process each weight file
     for input_file, output_file in weight_files:
-        input_path = os.path.join(data_dir, input_file)
-        output_path = os.path.join(data_dir, output_file)
-        
+        input_path = os.path.join(data_folder_path, input_file)
+        output_path = os.path.join(data_folder_path, output_file)
+
         if os.path.exists(input_path):
             logger.info(f"Processing weight file: {input_path} -> {output_path}")
-            # Use our custom function instead of the imported one to ensure date order
             process_weight_file_with_reversed_dates(input_path, output_path, dates_path)
         else:
             logger.warning(f"Input file not found: {input_path}")
-            
+
     # Special handling for securities file
-    secs_input_path = os.path.join(data_dir, 'pre_w_secs.csv')
-    secs_output_path = os.path.join(data_dir, 'w_secs.csv')
-    
+    secs_input_path = os.path.join(data_folder_path, 'pre_w_secs.csv')
+    secs_output_path = os.path.join(data_folder_path, 'w_secs.csv')
+
     if os.path.exists(secs_input_path):
         process_securities_file(secs_input_path, secs_output_path, dates_path)
     else:
