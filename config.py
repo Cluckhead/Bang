@@ -116,6 +116,9 @@ LOGGING_CONFIG = {
     }
 }
 
+# To enable more verbose debugging, set the 'level' value to 'DEBUG' in the LOGGING_CONFIG['loggers'][''] section below.
+# For example: 'level': 'DEBUG' (already set for root logger). For less verbosity, use 'INFO' or 'WARNING'.
+
 # --- Add comments explaining the purpose of this file ---
 # This file centralizes configuration settings for the Simple Data Checker application.
 # It defines paths, constants (like color palettes), and specific configurations

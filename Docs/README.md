@@ -186,6 +186,90 @@ graph TD
 | `process_w_secs.py` | Process pre_w_secs.csv to w_secs.csv, replacing weight columns with dates and preserving metadata columns. | `process_securities_file()` |
 | `data_validation.py` | Validate structure and content of DataFrames before saving, checking columns and types by file type. | `validate_data()` |
 
+## Logging and Diagnostics
+
+The Simple Data Checker uses a **centralized logging system** to capture application events, errors, and diagnostics. This makes it easy to trace issues and monitor application health, both during development and in production.
+
+### How Logging Works (Step by Step)
+
+1. **Centralized Setup in `app.py`**
+   - Logging is configured in the Flask application factory (`create_app`).
+   - Both a **rotating file handler** (writes logs to `instance/app.log`) and a **console handler** (prints to terminal) are set up.
+   - The log format includes timestamps, log level, message, and source location for clarity.
+   - Log level is set to `DEBUG` for the file and `DEBUG` (or `INFO`) for the console by default.
+
+   Example (see `app.py`):
+   ```python
+   # In app.py (inside create_app)
+   import logging
+   from logging.handlers import RotatingFileHandler
+
+   app.logger.handlers.clear()
+   app.logger.setLevel(logging.DEBUG)
+   log_formatter = logging.Formatter(
+       '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+   )
+   file_handler = RotatingFileHandler('instance/app.log', maxBytes=10*1024*1024, backupCount=5)
+   file_handler.setFormatter(log_formatter)
+   file_handler.setLevel(logging.DEBUG)
+   app.logger.addHandler(file_handler)
+   console_handler = logging.StreamHandler()
+   console_handler.setFormatter(log_formatter)
+   console_handler.setLevel(logging.DEBUG)
+   app.logger.addHandler(console_handler)
+   ```
+
+2. **Module-Level Logging**
+   - Each Python module gets its own logger using `logging.getLogger(__name__)`.
+   - This ensures log messages are tagged with the module name, making it easy to trace their origin.
+   - Do **not** call `basicConfig` or set up handlers in individual modules—use the centralized config.
+
+   Example usage in a module:
+   ```python
+   import logging
+   logger = logging.getLogger(__name__)
+
+   def some_function():
+       logger.info("Processing started.")
+       try:
+           # ... code ...
+       except Exception as e:
+           logger.error(f"Error occurred: {e}", exc_info=True)
+   ```
+
+3. **Log File Location**
+   - All logs are written to `instance/app.log` (rotated when large).
+   - Console output is also available for real-time monitoring during development.
+
+4. **Log Levels**
+   - Use `logger.debug()` for verbose output, `logger.info()` for general events, `logger.warning()` for recoverable issues, and `logger.error()` for errors.
+   - For critical failures, use `logger.critical()`.
+
+5. **Extending Logging in New Modules**
+   - Always use `logger = logging.getLogger(__name__)` at the top of new modules.
+   - Use the logger for all diagnostic, warning, and error messages.
+   - Avoid configuring handlers or formatters in new modules—this is handled centrally.
+
+6. **Changing Log Levels or Format**
+   - To adjust log verbosity or format, edit the logging setup in `app.py` or the `LOGGING_CONFIG` in `config.py`.
+   - For production, consider setting the console handler to `INFO` or `WARNING` to reduce noise.
+
+### Example: Adding Logging to a New Module
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+def do_something():
+    logger.info("Started task.")
+    try:
+        # ...
+    except Exception as e:
+        logger.error(f"Task failed: {e}", exc_info=True)
+```
+
+This approach ensures all logs are consistent, easy to find, and follow a standard format across the application.
+
 ### View Modules (`views/`)
 
 | Module | Purpose | Routes |
