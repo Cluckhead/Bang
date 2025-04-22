@@ -70,23 +70,15 @@ def process_weight_file(input_path: str, output_path: str, dates_path: Optional[
         output_path (str): Absolute path where the processed weight file should be saved.
         dates_path (str, optional): Path to the Dates.csv file. If None, will look in the same directory as the input file.
     """
-    if not os.path.exists(input_path):
-        logger.error(f"Weight file not found: {input_path}. Skipping processing.")
-        return
-
-    logger.info(f"Processing weight file: {input_path} -> {output_path}")
-
     try:
         # Find the folder containing the input file to look for Dates.csv if not provided
         if dates_path is None:
             input_dir = os.path.dirname(input_path)
             dates_path = os.path.join(input_dir, 'Dates.csv')
-
         # Check if Dates.csv exists
         if not os.path.exists(dates_path):
             logger.error(f"Dates.csv not found at {dates_path}. Cannot replace headers.")
             return
-
         # Read and sort dates
         try:
             dates_df = pd.read_csv(dates_path)
@@ -97,10 +89,18 @@ def process_weight_file(input_path: str, output_path: str, dates_path: Optional[
             logger.info(f"Loaded {len(sorted_dates)} dates from {dates_path}")
             dates = clean_date_format(sorted_dates)
             logger.info(f"Cleaned up date formats to remove time components")
-        except Exception as e:
-            logger.error(f"Error loading dates from {dates_path}: {e}")
+        except FileNotFoundError:
+            logger.error(f"Dates file not found: {dates_path}")
             return
-
+        except pd.errors.EmptyDataError:
+            logger.warning(f"Dates file is empty: {dates_path}")
+            return
+        except pd.errors.ParserError as e:
+            logger.error(f"Parser error in dates file {dates_path}: {e}", exc_info=True)
+            return
+        except Exception as e:
+            logger.error(f"Unexpected error loading dates from {dates_path}: {e}", exc_info=True)
+            return
         input_basename = os.path.basename(input_path).lower()
 
         if "w_funds" in input_basename or "w_bench" in input_basename:

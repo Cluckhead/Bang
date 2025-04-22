@@ -3,15 +3,16 @@ Defines the Flask route for data retrieval interface and related functionality.
 '''
 import os
 import pandas as pd
-from flask import render_template, request, current_app, jsonify
+from flask import render_template, request, current_app, jsonify, Response
 import datetime
 from pandas.tseries.offsets import BDay
+import typing
 
 # Import from our local modules
 from views.api_core import api_bp, get_data_file_statuses
 
 @api_bp.route('/get_data')
-def get_data_page():
+def get_data_page() -> typing.Union[str, typing.Tuple[str, int], Response]:
     '''Renders the page for users to select parameters for API data retrieval.'''
     try:
         # Construct the path to FundList.csv relative to the app's instance path or root

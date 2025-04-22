@@ -128,21 +128,32 @@ def get_data_folder_path(app_root_path=None):
 def load_exclusions(exclusion_file_path):
     """
     Loads the exclusion data from the specified CSV file.
-
     Args:
         exclusion_file_path (str): The full path to the exclusions CSV file.
-
     Returns:
         pandas.DataFrame or None: A DataFrame containing the exclusion data 
                                  if the file exists and is loaded successfully, 
                                  otherwise None.
     """
     logger = logging.getLogger(__name__)
-    if not os.path.exists(exclusion_file_path):
-        logger.warning(f"Exclusion file not found: {exclusion_file_path}. Returning None.")
-        return None
     try:
-        exclusions_df = pd.read_csv(exclusion_file_path, dtype=str) # Read all as string initially
+        if not os.path.exists(exclusion_file_path):
+            logger.warning(f"Exclusion file not found: {exclusion_file_path}. Returning None.")
+            return None
+        try:
+            exclusions_df = pd.read_csv(exclusion_file_path, dtype=str) # Read all as string initially
+        except FileNotFoundError:
+            logger.error(f"Exclusion file not found during read: {exclusion_file_path}")
+            return None
+        except pd.errors.EmptyDataError:
+            logger.warning(f"Exclusion file is empty: {exclusion_file_path}. Returning empty DataFrame.")
+            return pd.DataFrame() # Return an empty DataFrame for consistency
+        except pd.errors.ParserError as e:
+            logger.error(f"Parser error in exclusion file {exclusion_file_path}: {e}", exc_info=True)
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error reading exclusion file {exclusion_file_path}: {e}", exc_info=True)
+            return None
         # Optional: Convert date columns if needed, handle potential errors
         # Example: 
         # for col in ['AddDate', 'EndDate']:
@@ -150,9 +161,6 @@ def load_exclusions(exclusion_file_path):
         #         exclusions_df[col] = pd.to_datetime(exclusions_df[col], errors='coerce')
         logger.info(f"Successfully loaded exclusions from {exclusion_file_path}. Shape: {exclusions_df.shape}")
         return exclusions_df
-    except pd.errors.EmptyDataError:
-        logger.warning(f"Exclusion file is empty: {exclusion_file_path}. Returning empty DataFrame.")
-        return pd.DataFrame() # Return an empty DataFrame for consistency
     except Exception as e:
         logger.error(f"Error loading exclusion file {exclusion_file_path}: {e}", exc_info=True)
         return None

@@ -1,3 +1,6 @@
+# Purpose: Main entry point for API views. Imports and exposes API blueprints and routes for the Simple Data Checker app.
+# No function definitions in this file.
+
 '''
 Main entry point for API views.
 This file now imports from the split modules to maintain backward compatibility.

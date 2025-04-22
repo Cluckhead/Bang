@@ -28,7 +28,7 @@ def _calculate_column_stats(
     col_change_series: pd.Series,
     latest_date: pd.Timestamp,
     col_name: str,
-    prefix: str = "" # Optional prefix for metric names (e.g., "S&P " )
+    prefix: str = ""  # Optional prefix for metric names (e.g., "S&P " )
 ) -> Dict[str, Any]:
     """Helper function to calculate stats for a single column series.
 
@@ -225,7 +225,7 @@ def calculate_latest_metrics(
     secondary_df: Optional[pd.DataFrame] = None,
     secondary_fund_cols: Optional[List[str]] = None,
     secondary_benchmark_col: Optional[str] = None,
-    secondary_prefix: str = "S&P " # Prefix for secondary metrics
+    secondary_prefix: str = "S&P "  # Prefix for secondary metrics
 ) -> pd.DataFrame:
     """Calculates latest metrics for primary and optional secondary data, including relative metrics.
 
@@ -417,3 +417,22 @@ def calculate_latest_metrics(
 
     logger.info(f"Successfully calculated and combined metrics. Final shape: {combined_metrics_df_sorted.shape}")
     return combined_metrics_df_sorted 
+
+def load_metrics_from_csv(filepath: str) -> pd.DataFrame:
+    """Loads metrics from a CSV file, handling errors robustly."""
+    try:
+        df = pd.read_csv(filepath)
+        logger.info(f"Successfully loaded metrics from {filepath}.")
+        return df
+    except FileNotFoundError:
+        logger.error(f"Metrics file not found: {filepath}")
+        return pd.DataFrame()
+    except pd.errors.EmptyDataError:
+        logger.warning(f"Metrics file is empty: {filepath}")
+        return pd.DataFrame()
+    except pd.errors.ParserError as e:
+        logger.error(f"Parser error in metrics file {filepath}: {e}", exc_info=True)
+        return pd.DataFrame()
+    except Exception as e:
+        logger.error(f"Unexpected error loading metrics from {filepath}: {e}", exc_info=True)
+        return pd.DataFrame() 

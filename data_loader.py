@@ -154,7 +154,20 @@ def _process_single_file(
         if not original_fund_val_col_names and not benchmark_col_present:
             logger.error(f"No fund value columns and no benchmark column identified in '{filename_for_logging}'. Cannot process.")
             return None
-        df = pd.read_csv(filepath, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip', dtype={actual_date_col: str})
+        try:
+            df = pd.read_csv(filepath, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip', dtype={actual_date_col: str})
+        except FileNotFoundError:
+            logger.error(f"File not found during processing: {filepath}")
+            return None
+        except pd.errors.EmptyDataError:
+            logger.warning(f"File is empty: {filepath}")
+            return None
+        except pd.errors.ParserError as e:
+            logger.error(f"Parser error in file {filepath}: {e}", exc_info=True)
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error reading file {filepath}: {e}", exc_info=True)
+            return None
         df.columns = df.columns.str.strip()
         rename_map = {
             actual_date_col: STD_DATE_COL,
@@ -182,6 +195,18 @@ def _process_single_file(
         return df, original_fund_val_col_names, final_benchmark_col_name
     except FileNotFoundError:
         logger.error(f"File not found during processing: {filepath}")
+        return None
+    except pd.errors.EmptyDataError:
+        logger.warning(f"File is empty: {filepath}")
+        return None
+    except pd.errors.ParserError as e:
+        logger.error(f"Parser error in file {filepath}: {e}", exc_info=True)
+        return None
+    except PermissionError:
+        logger.error(f"Permission denied when accessing {filepath}", exc_info=True)
+        return None
+    except OSError as e:
+        logger.error(f"OS error when accessing {filepath}: {e}", exc_info=True)
         return None
     except ValueError as e:
         logger.error(f"Value error processing {filename_for_logging}: {e}")

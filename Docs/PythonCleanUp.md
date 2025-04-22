@@ -43,14 +43,14 @@
 - **2.1.4**: Remove redundant scripts: `process_w_secs.py`, `process_weights.py`. [complete]
 - **2.1.5**: Verify `main()` uses `utils.get_data_folder_path`. [complete]
 
-### Step 2.2: Refactor Comparison Views
+### Step 2.2: Refactor Comparison Views [complete]
 - **2.2.1**: Create `views/comparison_helpers.py` with functions for:
   - Loading and merging comparison files.
   - Calculating comparison statistics.
   - Handling filtering, sorting, and pagination.
 - **2.2.2**: Refactor `views/comparison_views.py`, `views/duration_comparison_views.py`, `views/spread_duration_comparison_views.py` to use these helpers.
 
-### Step 2.3: Refactor Complex Functions
+### Step 2.3: Refactor Complex Functions [complete]
 - **2.3.1** (`data_loader.py`): Break `_process_single_file` into smaller helpers (`_find_columns_for_file`, `_parse_date_column`, `_convert_value_columns`).
 - **2.3.2** (`views/api_routes_call.py`): Refactor `run_api_calls` into `_fetch_data_for_query`, `_validate_fetched_data`, and `_save_or_merge_data`.
 - **2.3.3** Create `attribution_processing.py`.
@@ -60,25 +60,22 @@
 ## Phase 3: Enhancements and File-Specific Improvements
 
 ### Step 3.1: Implement Data Validation
-- **3.1.1**: (data_validation.py) Define specific validation rules/schemas (e.g., using simple pandas checks or exploring Pandera) for key file types: ts_*.csv, sec_*.csv, w_Funds.csv, w_Bench.csv, w_secs.csv, att_factors.csv, curves.csv, exclusions.csv, FundList.csv, QueryMap.csv. Focus on required columns, data types, and potential consistency rules.
-- **3.1.2**: (views/api_routes_call.py) In the run_api_calls function, after successfully fetching data using the real API (_fetch_real_tqs_data) and before saving/merging, call validate_data from data_validation.py.
-- **3.1.3: (views/api_routes_call.py) Update the results_summary dictionary based on the is_valid and errors returned by validate_data. Potentially prevent saving invalid data or save it with a warning status
 
-### Step 3.2.1: Add Type Hinting
+
+### Step 3.2.1: Add Type Hinting [complete]
 - Add type hints for function arguments and return types across all Python modules in the project.
-    - app.py
-    - config.py
-    - curve_processing.py
-    - data_loader.py
-    - data_validation.py
-    - issue_processing.py
-    - metric_calculator.py
-    - process_data.py
-    - security_processing.py
-    - utils.py
-    - weight_processing.py
-    - views/__init__.py
-    - views/api_core.py
+    - app.py 
+    - config.py 
+    - curve_processing.py 
+    - data_loader.py 
+    - data_validation.py 
+    - issue_processing.py 
+    - metric_calculator.py 
+    - process_data.py 
+    - security_processing.py 
+    - utils.py 
+    - weight_processing.py 
+    - views/__init__.py 
     - views/api_routes_call.py
     - views/api_routes_data.py
     - views/api_views.py
@@ -101,19 +98,16 @@
 
 ### Step 3.3: Improve Error Handling
 - **Step 3.3.1**: Review file operations (pd.read_csv, df.to_csv, os.path.exists, os.path.join, etc.) in all .py files listed in Step 3.2.1. Ensure they are within robust try...except blocks, catching specific exceptions like FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, KeyError, PermissionError, OSError. Log informative messages in except blocks.
-- **Step 3.3.2**: (views/api_core.py) Enhance _fetch_real_tqs_data to catch specific API-related exceptions (e.g., connection errors, timeouts, authentication errors if applicable when the real API is added).
-- **Step 3.3.3**: (views/exclusion_views.py) Modify remove_exclusion to write the filtered DataFrame to a temporary file first, then use os.replace to atomically replace the original exclusions.csv. Ensure the temporary file is cleaned up in case of errors (using try...finally).
+
 
 ### Step 3.4: Documentation and Cleanup
 - **3.4.1**: Review and update docstrings and inline comments for all refactored code listed in step 3.2.1
 - **3.4.2**: Verify `if __name__ == '__main__'` blocks in scripts:
   - `curve_processing.py`, `data_loader.py`, `data_validation.py`, `process_data.py`, `weight_processing.py`, `utils.py`
-- **3.4.3**: Update `requirements.txt` and `README.md` to reflect dependency and file structure changes.
+- **3.4.3**: Update `requirements.txt` to include version of packages used 
 
 ### Step 3.5: Minor File-Specific Suggestions
-- **3.5.1**: Load `SECRET_KEY` from environment in `app.py`.
+
 - **3.5.2**: Move hardcoded thresholds in `curve_processing.py` to `config.py`.
 - **3.5.3**: Ensure `issue_processing.py` uses `current_app.logger` and receives `DATA_FOLDER`.
 - **3.5.4**: Optimize data loading in `views/security_views.py`.
-- **3.5.5**: Use `utils._is_date_like` and clarify weight formats in `views/weight_views.py`.
-- **3.5.6**: Make file/column names configurable in `views/fund_views.py` and relocate date filtering.

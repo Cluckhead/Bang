@@ -14,6 +14,7 @@ import numpy as np
 # Removed: from config import DATA_FOLDER
 import logging # Import logging
 from config import CURVE_MONOTONICITY_DROP_THRESHOLD, CURVE_ANOMALY_STD_MULTIPLIER, CURVE_ANOMALY_ABS_THRESHOLD
+from typing import Optional, Dict, Any
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ TERM_MULTIPLIERS = {
     'Y': 365 # Approximate
 }
 
-def _term_to_days(term_str):
+def _term_to_days(term_str: str) -> Optional[int]:
     """Converts a term string (e.g., '7D', '1M', '2Y') to an approximate number of days."""
     if not isinstance(term_str, str):
         return None # Handle non-string inputs
@@ -48,7 +49,7 @@ def _term_to_days(term_str):
         logger.warning(f"Could not parse term '{term_str}' to days.")
         return None # Indicate failure to parse
 
-def load_curve_data(data_folder_path: str):
+def load_curve_data(data_folder_path: str) -> pd.DataFrame:
     """Loads and preprocesses the curve data from 'curves.csv' within the given folder.
 
     Args:
@@ -66,10 +67,6 @@ def load_curve_data(data_folder_path: str):
 
     file_path = os.path.join(data_folder_path, 'curves.csv')
     logger.info(f"Attempting to load curve data from: {file_path}")
-
-    if not os.path.exists(file_path):
-        logger.error(f"Curve data file not found at {file_path}")
-        return pd.DataFrame() # Return empty DataFrame
 
     try:
         # Load without automatic date parsing initially
@@ -90,8 +87,17 @@ def load_curve_data(data_folder_path: str):
             logger.error(f"Critical: 'Date' column not found in {file_path}")
             return pd.DataFrame()
 
+    except FileNotFoundError:
+        logger.error(f"Curve data file not found at {file_path}")
+        return pd.DataFrame()
+    except pd.errors.EmptyDataError:
+        logger.warning(f"Curve data file is empty: {file_path}")
+        return pd.DataFrame()
+    except pd.errors.ParserError as e:
+        logger.error(f"Parser error in curve data CSV '{file_path}': {e}", exc_info=True)
+        return pd.DataFrame()
     except Exception as e:
-        logger.error(f"Error reading curve data CSV '{file_path}': {e}", exc_info=True)
+        logger.error(f"Unexpected error reading curve data CSV '{file_path}': {e}", exc_info=True)
         return pd.DataFrame()
 
     # Rename columns for consistency if necessary (adjust based on actual CSV)
@@ -141,7 +147,7 @@ def load_curve_data(data_folder_path: str):
 
     return df
 
-def get_latest_curve_date(df):
+def get_latest_curve_date(df: pd.DataFrame) -> Optional[pd.Timestamp]:
     """Gets the most recent date in the DataFrame's index."""
     if df.empty or 'Date' not in df.index.names:
         logger.warning("Cannot get latest date: DataFrame is empty or 'Date' is not in the index.")
@@ -155,7 +161,7 @@ def get_latest_curve_date(df):
          return None
 
 
-def check_curve_inconsistencies(df):
+def check_curve_inconsistencies(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Checks for inconsistencies in yield curves compared to the previous day.
     Returns a dictionary summarizing potential issues for the latest date.

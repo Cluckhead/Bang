@@ -1,19 +1,20 @@
-# Purpose: Defines the Attribution summary view for the Simple Data Checker app.
+# Purpose: Defines the Attribution summary, charts, radar, and security-level views for the Simple Data Checker app.
 # This blueprint provides a page that loads att_factors.csv and displays the sum of residuals
 # for each fund and day, for two cases: Benchmark and Portfolio, with both Prod and S&P columns.
 # Residuals are calculated as L0 Total - (L1 Rates + L1 Credit + L1 FX), with L1s computed from L2s.
 
-from flask import Blueprint, render_template, current_app, request, jsonify, url_for
+from flask import Blueprint, render_template, current_app, request, jsonify, url_for, Response
 import pandas as pd
 import os
 import json
 from utils import _is_date_like
 from .attribution_processing import sum_l2s_block, sum_l1s_block, compute_residual_block, calc_residual, norm
+import typing
 
 attribution_bp = Blueprint('attribution_bp', __name__, url_prefix='/attribution')
 
 @attribution_bp.route('/summary')
-def attribution_summary():
+def attribution_summary() -> Response:
     """
     Loads att_factors.csv and computes residuals for each fund and day for Benchmark and Portfolio,
     showing both Prod and S&P (SPv3) columns. Supports grouping/filtering by characteristic.
@@ -210,7 +211,7 @@ def attribution_summary():
     )
 
 @attribution_bp.route('/charts')
-def attribution_charts():
+def attribution_charts() -> Response:
     """
     Attribution Residuals Chart Page: Shows residuals over time for Benchmark and Portfolio (Prod and S&P),
     with filters and grouping as in the summary view. Data is prepared for JS charts.
@@ -371,7 +372,7 @@ def attribution_charts():
     )
 
 @attribution_bp.route('/radar')
-def attribution_radar():
+def attribution_radar() -> Response:
     """
     Attribution Radar Chart Page: Aggregates L1 or L2 factors (plus residual) for Portfolio and Benchmark
     for a single fund, over a selected date range and characteristic. Data is prepared for radar charts.
@@ -539,7 +540,7 @@ def attribution_radar():
     )
 
 @attribution_bp.route('/security')
-def attribution_security_page():
+def attribution_security_page() -> Response:
     """
     Attribution Security-Level Page: Shows attribution data for each security (ISIN) for a selected date and fund.
     Supports filtering by date, fund, type, bench/portfolio toggle, MTD aggregation, normalization, and pagination.

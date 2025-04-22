@@ -7,8 +7,9 @@ Rex API before they are saved as CSV files.
 '''
 
 import pandas as pd
+from typing import Tuple, List
 
-def validate_data(df: pd.DataFrame, filename: str):
+def validate_data(df: pd.DataFrame, filename: str) -> Tuple[bool, List[str]]:
     """
     Validates the structure and types of the DataFrame based on filename conventions.
 

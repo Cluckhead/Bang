@@ -13,7 +13,7 @@
 # This modular structure using factories and blueprints makes the application more organized and scalable.
 
 # This file contains the main Flask application factory.
-from flask import Flask, render_template, Blueprint, jsonify
+from flask import Flask, render_template, Blueprint, jsonify, Response
 import os
 import logging
 from logging.handlers import RotatingFileHandler # Import handler
@@ -30,7 +30,10 @@ import datetime
 from config import COLOR_PALETTE # Import other needed configs
 from utils import get_data_folder_path # Import the path utility
 
-def create_app():
+# Add typing imports for type hints
+from typing import List, Dict, Any
+
+def create_app() -> Flask:
     """Factory function to create and configure the Flask app."""
     app = Flask(__name__, instance_relative_config=True) # instance_relative_config=True allows for instance folder config
     app.logger.info(f"Application root path: {app.root_path}")
@@ -167,12 +170,12 @@ def create_app():
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')
-    def hello():
+    def hello() -> str:
         return 'Hello, World! App factory is working.'
 
     # --- Add the new cleanup route ---
     @app.route('/run-cleanup', methods=['POST'])
-    def run_cleanup():
+    def run_cleanup() -> Response:
         """Endpoint to trigger the process_data.py script."""
         script_path = os.path.join(os.path.dirname(__file__), 'process_data.py')
         python_executable = sys.executable # Use the same python that runs flask
@@ -214,15 +217,15 @@ def create_app():
             json.dump([], f)
 
     # Helper functions to load/save schedules
-    def load_schedules():
+    def load_schedules() -> List[Dict[str, Any]]:
         with open(schedules_file, 'r') as f:
             return json.load(f)
-    def save_schedules(schedules):
+    def save_schedules(schedules: List[Dict[str, Any]]) -> None:
         with open(schedules_file, 'w') as f:
             json.dump(schedules, f)
 
     # Job runner function
-    def run_scheduled_job(schedule):
+    def run_scheduled_job(schedule: Dict[str, Any]) -> None:
         with app.app_context():
             payload = {
                 'date_mode': schedule['date_mode'],
@@ -252,7 +255,7 @@ def create_app():
             app.logger.info(f"Scheduled job {schedule['id']} executed. Status: {response.status_code}")
 
     # Manual scheduling loop
-    def schedule_loop():
+    def schedule_loop() -> None:
         last_checked = None
         while True:
             now = datetime.datetime.now()

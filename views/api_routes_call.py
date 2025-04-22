@@ -5,11 +5,11 @@ Defines the Flask routes for API data calls, including:
 '''
 import os
 import pandas as pd
-from flask import request, current_app, jsonify
+from flask import request, current_app, jsonify, Response
 import datetime
 import time
 import json
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 # Import from our local modules
 from views.api_core import api_bp, _simulate_and_print_tqs_call, _fetch_real_tqs_data, _find_key_columns, USE_REAL_TQS_API
@@ -17,7 +17,7 @@ from views.api_core import api_bp, _simulate_and_print_tqs_call, _fetch_real_tqs
 # Import the validation function from data_validation
 from data_validation import validate_data
 
-def _fetch_data_for_query(query_id: str, selected_funds: list, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+def _fetch_data_for_query(query_id: str, selected_funds: List[str], start_date: str, end_date: str) -> Optional[pd.DataFrame]:
     """
     Fetches data for a given query using the real TQS API.
     Returns a DataFrame or None if the fetch fails.
@@ -159,7 +159,7 @@ def _save_or_merge_data(
     return df_to_save, summary
 
 @api_bp.route('/run_api_calls', methods=['POST'])
-def run_api_calls():
+def run_api_calls() -> Response:
     '''Handles the form submission to trigger API calls (real or simulated).
     Now supports:
     - date_mode: 'quick' (days_back + end_date) or 'range' (start_date + custom_end_date)
@@ -389,7 +389,7 @@ def run_api_calls():
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {e}"}), 500
 
 @api_bp.route('/rerun-api-call', methods=['POST'])
-def rerun_api_call():
+def rerun_api_call() -> Response:
     '''Handles the request to rerun a single API call (real or simulated).'''
     try:
         data = request.get_json()
@@ -522,10 +522,10 @@ def rerun_api_call():
         current_app.logger.error(f"Unexpected error in /rerun-api-call: {e}", exc_info=True)
         return jsonify({"status": "error", "message": f"An unexpected error occurred: {e}"}), 500
 
-def get_schedules_file():
+def get_schedules_file() -> str:
     return os.path.join(current_app.instance_path, 'schedules.json')
 
-def load_schedules():
+def load_schedules() -> List[Any]:
     file = get_schedules_file()
     if not os.path.exists(file):
         return []
@@ -536,7 +536,7 @@ def load_schedules():
         current_app.logger.error(f"Error loading schedules: {e}", exc_info=True)
         return []
 
-def save_schedules(schedules):
+def save_schedules(schedules: List[Any]) -> None:
     file = get_schedules_file()
     try:
         with open(file, 'w') as f:
@@ -545,11 +545,11 @@ def save_schedules(schedules):
         current_app.logger.error(f"Error saving schedules: {e}", exc_info=True)
 
 @api_bp.route('/schedules', methods=['GET'])
-def list_schedules():
+def list_schedules() -> Response:
     return jsonify(load_schedules())
 
 @api_bp.route('/schedules', methods=['POST'])
-def add_schedule():
+def add_schedule() -> Tuple[Response, int]:
     data = request.get_json() or {}
     schedule_time = data.get('schedule_time')
     write_mode = data.get('write_mode')
@@ -584,7 +584,7 @@ def add_schedule():
     return jsonify(sched), 201
 
 @api_bp.route('/schedules/<int:schedule_id>', methods=['DELETE'])
-def delete_schedule(schedule_id):
+def delete_schedule(schedule_id: int) -> Tuple[str, int]:
     schedules = load_schedules()
     new_list = [s for s in schedules if s['id'] != schedule_id]
     if len(new_list) == len(schedules):

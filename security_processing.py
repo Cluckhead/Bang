@@ -21,46 +21,56 @@ from utils import _is_date_like
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
 
-# --- Removed logging setup block --- 
-# Logging is now handled centrally by the Flask app factory in app.py
+# Simple in-memory cache for loaded security data (keyed by (filename, data_folder_path))
+_dataframe_cache = {}
 
 # Removed DATA_FOLDER constant - path is now passed to functions
 
 def load_and_process_security_data(filename: str, data_folder_path: str):
-    """Loads security data, identifies static/date columns, and melts to long format."""
+    """Loads security data, identifies static/date columns, and melts to long format. Uses in-memory cache to avoid redundant loads."""
+    cache_key = (filename, os.path.abspath(data_folder_path))
+    if cache_key in _dataframe_cache:
+        logger.info(f"[CACHE HIT] Returning cached DataFrame for {filename} in {data_folder_path}")
+        return _dataframe_cache[cache_key]
     log_prefix = f"[{filename}] " # Prefix for logs from this function
     logger.info(f"{log_prefix}--- Entering load_and_process_security_data ---")
     if not data_folder_path:
         logger.error(f"{log_prefix}No data_folder_path provided.")
         return pd.DataFrame(), []
-
     filepath = os.path.join(data_folder_path, filename)
     logger.info(f"{log_prefix}Attempting to load security data from: {filepath}")
-
     try:
         # --- Read Header --- 
         logger.debug(f"{log_prefix}Reading header...")
-        header_df = pd.read_csv(filepath, nrows=0, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
+        try:
+            header_df = pd.read_csv(filepath, nrows=0, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
+        except FileNotFoundError:
+            logger.error(f"{log_prefix}File not found: {filepath}")
+            return pd.DataFrame(), []
+        except pd.errors.EmptyDataError:
+            logger.warning(f"{log_prefix}File is empty: {filepath}")
+            return pd.DataFrame(), []
+        except pd.errors.ParserError as e:
+            logger.error(f"{log_prefix}Parser error in header of {filepath}: {e}", exc_info=True)
+            return pd.DataFrame(), []
+        except Exception as e:
+            logger.error(f"{log_prefix}Unexpected error reading header of {filepath}: {e}", exc_info=True)
+            return pd.DataFrame(), []
         all_cols = [str(col).strip() for col in header_df.columns.tolist()]
         logger.debug(f"{log_prefix}Read header columns: {all_cols}")
-
         if not all_cols:
             logger.error(f"{log_prefix}CSV file appears to be empty or header is missing.")
             raise ValueError(f"CSV file '{filename}' appears to be empty or header is missing.")
-
         # --- Identify Essential ID Columns --- 
         essential_id_cols = []
         if 'ISIN' in all_cols:
             essential_id_cols.append('ISIN')
         if 'Security Name' in all_cols:
             essential_id_cols.append('Security Name')
-        
         if not essential_id_cols:
              logger.warning(f"{log_prefix}Neither 'ISIN' nor 'Security Name' found. Using first column '{all_cols[0]}' as potential ID.")
              essential_id_cols.append(all_cols[0])
-
         logger.info(f"{log_prefix}Essential ID Columns identified: {essential_id_cols}")
-
         # --- Identify Static and Date Columns --- 
         static_cols = []
         date_cols = []
@@ -182,20 +192,11 @@ def load_and_process_security_data(filename: str, data_folder_path: str):
         final_static_cols = [col for col in static_cols if col in df_long.columns]
 
         logger.info(f"{log_prefix}--- Exiting load_and_process_security_data. Returning DataFrame and static cols: {final_static_cols} ---")
+        _dataframe_cache[cache_key] = (df_long, final_static_cols)
         return df_long, final_static_cols # Return only non-ID static cols
 
-    except FileNotFoundError:
-        logger.error(f"Error: File not found at {filepath}")
-        return pd.DataFrame(), [] # Return empty dataframe and list
-    except ValueError as ve:
-        logger.error(f"Error processing header or columns in {filename}: {ve}")
-        return pd.DataFrame(), []
-    except KeyError as ke:
-        logger.error(f"Error melting DataFrame for {filename}, likely due to missing column used as id_var or value_var: {ke}")
-        return pd.DataFrame(), []
     except Exception as e:
-        logger.error(f"An unexpected error occurred loading/processing {filename}: {e}", exc_info=True)
-        # traceback.print_exc() # Logger handles traceback now
+        logger.error(f"{log_prefix}Error in load_and_process_security_data: {e}", exc_info=True)
         return pd.DataFrame(), []
 
 

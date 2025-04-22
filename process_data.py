@@ -239,12 +239,8 @@ def aggregate_data(
 
 def process_csv_file(input_path, output_path, date_columns, dates_file_path):
     """
-    Reads a 'pre_' CSV file, replaces placeholder columns with dates, aggregates/group data, and writes the result to a 'sec_' CSV file.
-    Header handling and data aggregation are now separated for clarity and maintainability.
+    Processes a CSV file, handling errors robustly.
     """
-    if date_columns is None:
-         logger.warning(f"Skipping {input_path} because date information is unavailable (check logs for errors reading dates.csv).")
-         return
     try:
         df = pd.read_csv(input_path, on_bad_lines='skip', encoding='utf-8', encoding_errors='replace')
         logger.info(f"Processing file: {input_path}")
@@ -295,9 +291,13 @@ def process_csv_file(input_path, output_path, date_columns, dates_file_path):
     except FileNotFoundError:
         logger.error(f"Error: Input file not found - {input_path}")
     except pd.errors.EmptyDataError:
-         logger.warning(f"Input file is empty or contains only header - {input_path}. Skipping.")
+        logger.warning(f"Input file is empty or contains only header - {input_path}. Skipping.")
     except pd.errors.ParserError as pe:
         logger.error(f"Error parsing CSV file {input_path}: {pe}. Check file format and integrity.", exc_info=True)
+    except PermissionError:
+        logger.error(f"Permission denied when writing to {output_path}", exc_info=True)
+    except OSError as e:
+        logger.error(f"OS error when writing to {output_path}: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"An unexpected error occurred processing {input_path}: {e}", exc_info=True)
 
