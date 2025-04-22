@@ -1,7 +1,6 @@
 # Finalisation - Visuals
 
 - Revamp look use tail winds, 538 style graphs
-- Fund drop down on security should be a a list not a concat
 - Redo navigation bar
 
 # Code Structure
