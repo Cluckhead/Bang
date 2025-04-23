@@ -3,6 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <!-- Pass filter state and secondary data availability to JS -->
+    <meta name="sp-valid-state" content="{{ sp_valid_state | lower }}">
+    <meta name="secondary-data-available" content="{{ secondary_data_initially_available | lower }}">
     <title>{{ metric_name }} Check (JS)</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <!-- Include Chart.js and the date adapter -->
@@ -17,6 +20,8 @@
         .missing-warning { color: red; font-weight: bold; }
         .high-z { background-color: #fff3cd; }
         .very-high-z { background-color: #f8d7da; font-weight: bold; }
+        /* Add some spacing between toggles */
+        .toggle-container { margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -30,17 +35,36 @@
         <p>Latest Data Date: <strong>{{ latest_date }}</strong></p>
         <p>Charts sorted by the maximum absolute <strong>Change Z-Score</strong> across all columns for the fund (most deviation first).</p>
 
-        <!-- Toggle Switch for S&P Data -->
-        <div id="sp-toggle-container" class="form-group" style="display: none;"> <!-- Initially hidden, JS will show if needed -->
-            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="toggleSpData">
-                <label class="form-check-label" for="toggleSpData">Show S&P Comparison Data</label>
+        <!-- Toggle Controls Container -->
+        <div class="d-flex flex-column flex-sm-row mb-3"> <!-- Flex layout for toggles -->
+
+            <!-- S&P Valid Filter Toggle -->
+            <div class="form-group mr-sm-3 toggle-container"> <!-- Added toggle-container class -->
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="toggleSpValid" {% if sp_valid_state %}checked{% endif %}>
+                    <label class="form-check-label" for="toggleSpValid">S&P Valid Data Only</label>
+                </div>
+                 <small class="form-text text-muted">Only include data where 'SS Project - In Scope' is TRUE.</small>
             </div>
+            <!-- End S&P Valid Filter Toggle -->
+
+            <!-- Toggle Switch for S&P Data Comparison -->
+            <div id="sp-toggle-container" class="form-group toggle-container" style="display: none;"> <!-- Initially hidden, JS will show if comparison data exists -->
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="toggleSpData">
+                    <label class="form-check-label" for="toggleSpData">Show S&P Comparison Data</label>
+                </div>
+                 <small class="form-text text-muted">Overlay S&P data on charts (if available).</small>
+            </div>
+            <!-- End Toggle Switch -->
+
         </div>
-        <!-- End Toggle Switch -->
+        <!-- End Toggle Controls Container -->
+
 
         {% if not missing_funds.empty %}
             <div class="alert alert-warning" role="alert">
-                <strong>Warning:</strong> The following funds are missing data for the latest date ({{ latest_date }}):
+                 <strong>Warning:</strong> The following funds appear to be missing data for the latest date ({{ latest_date }}) {% if sp_valid_state %}with the 'S&P Valid' filter applied{% endif %}:
                 {{ missing_funds.index.tolist() | join(', ') }}
             </div>
         {% endif %}
@@ -65,6 +89,7 @@
     </main>
 
     <!-- Link to the external JavaScript module -->
+    <!-- Assumes main.js reads the meta tags and initializes event listeners for toggles -->
     <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
 
     <!-- Bootstrap JS (optional) -->

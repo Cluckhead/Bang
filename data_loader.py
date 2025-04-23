@@ -1,9 +1,10 @@
 # This file is responsible for loading and preprocessing data from CSV files.
-# It includes functions to dynamically identify essential columns (Date, Code, Benchmark)
+# It includes functions to dynamically identify essential columns (Date, Code, Benchmark, 'SS Project - In Scope')
 # based on patterns, handle potential naming variations, parse dates, standardize column names,
 # set appropriate data types, and prepare the data in a pandas DataFrame format
 # suitable for further analysis and processing within the application.
-# It also supports loading a secondary file (e.g., prefixed with 'sp_') for comparison.
+# It also supports loading a secondary file (e.g., prefixed with 'sp_') for comparison,
+# and filtering data based on the 'SS Project - In Scope' column.
 #
 # Refactored: _process_single_file is now split into smaller helpers for clarity and maintainability.
 
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 STD_DATE_COL = 'Date'
 STD_CODE_COL = 'Code'
 STD_BENCHMARK_COL = 'Benchmark'
+STD_SCOPE_COL = 'SS Project - In Scope' # Standardized name for the scope column
 
 def _find_column(pattern: str, columns: List[str], filename_for_logging: str, col_type: str) -> str:
     """Helper function to find a single column matching a pattern (case-insensitive)."""
@@ -58,16 +60,17 @@ def _create_empty_dataframe(original_fund_val_col_names: List[str], benchmark_co
 def _find_columns_for_file(
     original_cols: List[str],
     filename_for_logging: str
-) -> Tuple[str, str, bool, Optional[str], List[str]]:
+) -> Tuple[str, str, bool, Optional[str], List[str], Optional[str]]:
     """
-    Identifies the actual date, code, and (optionally) benchmark columns, and fund value columns.
+    Identifies the actual date, code, (optionally) benchmark columns, fund value columns, and scope column.
     Returns:
-        actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names
+        actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names, actual_scope_col
     """
     date_pattern = r'\b(Position\s*)?Date\b'
     actual_date_col = _find_column(date_pattern, original_cols, filename_for_logging, 'Date')
     code_pattern = r'\b(Fund\s*)?Code\b'
     actual_code_col = _find_column(code_pattern, original_cols, filename_for_logging, 'Code')
+
     benchmark_col_present = False
     actual_benchmark_col = None
     try:
@@ -76,11 +79,28 @@ def _find_columns_for_file(
         benchmark_col_present = True
     except ValueError:
         logger.info(f"No Benchmark column found in '{filename_for_logging}' matching pattern. Proceeding without benchmark.")
+
+    actual_scope_col = None
+    try:
+        # Pattern to match 'SS Project - In Scope' allowing for slight variations or extra spaces
+        scope_pattern = r'\bSS\s+Project\s*-\s*In\s+Scope\b'
+        actual_scope_col = _find_column(scope_pattern, original_cols, filename_for_logging, 'Scope')
+    except ValueError:
+        logger.info(f"No '{STD_SCOPE_COL}' column found in '{filename_for_logging}' matching pattern. Proceeding without scope filtering for this file.")
+
+    # Exclude date, code, benchmark, and scope columns when identifying value columns
     excluded_cols_for_funds = {actual_date_col, actual_code_col}
     if benchmark_col_present and actual_benchmark_col:
         excluded_cols_for_funds.add(actual_benchmark_col)
+    if actual_scope_col:
+        excluded_cols_for_funds.add(actual_scope_col)
+
     original_fund_val_col_names = [col for col in original_cols if col not in excluded_cols_for_funds]
-    return actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names
+
+    if not original_fund_val_col_names and not benchmark_col_present:
+         logger.warning(f"No fund value columns identified in '{filename_for_logging}' after excluding standard columns.") # Warning, not error, might still have benchmark
+
+    return actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names, actual_scope_col
 
 def _parse_date_column(
     df: pd.DataFrame,
@@ -129,11 +149,13 @@ def _convert_value_columns(
 
 def _process_single_file(
     filepath: str,
-    filename_for_logging: str
+    filename_for_logging: str,
+    filter_sp_valid: bool = False # Add parameter with default False
 ) -> Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
     """
     Internal helper to load and process a single CSV file.
-    Handles finding columns, parsing dates, renaming, indexing, and type conversion.
+    Handles finding columns, parsing dates, renaming, indexing, type conversion,
+    and optionally filtering based on the 'SS Project - In Scope' column.
     Returns None if the file is not found or critical processing steps fail.
     Returns:
         Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
@@ -148,14 +170,34 @@ def _process_single_file(
         header_df = pd.read_csv(filepath, nrows=0, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip')
         original_cols = [col.strip() for col in header_df.columns.tolist()]
         logger.info(f"Processing file: '{filename_for_logging}'. Original columns: {original_cols}")
-        actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names = _find_columns_for_file(
+
+        actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names, actual_scope_col = _find_columns_for_file(
             original_cols, filename_for_logging
         )
-        if not original_fund_val_col_names and not benchmark_col_present:
-            logger.error(f"No fund value columns and no benchmark column identified in '{filename_for_logging}'. Cannot process.")
-            return None
+
+        # Determine columns to read, potentially including the scope column
+        cols_to_read = {actual_date_col, actual_code_col}
+        if benchmark_col_present and actual_benchmark_col:
+            cols_to_read.add(actual_benchmark_col)
+        if actual_scope_col:
+            cols_to_read.add(actual_scope_col)
+        cols_to_read.update(original_fund_val_col_names)
+
+        # Define dtypes, read scope col as string initially
+        dtype_map = {actual_date_col: str}
+        if actual_scope_col:
+            dtype_map[actual_scope_col] = str # Read scope as string
+
         try:
-            df = pd.read_csv(filepath, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip', dtype={actual_date_col: str})
+            # Read only necessary columns
+            df = pd.read_csv(
+                filepath,
+                usecols=list(cols_to_read),
+                encoding='utf-8',
+                encoding_errors='replace',
+                on_bad_lines='skip',
+                dtype=dtype_map
+            )
         except FileNotFoundError:
             logger.error(f"File not found during processing: {filepath}")
             return None
@@ -165,34 +207,76 @@ def _process_single_file(
         except pd.errors.ParserError as e:
             logger.error(f"Parser error in file {filepath}: {e}", exc_info=True)
             return None
+        except ValueError as e: # Handle cases where usecols might be invalid (though less likely now)
+             logger.error(f"ValueError during read_csv for {filepath} (potential column issue): {e}")
+             return None
         except Exception as e:
             logger.error(f"Unexpected error reading file {filepath}: {e}", exc_info=True)
             return None
-        df.columns = df.columns.str.strip()
+
+
+        df.columns = df.columns.str.strip() # Strip whitespace from loaded columns
+
+        # --- Filtering Step ---
+        if filter_sp_valid and actual_scope_col and actual_scope_col in df.columns:
+            original_count = len(df)
+            # Ensure case-insensitive comparison and handle potential NAs
+            df[actual_scope_col] = df[actual_scope_col].astype(str).str.upper().fillna('FALSE')
+            df = df[df[actual_scope_col] == 'TRUE']
+            filtered_count = len(df)
+            logger.info(f"Filtered '{filename_for_logging}' based on '{actual_scope_col}'. Kept {filtered_count}/{original_count} rows where value is 'TRUE'.")
+            if df.empty:
+                 logger.warning(f"DataFrame became empty after filtering on '{actual_scope_col}' for {filename_for_logging}")
+                 # Return an empty structure consistent with success but no data
+                 empty_df = _create_empty_dataframe(original_fund_val_col_names, benchmark_col_present)
+                 final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
+                 return empty_df, original_fund_val_col_names, final_bm_col
+
+        # Rename columns *after* potential filtering
         rename_map = {
             actual_date_col: STD_DATE_COL,
             actual_code_col: STD_CODE_COL
         }
-        if benchmark_col_present and actual_benchmark_col:
+        if benchmark_col_present and actual_benchmark_col and actual_benchmark_col in df.columns:
             rename_map[actual_benchmark_col] = STD_BENCHMARK_COL
+        # Do NOT rename the scope column here if it existed, we only needed it for filtering
+
+        # Perform rename
         df.rename(columns=rename_map, inplace=True)
-        logger.info(f"Renamed columns in '{filename_for_logging}': {list(rename_map.keys())} -> {list(rename_map.values())}")
+        logger.info(f"Renamed standard columns in '{filename_for_logging}'.")
+
+
+        # Now that filtering is done, drop the original scope column if it exists and we don't need it further
+        if actual_scope_col and actual_scope_col in df.columns:
+            df.drop(columns=[actual_scope_col], inplace=True)
+            logger.debug(f"Dropped original scope column '{actual_scope_col}' after filtering.")
+
+
+        # Continue processing (date parsing, indexing, type conversion)
         df[STD_DATE_COL] = _parse_date_column(df, STD_DATE_COL, filename_for_logging)
+
         original_row_count = len(df)
-        df.dropna(subset=[STD_DATE_COL], inplace=True)
+        df.dropna(subset=[STD_DATE_COL], inplace=True) # Drop rows where date parsing failed
         rows_dropped = original_row_count - len(df)
         if rows_dropped > 0:
-            logger.warning(f"Dropped {rows_dropped} rows from {filename_for_logging} due to failed date parsing.")
+            logger.warning(f"Dropped {rows_dropped} rows from {filename_for_logging} due to failed date parsing (after potential filtering).")
+
         if df.empty:
-            logger.warning(f"DataFrame became empty after dropping rows with unparseable dates in {filename_for_logging}.")
+            logger.warning(f"DataFrame became empty after dropping rows with unparseable dates in {filename_for_logging} (after potential filtering).")
             empty_df = _create_empty_dataframe(original_fund_val_col_names, benchmark_col_present)
             final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
             return empty_df, original_fund_val_col_names, final_bm_col
+
         df.set_index([STD_DATE_COL, STD_CODE_COL], inplace=True)
+
+        # Convert value columns *after* setting the index
         _convert_value_columns(df, original_fund_val_col_names, benchmark_col_present)
-        final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present else None
+
+        final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present and STD_BENCHMARK_COL in df.columns else None
+
         logger.info(f"Successfully processed file: '{filename_for_logging}'. Index: {df.index.names}. Columns: {df.columns.tolist()}")
         return df, original_fund_val_col_names, final_benchmark_col_name
+
     except FileNotFoundError:
         logger.error(f"File not found during processing: {filepath}")
         return None
@@ -208,8 +292,8 @@ def _process_single_file(
     except OSError as e:
         logger.error(f"OS error when accessing {filepath}: {e}", exc_info=True)
         return None
-    except ValueError as e:
-        logger.error(f"Value error processing {filename_for_logging}: {e}")
+    except ValueError as e: # Catch ValueErrors from _find_columns or other steps
+        logger.error(f"Value error processing {filename_for_logging}: {e}") # Removed exc_info=True as it might be verbose for config errors
         return None
     except Exception as e:
         logger.exception(f"Unexpected error processing {filename_for_logging}: {e}")
@@ -228,7 +312,8 @@ LoadResult = Tuple[
 def load_and_process_data(
     primary_filename: str,
     secondary_filename: Optional[str] = None,
-    data_folder_path: Optional[str] = None # Renamed and made optional
+    data_folder_path: Optional[str] = None, # Renamed and made optional
+    filter_sp_valid: bool = False # Add parameter here
 ) -> LoadResult:
     """Loads and processes a primary CSV file and optionally a secondary CSV file.
 
@@ -243,65 +328,47 @@ def load_and_process_data(
         secondary_filename (Optional[str]): The name of the secondary CSV file. Defaults to None.
         data_folder_path (Optional[str]): Explicit path to the folder containing the data files.
                                            If None, path is retrieved from current_app.config.
+        filter_sp_valid (bool): If True, filters both primary and secondary dataframes
+                                to include only rows where 'SS Project - In Scope' is TRUE.
+                                Defaults to False (no filtering).
 
     Returns:
         LoadResult: A tuple containing the processed DataFrames and metadata for
                     primary and (optionally) secondary files. Elements corresponding
                     to a file will be None if the file doesn't exist or processing fails,
-                    or if the data folder path cannot be determined.
+                    or if the file is empty after filtering.
     """
-    data_folder: Optional[str] = None
-
     if data_folder_path is None:
         try:
-            # Retrieve the absolute path configured during app initialization
-            data_folder = current_app.config['DATA_FOLDER']
-            logger.info(f"Using data folder from current_app.config: {data_folder}")
-            if not data_folder:
-                 logger.error("DATA_FOLDER in current_app.config is not set or empty.")
-                 return None, None, None, None, None, None
+            data_folder_path = current_app.config['DATA_FOLDER']
+            logger.debug(f"Retrieved DATA_FOLDER from Flask app config: {data_folder_path}")
         except RuntimeError:
-            logger.error("Cannot access current_app.config. load_and_process_data must be called within a Flask request context or be provided with an explicit data_folder_path.")
-            # Return None for all parts of the tuple if path cannot be determined
-            return None, None, None, None, None, None
-        except KeyError:
-            logger.error("'DATA_FOLDER' key not found in current_app.config. Ensure it is set during app initialization.")
-            return None, None, None, None, None, None
-    else:
-        # Use the explicitly provided path
-        data_folder = data_folder_path
-        logger.info(f"Using explicitly provided data_folder_path: {data_folder}")
+            logger.error("Attempted to load data outside of Flask application context and no data_folder_path provided.")
+            return None, None, None, None, None, None # Return tuple of Nones matching LoadResult
 
-    # Ensure data_folder is not None before proceeding (should be handled above, but belt-and-suspenders)
-    if data_folder is None:
-         logger.critical("Data folder path could not be determined. Aborting load.")
-         return None, None, None, None, None, None
+    primary_filepath = os.path.join(data_folder_path, primary_filename)
+    logger.info(f"Attempting to load primary file: {primary_filepath}, filter_sp_valid={filter_sp_valid}")
+    primary_result = _process_single_file(primary_filepath, primary_filename, filter_sp_valid) # Pass filter flag
 
-    # --- Process Primary File --- 
-    primary_filepath = os.path.join(data_folder, primary_filename)
-    logger.info(f"--- Starting data load for primary: {primary_filename} from {primary_filepath} ---")
-    primary_result = _process_single_file(primary_filepath, primary_filename)
+    df_primary, primary_val_cols, primary_bm_col = (None, None, None) if primary_result is None else primary_result
 
-    df1, cols1, bench1 = (None, None, None)
-    if primary_result:
-        df1, cols1, bench1 = primary_result
-        logger.info(f"Primary file '{primary_filename}' processed. Shape: {df1.shape if df1 is not None else 'N/A'}. Benchmark: {bench1}")
-    else:
-        logger.warning(f"Processing failed for primary file: {primary_filename}")
-
-    # --- Process Secondary File (if provided) --- 
-    df2, cols2, bench2 = (None, None, None)
+    df_secondary, secondary_val_cols, secondary_bm_col = None, None, None
     if secondary_filename:
-        secondary_filepath = os.path.join(data_folder, secondary_filename)
-        logger.info(f"--- Starting data load for secondary: {secondary_filename} from {secondary_filepath} ---")
-        secondary_result = _process_single_file(secondary_filepath, secondary_filename)
-        if secondary_result:
-            df2, cols2, bench2 = secondary_result
-            logger.info(f"Secondary file '{secondary_filename}' processed. Shape: {df2.shape if df2 is not None else 'N/A'}. Benchmark: {bench2}")
-        else:
-            logger.warning(f"Processing failed for secondary file: {secondary_filename}")
+        secondary_filepath = os.path.join(data_folder_path, secondary_filename)
+        logger.info(f"Attempting to load secondary file: {secondary_filepath}, filter_sp_valid={filter_sp_valid}")
+        secondary_result = _process_single_file(secondary_filepath, secondary_filename, filter_sp_valid) # Pass filter flag
+        if secondary_result is not None:
+            df_secondary, secondary_val_cols, secondary_bm_col = secondary_result
 
-    return df1, cols1, bench1, df2, cols2, bench2
+    # Log summary of what was loaded (or not loaded)
+    primary_status = "loaded successfully" if df_primary is not None and not df_primary.empty else ("empty or processing failed" if df_primary is None else "loaded but empty (possibly due to filtering)")
+    secondary_status = "not requested"
+    if secondary_filename:
+         secondary_status = "loaded successfully" if df_secondary is not None and not df_secondary.empty else ("empty or processing failed" if df_secondary is None else "loaded but empty (possibly due to filtering)")
+
+    logger.info(f"Load complete. Primary file ({primary_filename}): {primary_status}. Secondary file ({secondary_filename or 'N/A'}): {secondary_status}.")
+
+    return df_primary, primary_val_cols, primary_bm_col, df_secondary, secondary_val_cols, secondary_bm_col
 
 # --- Standalone Execution / Testing --- 
 # Note: If run directly, this block cannot use current_app.config.

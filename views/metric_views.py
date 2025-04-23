@@ -1,16 +1,19 @@
 # This file defines the routes for displaying detailed views of specific time-series metrics.
 # It handles requests where the user wants to see the data and charts for a single metric
 # (like 'Yield' or 'Spread Duration') across all applicable funds.
-# Updated to optionally load and display a secondary data source (prefixed with 'sp_').
+# It loads primary and optionally secondary data, calculates key metrics,
+# handles filtering based on 'SS Project - In Scope' status via a query parameter,
+# prepares data for visualization, and renders the metric detail page.
 
 """
 Blueprint for metric-specific routes (e.g., displaying individual metric charts).
 """
-from flask import Blueprint, render_template, jsonify, current_app
+from flask import Blueprint, render_template, jsonify, current_app, request # Added request
 import os
 import pandas as pd
 import numpy as np
 import traceback
+import math
 
 # Import necessary functions/constants from other modules
 from config import COLOR_PALETTE
@@ -25,57 +28,109 @@ def metric_page(metric_name):
     """Renders the detailed page (`metric_page_js.html`) for a specific metric.
 
     Loads primary data (e.g., 'ts_Yield.csv') and optionally secondary data ('sp_ts_Yield.csv').
+    Applies filtering based on the 'sp_valid' query parameter (defaults to True).
     Calculates metrics for both, prepares data for Chart.js, and passes it to the template.
-    Includes a flag to indicate if secondary data is available.
+    Includes flags for secondary data availability and the current filter state.
     """
     primary_filename = f"ts_{metric_name}.csv"
     secondary_filename = f"sp_{primary_filename}"
     fund_code = 'N/A' # Default for logging fallback in case of early error
     latest_date_overall = pd.Timestamp.min # Initialize
+    error_message = None # Initialize error message
 
     try:
-        current_app.logger.info(f"--- Processing metric: {metric_name} ---")
-        current_app.logger.info(f"Primary file: {primary_filename}, Secondary file: {secondary_filename}")
-        
-        # Load Data (Primary and Secondary)
-        load_result: LoadResult = load_and_process_data(primary_filename, secondary_filename)
+        # --- Get Filter State from Query Parameter ---
+        # Default to 'true' if parameter is missing or invalid
+        sp_valid_param = request.args.get('sp_valid', 'true').lower()
+        filter_sp_valid = sp_valid_param == 'true'
+        current_app.logger.info(f"--- Processing metric: {metric_name}, S&P Valid Filter: {filter_sp_valid} ---")
+        current_app.logger.info(f"URL Query Params: {request.args}") # Log query params for debugging
+
+        # --- Load Data (Primary and Secondary) with Filtering ---
+        current_app.logger.info(f"Loading data: Primary='{primary_filename}', Secondary='{secondary_filename}', Filter='{filter_sp_valid}'")
+        load_result: LoadResult = load_and_process_data(
+            primary_filename=primary_filename,
+            secondary_filename=secondary_filename,
+            filter_sp_valid=filter_sp_valid # Pass the filter flag
+        )
         primary_df, pri_fund_cols, pri_bench_col, secondary_df, sec_fund_cols, sec_bench_col = load_result
 
-        # --- Validate Primary Data --- 
-        if primary_df is None or primary_df.empty or pri_fund_cols is None:
-            # Retrieve the configured absolute data folder path for error reporting
+        # --- Validate Primary Data (Post-Filtering) ---
+        if primary_df is None or primary_df.empty:
             data_folder_for_error = current_app.config['DATA_FOLDER']
-            # Construct the full path using the absolute data_folder path
             primary_filepath = os.path.join(data_folder_for_error, primary_filename)
             if not os.path.exists(primary_filepath):
-                 current_app.logger.error(f"Error: Primary data file not found: {primary_filepath}")
-                 return f"Error: Data file for metric '{metric_name}' (expected: '{primary_filename}') not found.", 404
+                 current_app.logger.error(f"Error: Primary data file not found: {primary_filepath} (Filter: {filter_sp_valid})")
+                 error_message = f"Error: Data file for metric '{metric_name}' (expected: '{primary_filename}') not found."
+                 # Render template with error message and filter state
+                 return render_template('metric_page_js.html',
+                               metric_name=metric_name,
+                               charts_data_json='{}', # Empty data
+                               latest_date="N/A",
+                               missing_funds=pd.DataFrame(), # Empty dataframe
+                               sp_valid_state=filter_sp_valid, # Pass filter state
+                               secondary_data_initially_available=False,
+                               error_message=error_message), 404
             else:
-                 current_app.logger.error(f"Error: Failed to process primary data file: {primary_filename}")
-                 return f"Error: Could not process required data for metric '{metric_name}' (file: {primary_filename}). Check file format or logs.", 500
+                 current_app.logger.error(f"Error: Failed to process primary data file '{primary_filename}' or file became empty after filtering (Filter: {filter_sp_valid}).")
+                 error_message = f"Error: Could not process required data for metric '{metric_name}' (file: '{primary_filename}')."
+                 if filter_sp_valid:
+                     error_message += " The data might be missing, empty, or contain no rows marked as 'TRUE' in 'SS Project - In Scope' when the S&P Valid filter is ON."
+                 else:
+                      error_message += " Check file format or logs."
+                 # Render template with error message and filter state
+                 return render_template('metric_page_js.html',
+                               metric_name=metric_name,
+                               charts_data_json='{}',
+                               latest_date="N/A",
+                               missing_funds=pd.DataFrame(),
+                               sp_valid_state=filter_sp_valid,
+                               secondary_data_initially_available=False,
+                               error_message=error_message), 500
 
-        # --- Determine Combined Metadata --- 
+        # Add check for pri_fund_cols after ensuring primary_df is not None
+        if pri_fund_cols is None:
+            current_app.logger.error(f"Error: Could not identify primary fund value columns in '{primary_filename}' after loading.")
+            error_message = f"Error: Failed to identify fund value columns in '{primary_filename}'. Check file structure."
+            return render_template('metric_page_js.html',
+                               metric_name=metric_name,
+                               charts_data_json='{}',
+                               latest_date="N/A",
+                               missing_funds=pd.DataFrame(),
+                               sp_valid_state=filter_sp_valid,
+                               secondary_data_initially_available=False,
+                               error_message=error_message), 500
+
+        # --- Determine Combined Metadata (Post-Filtering) ---
         all_dfs = [df for df in [primary_df, secondary_df] if df is not None and not df.empty]
         if not all_dfs:
-             # Should be caught by primary check, but safeguard
-            current_app.logger.error(f"Error: No valid data loaded for {metric_name}")
-            return f"Error: No data found for metric '{metric_name}'.", 404
+            current_app.logger.error(f"Error: No valid data loaded for {metric_name} (Filter: {filter_sp_valid})")
+            error_message = f"Error: No data found for metric '{metric_name}' (Filter Applied: {filter_sp_valid})."
+            return render_template('metric_page_js.html',
+                               metric_name=metric_name,
+                               charts_data_json='{}',
+                               latest_date="N/A",
+                               missing_funds=pd.DataFrame(),
+                               sp_valid_state=filter_sp_valid,
+                               secondary_data_initially_available=False,
+                               error_message=error_message), 404
 
+        # --- Calculate Latest Date Overall ---
         try:
             combined_index = pd.concat(all_dfs).index
             latest_date_overall = combined_index.get_level_values(0).max()
-            latest_date_str = latest_date_overall.strftime('%Y-%m-%d')
+            latest_date_str = latest_date_overall.strftime('%Y-%m-%d') if pd.notna(latest_date_overall) else "N/A"
         except Exception as idx_err:
             current_app.logger.error(f"Error combining indices or getting latest date for {metric_name}: {idx_err}")
-            # Fallback or re-raise? Let's try to proceed if possible, using primary date
-            latest_date_overall = primary_df.index.get_level_values(0).max()
-            latest_date_str = latest_date_overall.strftime('%Y-%m-%d')
+            latest_date_overall = primary_df.index.get_level_values(0).max() # Fallback to primary
+            latest_date_str = latest_date_overall.strftime('%Y-%m-%d') if pd.notna(latest_date_overall) else "N/A"
             current_app.logger.warning(f"Warning: Using latest date from primary data only: {latest_date_str}")
 
+        # --- Check Secondary Data Availability ---
         secondary_data_available = secondary_df is not None and not secondary_df.empty and sec_fund_cols is not None
         current_app.logger.info(f"Secondary data available for {metric_name}: {secondary_data_available}")
-        
-        # --- Calculate Metrics --- 
+
+        # --- Calculate Metrics (based on potentially filtered data) ---
         current_app.logger.info(f"Calculating metrics for {metric_name}...")
         latest_metrics = calculate_latest_metrics(
             primary_df=primary_df,
@@ -88,9 +143,10 @@ def metric_page(metric_name):
         )
 
         # --- Handle Empty Metrics Result --- 
+        missing_latest = pd.DataFrame() # Initialize
         if latest_metrics.empty:
             current_app.logger.warning(f"Warning: Metric calculation returned empty DataFrame for {metric_name}. Rendering page with no fund data.")
-            missing_latest = pd.DataFrame()
+            # Still need to prepare basic JSON payload for the template structure
             json_payload = {
                 "metadata": {
                     "metric_name": metric_name,
@@ -106,10 +162,13 @@ def metric_page(metric_name):
             return render_template('metric_page_js.html',
                            metric_name=metric_name,
                            charts_data_json=jsonify(json_payload).get_data(as_text=True),
-                           latest_date=latest_date_overall.strftime('%d/%m/%Y'), 
-                           missing_funds=missing_latest)
+                           latest_date=latest_date_overall.strftime('%d/%m/%Y') if pd.notna(latest_date_overall) else "N/A",
+                           missing_funds=missing_latest, # Empty DF
+                           sp_valid_state=filter_sp_valid, # Pass filter state
+                           secondary_data_initially_available=secondary_data_available, # Pass initial availability for JS
+                           error_message=None) # No error message here specifically
 
-        # --- Identify Missing Funds (based on primary data) --- 
+        # --- Identify Missing Funds --- 
         current_app.logger.info(f"Identifying potentially missing latest data for {metric_name}...")
         primary_cols_for_check = []
         if pri_bench_col:
@@ -117,7 +176,6 @@ def metric_page(metric_name):
         if pri_fund_cols:
             primary_cols_for_check.extend(pri_fund_cols)
         
-        # Prefer checking Z-Score, fallback to Latest Value
         primary_z_score_cols = [f'{col} Change Z-Score' for col in primary_cols_for_check 
                                 if f'{col} Change Z-Score' in latest_metrics.columns]
         primary_latest_val_cols = [f'{col} Latest Value' for col in primary_cols_for_check
@@ -129,7 +187,7 @@ def metric_page(metric_name):
             missing_latest = latest_metrics[latest_metrics[check_cols_for_missing].isna().any(axis=1)]
         else:
             current_app.logger.warning(f"Warning: No primary Z-Score or Latest Value columns found for {metric_name} to check for missing data.")
-            missing_latest = pd.DataFrame(index=latest_metrics.index) # Assume none are missing if no check cols
+            missing_latest = pd.DataFrame(index=latest_metrics.index) # Assume none missing
 
         # --- Prepare Data Structure for JavaScript --- 
         current_app.logger.info(f"Preparing chart and metric data for JavaScript for {metric_name}...")
@@ -137,12 +195,10 @@ def metric_page(metric_name):
         fund_codes_in_metrics = latest_metrics.index
         primary_df_index = primary_df.index
         secondary_df_index = secondary_df.index if secondary_data_available and secondary_df is not None else None
-
-        # Helper function to convert NaN to None for JSON compatibility
+        
         def nan_to_none(data_list):
-            return [None if pd.isna(x) else x for x in data_list]
-
-        # Loop through funds present in the calculated metrics
+             return [None if pd.isna(x) else x for x in data_list]
+             
         for fund_code in fund_codes_in_metrics:
             fund_latest_metrics_row = latest_metrics.loc[fund_code]
             is_missing_latest = fund_code in missing_latest.index
@@ -341,44 +397,74 @@ def metric_page(metric_name):
                 fund_charts.append(relative_chart_config)
 
             # --- Store Fund Data ---
+            # Ensure all values in latest_metrics_raw are JSON-safe (no NaN/inf)
+            safe_latest_metrics_raw = fund_latest_metrics_row.where(pd.notnull(fund_latest_metrics_row), None).replace([np.inf, -np.inf], None).to_dict()
             funds_data_for_js[fund_code] = {
+                'latest_metrics_html': "<td>Placeholder</td>", # Replace with actual table generation if needed separately
+                'latest_metrics_raw': safe_latest_metrics_raw, # Use safe dict
                 'charts': fund_charts,
-                'is_missing_latest': is_missing_latest
+                'is_missing_latest': is_missing_latest,
+                'max_abs_z': fund_latest_metrics_row.filter(like='Z-Score').abs().max() if hasattr(fund_latest_metrics_row.filter(like='Z-Score'), 'abs') else None
             }
 
         # --- Final JSON Payload ---
+        # Recursively ensure all values in json_payload are JSON-safe (no NaN/inf)
+        def make_json_safe(obj):
+            if isinstance(obj, dict):
+                return {k: make_json_safe(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [make_json_safe(x) for x in obj]
+            elif isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return None
+                return obj
+            return obj
+
         json_payload = {
             "metadata": {
                 "metric_name": metric_name,
                 "latest_date": latest_date_str,
-                 # Keep original column names for potential reference, though chart uses specific labels now
                 "fund_col_names": pri_fund_cols or [],
                 "benchmark_col_name": pri_bench_col,
                 "secondary_fund_col_names": sec_fund_cols if secondary_data_available else [],
                 "secondary_benchmark_col_name": sec_bench_col if secondary_data_available else None,
                 "secondary_data_available": secondary_data_available
             },
-            "funds": funds_data_for_js # Use the new structure
+            "funds": funds_data_for_js
         }
+        json_payload = make_json_safe(json_payload)
 
-        current_app.logger.info(f"--- Completed processing metric: {metric_name} ---")
-
+        # --- Render Template --- 
+        current_app.logger.info(f"Rendering template for {metric_name} with filter_sp_valid={filter_sp_valid}")
         return render_template('metric_page_js.html',
                                metric_name=metric_name,
                                charts_data_json=jsonify(json_payload).get_data(as_text=True),
-                               latest_date=latest_date_overall.strftime('%d/%m/%Y'),
+                               latest_date=latest_date_overall.strftime('%d/%m/%Y') if pd.notna(latest_date_overall) else "N/A",
                                missing_funds=missing_latest,
-                               error_message=None) # Explicitly set error to None on success
+                               sp_valid_state=filter_sp_valid, # Pass filter state
+                               secondary_data_initially_available=secondary_data_available, # Pass initial availability for JS logic
+                               error_message=error_message # Pass potential error message
+                               )
 
     except FileNotFoundError as e:
         current_app.logger.error(f"Error: File not found during processing for {metric_name}. Details: {e}")
         traceback.print_exc()
-        error_msg = f"Error: Required data file not found for metric '{metric_name}'. {e}"
-        return render_template('metric_page_js.html', metric_name=metric_name, charts_data_json='{}', latest_date='N/A', missing_funds=pd.DataFrame(), error_message=error_msg), 404
+        error_message = f"Error: Required data file not found for metric '{metric_name}'. {e}"
+        # Determine filter state even in exception for consistent template rendering
+        sp_valid_param_except = request.args.get('sp_valid', 'true').lower()
+        filter_sp_valid_except = sp_valid_param_except == 'true'
+        return render_template('metric_page_js.html',
+                               metric_name=metric_name, charts_data_json='{}', latest_date="N/A",
+                               missing_funds=pd.DataFrame(), sp_valid_state=filter_sp_valid_except,
+                               secondary_data_initially_available=False, error_message=error_message), 404
 
     except Exception as e:
-        current_app.logger.error(f"Error processing metric page for {metric_name} (Fund: {fund_code}): {e}")
-        traceback.print_exc() # Log the full traceback to console/log file
-        error_msg = f"An error occurred while processing metric '{metric_name}'. Please check the server logs for details. Error: {e}"
-        # Attempt to render template with error message
-        return render_template('metric_page_js.html', metric_name=metric_name, charts_data_json='{}', latest_date='N/A', missing_funds=pd.DataFrame(), error_message=error_msg), 500
+        current_app.logger.error(f"Unexpected error processing metric {metric_name}: {e}\n{traceback.format_exc()}")
+        error_message = f"An unexpected error occurred while processing metric '{metric_name}'. Please check the logs for details."
+        # Determine filter state even in exception for consistent template rendering
+        sp_valid_param_except = request.args.get('sp_valid', 'true').lower()
+        filter_sp_valid_except = sp_valid_param_except == 'true'
+        return render_template('metric_page_js.html',
+                               metric_name=metric_name, charts_data_json='{}', latest_date="N/A",
+                               missing_funds=pd.DataFrame(), sp_valid_state=filter_sp_valid_except,
+                               secondary_data_initially_available=False, error_message=error_message), 500

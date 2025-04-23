@@ -28,15 +28,39 @@ import { initTableSorter } from './modules/ui/tableSorter.js';
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM fully loaded and parsed");
 
-    // --- Shared Elements --- 
-    const toggleSwitch = document.getElementById('toggleSpData'); // Find toggle switch globally
+    // --- Shared Elements ---
+    const spComparisonToggle = document.getElementById('toggleSpData'); // Existing toggle for S&P *comparison*
+    const spValidToggle = document.getElementById('toggleSpValid'); // NEW toggle for S&P *valid* filter
 
-    // --- Metric Page (Multiple Charts per Metric) ---    
+    // --- Metric Page Specific Logic ---
     const metricChartDataElement = document.getElementById('chartData');
     const metricChartsArea = document.getElementById('chartsArea');
 
     if (metricChartDataElement && metricChartsArea) {
-        console.log("Metric page detected. Initializing charts.");
+        console.log("Metric page detected. Initializing charts and toggles.");
+
+        // --- NEW: S&P Valid Filter Toggle Logic ---
+        if (spValidToggle) {
+            console.log("[main.js] Attaching toggle listener for S&P Valid Filter.");
+            spValidToggle.addEventListener('change', (event) => {
+                const isChecked = event.target.checked;
+                console.log(`[main.js Metric Page Toggle] S&P Valid toggle changed. Is Checked: ${isChecked}`);
+
+                // Construct the new URL
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('sp_valid', isChecked ? 'true' : 'false');
+
+                // Reload the page with the new query parameter
+                console.log(`Reloading to: ${currentUrl.toString()}`);
+                window.location.href = currentUrl.toString();
+            });
+        } else {
+             console.log("[main.js] S&P Valid toggle switch (#toggleSpValid) not found for Metric Page.");
+        }
+        // --- END: S&P Valid Filter Toggle Logic ---
+
+
+        // --- Existing S&P Comparison Toggle Logic ---
         try {
             const chartDataJson = metricChartDataElement.textContent;
             console.log("Raw JSON string from script tag:", chartDataJson);
@@ -56,18 +80,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
 
                 // Now, attach the event listener if the toggle exists and data is available
-                if (toggleSwitch && metadata.secondary_data_available) {
-                     console.log("[main.js] Attaching toggle listener for Metric Page.");
-                    toggleSwitch.addEventListener('change', (event) => {
+                // Attach listener for the S&P *Comparison* toggle
+                if (spComparisonToggle && metadata.secondary_data_available) {
+                     console.log("[main.js] Attaching toggle listener for S&P Comparison Data on Metric Page.");
+                    spComparisonToggle.addEventListener('change', (event) => {
                         const showSecondary = event.target.checked;
-                        console.log(`[main.js Metric Page Toggle] Toggle changed. Show Secondary: ${showSecondary}`);
+                        console.log(`[main.js Metric Page Toggle] S&P Comparison toggle changed. Show Secondary: ${showSecondary}`);
                         toggleSecondaryDataVisibility(showSecondary); // Call imported function
                     });
-                } else if (toggleSwitch) {
-                     console.log("[main.js] Toggle exists, but secondary data not available for Metric Page.");
-                     toggleSwitch.disabled = true;
+                     // Show the comparison toggle container if data is available
+                     const spToggleContainer = document.getElementById('sp-toggle-container');
+                      if (spToggleContainer) spToggleContainer.style.display = 'block';
+
+                } else if (spComparisonToggle) {
+                     console.log("[main.js] S&P Comparison toggle exists, but secondary data not available for Metric Page.");
+                     spComparisonToggle.disabled = true;
+                     const spToggleContainer = document.getElementById('sp-toggle-container');
+                      if (spToggleContainer) spToggleContainer.style.display = 'block'; // Still show, but disabled
+                      // Optionally update label
+                      const label = spToggleContainer.querySelector('label');
+                      if (label) label.textContent += ' (N/A)';
                 } else {
-                    console.log("[main.js] Toggle switch not found for Metric Page.");
+                    console.log("[main.js] S&P Comparison toggle switch (#toggleSpData) not found for Metric Page.");
                 }
 
             } else {
@@ -78,9 +112,10 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error processing metric chart data:', e);
             metricChartsArea.innerHTML = '<div class="alert alert-danger">Error loading chart data. Check console.</div>';
         }
+        // --- END: Existing S&P Comparison Toggle Logic ---
     }
 
-    // --- Fund Detail Page (Multiple Charts per Fund) ---    
+    // --- Fund Detail Page Logic --- 
     const fundChartDataElement = document.getElementById('fundChartData');
     const fundChartsArea = document.getElementById('fundChartsArea');
 
@@ -101,24 +136,35 @@ document.addEventListener('DOMContentLoaded', () => {
                  renderFundCharts(fundChartsArea, allChartData);
 
                 // Setup toggle based on data availability
-                if (toggleSwitch) {
+                 if (spComparisonToggle) { // Use the correct variable name
                     if (anySpDataAvailable) {
-                         console.log("[main.js] Attaching toggle listener for Fund Detail Page.");
-                        toggleSwitch.disabled = false;
-                        toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data';
-                        toggleSwitch.addEventListener('change', (event) => {
+                         console.log("[main.js] Attaching toggle listener for S&P Comparison Data on Fund Detail Page.");
+                        spComparisonToggle.disabled = false;
+                          // Show the comparison toggle container
+                          const spToggleContainer = document.getElementById('sp-toggle-container');
+                          if (spToggleContainer) spToggleContainer.style.display = 'block';
+                          // Ensure label is correct
+                         const label = spToggleContainer.querySelector('label');
+                         if (label) label.textContent = 'Show SP Comparison Data';
+
+                        spComparisonToggle.addEventListener('change', (event) => {
                             const showSecondary = event.target.checked;
                             console.log(`[main.js Fund Detail Page Toggle] Toggle changed. Show SP: ${showSecondary}`);
                             toggleSecondaryDataVisibility(showSecondary); // Call imported function
                         });
                     } else {
-                        console.log("[main.js] Fund Detail Page: No SP data available, disabling toggle.");
-                        toggleSwitch.disabled = true;
-                        toggleSwitch.checked = false;
-                        toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data (N/A)';
+                        console.log("[main.js] Fund Detail Page: No SP data available, disabling SP comparison toggle.");
+                        spComparisonToggle.disabled = true;
+                        spComparisonToggle.checked = false;
+                         // Show the comparison toggle container but disabled
+                         const spToggleContainer = document.getElementById('sp-toggle-container');
+                         if (spToggleContainer) spToggleContainer.style.display = 'block';
+                         // Update label
+                         const label = spToggleContainer.querySelector('label');
+                         if (label) label.textContent = 'Show SP Comparison Data (N/A)';
                     }
                 } else {
-                    console.log("[main.js] Toggle switch not found for Fund Detail Page.");
+                    console.log("[main.js] S&P Comparison toggle switch (#toggleSpData) not found for Fund Detail Page.");
                 }
             } else {
                  console.error('Parsed fund chart data is not an array or is invalid:', allChartData);
@@ -129,6 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fundChartsArea.innerHTML = '<div class="alert alert-danger">Error loading fund charts. Check console.</div>';
         }
     }
+
 
     // --- Securities Summary Page (Filterable & Sortable Table) ---
     const securitiesTable = document.getElementById('securities-table');
