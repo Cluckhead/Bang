@@ -73,24 +73,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (metadata && fullChartData.funds && Object.keys(fullChartData.funds).length > 0) {
                 console.log("Conditional check passed. Calling renderChartsAndTables...");
-                // Render charts and tables (this now just shows/hides the container)
+                // Determine initial toggle state
+                let showSecondary = true;
+                if (spComparisonToggle) {
+                    showSecondary = spComparisonToggle.checked;
+                }
                 renderChartsAndTables(
                     metricChartsArea,
-                    fullChartData
+                    fullChartData,
+                    showSecondary
                 );
 
                 // Now, attach the event listener if the toggle exists and data is available
-                // Attach listener for the S&P *Comparison* toggle
                 if (spComparisonToggle && metadata.secondary_data_available) {
-                     console.log("[main.js] Attaching toggle listener for S&P Comparison Data on Metric Page.");
+                    console.log("[main.js] Attaching toggle listener for S&P Comparison Data on Metric Page.");
                     spComparisonToggle.addEventListener('change', (event) => {
                         const showSecondary = event.target.checked;
                         console.log(`[main.js Metric Page Toggle] S&P Comparison toggle changed. Show Secondary: ${showSecondary}`);
-                        toggleSecondaryDataVisibility(showSecondary); // Call imported function
+                        renderChartsAndTables(
+                            metricChartsArea,
+                            fullChartData,
+                            showSecondary
+                        );
                     });
-                     // Show the comparison toggle container if data is available
-                     const spToggleContainer = document.getElementById('sp-toggle-container');
-                      if (spToggleContainer) spToggleContainer.style.display = 'block';
+                    // Show the comparison toggle container if data is available
+                    const spToggleContainer = document.getElementById('sp-toggle-container');
+                    if (spToggleContainer) spToggleContainer.style.display = 'block';
 
                 } else if (spComparisonToggle) {
                      console.log("[main.js] S&P Comparison toggle exists, but secondary data not available for Metric Page.");

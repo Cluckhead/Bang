@@ -49,6 +49,7 @@ def manage_issues():
             issue_date = pd.to_datetime(issue_date_str).date() if issue_date_str else None
             description = request.form.get('description')
             jira_link = request.form.get('jira_link', None) # Get optional Jira link
+            in_scope_for_go_live = request.form.get('in_scope_for_go_live', 'No')
 
             # Basic Validation
             if not raised_by or not fund_impacted or not data_source or not description or not issue_date:
@@ -67,6 +68,7 @@ def manage_issues():
                 issue_date=issue_date,
                 description=description,
                 jira_link=jira_link, # Pass Jira link
+                in_scope_for_go_live=in_scope_for_go_live,
                 data_folder_path=data_folder # Pass data_folder_path
             )
             message = f"Successfully added new issue (ID: {issue_id})."

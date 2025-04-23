@@ -15,7 +15,7 @@ import logging
 
 REQUIRED_ISSUE_COLUMNS = [
     'IssueID', 'DateRaised', 'RaisedBy', 'FundImpacted', 'DataSource',
-    'IssueDate', 'Description', 'JiraLink', 'Status', 'DateClosed', 'ClosedBy',
+    'IssueDate', 'Description', 'JiraLink', 'InScopeForGoLive', 'Status', 'DateClosed', 'ClosedBy',
     'ResolutionComment'
 ]
 
@@ -42,6 +42,8 @@ def load_issues(data_folder_path: str) -> pd.DataFrame:
                              df[col] = None # Use None or empty string for JiraLink
                         elif col == 'Status':
                              df[col] = 'Open' # Default status
+                        elif col == 'InScopeForGoLive':
+                             df[col] = 'No' # Default to 'No'
                         else:
                             df[col] = None # Default for other types
                         columns_added = True
@@ -99,6 +101,8 @@ def _save_issues(df: pd.DataFrame, data_folder_path: str) -> None:
                      df[col] = None
                  elif col == 'Status':
                      df[col] = 'Open'
+                 elif col == 'InScopeForGoLive':
+                     df[col] = 'No'
                  else:
                      df[col] = None
         # Reorder columns before saving
@@ -136,7 +140,7 @@ def _generate_issue_id(existing_ids: pd.Series) -> str:
     new_num = max_num + 1
     return f"ISSUE-{new_num:03d}"
 
-def add_issue(raised_by: str, fund_impacted: str, data_source: str, issue_date: Any, description: str, jira_link: Optional[str] = None, data_folder_path: Optional[str] = None) -> str:
+def add_issue(raised_by: str, fund_impacted: str, data_source: str, issue_date: Any, description: str, jira_link: Optional[str] = None, in_scope_for_go_live: str = 'No', data_folder_path: Optional[str] = None) -> str:
     """Adds a new issue to the CSV file in the specified data folder."""
     try:
         df = load_issues(data_folder_path)
@@ -150,6 +154,7 @@ def add_issue(raised_by: str, fund_impacted: str, data_source: str, issue_date: 
             'IssueDate': [issue_date], # Date the issue relates to
             'Description': [description],
             'JiraLink': [jira_link if jira_link else ''], # Add Jira link, ensure it's not None
+            'InScopeForGoLive': [in_scope_for_go_live],
             'Status': ['Open'],
             'DateClosed': [pd.NaT],
             'ClosedBy': [None],

@@ -27,7 +27,7 @@
 - Filter by fund Group
 - Add Is distressed as a filter
 - Make sure S&P toggle works everywhere and is selectable 
-- sort by Z score correctly
+
 - get rid of scores on residuals
 - make sure charts deal with weekends and UK holidays
 - add ability to correct using PCL on Security level
@@ -38,7 +38,7 @@
 - get rid of motonic drops from curves
 - add fund lists to metrics page for filtering
 - issues, add a go-live tag
-- incorporate "inScope" toggle on metrics - add to the raw data
+
 - Link security to BBG terminal
 
 

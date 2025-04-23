@@ -13,8 +13,9 @@
  * @param {string} fundCode - Code of the specific fund.
  * @param {number | null} maxZScore - The maximum absolute Z-score for this fund (used in title).
  * @param {boolean} isMissingLatest - Flag indicating if the latest point is missing for any spread.
+ * @param {string} chartType - 'main' or 'relative' (optional, default 'main')
  */
-export function createTimeSeriesChart(canvasId, chartData, metricName, fundCode, maxZScore, isMissingLatest) {
+export function createTimeSeriesChart(canvasId, chartData, metricName, fundCode, maxZScore, isMissingLatest, chartType = 'main') {
     const ctx = document.getElementById(canvasId).getContext('2d');
     if (!ctx) {
         console.error(`[createTimeSeriesChart] Failed to get 2D context for canvas ID: ${canvasId}`);
@@ -24,9 +25,13 @@ export function createTimeSeriesChart(canvasId, chartData, metricName, fundCode,
     // --- Prepare Chart Title (Adjusted for different contexts) --- 
     let chartTitle = metricName; // Default to just the metric name
     if (fundCode) { // If fundCode is provided (called from metric page)
-        let titleSuffix = maxZScore !== null ? `(Max Spread Z: ${maxZScore.toFixed(2)})` : '(Z-Score N/A)';
+        let titleSuffix = '';
         if (isMissingLatest) {
             titleSuffix = "(MISSING LATEST DATA)";
+        } else if (chartType === 'main' && maxZScore !== null) {
+            titleSuffix = `(Max Spread Z: ${maxZScore.toFixed(2)})`;
+        } else if (chartType === 'main') {
+            titleSuffix = '(Z-Score N/A)';
         }
         chartTitle = `${metricName} for ${fundCode} ${titleSuffix}`; 
     }

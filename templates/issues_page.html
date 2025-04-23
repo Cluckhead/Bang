@@ -71,6 +71,13 @@
                     <label for="jira_link" class="form-label">Jira Link (Optional):</label>
                     <input type="text" class="form-control" id="jira_link" name="jira_link" placeholder="e.g., www.your-jira.com/browse/ISSUE-KEY or ISSUE-KEY">
                 </div>
+                <div class="mb-3">
+                    <label for="in_scope_for_go_live" class="form-label">In Scope for Go-live:</label>
+                    <select class="form-select" id="in_scope_for_go_live" name="in_scope_for_go_live" required>
+                        <option value="No" selected>No</option>
+                        <option value="Yes">Yes</option>
+                    </select>
+                </div>
                 <button type="submit" class="btn btn-primary">Raise Issue</button>
             </form>
         </div>
@@ -91,6 +98,7 @@
                             <th>Source</th>
                             <th>Description</th>
                             <th>Jira</th>
+                            <th>In Scope for Go-live</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -111,6 +119,7 @@
                                         N/A
                                     {% endif %}
                                 </td>
+                                <td>{{ issue.InScopeForGoLive or 'No' }}</td>
                                 <td>
                                     {# Button to trigger modal for closing #}
                                     <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#closeIssueModal-{{ issue.IssueID }}">
@@ -179,6 +188,7 @@
                      <th>Source</th>
                      <th>Description</th>
                      <th>Jira</th>
+                     <th>In Scope for Go-live</th>
                      <th>Closed</th>
                      <th>By</th>
                      <th>Resolution</th>
@@ -201,6 +211,7 @@
                                 N/A
                             {% endif %}
                         </td>
+                        <td>{{ issue.InScopeForGoLive or 'No' }}</td>
                         <td>{{ issue.DateClosed.strftime('%Y-%m-%d') if issue.DateClosed else 'N/A' }}</td>
                         <td>{{ issue.ClosedBy }}</td>
                         <td style="white-space: pre-wrap; word-wrap: break-word;">{{ issue.ResolutionComment }}</td>

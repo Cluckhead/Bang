@@ -17,8 +17,9 @@ const chartInstances = {};
  * Handles primary and optional secondary (S&P) data source toggle.
  * @param {HTMLElement} container - The parent element to render into.
  * @param {object} payload - The full data payload object from Flask (contains metadata and funds data).
+ * @param {boolean} showSecondary - Whether to show secondary data in the metrics table.
  */
-export function renderChartsAndTables(container, payload) {
+export function renderChartsAndTables(container, payload, showSecondary = true) {
     const metadata = payload.metadata;
     const fundsData = payload.funds; // Renamed from chartsData for clarity
     const metricName = metadata.metric_name;
@@ -68,7 +69,31 @@ export function renderChartsAndTables(container, payload) {
     }
 
     // --- Render Charts and Tables for Each Fund --- 
-    for (const [fundCode, fundData] of Object.entries(fundsData)) {
+    // Sort fundsData by max absolute Z-score (descending)
+    const sortedFunds = Object.entries(fundsData).map(([fundCode, fundData]) => {
+        let maxAbsPrimaryZScore = 0;
+        const mainChartConfig = (fundData.charts || []).find(c => c.chart_type === 'main');
+        if (mainChartConfig && mainChartConfig.latest_metrics) {
+            const mainMetrics = mainChartConfig.latest_metrics;
+            const primaryColsToCheck = [];
+            if (primaryBenchColMeta) primaryColsToCheck.push(primaryBenchColMeta);
+            if (primaryFundColsMeta && Array.isArray(primaryFundColsMeta)) primaryColsToCheck.push(...primaryFundColsMeta);
+            primaryColsToCheck.forEach(colName => {
+                if (!colName) return;
+                const zScoreKey = `${colName} Change Z-Score`;
+                const zScore = mainMetrics[zScoreKey];
+                if (zScore !== null && typeof zScore !== 'undefined' && !isNaN(zScore)) {
+                    const absZ = Math.abs(zScore);
+                    if (absZ > maxAbsPrimaryZScore) {
+                        maxAbsPrimaryZScore = absZ;
+                    }
+                }
+            });
+        }
+        return { fundCode, fundData, maxAbsPrimaryZScore };
+    }).sort((a, b) => b.maxAbsPrimaryZScore - a.maxAbsPrimaryZScore);
+
+    for (const { fundCode, fundData } of sortedFunds) {
         console.log(`[chartRenderer] Processing fund: ${fundCode}`);
         const charts = fundData.charts || [];
         const isMissingLatest = fundData.is_missing_latest;
@@ -151,7 +176,8 @@ export function renderChartsAndTables(container, payload) {
                 chartMetrics,
             latestDate,
                 chartType, // Pass chart type to determine columns
-                metadata // Pass full metadata for context
+                metadata, // Pass full metadata for context
+                showSecondary // Pass showSecondary
             );
             chartWrapper.appendChild(table);
             
@@ -179,7 +205,8 @@ export function renderChartsAndTables(container, payload) {
                         chartTitle, // Use the title from config
                         fundCode, // Keep fund code for context if needed
                         zScoreForChartTitle, // Pass main Z-score only to main chart
-                        isMissingLatest // Still relevant at fund level
+                        isMissingLatest, // Still relevant at fund level
+                        chartType // Pass chartType so title logic is correct
                     );
                  if (chart) {
                         chartInstances[chartId] = chart; // Store chart instance with unique ID
@@ -253,13 +280,15 @@ export function toggleSecondaryDataVisibility(show) { // Make sure this is expor
  * @param {string} latestDate - The latest date string.
  * @param {string} chartType - 'relative' or 'main'.
  * @param {object} metadata - The overall metadata object from Flask (for column names).
+ * @param {boolean} showSecondary - Whether to show secondary data in the metrics table.
  * @returns {HTMLTableElement} The created table element.
  */
 function createMetricsTable(
     metrics, 
     latestDate, 
     chartType, 
-    metadata 
+    metadata, 
+    showSecondary = true
 ) {
     const table = document.createElement('table');
     table.className = 'table table-sm table-bordered metrics-table';
@@ -289,12 +318,12 @@ function createMetricsTable(
     let secondaryHeaders = ['S&P Latest', 'S&P Change', 'S&P Mean', 'S&P Max', 'S&P Min', 'S&P Z-Score'];
     let showSecondaryColumns = false;
 
-    if (chartType === 'relative') {
-        // Check if any S&P Relative metrics actually exist
-        showSecondaryColumns = Object.keys(metrics).some(key => key.startsWith(secondaryPrefix + 'Relative '));
-    } else { // chartType === 'main'
-        // Check if any regular S&P metrics exist (excluding relative)
-        showSecondaryColumns = Object.keys(metrics).some(key => key.startsWith(secondaryPrefix) && !key.startsWith(secondaryPrefix + 'Relative '));
+    if (showSecondary) {
+        if (chartType === 'relative') {
+            showSecondaryColumns = Object.keys(metrics).some(key => key.startsWith(secondaryPrefix + 'Relative '));
+        } else { // chartType === 'main'
+            showSecondaryColumns = Object.keys(metrics).some(key => key.startsWith(secondaryPrefix) && !key.startsWith(secondaryPrefix + 'Relative '));
+        }
     }
 
     headerRow.innerHTML = `<th>${headers.join('</th><th>')}</th>` + 
