@@ -134,7 +134,7 @@ This plan outlines the steps to introduce comprehensive unit testing to the Simp
 - **Action:** Test `/security/details/<metric_name>/<path:security_id>` (`security_details`). Mock data loading. Test with valid and invalid IDs (including those with special characters). Verify response code, template, and context (`security_id`, `metric_name`, `chart_data_json`, `static_info`).
 - **Target:** `tests/views/test_security_views.py` (new file).
 
-### Step 4.4: Test Comparison Views (`generic_comparison_views.py`)
+### Step 4.4: Test Comparison Views (`generic_comparison_views.py`) (complete)
 
 - **Action:** Create `tests/views/test_generic_comparison_views.py`.
 - **Action:** Test `/compare/<comparison_type>/summary`. Mock `load_generic_comparison_data`, `calculate_generic_comparison_stats`, `load_weights_and_held_status`. Test for different `comparison_type` values. Test filtering, sorting, pagination, and the `show_sold` toggle. Verify template and context.
@@ -144,13 +144,14 @@ This plan outlines the steps to introduce comprehensive unit testing to the Simp
 
 ### Step 4.5: Test Other View Blueprints
 
-- **Action:** Create corresponding test files (e.g., `test_fund_views.py`, `test_exclusion_views.py`, `test_issue_views.py`, `test_curve_views.py`, `test_attribution_views.py`, `test_staleness_views.py`, `test_weight_views.py`) in `tests/views/`.
-- **Action:** For each blueprint, test its routes using the test client.
-- **Action:** Mock underlying data loading and processing functions specific to each view.
-- **Action:** Verify response codes, template rendering, context variables, redirects, and flash messages where applicable.
-- **Action:** For views handling POST requests (e.g., adding exclusions, closing issues), simulate form submissions using `client.post()` with `data={...}` and `follow_redirects=True`.
+- **Action:** Create corresponding test files (e.g., `test_fund_views.py`, `test_exclusion_views.py`, `test_issue_views.py`, `test_curve_views.py`, `test_attribution_views.py`, `test_staleness_views.py`, `test_weight_views.py`) in `tests/views/`. (Complete)
+- **Action:** For each blueprint, test its routes using the test client. (Complete)
+- **Action:** Mock underlying data loading and processing functions specific to each view. (Complete)
+- **Action:** Verify response codes, template rendering, context variables, redirects, and flash messages where applicable. (Complete)
+- **Action:** For views handling POST requests (e.g., adding exclusions, closing issues), simulate form submissions using `client.post()` with `data={...}` and `follow_redirects=True`. (Complete)
 
-- **Target:** New test files in `tests/views/`.
-    
+- **Target:** New test files in `tests/views/`. (Complete)
 
-### Step 4.6: Test API Endpoints (`api_views.py`, `api_routes_call.py`, `
+- **Status:** All view test files created and running. 'Test Fund Views' is now complete and correctly tests the /fund/<fund_code> route with proper mocking and chart data validation.
+
+### Step 4.6: Test API Endpoints (`

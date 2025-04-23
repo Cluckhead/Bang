@@ -127,3 +127,73 @@ All tests use Flask's test client and mock dependencies for isolation. Edge and 
 - **test_security_details_missing_file**: Simulates a missing file for the details route, checks that the response is 200 and contains an error message.
 
 All tests use Flask's test client and mock dependencies for isolation. Edge and error cases are covered.
+
+## tests/views/test_fund_views.py
+
+### fund_views.py (/fund/<fund_code> route)
+- **test_fund_detail_page_success**: Mocks file discovery (glob.glob for ts_*.csv), mocks data loading (load_and_process_data) to return a DataFrame with the fund code and datetime index, and checks that the embedded chart data JSON contains the expected metric names. This test validates that the fund detail page correctly aggregates and renders chart data for all metrics for a single fund. All assertions pass.
+
+All tests use Flask's test client and mock dependencies.
+
+## tests/views/test_exclusion_views.py
+
+### exclusion_views.py (/exclusions GET, /exclusions/add POST routes)
+- **test_exclusions_page_success**: Tests GET `/exclusions`, mocks loading existing exclusions, verifies 200 status and correct rendering of exclusions table and add form.
+- **test_exclusions_page_no_file**: Tests GET `/exclusions` when `Exclusions.csv` is missing, verifies 200 status and rendering of a 'no exclusions found' message.
+- **test_exclusions_page_load_error**: Tests GET `/exclusions` simulating a pandas error during loading, verifies 200 status, flash error message, and error content in response.
+- **test_add_exclusion_success**: Tests POST `/exclusions/add` with valid ISIN/Reason, mocks file writing, verifies redirect (200 status), flash success message, and checks that `open` was called with the correct arguments and data.
+- **test_add_exclusion_missing_data**: Tests POST `/exclusions/add` with missing form data, verifies 200 status, flash error message, and that file writing was not attempted.
+- **test_add_exclusion_write_error**: Tests POST `/exclusions/add` simulating an `IOError` during file write, verifies 200 status, flash error message, and relevant error content.
+
+All tests use Flask's test client and mock dependencies, including `builtins.open` for file operations.
+
+## tests/views/test_issue_views.py
+
+### issue_views.py (/issues GET, /issues/add POST, /issues/close/<issue_id> POST routes)
+- **test_issues_page_success**: Tests GET `/issues`, mocks loading existing issues, verifies 200 status and correct rendering of issues table and add form.
+- **test_issues_page_no_file**: Tests GET `/issues` when the issues file is missing, verifies 200 status and rendering of a 'no open issues found' message.
+- **test_issues_page_load_error**: Tests GET `/issues` simulating a pandas error during loading, verifies 200 status, flash error message, and error content.
+- **test_add_new_issue_success**: Tests POST `/issues/add` with valid data, mocks `add_issue` function, verifies redirect (200 status), flash success message, and that `add_issue` was called correctly.
+- **test_add_new_issue_missing_data**: Tests POST `/issues/add` with missing form data, verifies 200 status, flash error message, and that `add_issue` was not called.
+- **test_add_new_issue_save_error**: Tests POST `/issues/add` simulating `add_issue` returning False (save failure), verifies 200 status and flash error message.
+- **test_close_existing_issue_success**: Tests POST `/issues/close/<id>`, mocks `close_issue` returning True, verifies redirect (200 status), flash success message, and that `close_issue` was called correctly.
+- **test_close_existing_issue_failure**: Tests POST `/issues/close/<id>`, mocks `close_issue` returning False (e.g., issue not found), verifies 200 status and flash error message.
+
+All tests use Flask's test client and mock dependencies for issue processing functions.
+
+## tests/views/test_curve_views.py
+
+### curve_views.py (/curve route)
+- **test_curve_page_success**: Mocks successful loading of curve data and inconsistency checks, verifies 200 status, template content (title, date, inconsistency table, plot div).
+- **test_curve_page_no_data_file**: Simulates the curve file not existing, verifies graceful handling (200 status) and appropriate flash message/content indicating the missing file.
+- **test_curve_page_load_error**: Simulates `FileNotFoundError` during `load_curve_data`, verifies graceful handling (200 status) and an error message.
+- **test_curve_page_processing_error**: Simulates `ValueError` during `check_curve_inconsistencies`, verifies 200 status (page still renders chart) and an error message about inconsistency check failure.
+
+All tests use Flask's test client and mock dependencies.
+
+## tests/views/test_attribution_views.py
+
+### attribution_views.py (/attribution route)
+- **test_attribution_page_success**: Mocks successful data loading and calculations (metrics, residuals, normalization), verifies 200 status, template content (title, tables, plot div).
+- **test_attribution_page_no_data**: Simulates `FileNotFoundError` during data loading, verifies graceful handling (200 status) and appropriate flash message/content indicating missing data.
+- **test_attribution_page_processing_error**: Simulates `ValueError` during `calc_residual`, verifies graceful handling (200 status) and an error message about residual calculation failure.
+
+All tests use Flask's test client and mock dependencies.
+
+## tests/views/test_staleness_views.py
+
+### staleness_views.py (/staleness route)
+- **test_staleness_page_success**: Mocks successful retrieval of staleness summary, details, and plot creation, verifies 200 status and rendering of summary/details tables and plot div.
+- **test_staleness_page_no_data**: Simulates `FileNotFoundError` during `get_staleness_summary`, verifies graceful handling (200 status) and appropriate flash message/content indicating missing data.
+- **test_staleness_page_processing_error**: Simulates `ValueError` during `get_stale_securities_details`, verifies graceful handling (200 status) and an error message about processing failure.
+
+All tests use Flask's test client and mock dependencies.
+
+## tests/views/test_weight_views.py
+
+### weight_views.py (/weights route)
+- **test_weights_page_success**: Mocks successful loading of weights data, verifies 200 status, template content (title, date, table data).
+- **test_weights_page_no_data_file**: Simulates the weight file not existing, verifies graceful handling (200 status) and appropriate flash message/content indicating the missing file.
+- **test_weights_page_load_error**: Simulates `FileNotFoundError` during `load_weights_and_held_status`, verifies graceful handling (200 status) and an error message.
+
+All tests use Flask's test client and mock dependencies.

@@ -4,16 +4,40 @@ import pytest
 from flask import Flask
 from unittest.mock import patch, MagicMock
 import pandas as pd
+import os
 
-# Minimal Flask app factory for testing
+# Comprehensive Flask app factory for testing (register all blueprints)
 @pytest.fixture
 def app():
-    app = Flask(__name__)
+    template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../templates'))
+    app = Flask(__name__, template_folder=template_dir)
     app.config['DATA_FOLDER'] = '/mock/data/folder'
     app.config['TESTING'] = True
-    # Import and register the blueprint
+    app.config['SECRET_KEY'] = 'test'  # Ensure session support
     from views.main_views import main_bp
+    from views.metric_views import metric_bp
+    from views.security_views import security_bp
+    from views.weight_views import weight_bp
+    from views.curve_views import curve_bp
+    from views.attribution_views import attribution_bp
+    from views.exclusion_views import exclusion_bp
+    from views.issue_views import issue_bp
+    from views.api_views import api_bp
+    from views.staleness_views import staleness_bp
+    from views.generic_comparison_views import generic_comparison_bp
+    from views.fund_views import fund_bp
     app.register_blueprint(main_bp)
+    app.register_blueprint(metric_bp)
+    app.register_blueprint(security_bp)
+    app.register_blueprint(weight_bp)
+    app.register_blueprint(curve_bp)
+    app.register_blueprint(attribution_bp)
+    app.register_blueprint(exclusion_bp)
+    app.register_blueprint(issue_bp)
+    app.register_blueprint(api_bp)
+    app.register_blueprint(staleness_bp)
+    app.register_blueprint(generic_comparison_bp, url_prefix='/compare')
+    app.register_blueprint(fund_bp)
     return app
 
 @pytest.fixture

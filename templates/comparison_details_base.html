@@ -35,7 +35,7 @@
         <a href="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="btn btn-outline-secondary btn-sm">&laquo; Back to {{ display_name }} Summary</a>
     </div>
 
-    {# Display message if any #}
+    {# Show error/info message if present #}
     {% if message %}
     <div class="alert alert-warning alert-dismissible fade show" role="alert">
         {{ message }}

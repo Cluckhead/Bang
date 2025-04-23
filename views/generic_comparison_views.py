@@ -709,6 +709,20 @@ def details(comparison_type, security_id):
     # Pass the filtered security_data and its corresponding static row
     stats_df = calculate_generic_comparison_stats(security_data, security_static_row, actual_id_col)
 
+    # --- Prepare stats dict for template ---
+    expected_keys = [
+        'Level_Correlation', 'Change_Correlation', 'Mean_Abs_Diff', 'Max_Abs_Diff',
+        'Same_Date_Range', 'is_held', 'StaticCol', 'NaN_Count_Orig', 'NaN_Count_New', 'Total_Points'
+    ]
+    if not stats_df.empty:
+        stats = stats_df.iloc[0].to_dict()
+        for key in expected_keys:
+            if key not in stats:
+                stats[key] = None
+    else:
+        stats = {key: None for key in expected_keys}
+        stats[actual_id_col] = decoded_security_id
+
     stats = {}
     security_name = decoded_security_id # Default name is the ID
     if not stats_df.empty:
