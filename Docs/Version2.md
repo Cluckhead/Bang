@@ -26,6 +26,22 @@
 - Watch list for securities - Greg's issue
 - Filter by fund Group
 - Add Is distressed as a filter
+- Make sure S&P toggle works everywhere and is selectable 
+- sort by Z score correctly
+- get rid of scores on residuals
+- make sure charts deal with weekends and UK holidays
+- add ability to correct using PCL on Security level
+- have teh ability to dig into the biggest contributers to a change at fund level
+- if min = 0 then exclude toggle
+- Create fund groups 
+- Comparison prerun and save DFs after processing
+- get rid of motonic drops from curves
+- add fund lists to metrics page for filtering
+- issues, add a go-live tag
+- incorporate "inScope" toggle on metrics - add to the raw data
+- Link security to BBG terminal
+
+
 
 # Version 3
 - Add SQLite with enhanced file locking

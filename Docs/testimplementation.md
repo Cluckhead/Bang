@@ -154,4 +154,57 @@ This plan outlines the steps to introduce comprehensive unit testing to the Simp
 
 - **Status:** All view test files created and running. 'Test Fund Views' is now complete and correctly tests the /fund/<fund_code> route with proper mocking and chart data validation.
 
-### Step 4.6: Test API Endpoints (`
+### Step 4.6: Test API Endpoints (`api_views.py`, `api_routes_call.py`, `api_routes_data.py`) (Complete)
+
+- **Action:** Created `tests/views/test_api_views.py` with tests for `/get_data`, `/run_api_calls`, `/rerun-api-call`, and `/schedules` endpoints.
+- **Action:** Used proper mocking to simulate API calls, file operations, and database access.
+- **Action:** Tested both success paths and error handling for all API endpoints.
+- **Target:** API routes and data handling logic.
+- **Status:** All API endpoint tests are passing successfully. Each test verifies the correct behavior of the respective endpoints, including proper parameter handling and response formatting.
+
+
+### Step 5###
+
+Fix the tests that are failing.
+Okay, I've analyzed the pytest.log content you provided.
+
+While there are no outright test failures (F or E) reported by pytest, the log reveals several important issues contributing to the "mess":
+
+Critical Configuration Error: The KeyError: 'COLOR_PALETTE' during the fund_views tests is the most significant problem. It means the test setup isn't loading the application configuration correctly, which likely affects many view tests.
+Test Data File Issues: Several errors (FundList.csv not found, Dates.csv not found) and warnings show that tests requiring specific data files are not finding them in the temporary test environment.
+Inconsistent Path Handling: Warnings about app_root_path not being provided and errors about DATA_FOLDER not existing suggest the way tests handle file paths and the data directory needs refinement.
+Code Robustness Warnings: Warnings related to parsing terms ('BAD') and mismatches between dates and data columns in weight files indicate areas where the application code might need to be more resilient to unexpected input, and tests should cover these cases.
+Log Noise: The high volume of INFO logs makes it harder to spot the important warnings and errors.
+Here is a specific, prioritized plan to address these issues:
+
+Phase 1: Fix Critical Test Setup Errors
+
+Fix Configuration Loading (High Priority):
+Action: Modify the app fixture in tests/views/conftest.py. Immediately after the app = Flask(...) line, add app.config.from_object('config') to explicitly load your application's configuration, including COLOR_PALETTE.   
+File: tests/views/conftest.py
+Verification: Rerun pytest and confirm the KeyError: 'COLOR_PALETTE' in tests/views/test_fund_views.py is gone.
+Fix Test Data File Management (High Priority):
+Action: Review tests that failed due to missing files (test_api_views.py needs FundList.csv, test_weight_processing.py needs Dates.csv). Update the setup for these tests (or relevant fixtures in conftest.py) to create necessary dummy versions of FundList.csv, Dates.csv, etc., within the temporary directory provided by the app fixture (tmp_path).   
+Files: tests/views/test_api_views.py, tests/processing/test_weight_processing.py, tests/processing/test_process_data.py, tests/views/conftest.py (if using fixtures for data setup).
+Verification: Rerun tests and confirm the FileNotFoundError logs for FundList.csv and Dates.csv are resolved.
+Standardize Data Folder Path Handling:
+Action (Code): Ensure all application code (views/*.py, utils.py, etc.) consistently retrieves the data folder path from current_app.config['DATA_FOLDER'] rather than relying on relative paths or os.getcwd().
+Action (Tests): Ensure all tests needing a data folder use the app fixture from conftest.py. This fixture correctly sets app.config['DATA_FOLDER'] to a temporary path (tmp_path), eliminating the /mock/data/folder error and the warnings about app_root_path. Remove any direct mocking of DATA_FOLDER in individual tests if they use the app fixture.
+Files: views/main_views.py, utils.py, tests/views/test_main_views.py, tests/utils/test_utils.py, potentially others.
+Verification: Rerun tests and check that the DATA_FOLDER does not exist error and the app_root_path warnings are gone.
+Phase 2: Improve Test Quality and Reduce Noise
+
+Reduce Log Noise:
+Action: Modify pytest.ini. Change --log-file-level=INFO to --log-file-level=WARNING. This will make the pytest.log much cleaner, only showing warnings and errors by default. You can temporarily switch back to INFO if needed for debugging specific tests.   
+File: pytest.ini
+Verification: Run pytest again. The pytest.log should be significantly shorter and focus on potential problems.
+Address Code Robustness Warnings:
+Action (curve_processing): Add specific test cases to tests/processing/test_curve_processing.py for invalid terms like 'BAD' and '' to explicitly assert that _term_to_days returns None as expected.
+Action (weight_processing): In tests/processing/test_weight_processing.py, add test cases with mismatched numbers of dates vs. data columns to verify the truncation logic works correctly and the warnings are expected under those conditions.
+Action (generic_comparison_views): In the view or comparison_helpers.py, ensure ID columns are cast to the same type (e.g., str) before merging summary_stats and held_status to avoid the dtype warning.
+Phase 3: General Health Check (Revisit from General Plan)
+
+Review Coverage: Once the tests are stable and less noisy, regenerate the coverage report (pytest --cov=. --cov-report=html) and identify areas needing more tests.
+Check for Flakiness: Run the test suite multiple times (e.g., pytest -n auto --count=5) to see if any tests fail intermittently. Address any flaky tests found.
+Optimize: Use pytest --durations=10 to find slow tests and investigate optimizations.
+By following these steps, focusing on fixing the configuration and data handling in the test environment first, you should be able to bring the unit tests back into a reliable and useful state.

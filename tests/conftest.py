@@ -2,29 +2,40 @@
 
 import pytest
 import os
-from app import create_app
+from app import app as flask_app  # Assuming your Flask app instance is named 'app' in 'app.py'
 
-@pytest.fixture(scope='module')
-def app():
-    """Fixture to create a Flask app instance for testing."""
-    # Ensure the template folder is set correctly relative to the test directory
-    template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'templates'))
-    # Create the app instance first
-    app_instance = create_app()
-    # Update config for testing
-    app_instance.config.update({
+@pytest.fixture(scope="module")
+def test_app():
+    """Provides a Flask application context for the test session."""
+    # Configure the app for testing here if needed
+    # Example: flask_app.config.update({'TESTING': True, 'SECRET_KEY': 'test'})
+    # Ensure the template folder path is correct relative to the app root
+    template_dir = os.path.abspath(os.path.join(flask_app.root_path, 'templates'))
+    flask_app.template_folder = template_dir
+    # Update other necessary testing configurations
+    flask_app.config.update({
         'TESTING': True,
-        'WTF_CSRF_ENABLED': False,
-        'SECRET_KEY': 'test',
-        'TEMPLATES_AUTO_RELOAD': True,
-        'TEMPLATE_FOLDER': template_dir, # Override template folder if needed
-        # Ensure DATA_FOLDER points to a test-specific location if necessary
-        # 'DATA_FOLDER': '/path/to/test/data' 
+        'WTF_CSRF_ENABLED': False, # Often disabled for testing forms
+        'SECRET_KEY': 'test', # Needed for session, flash messages
+        'SERVER_NAME': 'localhost.test' # Helps url_for work correctly outside request context
     })
 
-    yield app_instance
+    with flask_app.app_context():
+        yield flask_app
 
-@pytest.fixture(scope='module')
-def client(app):
-    """Fixture to provide a test client for the Flask app."""
-    return app.test_client() 
+@pytest.fixture(scope="function") # Changed scope to function for isolation
+def client(test_app):
+    """Provides a Flask test client for each test function."""
+    return test_app.test_client()
+
+# Removed duplicate app and client fixtures below
+# @pytest.fixture(scope='module')
+# def app():
+#     """Fixture to create a Flask app instance for testing."""
+#     # ... (removed duplicate logic) ...
+#     yield app_instance
+#
+# @pytest.fixture(scope='module')
+# def client(app):
+#     """Fixture to provide a test client for the Flask app."""
+#     return app.test_client() 
