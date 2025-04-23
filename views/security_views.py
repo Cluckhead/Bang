@@ -61,11 +61,17 @@ def securities_page():
     page = request.args.get('page', 1, type=int)
     search_term = request.args.get('search_term', '', type=str).strip()
     sort_by = request.args.get('sort_by', None, type=str)
-    # Default sort: Abs Change Z-Score Descending
     sort_order = request.args.get('sort_order', 'desc', type=str).lower() 
-    # Ensure sort_order is either 'asc' or 'desc'
     if sort_order not in ['asc', 'desc']:
         sort_order = 'desc'
+    active_filters = {
+        key.replace('filter_', ''): value 
+        for key, value in request.args.items() 
+        if key.startswith('filter_') and value
+    }
+    # --- Min = 0 Exclusion Toggle ---
+    exclude_min_zero = request.args.get('exclude_min_zero', 'true') == 'true'
+    current_app.logger.info(f"Request Params: Page={page}, Search='{search_term}', SortBy='{sort_by}', SortOrder='{sort_order}', Filters={active_filters}, Exclude Min = 0: {exclude_min_zero}")
 
     # Collect active filters from request args (e.g., ?filter_Country=USA&filter_Sector=Tech)
     active_filters = {
@@ -170,11 +176,17 @@ def securities_page():
         if active_filters:
             for col, value in active_filters.items():
                 if col in combined_metrics_df.columns:
-                    # Ensure consistent type for comparison, handle NaNs
                     combined_metrics_df = combined_metrics_df[combined_metrics_df[col].astype(str) == str(value)]
                     current_app.logger.info(f"Applied filter '{col}={value}'. Rows remaining: {len(combined_metrics_df)}")
                 else:
                      current_app.logger.warning(f"Warning: Filter column '{col}' not found in DataFrame.")
+
+        # 4. Exclude Min = 0 if toggle is on
+        if exclude_min_zero and 'Min' in combined_metrics_df.columns:
+            before_count = len(combined_metrics_df)
+            combined_metrics_df = combined_metrics_df[~(combined_metrics_df['Min'].fillna(0) == 0)]
+            after_count = len(combined_metrics_df)
+            current_app.logger.info(f"Excluded securities where Min = 0. Rows before: {before_count}, after: {after_count}")
 
         # --- Handle Empty DataFrame After Filtering ---
         if combined_metrics_df.empty:
@@ -194,7 +206,8 @@ def securities_page():
                                    active_filters=active_filters,
                                    pagination=None,
                                    current_sort_by=sort_by,
-                                   current_sort_order=sort_order)
+                                   current_sort_order=sort_order,
+                                   exclude_min_zero=exclude_min_zero)
 
         # --- Apply Sorting ---
         current_app.logger.info(f"Applying sort: By='{sort_by}', Order='{sort_order}'")
@@ -311,7 +324,8 @@ def securities_page():
                                securities_data=[], 
                                pagination=None,
                                filter_options=final_filter_options if 'final_filter_options' in locals() else {},
-                               active_filters=active_filters)
+                               active_filters=active_filters,
+                               exclude_min_zero=exclude_min_zero)
 
     # --- Render Template ---
     return render_template('securities_page.html',
@@ -324,7 +338,9 @@ def securities_page():
                            pagination=pagination_context, # Pass pagination object
                            current_sort_by=sort_by,
                            current_sort_order=sort_order,
-                           message=None) # Clear any previous error message if successful
+                           message=None, # Clear any previous error message if successful
+                           exclude_min_zero=exclude_min_zero # Pass toggle state to template
+    )
 
 @security_bp.route('/security/details/<metric_name>/<path:security_id>')
 def security_details(metric_name, security_id):

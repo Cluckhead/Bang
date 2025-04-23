@@ -51,6 +51,16 @@ main.js:29 DOM fully loaded and parsed
                 {% endfor %}
             {% endif %}
 
+            {# Min = 0 Exclusion Toggle #}
+            <div class="col-md-2 d-flex align-items-center">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" value="true" id="exclude_min_zero" name="exclude_min_zero" {% if exclude_min_zero %}checked{% endif %}>
+                    <label class="form-check-label" for="exclude_min_zero">
+                        Exclude securities where Min = 0
+                    </label>
+                </div>
+            </div>
+
             {# Buttons #}
             <div class="col-md-auto">
                 <button class="btn btn-primary btn-sm" type="submit">Apply Filters</button>
@@ -199,6 +209,13 @@ main.js:29 DOM fully loaded and parsed
 
 {% block scripts %}
 {{ super() }}
-{# Remove client-side filter script block - All filtering/sorting is server-side #}
-{# Optional: Add JS for minor enhancements like highlighting sort column, but core logic is server-side #}
+<script>
+// Auto-submit the filter form when the Min=0 exclusion toggle is changed
+const excludeMinZeroCheckbox = document.getElementById('exclude_min_zero');
+if (excludeMinZeroCheckbox) {
+    excludeMinZeroCheckbox.addEventListener('change', function() {
+        document.getElementById('filter-form').submit();
+    });
+}
+</script>
 {% endblock %} 

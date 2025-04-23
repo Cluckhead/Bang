@@ -37,10 +37,8 @@
 - Comparison prerun and save DFs after processing
 - get rid of motonic drops from curves
 - add fund lists to metrics page for filtering
-- issues, add a go-live tag
-
 - Link security to BBG terminal
-
+- add the static data to the security details page
 
 
 # Version 3
