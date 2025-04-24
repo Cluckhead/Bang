@@ -72,3 +72,13 @@ This feature monitors and identifies stale data in security files, helping users
   * Days stale
   * Staleness type (placeholder pattern or time-based)
   * Number of consecutive placeholders (if applicable)
+
+## Security-Level Analysis: Min=0 Exclusion Toggle
+
+- The Securities summary page includes a toggle labeled "Exclude securities where Min = 0".
+- This toggle is checked by default, and when enabled, all securities with a Min value of 0 are excluded from the results table.
+- The toggle is part of the filter form and is applied server-side for accurate filtering and pagination.
+- Changing the toggle automatically refreshes the page and reapplies the filter, providing instant feedback without needing to click the "Apply Filters" button.
+- The toggle state is preserved across filter and sort actions.
+
+- Add the static data to the security details page

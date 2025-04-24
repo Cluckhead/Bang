@@ -129,6 +129,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (fundChartDataElement && fundChartsArea) {
         console.log("Fund detail page detected. Initializing charts.");
+
+        // --- NEW: S&P Valid Filter Toggle Logic for Fund Detail Page ---
+        if (spValidToggle) {
+            console.log("[main.js] Attaching toggle listener for S&P Valid Filter on Fund Detail Page.");
+            spValidToggle.addEventListener('change', (event) => {
+                const isChecked = event.target.checked;
+                console.log(`[main.js Fund Detail Page Toggle] S&P Valid toggle changed. Is Checked: ${isChecked}`);
+
+                // Construct the new URL
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('sp_valid', isChecked ? 'true' : 'false');
+
+                // Reload the page with the new query parameter
+                console.log(`Reloading to: ${currentUrl.toString()}`);
+                window.location.href = currentUrl.toString();
+            });
+        } else {
+            console.log("[main.js] S&P Valid toggle switch (#toggleSpValid) not found for Fund Detail Page.");
+        }
+        // --- END: S&P Valid Filter Toggle Logic for Fund Detail Page ---
+
         try {
             const fundChartDataJson = fundChartDataElement.textContent;
             const allChartData = JSON.parse(fundChartDataJson);

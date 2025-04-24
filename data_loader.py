@@ -198,22 +198,18 @@ def _process_single_file(
                 on_bad_lines='skip',
                 dtype=dtype_map
             )
-        except FileNotFoundError:
-            logger.error(f"File not found during processing: {filepath}")
-            return None
-        except pd.errors.EmptyDataError:
-            logger.warning(f"File is empty: {filepath}")
-            return None
-        except pd.errors.ParserError as e:
-            logger.error(f"Parser error in file {filepath}: {e}", exc_info=True)
-            return None
-        except ValueError as e: # Handle cases where usecols might be invalid (though less likely now)
-             logger.error(f"ValueError during read_csv for {filepath} (potential column issue): {e}")
-             return None
         except Exception as e:
-            logger.error(f"Unexpected error reading file {filepath}: {e}", exc_info=True)
+            logger.error(f"Error reading file '{filename_for_logging}': {e}")
             return None
 
+        # If not filtering on S&P Valid, deduplicate (Date, Code) pairs to avoid duplicate index errors
+        if not filter_sp_valid:
+            # Drop duplicates, keep the first occurrence for each (Date, Code) pair
+            before = len(df)
+            df = df.drop_duplicates(subset=[actual_date_col, actual_code_col], keep='first')
+            after = len(df)
+            if before != after:
+                logger.warning(f"Dropped {before - after} duplicate (Date, Code) rows in '{filename_for_logging}' to avoid duplicate index errors when S&P Valid filter is OFF.")
 
         df.columns = df.columns.str.strip() # Strip whitespace from loaded columns
 

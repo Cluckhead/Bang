@@ -1,6 +1,7 @@
-"""Blueprint for fund-specific routes, including duration details and a general fund overview page."""
+"""Blueprint for fund-specific routes, including duration details and a general fund overview page.
+All charts use the full Dates.csv list for the x-axis, handling weekends and holidays."""
 
-from flask import Blueprint, render_template, current_app, jsonify
+from flask import Blueprint, render_template, current_app, jsonify, request
 import os
 import pandas as pd
 import traceback
@@ -14,6 +15,7 @@ from utils import _is_date_like, parse_fund_list # Import required utils
 # Updated import to include data loader
 from data_loader import load_and_process_data
 from security_processing import load_and_process_security_data, calculate_security_latest_metrics # For fund_duration_details
+from process_data import read_and_sort_dates
 
 # Define the blueprint
 fund_bp = Blueprint('fund', __name__, url_prefix='/fund')
@@ -268,9 +270,15 @@ def fund_detail(fund_code):
     Renders the fund detail page, displaying time-series charts for all available
     metrics associated with the given fund_code.
     Includes primary data and optionally secondary/SP data if corresponding files exist.
+    X-axis always uses Dates.csv.
     """
-    current_app.logger.info(f"--- Requesting Detail Page for Fund: {fund_code} ---")
+    # --- Get Filter State from Query Parameter ---
+    sp_valid_param = request.args.get('sp_valid', 'true').lower()
+    filter_sp_valid = sp_valid_param == 'true'
+    current_app.logger.info(f"--- Requesting Detail Page for Fund: {fund_code}, S&P Valid Filter: {filter_sp_valid} ---")
     data_folder = current_app.config['DATA_FOLDER'] # Define data_folder using app config
+    dates_file_path = os.path.join(data_folder, 'Dates.csv')
+    full_date_list = read_and_sort_dates(dates_file_path) or []
     all_chart_data = []
     available_metrics = []
     processed_files = 0
@@ -324,8 +332,8 @@ def fund_detail(fund_code):
             benchmark_col = None
             primary_load_error = None
             try:
-                # Corrected keyword argument
-                load_result = load_and_process_data(primary_filename=filename, data_folder_path=data_folder)
+                # Pass filter_sp_valid to data loader
+                load_result = load_and_process_data(primary_filename=filename, data_folder_path=data_folder, filter_sp_valid=filter_sp_valid)
                 df = load_result[0]
                 fund_cols = load_result[1]
                 benchmark_col = load_result[2]
@@ -353,12 +361,10 @@ def fund_detail(fund_code):
             if primary_load_error is None and os.path.exists(sp_file_path):
                 current_app.logger.info(f"Found corresponding SP file: {sp_filename}. Attempting to load.")
                 try:
-                    # Corrected keyword argument
-                    sp_load_result = load_and_process_data(primary_filename=sp_filename, data_folder_path=data_folder)
+                    # Pass filter_sp_valid to data loader for SP file as well
+                    sp_load_result = load_and_process_data(primary_filename=sp_filename, data_folder_path=data_folder, filter_sp_valid=filter_sp_valid)
                     sp_df = sp_load_result[0]
                     sp_fund_cols = sp_load_result[1] # Assuming same structure for fund cols
-                    # SP files typically don't have benchmarks in this context, ignore sp_load_result[2]
-                    # --- Correction: Let's check for SP benchmark column too ---
                     sp_benchmark_col = sp_load_result[2] # Get potential SP benchmark col name
 
                     if sp_df is None or sp_df.empty:
@@ -411,9 +417,7 @@ def fund_detail(fund_code):
                     sp_fund_df = None # Treat as if no SP data for this fund
 
             # --- Prepare chart data structure ---
-            # Use the primary fund_df index as the master list of labels
-            # Align SP data to this index later if needed
-            chart_labels = fund_df.index.strftime('%Y-%m-%d').tolist()
+            chart_labels = full_date_list
             chart_data = {
                 'metricName': metric_name_display, # Use display name
                 'labels': chart_labels,
@@ -424,7 +428,7 @@ def fund_detail(fund_code):
             fund_col_name = next((col for col in fund_cols if col in fund_df.columns), None)
             if fund_col_name:
                 # Reindex to ensure consistent length and alignment, fill missing with None
-                fund_values = fund_df[fund_col_name].reindex(fund_df.index).where(pd.notna, None).tolist()
+                fund_values = fund_df[fund_col_name].reindex(pd.to_datetime(full_date_list)).where(pd.notna, None).tolist()
                 chart_data['datasets'].append({
                     'label': f"{fund_code} {metric_name_display}",
                     'data': nan_to_none(fund_values),
@@ -439,8 +443,7 @@ def fund_detail(fund_code):
 
             # Add benchmark dataset (from primary data)
             if benchmark_col and benchmark_col in fund_df.columns:
-                # Reindex to ensure consistent length and alignment
-                bench_values = fund_df[benchmark_col].reindex(fund_df.index).where(pd.notna, None).tolist()
+                bench_values = fund_df[benchmark_col].reindex(pd.to_datetime(full_date_list)).where(pd.notna, None).tolist()
                 chart_data['datasets'].append({
                     'label': f"Benchmark ({benchmark_col})",
                     'data': nan_to_none(bench_values),
@@ -454,21 +457,18 @@ def fund_detail(fund_code):
 
             # --- Add SP fund dataset (if available) ---
             if sp_fund_df is not None:
-                # Add SP Fund Data (if column exists)
                 if sp_fund_col_name:
-                    # Reindex SP data to the primary data's date index to ensure alignment for the chart
-                    sp_fund_aligned = sp_fund_df[sp_fund_col_name].reindex(fund_df.index)
+                    sp_fund_aligned = sp_fund_df[sp_fund_col_name].reindex(pd.to_datetime(full_date_list))
                     sp_values = sp_fund_aligned.where(pd.notna, None).tolist() # Replace NaN with None for JSON
                     chart_data['datasets'].append({
                         'label': f"{fund_code} {metric_name_display} (SP)",
                         'data': nan_to_none(sp_values),
-                        'borderColor': current_app.config['COLOR_PALETTE'][2 % len(current_app.config['COLOR_PALETTE'])], # Use a different color
+                        'borderColor': current_app.config['COLOR_PALETTE'][2 % len(current_app.config['COLOR_PALETTE'])],
                         'tension': 0.1,
                         'pointRadius': 1,
-                        'borderDash': [2, 2], # Different dash style
+                        'borderDash': [2, 2],
                         'borderWidth': 1.5,
                         'isSpData': True # Mark this dataset as SP data
-                        # 'hidden': True # Optionally start hidden
                     })
                     current_app.logger.info(f"Added SP Fund dataset for metric '{metric_name_display}'.")
                 else:
@@ -476,16 +476,15 @@ def fund_detail(fund_code):
 
                 # --- Add SP benchmark dataset (if available) ---
                 if sp_benchmark_col and sp_benchmark_col in sp_fund_df.columns:
-                    # Reindex SP benchmark data to the primary data's date index
-                    sp_bench_aligned = sp_fund_df[sp_benchmark_col].reindex(fund_df.index)
+                    sp_bench_aligned = sp_fund_df[sp_benchmark_col].reindex(pd.to_datetime(full_date_list))
                     sp_bench_values = sp_bench_aligned.where(pd.notna, None).tolist()
                     chart_data['datasets'].append({
-                        'label': f"Benchmark ({sp_benchmark_col}) (SP)", # Label appropriately
+                        'label': f"Benchmark ({sp_benchmark_col}) (SP)",
                         'data': nan_to_none(sp_bench_values),
-                        'borderColor': current_app.config['COLOR_PALETTE'][3 % len(current_app.config['COLOR_PALETTE'])], # Use another color
+                        'borderColor': current_app.config['COLOR_PALETTE'][3 % len(current_app.config['COLOR_PALETTE'])],
                         'tension': 0.1,
                         'pointRadius': 1,
-                        'borderDash': [2, 2], # Use dash similar to SP fund
+                        'borderDash': [2, 2],
                         'borderWidth': 1,
                         'isSpData': True # Mark this dataset as SP data
                     })
@@ -522,7 +521,8 @@ def fund_detail(fund_code):
                                    fund_code=fund_code,
                                    chart_data_json='[]',
                                    available_metrics=[],
-                                   message=final_message)
+                                   message=final_message,
+                                   sp_valid_state=filter_sp_valid)
 
         # Convert chart data to JSON for the template
         chart_data_json = jsonify(all_chart_data).get_data(as_text=True)
@@ -531,7 +531,8 @@ def fund_detail(fund_code):
                                fund_code=fund_code,
                                chart_data_json=chart_data_json,
                                available_metrics=available_metrics,
-                               message=None) # No message if data was found
+                               message=None, # No message if data was found
+                               sp_valid_state=filter_sp_valid) # Pass filter state
 
     except Exception as e:
         current_app.logger.error(f"Unexpected error in fund_detail for {fund_code}: {e}", exc_info=True)
@@ -541,4 +542,5 @@ def fund_detail(fund_code):
                                fund_code=fund_code,
                                chart_data_json='[]',
                                available_metrics=[],
-                               message=f"An unexpected error occurred: {e}") 
+                               message=f"An unexpected error occurred: {e}",
+                               sp_valid_state=True) # Default to True on error 

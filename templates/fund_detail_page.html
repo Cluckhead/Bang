@@ -6,6 +6,28 @@
 <div class="container mt-4">
     <h1 class="mb-4">Fund Details: {{ fund_code }}</h1>
 
+    <!-- Toggle Controls Container -->
+    <div class="d-flex flex-column flex-sm-row mb-3"> <!-- Flex layout for toggles -->
+        <!-- S&P Valid Filter Toggle -->
+        <div class="form-group mr-sm-3 toggle-container"> <!-- Added toggle-container class -->
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggleSpValid" {% if sp_valid_state %}checked{% endif %}>
+                <label class="form-check-label" for="toggleSpValid">S&P Valid Data Only</label>
+            </div>
+            <small class="form-text text-muted">Only include data where 'SS Project - In Scope' is TRUE.</small>
+        </div>
+        <!-- End S&P Valid Filter Toggle -->
+        <!-- Toggle Switch for SP Data Comparison -->
+        <div id="sp-toggle-container" class="form-group toggle-container" style="display: none;"> <!-- Initially hidden, JS will show if comparison data exists -->
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggleSpData" checked>
+                <label class="form-check-label" for="toggleSpData">Show SP Comparison Data</label>
+            </div>
+            <small class="form-text text-muted">Overlay S&P data on charts (if available).</small>
+        </div>
+    </div>
+    <!-- End Toggle Controls Container -->
+
     {% if message %}
         <div class="alert alert-info" role="alert">
             {{ message }}
@@ -13,12 +35,6 @@
     {% endif %}
 
     {% if chart_data_json and chart_data_json != '[]' %}
-        <!-- Toggle Switch for SP Data -->
-        <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" role="switch" id="toggleSpData" checked>
-            <label class="form-check-label" for="toggleSpData">Show SP Comparison Data</label>
-        </div>
-
         <!-- Embed JSON data for JavaScript -->
         <script id="fundChartData" type="application/json">
             {{ chart_data_json | safe }}

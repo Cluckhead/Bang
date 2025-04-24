@@ -4,6 +4,7 @@
 # It loads primary and optionally secondary data, calculates key metrics,
 # handles filtering based on 'SS Project - In Scope' status via a query parameter,
 # prepares data for visualization, and renders the metric detail page.
+# All charts use the full Dates.csv list for the x-axis, handling weekends and holidays.
 
 """
 Blueprint for metric-specific routes (e.g., displaying individual metric charts).
@@ -19,19 +20,14 @@ import math
 from config import COLOR_PALETTE
 from data_loader import load_and_process_data, LoadResult # Import LoadResult type
 from metric_calculator import calculate_latest_metrics
+from process_data import read_and_sort_dates
 
 # Define the blueprint for metric routes, using '/metric' as the URL prefix
 metric_bp = Blueprint('metric', __name__, url_prefix='/metric')
 
 @metric_bp.route('/<string:metric_name>')
 def metric_page(metric_name):
-    """Renders the detailed page (`metric_page_js.html`) for a specific metric.
-
-    Loads primary data (e.g., 'ts_Yield.csv') and optionally secondary data ('sp_ts_Yield.csv').
-    Applies filtering based on the 'sp_valid' query parameter (defaults to True).
-    Calculates metrics for both, prepares data for Chart.js, and passes it to the template.
-    Includes flags for secondary data availability and the current filter state.
-    """
+    """Renders the detailed page (`metric_page_js.html`) for a specific metric. X-axis always uses Dates.csv."""
     primary_filename = f"ts_{metric_name}.csv"
     secondary_filename = f"sp_{primary_filename}"
     fund_code = 'N/A' # Default for logging fallback in case of early error
@@ -199,12 +195,16 @@ def metric_page(metric_name):
         def nan_to_none(data_list):
              return [None if pd.isna(x) else x for x in data_list]
              
+        data_folder = current_app.config['DATA_FOLDER']
+        dates_file_path = os.path.join(data_folder, 'Dates.csv')
+        full_date_list = read_and_sort_dates(dates_file_path) or []
+
         for fund_code in fund_codes_in_metrics:
             fund_latest_metrics_row = latest_metrics.loc[fund_code]
             is_missing_latest = fund_code in missing_latest.index
             fund_charts = [] # Initialize list to hold chart configs for this fund
 
-            primary_labels = []
+            primary_labels = full_date_list
             primary_dt_index = None
             fund_hist_primary = None
             relative_primary_hist = None
@@ -214,13 +214,11 @@ def metric_page(metric_name):
             if fund_code in primary_df_index.get_level_values(1):
                 fund_hist_primary = primary_df.xs(fund_code, level=1).sort_index()
                 if isinstance(fund_hist_primary.index, pd.DatetimeIndex):
-                    primary_dt_index = fund_hist_primary.index # Store before filtering
-                    # Filter out weekends (assuming data is daily/business daily)
-                    fund_hist_primary = fund_hist_primary[primary_dt_index.dayofweek < 5]
-                    primary_dt_index = fund_hist_primary.index # Update after filtering
-                    primary_labels = primary_dt_index.strftime('%Y-%m-%d').tolist()
+                    # Reindex to full_date_list
+                    fund_hist_primary = fund_hist_primary.reindex(pd.to_datetime(full_date_list))
+                    primary_dt_index = pd.to_datetime(full_date_list)
                 else:
-                    primary_labels = fund_hist_primary.index.astype(str).tolist()
+                    fund_hist_primary = fund_hist_primary.reindex(full_date_list)
                     current_app.logger.warning(f"Warning: Primary index for {fund_code} is not DatetimeIndex.")
 
             # --- Get Secondary Historical Data ---
@@ -228,24 +226,11 @@ def metric_page(metric_name):
             if secondary_data_available and secondary_df_index is not None and fund_code in secondary_df_index.get_level_values(1):
                 fund_hist_secondary_raw = secondary_df.xs(fund_code, level=1).sort_index()
                 if isinstance(fund_hist_secondary_raw.index, pd.DatetimeIndex):
-                    fund_hist_secondary_raw = fund_hist_secondary_raw[fund_hist_secondary_raw.index.dayofweek < 5]
-                    # Reindex to primary date index if possible
-                    if primary_dt_index is not None and not primary_dt_index.empty:
-                         try:
-                             if isinstance(fund_hist_secondary_raw.index, pd.DatetimeIndex):
-                                 fund_hist_secondary = fund_hist_secondary_raw.reindex(primary_dt_index)
-                                 current_app.logger.info(f"Successfully reindexed secondary data for {fund_code}.")
-                             else:
-                                 current_app.logger.warning(f"Warning: Cannot reindex - Secondary index for {fund_code} is not DatetimeIndex after filtering.")
-                         except Exception as reindex_err:
-                             current_app.logger.warning(f"Warning: Reindexing secondary data for {fund_code} failed: {reindex_err}. Chart may be misaligned.")
-                             fund_hist_secondary = fund_hist_secondary_raw # Use unaligned as fallback
-                    else:
-                         current_app.logger.warning(f"Warning: Cannot reindex secondary for {fund_code} - Primary DatetimeIndex unavailable.")
-                         fund_hist_secondary = fund_hist_secondary_raw # Use unaligned as fallback
+                    fund_hist_secondary_raw = fund_hist_secondary_raw.reindex(pd.to_datetime(full_date_list))
+                    fund_hist_secondary = fund_hist_secondary_raw
                 else:
+                    fund_hist_secondary = fund_hist_secondary_raw.reindex(full_date_list)
                     current_app.logger.warning(f"Warning: Secondary index for {fund_code} is not DatetimeIndex.")
-                    fund_hist_secondary = fund_hist_secondary_raw # Use raw if not datetime
 
             # --- Prepare Main Chart Datasets (Primary Data) ---
             main_datasets = []
