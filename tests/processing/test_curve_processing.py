@@ -55,18 +55,6 @@ def test_get_latest_curve_date():
     assert latest == pd.Timestamp('2024-01-02')
 
 # --- check_curve_inconsistencies ---
-def test_check_curve_inconsistencies_monotonicity():
-    # Should flag a non-monotonic drop
-    idx = pd.MultiIndex.from_tuples([
-        ('USD', pd.Timestamp('2024-01-01'), '1D'),
-        ('USD', pd.Timestamp('2024-01-01'), '1M'),
-        ('USD', pd.Timestamp('2024-01-01'), '1Y')
-    ], names=['Currency', 'Date', 'Term'])
-    df = pd.DataFrame({'Value': [1.0, 0.0, 2.0], 'TermDays': [1, 30, 365]}, index=idx)
-    summary = curve_processing.check_curve_inconsistencies(df)
-    assert 'USD' in summary
-    assert any('non-monotonic' in msg for msg in summary['USD'])
-
 def test_check_curve_inconsistencies_ok():
     # Should return OK for monotonic increasing
     idx = pd.MultiIndex.from_tuples([

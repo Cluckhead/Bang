@@ -124,18 +124,27 @@ def load_and_process_security_data(filename: str, data_folder_path: str):
         df_long[date_col_dt] = pd.to_datetime(df_long[date_col_str], format='%d/%m/%Y', errors='coerce')
         
         # 2. Try YYYY-MM-DD for any remaining NaTs
-        # Create a mask for rows where the first attempt failed
         nat_mask = df_long[date_col_dt].isna()
         if nat_mask.any():
             logger.info(f"{log_prefix}Attempting fallback date parsing (YYYY-MM-DD) for {nat_mask.sum()} entries.")
-            # Apply the second format ONLY to the NaT rows
             df_long.loc[nat_mask, date_col_dt] = pd.to_datetime(df_long.loc[nat_mask, date_col_str], format='%Y-%m-%d', errors='coerce')
 
-        # Check again for NaTs after both attempts
+        # 3. Try ISO 8601 (YYYY-MM-DDTHH:MM:SS) for any remaining NaTs
+        nat_mask = df_long[date_col_dt].isna()
+        if nat_mask.any():
+            logger.info(f"{log_prefix}Attempting fallback date parsing (ISO 8601) for {nat_mask.sum()} entries.")
+            df_long.loc[nat_mask, date_col_dt] = pd.to_datetime(df_long.loc[nat_mask, date_col_str], format='%Y-%m-%dT%H:%M:%S', errors='coerce')
+
+        # 4. Final fallback: let pandas try to infer any remaining
+        nat_mask = df_long[date_col_dt].isna()
+        if nat_mask.any():
+            logger.info(f"{log_prefix}Attempting final fallback flexible date parsing for {nat_mask.sum()} entries.")
+            df_long.loc[nat_mask, date_col_dt] = pd.to_datetime(df_long.loc[nat_mask, date_col_str], errors='coerce')
+
+        # Check again for NaTs after all attempts
         final_nat_count = df_long[date_col_dt].isna().sum()
         if final_nat_count > 0:
-            logger.warning(f"{log_prefix}Could not parse {final_nat_count} date strings using specified formats (DD/MM/YYYY, YYYY-MM-DD).")
-            # Example of unparsed date strings:
+            logger.warning(f"{log_prefix}Could not parse {final_nat_count} date strings using all attempted formats (DD/MM/YYYY, YYYY-MM-DD, ISO 8601, flexible).")
             unparsed_examples = df_long.loc[df_long[date_col_dt].isna(), date_col_str].unique()[:5]
             logger.warning(f"{log_prefix}Unparsed examples: {unparsed_examples}")
 

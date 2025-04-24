@@ -1,6 +1,6 @@
 **Important Note on Date Formats:**
 
-Throughout this application, date processing logic (especially when identifying date columns in input files) should be flexible. Aim to handle common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and `YYYY-MM-DDTHH:MM:SS` where appropriate, particularly during initial data loading and column identification steps. While pre-processing steps might standardize dates to `YYYY-MM-DD`, initial parsing should be robust.
+Throughout this application, date processing logic (especially when identifying date columns in input files) is now fully flexible. The loader will handle common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`) where appropriate, particularly during initial data loading and column identification steps. If a date cannot be parsed with these, pandas' flexible parser is used as a final fallback. This ensures robust handling of a wide variety of date formats in your data files.
 
 ISIN is used as the primary identifier for securities, and is stored in the `w_secs.csv` file.
 
@@ -17,6 +17,7 @@ This application provides a web interface to load, process, and check financial 
     *   Route: `/metric/<metric_name>` (with toggle switch to show/hide comparison data)
 
 *   **Security-Level Analysis:** Load wide-format `sec_*.csv` files, view latest changes and Z-scores across securities, and drill down into historical charts.
+    *   Date parsing is now fully flexible: supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others.
     *   Server-side pagination, filtering (search, dropdowns), and sorting
     *   Routes: `/security/summary` (main page), `/security/details/<metric_name>/<security_id>` (detail view)
 
@@ -40,6 +41,8 @@ This application provides a web interface to load, process, and check financial 
 *   **Weight Check:** Compare fund and benchmark weights via `/weights/check`
 
 *   **Yield Curve Analysis:** Check curve inconsistencies via `/curve/summary` and `/curve/details/<currency>`
+    * Focuses on identifying stale and missing data as the most important checks
+    * Summary and detail views highlight data staleness and missing values
 
 *   **Attribution Residuals Summary:** Analyze attribution data via `/attribution`
     *   3-way toggle (L0, L1, L2) for different detail levels
@@ -153,7 +156,7 @@ graph TD
 |------|-------------|
 | `ts_*.csv` | Time-series data indexed by Date and Code (Fund/Benchmark) |
 | `sp_ts_*.csv` | (Optional) Secondary/comparison time-series data corresponding to `ts_*.csv` |
-| `sec_*.csv` | Security-level data in wide format (dates as columns). Used for Securities Check and Comparisons. |
+| `sec_*.csv` | Security-level data in wide format (dates as columns). Used for Securities Check and Comparisons. Date parsing is fully flexible: supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others. |
 | `pre_*.csv` | Input files for the `process_data.py` script |
 | `new_*.csv` | Output files from the `process_data.py` script |
 | `exclusions.csv` | Excluded securities list (`SecurityID`, `AddDate`, `EndDate`, `Comment`) |

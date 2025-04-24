@@ -7,7 +7,7 @@
 <div class="container mt-4">
     <h1 class="mb-4">Yield Curve Check Summary</h1>
     <p class="lead">Summary of potential inconsistencies found in the yield curve data for the latest available date: <strong>{{ latest_date }}</strong>.</p>
-    <p>Checks include basic monotonicity and comparison of daily change profiles against the previous day.</p>
+    <p>Checks focus on stale and missing data as the most important issues for yield curve quality.</p>
 
     {% if summary %}
         <table class="table table-striped table-hover">

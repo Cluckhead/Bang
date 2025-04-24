@@ -216,15 +216,6 @@ def check_curve_inconsistencies(df: pd.DataFrame) -> Dict[str, Any]:
             latest_curve = latest_curve_filtered.reset_index().sort_values('TermDays')
             logger.debug(f"Successfully filtered latest data for {currency}. Shape: {latest_curve.shape}")
 
-            # --- Basic Check 1: Monotonicity ---
-            diffs = latest_curve['Value'].diff()
-            large_drops = diffs[diffs < CURVE_MONOTONICITY_DROP_THRESHOLD]
-            if not large_drops.empty:
-                terms = latest_curve.loc[large_drops.index, 'Term'].tolist()
-                issue_msg = f"Potential non-monotonic drop(s) < {CURVE_MONOTONICITY_DROP_THRESHOLD} between terms near: {terms} on {latest_date.strftime('%Y-%m-%d')}"
-                summary.setdefault(currency, []).append(issue_msg)
-                logger.warning(f"{currency}: {issue_msg}")
-
             # --- Check 2: Compare change shape with previous day ---
             if previous_date:
                 logger.debug(f"Attempting to filter previous data for {currency} on {previous_date.strftime('%Y-%m-%d')}")

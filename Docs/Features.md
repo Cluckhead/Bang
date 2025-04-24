@@ -1,5 +1,9 @@
 # Application Features
 
+**Date Parsing Flexibility:**
+
+All security-level and time-series data loaders now support fully flexible date parsing. The application will handle `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`) formats, with pandas' flexible parser as a final fallback for any other date formats. This ensures robust handling of a wide variety of date formats in your data files.
+
 This document provides a more detailed overview of specific application features.
 
 ## Generic Data Comparison
@@ -40,14 +44,14 @@ This feature allows users to compare two related security-level datasets side-by
 
 ## Data Staleness Detection
 
-This feature monitors and identifies stale data in security files, helping users maintain data quality and reliability.
+This feature monitors and identifies stale or missing data in security and curve files, helping users maintain data quality and reliability.
 
 ### Core Functionality (`staleness_processing.py`)
 
-* **File Processing:** Automatically processes files with naming pattern `sec_*.csv` and `sp_sec_*.csv` in the configured data folder.
+* **File Processing:** Automatically processes files with naming pattern `sec_*.csv`, `sp_sec_*.csv`, and yield curve files in the configured data folder.
 * **Detection Methods:**
   * **Placeholder Pattern Detection:** Identifies consecutive placeholder values (default: repeated values of 100) that indicate stale or missing data.
-  * **Time-based Staleness:** Flags securities where the last valid update is older than a configurable threshold (default: 5 days).
+  * **Time-based Staleness:** Flags securities or curves where the last valid update is older than a configurable threshold (default: 5 days).
 * **Customizable Configuration:**
   * Configurable placeholder values that indicate stale data
   * Adjustable threshold for consecutive placeholders (default: 3)
@@ -82,3 +86,5 @@ This feature monitors and identifies stale data in security files, helping users
 - The toggle state is preserved across filter and sort actions.
 
 - Add the static data to the security details page
+
+- **Date parsing is fully flexible:** Security-level data now supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others.
