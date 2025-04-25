@@ -768,6 +768,17 @@ def details(comparison_type, security_id):
                     }
                 ]
             }
+            # --- Ensure chart_data is JSON serializable (convert numpy types) ---
+            import numpy as np
+            def convert_numpy(obj):
+                if isinstance(obj, np.generic):
+                    return obj.item()
+                if isinstance(obj, dict):
+                    return {k: convert_numpy(v) for k, v in obj.items()}
+                if isinstance(obj, list):
+                    return [convert_numpy(i) for i in obj]
+                return obj
+            chart_data = convert_numpy(chart_data)
             log.info(f"Prepared chart data for {decoded_security_id} with {len(chart_dates)} dates (from Dates.csv).")
         except Exception as e:
             log.error(f"Error processing dates for chart data for security {decoded_security_id}: {e}")

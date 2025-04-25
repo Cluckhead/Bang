@@ -152,14 +152,13 @@ def get_stale_securities_details(filename, threshold_days=DEFAULT_STALENESS_THRE
         meta_columns = df.columns[:6]
         date_columns = df.columns[6:]
         
-        # Convert date columns to datetime if they look like dates
+        # Use pandas' flexible date parser for all date columns
         date_objects = []
         for col in date_columns:
             try:
-                # Try to parse as DD/MM/YYYY
-                date_obj = datetime.strptime(col, '%d/%m/%Y')
+                date_obj = pd.to_datetime(col, errors='raise')
                 date_objects.append(date_obj)
-            except ValueError:
+            except Exception:
                 logger.warning(f"Column {col} in {filename} doesn't appear to be a date.")
                 date_objects.append(None)
         
@@ -200,7 +199,7 @@ def get_stale_securities_details(filename, threshold_days=DEFAULT_STALENESS_THRE
             # Method 1: Check for placeholder value patterns (e.g., repeated 100s)
             consecutive_placeholders = 0
             stale_start_idx = None
-            
+            found_stale = False
             for i, val in enumerate(date_values):
                 # Check if this value is a placeholder
                 if is_placeholder_value(val):
@@ -210,19 +209,15 @@ def get_stale_securities_details(filename, threshold_days=DEFAULT_STALENESS_THRE
                 else:
                     consecutive_placeholders = 0
                     stale_start_idx = None
-                
                 # If we've found enough consecutive placeholders, mark as stale
                 if consecutive_placeholders >= DEFAULT_CONSECUTIVE_THRESHOLD:
                     stale_start_date = date_columns[stale_start_idx]
-                    
-                    # Calculate days stale
                     days_stale = 0
+                    # Calculate days_stale as the difference between latest date and the start of the run
                     if stale_start_idx is not None and stale_start_idx < len(date_objects) and date_objects[stale_start_idx] is not None:
                         last_update_date = date_objects[stale_start_idx]
                         if latest_date_idx < len(date_objects) and date_objects[latest_date_idx] is not None:
                             days_stale = (date_objects[latest_date_idx] - last_update_date).days
-                    
-                    # Add to stale securities list
                     stale_securities.append({
                         'id': security_id,
                         'metric_name': metric_name,
@@ -232,26 +227,58 @@ def get_stale_securities_details(filename, threshold_days=DEFAULT_STALENESS_THRE
                         'stale_type': 'placeholder_pattern',
                         'consecutive_placeholders': consecutive_placeholders
                     })
+                    found_stale = True
                     break
-            
-            # Method 2: For securities not already marked stale by Method 1,
+            # Method 1b: Check for repeated value patterns (any value, not just placeholder)
+            if not found_stale:
+                consecutive_repeats = 1
+                repeat_value = date_values[0] if len(date_values) > 0 else None
+                repeat_start_idx = 0
+                for i in range(1, len(date_values)):
+                    if pd.isna(date_values[i]) or pd.isna(repeat_value):
+                        consecutive_repeats = 1
+                        repeat_value = date_values[i]
+                        repeat_start_idx = i
+                        continue
+                    if date_values[i] == repeat_value:
+                        consecutive_repeats += 1
+                        if consecutive_repeats == DEFAULT_CONSECUTIVE_THRESHOLD:
+                            stale_start_date = date_columns[repeat_start_idx]
+                            days_stale = 0
+                            # Calculate days_stale as the difference between latest date and the start of the run
+                            if repeat_start_idx < len(date_objects) and date_objects[repeat_start_idx] is not None:
+                                last_update_date = date_objects[repeat_start_idx]
+                                if latest_date_idx < len(date_objects) and date_objects[latest_date_idx] is not None:
+                                    days_stale = (date_objects[latest_date_idx] - last_update_date).days
+                            stale_securities.append({
+                                'id': security_id,
+                                'metric_name': metric_name,
+                                'static_info': static_info,
+                                'last_update': stale_start_date,
+                                'days_stale': days_stale,
+                                'stale_type': 'repeated_value',
+                                'consecutive_placeholders': consecutive_repeats
+                            })
+                            found_stale = True
+                            break
+                    else:
+                        consecutive_repeats = 1
+                        repeat_value = date_values[i]
+                        repeat_start_idx = i
+            # Method 2: For securities not already marked stale by Method 1 or 1b,
             # check for time-based staleness (last non-empty value is too old)
-            if consecutive_placeholders < DEFAULT_CONSECUTIVE_THRESHOLD:
-                # Find the last non-placeholder value
+            if not found_stale:
                 last_valid_idx = None
                 for i in range(len(date_values) - 1, -1, -1):
                     if not is_placeholder_value(date_values[i]):
                         last_valid_idx = i
                         break
-                
-                # If found a valid value, check if it's stale based on time
                 if last_valid_idx is not None and last_valid_idx < latest_date_idx:
                     days_difference = 0
                     if last_valid_idx < len(date_objects) and date_objects[last_valid_idx] is not None:
                         last_update_date = date_objects[last_valid_idx]
                         if latest_date_idx < len(date_objects) and date_objects[latest_date_idx] is not None:
                             days_difference = (date_objects[latest_date_idx] - last_update_date).days
-                    
                     if days_difference > threshold_days:
                         stale_securities.append({
                             'id': security_id,
