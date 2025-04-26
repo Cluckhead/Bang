@@ -27,6 +27,7 @@ This application provides a web interface to load, process, and check financial 
 | **Special Character Handling**   | Security IDs URL-encoded/decoded.                                                                            |
 | **Max/Min Value Breach**         | Checks `sec_*.csv` against thresholds. Dashboard: `/maxmin/dashboard`. Details: `/maxmin/details/<file>/<type>`. |
 | **Watchlist Management**         | Track/add/clear securities via `/watchlist`. Filterable, auditable, modal UI.                                |
+| **Inspect (Contribution Analysis)**      | Analyze top contributors/detractors to metric changes over a date range. Modal UI, supports all analytics. See below for technical details. |
 
 ## Fund Group Filtering (Reusable Feature)
 
@@ -381,3 +382,49 @@ That's it! The `generic_comparison_views.py` module and the base templates (`com
 - The security details page now displays all static columns from `reference.csv` in a grouped tile on the left (Identifiers, Classification, Financials, etc.), with all time-series charts on the right in a two-column layout.
 - Exclusion status (if the security is on the exclusion list) and open data issues (if any) are shown in bold red in the static tile, with all open issues listed.
 - A Bloomberg YAS link is generated for each security using the 'BBG Ticker Yellow' field. The link format is now configurable via the `BLOOMBERG_YAS_URL_FORMAT` variable in `config.py`, making it easy to change or reuse the link format elsewhere in the app.
+
+### Inspect (Contribution Analysis) Feature (Technical Details)
+
+The Inspect (Contribution Analysis) feature enables root-cause analysis of changes in any time-series metric (e.g., Duration, Spread, YTM, Spread Duration) at the security level. It is accessible from each chart on the metric detail page.
+
+**Workflow:**
+- Each chart includes an **Inspect** button.
+- Clicking opens a modal for user input:
+  - **Date Range:** User selects a subset of the chart's date range.
+  - **Data Category:** User selects "Original" or "SP" (S&P) data source.
+- On submission, the backend calculates contributions for each security:
+  - Loads weights from `w_secs.csv` and metric values from `sec_<metric>.csv` or `sp_sec_<metric>.csv`.
+  - For each security and day in the range: `Contribution = Weight × MetricValue`.
+  - Computes the average contribution over the range and compares to the baseline (day before the range).
+  - Ranks securities by the change; shows top 10 contributors and top 10 detractors.
+- Results are displayed in a dedicated results page, with links to security details.
+
+**Implementation:**
+- **Backend:**
+  - Main logic in `views/metric_views.py`:
+    - `_calculate_contributions(metric_name, fund_code, start_date_str, end_date_str, data_source, top_n=10)`
+    - Routes: `/metric/<metric_name>/inspect` (POST), `/metric/inspect/results` (GET)
+  - Handles flexible date parsing, missing data, and merges static info from `reference.csv`.
+- **Frontend:**
+  - Modal UI for input selection (date range, data source).
+  - Results page lists contributors/detractors with links.
+- **Supported Metrics:**
+  - Duration, Spread, YTM, Spread Duration, and any metric with security-level data.
+
+**Key Files and Functions:**
+- `views/metric_views.py` (core logic and routes)
+- `w_secs.csv` (weights)
+- `sec_<metric>.csv`, `sp_sec_<metric>.csv` (metric values)
+- `reference.csv` (static security info)
+
+**Example Calculation:**
+- For each security:
+  - For each day in range: `contribution = weight × metric_value`
+  - Average over range: `avg_contribution = sum(contributions) / N_days`
+  - Baseline: contribution on day before range
+  - Change: `avg_contribution - baseline`
+- Top 10 positive and negative changes are shown as contributors/detractors.
+
+**Purpose:**
+- Quickly identify which securities are driving changes in portfolio analytics over any period.
+- Integrated, user-friendly workflow for root-cause analysis.

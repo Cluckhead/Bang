@@ -11,6 +11,7 @@
 - [Technical Details](#technical-details)
 - [Security Details Page Enhancements](#security-details-page-enhancements)
 - [Watchlist Feature](#watchlist-feature)
+- [Inspect (Contribution Analysis) Feature](#inspect-contribution-analysis-feature)
 
 ---
 
@@ -233,3 +234,62 @@ The Watchlist feature provides a centralized way to track, review, and manage se
 - Provides a transparent, auditable workflow for tracking securities of interest.
 - Supports collaboration and accountability by recording who added/cleared entries and why.
 - Makes it easy to review, filter, and manage the watchlist, even as the number of entries grows.
+
+---
+
+## Inspect (Contribution Analysis) Feature
+
+The Inspect feature provides a powerful, interactive workflow for root-cause analysis of changes in any time-series metric (e.g., Duration, Spread, YTM, Spread Duration, etc.) at the security level. It is available directly from each chart on the metric detail page.
+
+### How It Works
+- **Access:**
+  - Each chart on the metric page (e.g., Duration, Spread, YTM, Spread Duration) includes an **Inspect** button.
+  - Clicking this button opens a modal (sub-window) where the user can configure the analysis.
+
+- **User Input:**
+  1. **Date Range Selection:**
+     - The user selects a date range (must be a subset of the chart's available dates).
+  2. **Data Category:**
+     - The user chooses between "Original" or "SP" (S&P) data sources.
+
+- **Calculation Logic:**
+  1. For the selected metric, fund, and data source, the app loads the relevant weights (from `w_secs.csv`) and metric values (from `sec_<metric>.csv` or `sp_sec_<metric>.csv`).
+  2. **Daily Contribution:**
+     - For each security and each day in the range, the daily contribution is calculated as:
+       - `Contribution = Weight × MetricValue`
+  3. **Baseline:**
+     - The contribution for each security is also calculated for the day *before* the selected range (serves as the baseline).
+  4. **Average Contribution:**
+     - For each security, the average contribution over the selected range is computed (sum of daily contributions divided by the number of days).
+  5. **Change Calculation:**
+     - The difference between the average contribution (over the range) and the baseline (day before) is calculated for each security.
+  6. **Ranking:**
+     - Securities are ranked by this difference. The top 10 positive (contributors) and top 10 negative (detractors) are identified.
+
+- **Results Display:**
+  - After calculation, a new results page is shown:
+    - **Top 10 Contributors** and **Top 10 Detractors** are listed, with their ISIN, Security Name, baseline, average, and change values.
+    - Each security is linked to its details page for further investigation.
+    - This helps users quickly identify which securities are driving changes in the metric over the selected period.
+
+- **Supported Analytics:**
+  - The Inspect feature is available for all key analytics:
+    - Duration
+    - Spread
+    - YTM
+    - Spread Duration
+    - (and any other metric with security-level data)
+
+### Why This Matters
+- **Root Cause Analysis:**
+  - Enables users to quickly pinpoint which securities are responsible for changes in portfolio analytics.
+- **Flexible Investigation:**
+  - Users can select any date range and data source, making it easy to investigate anomalies or performance drivers.
+- **Integrated Workflow:**
+  - Directly accessible from each chart, with seamless navigation to security details for deeper analysis.
+
+### Technical Details
+- Implemented in `views/metric_views.py` via the `_calculate_contributions` function and related routes.
+- Handles missing data, flexible date parsing, and robust error handling.
+- Merges security names from `reference.csv` for user-friendly display.
+- Results are rendered in a dedicated results page and also available as JSON for API use.

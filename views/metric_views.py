@@ -685,7 +685,7 @@ def _calculate_contributions(metric_name, fund_code, start_date_str, end_date_st
     if data_source == 'Original':
         metric_filename = f"sec_{metric_name}.csv"
     elif data_source == 'SP':
-        metric_filename = f"sp_sec_{metric_name}.csv" # Assuming S&P file prefix
+        metric_filename = f"sec_{metric_name}SP.csv"
     else:
         raise ValueError(f"Unsupported data_source: {data_source}")
         
@@ -871,7 +871,7 @@ def inspect_metric_contribution(metric_name):
 
     except FileNotFoundError as e:
          current_app.logger.error(f"Inspect API Error: File not found - {e}")
-         return jsonify({"error": f"Required data file not found: {e}. Ensure files like '{weights_filename}' and metric files exist."}), 500
+         return jsonify({"error": f"Required data file not found: {e}."}), 500
     except ValueError as e:
         current_app.logger.error(f"Inspect API Error: Value error - {e}")
         return jsonify({"error": f"Input or data processing error: {e}"}), 400 # Use 400 for client-side input errors / known data issues
