@@ -76,12 +76,12 @@ This application provides a web interface to load, process, and check financial 
   | IG04 |             |      |           |
 
 ### How the Fund Group Filter Works
-- On pages like the metric detail page, a scrollable list of fund groups appears under the latest date.
+- On pages like the metric detail page, a **dropdown** of fund groups appears under the latest date.
 - Only groups with at least one fund present in the current data are shown.
 - Selecting a group filters the view to only show those funds (and their associated benchmarks).
 - The filter is server-side: the page reloads with the `fund_group` query parameter in the URL.
 - The selected group is highlighted and persists across reloads and navigation.
-- The filter UI is accessible and scalable for large numbers of groups.
+- The filter UI is a compact dropdown and is scalable for large numbers of groups.
 
 ### How to Reuse This Feature on Other Pages
 1. **Load Fund Groups:**
@@ -93,8 +93,9 @@ This application provides a web interface to load, process, and check financial 
 3. **Pass to Template:**
    - Pass `fund_groups` (filtered to only non-empty groups in the current data) and `selected_fund_group` to your template context.
 4. **Render the UI:**
-   - Use the scrollable radio list pattern (see `metric_page_js.html`) to render the filter.
+   - Use the **dropdown pattern** (see `metric_page_js.html`) to render the filter.
    - Ensure the form preserves other query parameters (e.g., filters, toggles) when submitting.
+   - This dropdown approach is recommended for scalability and usability with many groups.
 5. **Persistence:**
    - The filter state is maintained in the URL and query string, so it persists across reloads and navigation.
 

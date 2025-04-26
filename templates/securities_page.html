@@ -30,10 +30,22 @@ main.js:29 DOM fully loaded and parsed
     {# Combined into one form submitting GET requests #}
     <form method="GET" action="{{ url_for('security.securities_page') }}" class="mb-3 p-3 border rounded bg-light" id="filter-form">
         <div class="row g-2 align-items-end">
+            {# Fund Group Filter Dropdown (if available) #}
+            {% if fund_groups %}
+            <div class="col-md-2">
+                <label for="fund-group-select" class="form-label">Fund Group</label>
+                <select class="form-select form-select-sm" id="fund-group-select" name="fund_group" onchange="this.form.submit()">
+                    <option value="" {% if not selected_fund_group %}selected{% endif %}>All</option>
+                    {% for group, funds in fund_groups.items() %}
+                        <option value="{{ group }}" {% if selected_fund_group == group %}selected{% endif %}>{{ group }} ({{ funds|length }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
             {# Search Box #}
             <div class="col-md-4">
                 <label for="search_term" class="form-label">Search by {{ id_col_name }}</label>
-                <input type="text" name="search_term" id="search_term" class="form-control form-control-sm" placeholder="Enter search term..." value="{{ search_term or '' }}">
+                <input type="text" name="search_term" id="search_term" class="form-control form-control-sm" placeholder="Enter search term..." value="{{ search_term or '' }}" oninput="this.form.submit()">
             </div>
             
             {# Dynamic Filters #}
@@ -41,7 +53,7 @@ main.js:29 DOM fully loaded and parsed
                 {% for column, options in filter_options.items() %}
                 <div class="col-md-2">
                     <label for="filter-{{ column|replace(' ', '_') }}" class="form-label">{{ column }}</label>
-                    <select id="filter-{{ column|replace(' ', '_') }}" name="filter_{{ column }}" class="form-select form-select-sm">
+                    <select id="filter-{{ column|replace(' ', '_') }}" name="filter_{{ column }}" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">All</option>
                         {% for option in options %}
                         <option value="{{ option }}" {% if active_filters.get(column) == option|string %}selected{% endif %}>{{ option }}</option>
@@ -54,7 +66,7 @@ main.js:29 DOM fully loaded and parsed
             {# Min = 0 Exclusion Toggle #}
             <div class="col-md-2 d-flex align-items-center">
                 <div class="form-check mt-4">
-                    <input class="form-check-input" type="checkbox" value="true" id="exclude_min_zero" name="exclude_min_zero" {% if exclude_min_zero %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" value="true" id="exclude_min_zero" name="exclude_min_zero" {% if exclude_min_zero %}checked{% endif %} onchange="this.form.submit()">
                     <label class="form-check-label" for="exclude_min_zero">
                         Exclude securities where Min = 0
                     </label>
@@ -63,7 +75,7 @@ main.js:29 DOM fully loaded and parsed
 
             {# Buttons #}
             <div class="col-md-auto">
-                <button class="btn btn-primary btn-sm" type="submit">Apply Filters</button>
+                {# Remove Apply Filters button, as all filters are now auto-submit #}
                 {# Clear button redirects to the base URL without filters/search #}
                  {% if search_term or active_filters %}
                     <a href="{{ url_for('security.securities_page') }}" class="btn btn-secondary btn-sm">Clear All</a>

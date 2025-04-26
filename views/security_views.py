@@ -18,6 +18,8 @@ from security_processing import load_and_process_security_data, calculate_securi
 # Import the exclusion loading function
 from views.exclusion_views import load_exclusions # Only import load_exclusions
 from utils import replace_nan_with_none
+# Add import for fund group utility
+from utils import load_fund_groups, parse_fund_list
 
 # Define the blueprint
 security_bp = Blueprint('security', __name__, url_prefix='/security')
@@ -48,7 +50,8 @@ def get_active_exclusions(data_folder_path: str):
 
 @security_bp.route('/summary')
 def securities_page():
-    """Renders a page summarizing potential issues in security-level data, with server-side pagination, filtering, and sorting."""
+    """Renders a page summarizing potential issues in security-level data, with server-side pagination, filtering, and sorting.
+    Adds support for filtering by fund group (from FundGroups.csv)."""
     current_app.logger.info("\n--- Starting Security Data Processing (Paginated) ---")
 
     # Retrieve the configured absolute data folder path
@@ -71,7 +74,9 @@ def securities_page():
     }
     # --- Min = 0 Exclusion Toggle ---
     exclude_min_zero = request.args.get('exclude_min_zero', 'true') == 'true'
-    current_app.logger.info(f"Request Params: Page={page}, Search='{search_term}', SortBy='{sort_by}', SortOrder='{sort_order}', Filters={active_filters}, Exclude Min = 0: {exclude_min_zero}")
+    # --- Fund Group Filter ---
+    selected_fund_group = request.args.get('fund_group', None)
+    current_app.logger.info(f"Request Params: Page={page}, Search='{search_term}', SortBy='{sort_by}', SortOrder='{sort_order}', Filters={active_filters}, Exclude Min = 0: {exclude_min_zero}, Fund Group: {selected_fund_group}")
 
     # Collect active filters from request args (e.g., ?filter_Country=USA&filter_Sector=Tech)
     active_filters = {
@@ -148,6 +153,37 @@ def securities_page():
         # Sort filter options dictionary by key for consistent display order
         final_filter_options = dict(sorted(filter_options.items()))
 
+        # --- Fund Group Filtering: Apply to DataFrame Before Filters ---
+        fund_groups_dict = load_fund_groups(data_folder)
+        if selected_fund_group and selected_fund_group in fund_groups_dict:
+            allowed_funds = set(fund_groups_dict[selected_fund_group])
+            # If 'Funds' column exists, filter by checking if any allowed fund is in the parsed list
+            if 'Funds' in combined_metrics_df.columns:
+                combined_metrics_df = combined_metrics_df[
+                    combined_metrics_df['Funds'].apply(
+                        lambda x: any(f in allowed_funds for f in parse_fund_list(x)) if pd.notna(x) else False
+                    )
+                ]
+            else:
+                # Fallback: Try to filter by a static column that matches fund code, e.g., 'Fund', 'Fund Code', or similar
+                fund_col_candidates = [col for col in ['Fund', 'Fund Code', 'Code'] if col in combined_metrics_df.columns]
+                if fund_col_candidates:
+                    fund_col = fund_col_candidates[0]
+                    combined_metrics_df = combined_metrics_df[combined_metrics_df[fund_col].isin(allowed_funds)]
+            # If no fund column, skip filtering (could log a warning)
+        # --- Prepare Fund Group Filtering for UI (only groups with securities in current data) ---
+        all_funds_in_data = set()
+        if 'Funds' in combined_metrics_df.columns:
+            all_funds_in_data = set()
+            for x in combined_metrics_df['Funds'].dropna():
+                all_funds_in_data.update(parse_fund_list(x))
+        else:
+            fund_col_candidates = [col for col in ['Fund', 'Fund Code', 'Code'] if col in combined_metrics_df.columns]
+            if fund_col_candidates:
+                fund_col = fund_col_candidates[0]
+                all_funds_in_data = set(combined_metrics_df[fund_col].unique())
+        filtered_fund_groups = {g: [f for f in funds if f in all_funds_in_data] for g, funds in fund_groups_dict.items()}
+        filtered_fund_groups = {g: funds for g, funds in filtered_fund_groups.items() if funds}
 
         # --- Apply Filtering Steps Sequentially ---
         current_app.logger.info("Applying filters...")
@@ -207,7 +243,9 @@ def securities_page():
                                    pagination=None,
                                    current_sort_by=sort_by,
                                    current_sort_order=sort_order,
-                                   exclude_min_zero=exclude_min_zero)
+                                   exclude_min_zero=exclude_min_zero,
+                                   fund_groups=filtered_fund_groups,
+                                   selected_fund_group=selected_fund_group)
 
         # --- Apply Sorting ---
         current_app.logger.info(f"Applying sort: By='{sort_by}', Order='{sort_order}'")
@@ -325,7 +363,9 @@ def securities_page():
                                pagination=None,
                                filter_options=final_filter_options if 'final_filter_options' in locals() else {},
                                active_filters=active_filters,
-                               exclude_min_zero=exclude_min_zero)
+                               exclude_min_zero=exclude_min_zero,
+                               fund_groups=filtered_fund_groups,
+                               selected_fund_group=selected_fund_group)
 
     # --- Render Template ---
     return render_template('securities_page.html',
@@ -339,7 +379,9 @@ def securities_page():
                            current_sort_by=sort_by,
                            current_sort_order=sort_order,
                            message=None, # Clear any previous error message if successful
-                           exclude_min_zero=exclude_min_zero # Pass toggle state to template
+                           exclude_min_zero=exclude_min_zero, # Pass toggle state to template
+                           fund_groups=filtered_fund_groups, # Pass available groups for UI
+                           selected_fund_group=selected_fund_group # Pass selected group for UI
     )
 
 @security_bp.route('/security/details/<metric_name>/<path:security_id>')
