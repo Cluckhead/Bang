@@ -10,6 +10,7 @@ import typing
 
 # Import from our local modules
 from views.api_core import api_bp, get_data_file_statuses
+from utils import load_fund_groups  # Import the fund group loader
 
 @api_bp.route('/get_data')
 def get_data_page() -> typing.Union[str, typing.Tuple[str, int], Response]:
@@ -51,9 +52,15 @@ def get_data_page() -> typing.Union[str, typing.Tuple[str, int], Response]:
         data_file_statuses = get_data_file_statuses(data_folder)
         # --- End Get Data File Statuses ---
 
+        # --- Load Fund Groups for Dropdown ---
+        fund_groups = load_fund_groups(data_folder)  # Always pass fund_groups to template
+        selected_fund_group = None  # Default to None; update if you add group selection logic
+        # --- End Fund Groups ---
+
     except Exception as e:
         current_app.logger.error(f"Error preparing get_data page: {e}", exc_info=True)
         # Provide a user-friendly error message, specific details are logged
         return f"An error occurred while preparing the data retrieval page: {e}", 500
 
-    return render_template('get_data.html', funds=funds, default_end_date=default_end_date, data_file_statuses=data_file_statuses) 
+    # Pass fund_groups and selected_fund_group to the template to avoid Undefined errors
+    return render_template('get_data.html', funds=funds, default_end_date=default_end_date, data_file_statuses=data_file_statuses, fund_groups=fund_groups, selected_fund_group=selected_fund_group) 

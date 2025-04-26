@@ -16,6 +16,7 @@ from views.api_core import api_bp, _simulate_and_print_tqs_call, _fetch_real_tqs
 
 # Import the validation function from data_validation
 from data_validation import validate_data
+from utils import load_fund_groups
 
 def _fetch_data_for_query(query_id: str, selected_funds: List[str], start_date: str, end_date: str) -> Optional[pd.DataFrame]:
     """
@@ -555,6 +556,7 @@ def add_schedule() -> Tuple[Response, int]:
     write_mode = data.get('write_mode')
     date_mode = data.get('date_mode')
     funds = data.get('funds')
+    fund_group = data.get('fund_group')  # Optionally sent from frontend in the future
     if not schedule_time or not write_mode or not date_mode or not isinstance(funds, list) or not funds:
         return jsonify({'message': 'Missing or invalid schedule fields'}), 400
     if date_mode == 'quick':
@@ -566,6 +568,14 @@ def add_schedule() -> Tuple[Response, int]:
         end_offset = data.get('end_offset')
         if start_offset is None or end_offset is None:
             return jsonify({'message': 'start_offset and end_offset are required for range mode'}), 400
+    # --- Fund group detection: if funds match a group exactly, save the group name ---
+    data_folder = current_app.config.get('DATA_FOLDER', 'Data')
+    fund_groups = load_fund_groups(data_folder)
+    matched_group = None
+    for group_name, group_funds in fund_groups.items():
+        if set(funds) == set(group_funds):
+            matched_group = group_name
+            break
     schedules = load_schedules()
     new_id = max((s['id'] for s in schedules), default=0) + 1
     sched = {
@@ -575,6 +585,8 @@ def add_schedule() -> Tuple[Response, int]:
         'date_mode': date_mode,
         'funds': funds
     }
+    if matched_group:
+        sched['fund_group'] = matched_group
     if date_mode == 'quick':
         sched['days_back'] = int(days_back)
     else:
@@ -590,4 +602,21 @@ def delete_schedule(schedule_id: int) -> Tuple[str, int]:
     if len(new_list) == len(schedules):
         return jsonify({'message': 'Schedule not found'}), 404
     save_schedules(new_list)
-    return '', 204 
+    return '', 204
+
+def run_scheduled_job(schedule: Dict[str, Any]) -> None:
+    with current_app.app_context():
+        payload = {
+            'date_mode': schedule['date_mode'],
+            'write_mode': schedule['write_mode'],
+        }
+        # --- Resolve funds from group if present ---
+        data_folder = current_app.config.get('DATA_FOLDER', 'Data')
+        if 'fund_group' in schedule:
+            fund_groups = load_fund_groups(data_folder)
+            funds = fund_groups.get(schedule['fund_group'], [])
+            payload['funds'] = funds
+        else:
+            payload['funds'] = schedule['funds']
+        # ... existing date logic ...
+        # (rest of the function unchanged) 

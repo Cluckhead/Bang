@@ -18,7 +18,6 @@
 ### Features v2.1
 - Attribution Errors
 - S&P vs Prod page
-- Fund Groups
 - S&P bad securities email
 - Monitor of missing S&P data
 - Watch list for securities - Greg's issue

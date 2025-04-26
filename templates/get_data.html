@@ -109,8 +109,22 @@
         </div>
         <div class="mb-3">
             <label class="form-label">Select Funds:</label>
-             <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="select-all-funds">Select All</button>
-             <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="deselect-all-funds">Deselect All</button>
+            <!-- Fund Group Dropdown for fast selection -->
+            {% if fund_groups %}
+            <div class="mb-2" style="max-width: 350px;">
+                <label for="fund-group-select" class="form-label"><strong>Fund Group:</strong></label>
+                <select class="form-select" id="fund-group-select">
+                    <option value="">-- Select Group --</option>
+                    {% for group, funds in fund_groups.items() %}
+                        <option value="{{ group }}">{{ group }} ({{ funds|length }})</option>
+                    {% endfor %}
+                </select>
+                <small class="form-text text-muted">Selecting a group will instantly select all funds in that group. You can then add/remove individual funds as needed.</small>
+            </div>
+            {% endif %}
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="select-all-funds">Select All</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="deselect-all-funds">Deselect All</button>
+            <button type="button" class="btn btn-sm btn-outline-danger ms-1" id="clear-fund-selection">Clear</button>
             <div id="fund-list" class="border p-3" style="max-height: 300px; overflow-y: auto;">
                 {% for fund in funds %}
                 <div class="form-check">
@@ -124,7 +138,7 @@
                 <p class="text-danger">No funds found or FundList.csv could not be loaded correctly.</p>
                 {% endfor %}
             </div>
-             <div class="form-text text-danger d-none" id="fund-selection-error">Please select at least one fund.</div>
+            <div class="form-text text-danger d-none" id="fund-selection-error">Please select at least one fund.</div>
         </div>
 
         <button type="submit" class="btn btn-primary">Run API Calls</button>
@@ -250,14 +264,57 @@
 {% endblock %}
 
 {% block scripts %}
-{{ super() }} {# Include scripts from base.html #}
-<script type="module">
-// Import the navbar status bar updater from main.js
-import { updateNavbarStatusBar } from '/static/js/main.js';
+{{ super() }}
+<script>
+// All fund selection and group logic in a single DOMContentLoaded block
+// Purpose: Handles fund group dropdown, select all, deselect all, and clear actions
 
-// .SYNOPSIS
-//     JavaScript for Get Data via API page. Handles form logic, date range and write mode selection, API calls, and results table updates.
 document.addEventListener('DOMContentLoaded', function() {
+    // --- Fund group selection logic ---
+    const fundGroupSelect = document.getElementById('fund-group-select');
+    const selectAllButton = document.getElementById('select-all-funds');
+    const deselectAllButton = document.getElementById('deselect-all-funds');
+    const clearButton = document.getElementById('clear-fund-selection');
+    // Map of group name to fund codes (populated from server-side context)
+    const fundGroups = {{ fund_groups|tojson|safe }};
+
+    // When a group is selected, uncheck all funds, then check only those in the group
+    if (fundGroupSelect) {
+        fundGroupSelect.addEventListener('change', function() {
+            const group = fundGroupSelect.value;
+            // Always get the latest checkboxes in case DOM changes
+            const checkboxes = document.querySelectorAll('.fund-checkbox');
+            // Uncheck all first
+            checkboxes.forEach(cb => cb.checked = false);
+            if (group && fundGroups[group]) {
+                const groupFunds = new Set(fundGroups[group]);
+                checkboxes.forEach(cb => {
+                    if (groupFunds.has(cb.value)) {
+                        cb.checked = true;
+                    }
+                });
+            }
+        });
+    }
+    // Select All/Deselect All/Clear logic
+    if (selectAllButton) {
+        selectAllButton.addEventListener('click', () => {
+            document.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = true);
+        });
+    }
+    if (deselectAllButton) {
+        deselectAllButton.addEventListener('click', () => {
+            document.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = false);
+        });
+    }
+    if (clearButton) {
+        clearButton.addEventListener('click', () => {
+            document.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = false);
+            if (fundGroupSelect) fundGroupSelect.value = '';
+        });
+    }
+
+    // --- Existing get-data-form logic ---
     const form = document.getElementById('get-data-form');
     const statusArea = document.getElementById('status-area');
     const statusMessage = document.getElementById('status-message');
@@ -272,8 +329,6 @@ document.addEventListener('DOMContentLoaded', function() {
     cleanupStatus.className = 'mt-2';
     cleanupButton.parentNode.insertBefore(cleanupStatus, cleanupButton.nextSibling);
     const fundCheckboxes = document.querySelectorAll('.fund-checkbox');
-    const selectAllButton = document.getElementById('select-all-funds');
-    const deselectAllButton = document.getElementById('deselect-all-funds');
     const dateModeQuick = document.getElementById('dateModeQuick');
     const dateModeRange = document.getElementById('dateModeRange');
     const customDateRangeRow = document.getElementById('custom-date-range-row');
@@ -293,14 +348,6 @@ document.addEventListener('DOMContentLoaded', function() {
     dateModeQuick.addEventListener('change', updateDateRangeVisibility);
     dateModeRange.addEventListener('change', updateDateRangeVisibility);
     updateDateRangeVisibility(); // Initial state
-
-    // Select/Deselect All Funds buttons
-    selectAllButton.addEventListener('click', () => {
-        fundCheckboxes.forEach(checkbox => checkbox.checked = true);
-    });
-    deselectAllButton.addEventListener('click', () => {
-        fundCheckboxes.forEach(checkbox => checkbox.checked = false);
-    });
 
     // --- Function to handle the API call logic ---
     async function handleApiCall(forceOverwriteButton = false) {
