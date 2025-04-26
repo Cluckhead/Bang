@@ -31,6 +31,9 @@ COLOR_PALETTE = [
     '#FFA500', '#8A2BE2', '#228B22', '#FF1493', '#A52A2A', '#20B2AA'
 ]
 
+# Bloomberg YAS URL syntax (format string, use {ticker} for the BBG Ticker Yellow)
+BLOOMBERG_YAS_URL_FORMAT = "http://Bloomberg:{ticker} YAS"
+
 # --- NEW: Comparison Configuration ---
 # Defines the different types of security data comparisons available.
 # Keys are the identifier used in URLs (e.g., 'spread').

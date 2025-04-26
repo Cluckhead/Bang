@@ -1,205 +1,296 @@
+{#
+security_details_page.html
+Purpose: Renders the security details page, showing all static info (from reference.csv), exclusion/issue status, and Bloomberg YAS link in a left tile, with charts on the right.
+#}
 {% extends 'base.html' %}
 
 {% block title %}Security Details: {{ security_id }} - {{ metric_name }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1>{{ security_id }} - {{ metric_name }}</h1>
-    <p>Latest data as of: <strong>{{ latest_date }}</strong></p>
-    
-    {# Display Static Info #}
-    {% if static_info %}
-    <div class="mb-3 p-3 border rounded bg-light small">
-        <strong>Static Details:</strong> 
-        {% for key, value in static_info.items() %}
-            <span class="me-3">{{ key }}: {{ value }}</span>
-        {% endfor %}
-    </div>
-    {% endif %}
+<div class="container-fluid mt-4">
+  <div class="row">
+    <!-- Left Column: Static Info Tile -->
+    <div class="col-lg-3 col-md-4" style="border-right: 1px solid #eee; min-width: 300px; max-width: 400px;">
+      <div class="card mb-4">
+        <div class="card-body">
+          <h5 class="card-title">Security Details</h5>
+          {% if reference_missing %}
+            <div class="alert alert-warning">No static reference data found for this security.</div>
+          {% else %}
+            {% for group_name, group_fields in static_groups %}
+              {% if group_fields %}
+                <h6 class="mt-3">{{ group_name }}</h6>
+                <ul class="list-unstyled mb-2">
+                  {% for k, v in group_fields.items() %}
+                    <li><strong>{{ k }}:</strong> {{ v }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
 
-    {# Primary Chart Area (Metric + Price Overlay) #}
-    <h2>{{ metric_name }} and Price Time Series</h2>
-    <div id="primary-chart-container" class="mb-4" style="height: 450px; position: relative;">
+          {# Exclusion Status #}
+          {% if is_excluded %}
+            <div class="fw-bold text-danger mt-3">This security is on the <u>exclusion list</u>{% if exclusion_comment %}: {{ exclusion_comment }}{% endif %}</div>
+          {% endif %}
+
+          {# Issue Status #}
+          {% if open_issues and open_issues|length > 0 %}
+            <div class="fw-bold text-danger mt-3">This security has open data issues:</div>
+            <ul class="mb-2">
+              {% for issue in open_issues %}
+                <li>
+                  <span class="fw-bold">IssueID:</span> {{ issue.IssueID }}<br>
+                  <span class="fw-bold">Raised:</span> {{ issue.DateRaised }} by {{ issue.RaisedBy }}<br>
+                  <span class="fw-bold">Description:</span> {{ issue.Description }}<br>
+                  <span class="fw-bold">Status:</span> {{ issue.Status }}
+                  {% if issue.JiraLink %}<br><span class="fw-bold">Jira:</span> <a href="{{ issue.JiraLink }}" target="_blank">{{ issue.JiraLink }}</a>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          {# Bloomberg YAS Link #}
+          {% if bloomberg_yas_url %}
+            <div class="mt-3">
+              <a href="{{ bloomberg_yas_url }}" class="btn btn-primary btn-sm" target="_blank">Open in Bloomberg YAS</a>
+            </div>
+          {% endif %}
+
+          <!-- Add Issue/Exclusion Buttons -->
+          <div class="mt-3">
+            <!-- Button to open Raise Data Issue modal -->
+            <button type="button" class="btn btn-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#raiseIssueModal">
+              Raise Data Issue
+            </button>
+            <!-- Button to open Add Exclusion modal -->
+            <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#addExclusionModal">
+              Add Exclusion
+            </button>
+          </div>
+
+          <!-- Raise Data Issue Modal -->
+          <div class="modal fade" id="raiseIssueModal" tabindex="-1" aria-labelledby="raiseIssueModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="raiseIssueModalLabel">Raise Data Issue for {{ security_id }}</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="{{ url_for('issue_bp.manage_issues') }}">
+                  <div class="modal-body">
+                    <!-- Raised By -->
+                    <div class="mb-3">
+                      <label for="modal-raised-by" class="form-label">Raised By:</label>
+                      <select class="form-select" id="modal-raised-by" name="raised_by" required>
+                        <option value="" disabled selected>Select User</option>
+                        {% for user in users %}
+                          <option value="{{ user }}">{{ user }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <!-- Fund Impacted (pre-filled with ISIN) -->
+                    <div class="mb-3">
+                      <label for="modal-fund-impacted" class="form-label">Fund Impacted:</label>
+                      <input type="text" class="form-control" id="modal-fund-impacted" name="fund_impacted" value="{{ security_id }}" required readonly>
+                    </div>
+                    <!-- Data Source -->
+                    <div class="mb-3">
+                      <label for="modal-data-source" class="form-label">Data Source:</label>
+                      <select class="form-select" id="modal-data-source" name="data_source" required>
+                        <option value="" disabled selected>Select Data Source</option>
+                        {% for ds in data_sources %}
+                          <option value="{{ ds }}">{{ ds }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <!-- Issue Date -->
+                    <div class="mb-3">
+                      <label for="modal-issue-date" class="form-label">Date of Issue:</label>
+                      <input type="date" class="form-control" id="modal-issue-date" name="issue_date" required>
+                    </div>
+                    <!-- Description (pre-filled with ISIN and Security Name if available) -->
+                    <div class="mb-3">
+                      <label for="modal-description" class="form-label">Description:</label>
+                      <textarea class="form-control" id="modal-description" name="description" rows="3" required>{{ security_id }}{% if static_groups and static_groups["Reference"] and static_groups["Reference"]["Security Name"] %} - {{ static_groups["Reference"]["Security Name"] }}{% endif %}</textarea>
+                    </div>
+                    <!-- Jira Link (optional) -->
+                    <div class="mb-3">
+                      <label for="modal-jira-link" class="form-label">Jira Link (optional):</label>
+                      <input type="url" class="form-control" id="modal-jira-link" name="jira_link">
+                    </div>
+                    <!-- In Scope for Go-live -->
+                    <div class="mb-3">
+                      <label for="modal-in-scope" class="form-label">In Scope for Go-live:</label>
+                      <select class="form-select" id="modal-in-scope" name="in_scope_for_go_live">
+                        <option value="No" selected>No</option>
+                        <option value="Yes">Yes</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Submit Issue</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <!-- Add Exclusion Modal -->
+          <div class="modal fade" id="addExclusionModal" tabindex="-1" aria-labelledby="addExclusionModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="addExclusionModalLabel">Add Exclusion for {{ security_id }}</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="{{ url_for('exclusion_bp.manage_exclusions') }}">
+                  <div class="modal-body">
+                    <!-- Security ID (hidden, pre-filled) -->
+                    <input type="hidden" name="security_id" value="{{ security_id }}">
+                    <!-- End Date (optional) -->
+                    <div class="mb-3">
+                      <label for="modal-end-date" class="form-label">End Date (Optional):</label>
+                      <input type="date" class="form-control" id="modal-end-date" name="end_date">
+                    </div>
+                    <!-- User (dropdown) -->
+                    <div class="mb-3">
+                      <label for="modal-user" class="form-label">Added By (User):</label>
+                      <select class="form-select" id="modal-user" name="user" required>
+                        <option value="" disabled selected>Select User</option>
+                        {% for user in users %}
+                          <option value="{{ user }}">{{ user }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <!-- Comment (required, pre-fill with ISIN and Security Name if available) -->
+                    <div class="mb-3">
+                      <label for="modal-comment" class="form-label">Comment (Required):</label>
+                      <textarea class="form-control" id="modal-comment" name="comment" rows="3" required>{{ security_id }}{% if static_groups and static_groups["Reference"] and static_groups["Reference"]["Security Name"] %} - {{ static_groups["Reference"]["Security Name"] }}{% endif %}</textarea>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Add Exclusion</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Right Column: Charts -->
+    <div class="col-lg-9 col-md-8 ps-lg-5 ps-md-4">
+      <h1>{{ security_id }} - {{ metric_name }}</h1>
+      <p>Latest data as of: <strong>{{ latest_date }}</strong></p>
+      {# Primary Chart Area (Metric + Price Overlay) #}
+      <h2>{{ metric_name }} and Price Time Series</h2>
+      <div id="primary-chart-container" class="mb-4" style="height: 450px; position: relative;">
         <canvas id="primarySecurityChart"></canvas>
-    </div>
-
-    {# Duration Chart Area #}
-    <h2>Duration Time Series</h2>
-    <div id="duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      </div>
+      {# Duration Chart Area #}
+      <h2>Duration Time Series</h2>
+      <div id="duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
         <canvas id="durationSecurityChart"></canvas>
-    </div>
-
-    {# Spread Duration Chart Area #}
-    <h2>Spread Duration Time Series</h2>
-    <div id="spread-duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      </div>
+      {# Spread Duration Chart Area #}
+      <h2>Spread Duration Time Series</h2>
+      <div id="spread-duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
         <canvas id="spreadDurationChart"></canvas>
-    </div>
-
-    {# Spread Chart Area #}
-    <h2>Spread Time Series</h2>
-    <div id="spread-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      </div>
+      {# Spread Chart Area #}
+      <h2>Spread Time Series</h2>
+      <div id="spread-chart-container" class="mb-4" style="height: 450px; position: relative;">
         <canvas id="spreadChart"></canvas>
-    </div>
-
-    {# YTM Chart Area #}
-    <h2>YTM Time Series</h2>
-    <div id="ytm-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      </div>
+      {# YTM Chart Area #}
+      <h2>YTM Time Series</h2>
+      <div id="ytm-chart-container" class="mb-4" style="height: 450px; position: relative;">
         <canvas id="ytmChart"></canvas>
-    </div>
-
-    {# YTW Chart Area #}
-    <h2>YTW Time Series</h2>
-    <div id="ytw-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      </div>
+      {# YTW Chart Area #}
+      <h2>YTW Time Series</h2>
+      <div id="ytw-chart-container" class="mb-4" style="height: 450px; position: relative;">
         <canvas id="ytwChart"></canvas>
-    </div>
-
-    {# Hidden script tag for chart data #}
-    <script id="chartJsonData" type="application/json">
+      </div>
+      {# Hidden script tag for chart data #}
+      <script id="chartJsonData" type="application/json">
         {{ chart_data_json|safe }}
-    </script>
-
+      </script>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-{# Include Chart.js library (Likely inherited from base.html, but included here for safety/explicitness if needed) #}
-{# If base.html already includes it, this line can be removed #}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Get the chart data passed from Flask
+        // Restore full Chart.js rendering logic
         const chartDataElement = document.getElementById('chartJsonData');
         const chartData = JSON.parse(chartDataElement.textContent);
 
-        /* --- REMOVED: Helper function to replace 0 with null --- 
-        const processDatasetData = (dataset) => {
-            if (dataset && dataset.data) {
-                dataset.data = dataset.data.map(value => (value === 0 ? null : value));
-            }
-            return dataset; // Return the processed dataset (or original if no data)
-        };
-        */
-
-        // --- REMOVED: Processing datasets before creating charts --- 
-        // No longer needed as backend uses NaN
-        /*
-        if (chartData.primary_datasets) {
-            chartData.primary_datasets = chartData.primary_datasets.map(processDatasetData);
-        }
-        if (chartData.duration_dataset) {
-            chartData.duration_dataset = processDatasetData(chartData.duration_dataset);
-        }
-        // Add processing for new datasets if they were added
-        if (chartData.sp_duration_dataset) { chartData.sp_duration_dataset = processDatasetData(chartData.sp_duration_dataset); }
-        if (chartData.spread_duration_dataset) { chartData.spread_duration_dataset = processDatasetData(chartData.spread_duration_dataset); }
-        if (chartData.sp_spread_duration_dataset) { chartData.sp_spread_duration_dataset = processDatasetData(chartData.sp_spread_duration_dataset); }
-        if (chartData.spread_dataset) { chartData.spread_dataset = processDatasetData(chartData.spread_dataset); }
-        if (chartData.sp_spread_dataset) { chartData.sp_spread_dataset = processDatasetData(chartData.sp_spread_dataset); }
-        */
-
-
-        // --- Render Primary Chart (Metric + Price) --- 
+        // --- Render Primary Chart (Metric + Price) ---
         const primaryCtx = document.getElementById('primarySecurityChart').getContext('2d');
         if (chartData.primary_datasets && chartData.primary_datasets.length > 0) {
-            // Check if *any* primary dataset has actual data (nulls are ignored by this check)
-            const hasPrimaryData = chartData.primary_datasets.some(dataset => 
+            const hasPrimaryData = chartData.primary_datasets.some(dataset =>
                 dataset.data && dataset.data.some(value => value !== null)
             );
-
             if (hasPrimaryData) {
                 new Chart(primaryCtx, {
                     type: 'line',
                     data: {
                         labels: chartData.labels,
-                        datasets: chartData.primary_datasets // Use datasets directly
+                        datasets: chartData.primary_datasets
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        spanGaps: true, // Let Chart.js handle gaps where data is null
+                        spanGaps: true,
                         scales: {
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Date'
-                                }
-                            },
-                            y: { // Primary Y-axis (for the main metric)
-                                position: 'left',
-                                title: {
-                                    display: true,
-                                    text: {{ metric_name|tojson }} + ' Value' 
-                                }
-                            },
-                            y1: { // Secondary Y-axis (for Price)
-                                position: 'right',
-                                title: {
-                                    display: true,
-                                    text: 'Price'
-                                },
-                                grid: {
-                                    drawOnChartArea: false, 
-                                },
-                            }
+                            x: { title: { display: true, text: 'Date' } },
+                            y: { position: 'left', title: { display: true, text: '{{ metric_name }} Value' } },
+                            y1: { position: 'right', title: { display: true, text: 'Price' }, grid: { drawOnChartArea: false } }
                         },
                         plugins: {
-                            legend: {
-                                position: 'top',
-                            },
-                            tooltip: {
-                                mode: 'index',
-                                intersect: false,
-                            }
+                            legend: { position: 'top' },
+                            tooltip: { mode: 'index', intersect: false }
                         }
                     }
                 });
             } else {
-                 document.getElementById('primary-chart-container').innerHTML = '<p class="text-info">No primary data available for this security.</p>';
+                document.getElementById('primary-chart-container').innerHTML = '<p class="text-info">No primary data available for this security.</p>';
             }
         } else {
-            console.error('No primary datasets found for the primary chart.');
             document.getElementById('primary-chart-container').innerHTML = '<p class="text-danger">Could not render primary chart: No data available.</p>';
         }
 
-        // --- Render Duration Chart (Now includes SP) ---
+        // --- Render Duration Chart ---
         const durationCtx = document.getElementById('durationSecurityChart').getContext('2d');
         const durationDatasets = [];
-        if (chartData.duration_dataset) {
-            // Check if there's actual data (not null)
-            if (chartData.duration_dataset.data && chartData.duration_dataset.data.some(value => value !== null)) {
-                durationDatasets.push(chartData.duration_dataset);
-            }
+        if (chartData.duration_dataset && chartData.duration_dataset.data && chartData.duration_dataset.data.some(value => value !== null)) {
+            durationDatasets.push(chartData.duration_dataset);
         }
-        if (chartData.sp_duration_dataset) {
-             if (chartData.sp_duration_dataset.data && chartData.sp_duration_dataset.data.some(value => value !== null)) {
-                durationDatasets.push(chartData.sp_duration_dataset);
-            }
+        if (chartData.sp_duration_dataset && chartData.sp_duration_dataset.data && chartData.sp_duration_dataset.data.some(value => value !== null)) {
+            durationDatasets.push(chartData.sp_duration_dataset);
         }
-
         if (durationDatasets.length > 0) {
             new Chart(durationCtx, {
                 type: 'line',
-                data: {
-                    labels: chartData.labels,
-                    datasets: durationDatasets // Use combined list
-                },
+                data: { labels: chartData.labels, datasets: durationDatasets },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    spanGaps: true, 
-                    scales: {
-                        x: { title: { display: true, text: 'Date' } },
-                        y: { title: { display: true, text: 'Duration Value' } }
-                    },
-                    plugins: { /* legend, tooltip */ }
+                    responsive: true, maintainAspectRatio: false, spanGaps: true,
+                    scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Duration Value' } } },
+                    plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
                 }
             });
         } else {
-             console.log('No non-null data points found for Duration or SP Duration chart.');
-             document.getElementById('duration-chart-container').innerHTML = '<p class="text-info">No duration data available for this security.</p>';
+            document.getElementById('duration-chart-container').innerHTML = '<p class="text-info">No duration data available for this security.</p>';
         }
 
-        // --- Render Spread Duration Chart (Includes SP) ---
+        // --- Render Spread Duration Chart ---
         const spreadDurationCtx = document.getElementById('spreadDurationChart').getContext('2d');
         const spreadDurationDatasets = [];
         if (chartData.spread_duration_dataset && chartData.spread_duration_dataset.data && chartData.spread_duration_dataset.data.some(v => v !== null)) {
@@ -208,23 +299,21 @@
         if (chartData.sp_spread_duration_dataset && chartData.sp_spread_duration_dataset.data && chartData.sp_spread_duration_dataset.data.some(v => v !== null)) {
             spreadDurationDatasets.push(chartData.sp_spread_duration_dataset);
         }
-
         if (spreadDurationDatasets.length > 0) {
             new Chart(spreadDurationCtx, {
                 type: 'line',
                 data: { labels: chartData.labels, datasets: spreadDurationDatasets },
-                options: { 
-                    responsive: true, maintainAspectRatio: false, spanGaps: true, 
+                options: {
+                    responsive: true, maintainAspectRatio: false, spanGaps: true,
                     scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Spread Duration Value' } } },
-                    plugins: { /* legend, tooltip */ }
+                    plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
                 }
             });
         } else {
-            console.log('No data found for Spread Duration or SP Spread Duration chart.');
             document.getElementById('spread-duration-chart-container').innerHTML = '<p class="text-info">Spread Duration data not available for this security.</p>';
         }
 
-        // --- Render Spread Chart (Includes SP) ---
+        // --- Render Spread Chart ---
         const spreadCtx = document.getElementById('spreadChart').getContext('2d');
         const spreadDatasets = [];
         if (chartData.spread_dataset && chartData.spread_dataset.data && chartData.spread_dataset.data.some(v => v !== null)) {
@@ -233,23 +322,21 @@
         if (chartData.sp_spread_dataset && chartData.sp_spread_dataset.data && chartData.sp_spread_dataset.data.some(v => v !== null)) {
             spreadDatasets.push(chartData.sp_spread_dataset);
         }
-
         if (spreadDatasets.length > 0) {
             new Chart(spreadCtx, {
                 type: 'line',
                 data: { labels: chartData.labels, datasets: spreadDatasets },
                 options: {
-                    responsive: true, maintainAspectRatio: false, spanGaps: true, 
+                    responsive: true, maintainAspectRatio: false, spanGaps: true,
                     scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Spread Value' } } },
-                    plugins: { /* legend, tooltip */ }
+                    plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
                 }
             });
         } else {
-             console.log('No data found for Spread or SP Spread chart.');
-             document.getElementById('spread-chart-container').innerHTML = '<p class="text-info">Spread data not available for this security.</p>';
+            document.getElementById('spread-chart-container').innerHTML = '<p class="text-info">Spread data not available for this security.</p>';
         }
 
-        // --- Render YTM Chart (Includes SP) ---
+        // --- Render YTM Chart ---
         const ytmCtx = document.getElementById('ytmChart').getContext('2d');
         const ytmDatasets = [];
         if (chartData.ytm_dataset && chartData.ytm_dataset.data && chartData.ytm_dataset.data.some(v => v !== null)) {
@@ -265,18 +352,14 @@
                 options: {
                     responsive: true, maintainAspectRatio: false, spanGaps: true,
                     scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'YTM Value' } } },
-                    plugins: {
-                        legend: { position: 'top' },
-                        tooltip: { mode: 'index', intersect: false }
-                    }
+                    plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
                 }
             });
         } else {
-            console.log('No data found for YTM or SP YTM chart.');
             document.getElementById('ytm-chart-container').innerHTML = '<p class="text-info">YTM data not available for this security.</p>';
         }
 
-        // --- Render YTW Chart (Includes SP) ---
+        // --- Render YTW Chart ---
         const ytwCtx = document.getElementById('ytwChart').getContext('2d');
         const ytwDatasets = [];
         if (chartData.ytw_dataset && chartData.ytw_dataset.data && chartData.ytw_dataset.data.some(v => v !== null)) {
@@ -292,17 +375,12 @@
                 options: {
                     responsive: true, maintainAspectRatio: false, spanGaps: true,
                     scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'YTW Value' } } },
-                    plugins: {
-                        legend: { position: 'top' },
-                        tooltip: { mode: 'index', intersect: false }
-                    }
+                    plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
                 }
             });
         } else {
-            console.log('No data found for YTW or SP YTW chart.');
             document.getElementById('ytw-chart-container').innerHTML = '<p class="text-info">YTW data not available for this security.</p>';
         }
-
     });
 </script>
 {% endblock %} 

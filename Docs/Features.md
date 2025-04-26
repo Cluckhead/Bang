@@ -148,3 +148,10 @@ This feature monitors and identifies stale or missing data in security and curve
   - When a user selects a fund, the application loads the corresponding attribution file for that fund only.
   - If no file exists for the selected fund, a clear message is shown: "No attribution available."
   - This replaces the previous approach of loading all attribution data from a single `att_factors.csv` file.
+
+## Security Details Page Enhancements
+
+- The security details page now displays **all static columns from reference.csv** in a grouped, clearly labeled tile on the left side of the page.
+- The layout uses a two-column design: static info on the left (Identifiers, Classification, Financials, etc.), and all time-series charts on the right, making full use of the screen width.
+- **Exclusion status** (if the security is on the exclusion list) and **open data issues** (if any) are shown in bold red in the static tile, with all open issues listed.
+- A **Bloomberg YAS link** is generated for each security using the 'BBG Ticker Yellow' field, and opens in a new tab. The link format is now configurable via the `BLOOMBERG_YAS_URL_FORMAT` variable in `config.py`, making it easy to change or reuse the link format elsewhere in the app.

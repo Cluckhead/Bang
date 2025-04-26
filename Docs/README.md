@@ -419,3 +419,9 @@ Thanks to the refactored generic comparison framework, adding a new comparison (
     ```
 
 That's it! The `generic_comparison_views.py` module and the base templates (`comparison_summary_base.html`, `comparison_details_base.html`) will automatically handle the routing, data loading, statistics calculation, filtering, sorting, pagination, and rendering for the new comparison type based on the configuration.
+
+### Security Details Page (Technical Details)
+
+- The security details page now displays all static columns from `reference.csv` in a grouped tile on the left (Identifiers, Classification, Financials, etc.), with all time-series charts on the right in a two-column layout.
+- Exclusion status (if the security is on the exclusion list) and open data issues (if any) are shown in bold red in the static tile, with all open issues listed.
+- A Bloomberg YAS link is generated for each security using the 'BBG Ticker Yellow' field. The link format is now configurable via the `BLOOMBERG_YAS_URL_FORMAT` variable in `config.py`, making it easy to change or reuse the link format elsewhere in the app.

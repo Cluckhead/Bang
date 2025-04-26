@@ -390,9 +390,8 @@ def security_details(metric_name, security_id):
     Renders a detail page for a specific security, showing historical charts
     for the specified metric overlaid with Price, plus separate charts for
     Duration, Spread Duration, and Spread (each potentially overlaid with SP data).
-
-    Handles security IDs that may contain special characters like slashes.
-    Uses 'ISIN' as the primary identifier when fetching data.
+    Also loads all static info from reference.csv, checks exclusion and issue lists,
+    and provides a Bloomberg YAS link.
     """
     # <<< ADDED: Decode the security_id to handle potential URL encoding (e.g., %2F for /)
     decoded_security_id = unquote(security_id)
@@ -403,8 +402,72 @@ def security_details(metric_name, security_id):
     chart_data = {} # Dictionary to hold data for JSON output
     static_info = {} # To store static info for the security
 
+    # --- NEW: Load static info from reference.csv ---
+    reference_path = os.path.join(data_folder, 'reference.csv')
+    reference_row = None
+    reference_columns = []
+    if os.path.exists(reference_path):
+        try:
+            ref_df = pd.read_csv(reference_path, dtype=str)
+            reference_columns = ref_df.columns.tolist()
+            ref_row = ref_df[ref_df['ISIN'] == decoded_security_id]
+            if not ref_row.empty:
+                reference_row = ref_row.iloc[0].to_dict()
+            else:
+                reference_row = None
+        except Exception as e:
+            current_app.logger.error(f"Error loading reference.csv: {e}")
+            reference_row = None
+    else:
+        current_app.logger.warning("reference.csv not found in Data folder.")
+        reference_row = None
+
+    # --- NEW: Check exclusion list ---
+    is_excluded = False
+    exclusion_comment = None
+    try:
+        exclusions_path = os.path.join(data_folder, 'exclusions.csv')
+        if os.path.exists(exclusions_path):
+            exclusions_df = pd.read_csv(exclusions_path, dtype=str)
+            today = datetime.now().date()
+            for _, row in exclusions_df.iterrows():
+                if row['SecurityID'] == decoded_security_id:
+                    add_date = pd.to_datetime(row['AddDate'], errors='coerce').date() if pd.notna(row['AddDate']) else None
+                    end_date = pd.to_datetime(row['EndDate'], errors='coerce').date() if pd.notna(row['EndDate']) else None
+                    if add_date and add_date <= today and (end_date is None or end_date >= today):
+                        is_excluded = True
+                        exclusion_comment = row.get('Comment', None)
+                        break
+    except Exception as e:
+        current_app.logger.error(f"Error checking exclusions: {e}")
+
+    # --- NEW: Check issue list ---
+    open_issues = []
+    try:
+        issues_path = os.path.join(data_folder, 'data_issues.csv')
+        if os.path.exists(issues_path):
+            issues_df = pd.read_csv(issues_path, dtype=str)
+            # Only consider issues where FundImpacted or Description mentions the ISIN
+            for _, row in issues_df.iterrows():
+                # Consider open if Status is not 'Closed' (case-insensitive)
+                status = (row.get('Status') or '').strip().lower()
+                if status != 'closed':
+                    # Check if ISIN is mentioned in FundImpacted or Description
+                    fund_impacted = (row.get('FundImpacted') or '')
+                    description = (row.get('Description') or '')
+                    if decoded_security_id in fund_impacted or decoded_security_id in description:
+                        open_issues.append(row)
+    except Exception as e:
+        current_app.logger.error(f"Error checking data issues: {e}")
+
+    # --- NEW: Prepare Bloomberg YAS link ---
+    bloomberg_yas_url = None
+    if reference_row and 'BBG Ticker Yellow' in reference_row:
+        bbg_ticker = reference_row['BBG Ticker Yellow']
+        bloomberg_yas_url = f"http://Bloomberg:{bbg_ticker} YAS"
+
     # --- Helper function to load, filter, and extract data ---
-    def load_filter_and_extract(filename, security_id_to_filter, id_column_name='ISIN'): # <<< CHANGED default ID column
+    def load_filter_and_extract(filename, security_id_to_filter, id_column_name='ISIN'):
         """Loads a sec_*.csv file, filters by security ID, and returns the long-format series."""
         current_app.logger.info(f"Loading file: {filename}")
         # Construct absolute path
@@ -707,15 +770,42 @@ def security_details(metric_name, security_id):
     # Convert the entire chart_data dictionary to JSON safely
     chart_data_json = json.dumps(chart_data, default=replace_nan_with_none, indent=4) # Use helper for NaN->null
 
+    # --- NEW: Group static info for display ---
+    static_groups = []
+    if reference_row:
+        # Group 1: Identifiers
+        identifiers = {k: reference_row[k] for k in ['ISIN', 'Security Name', 'BBG ID', 'BBG Ticker Yellow'] if k in reference_row}
+        # Group 2: Classification
+        classification = {k: reference_row[k] for k in ['Security Sub Type', 'SS Project - In Scope', 'Is Distressed', 'Rating', 'BBG LEVEL 3', 'CCY', 'Country Of Risk'] if k in reference_row}
+        # Group 3: Call/Redemption
+        call_info = {k: reference_row[k] for k in ['Call Indicator', 'Make Whole Call'] if k in reference_row}
+        # Group 4: Financials
+        financials = {k: reference_row[k] for k in ['Coupon Rate', 'Maturity Date'] if k in reference_row}
+        # Group 5: Other
+        others = {k: reference_row[k] for k in reference_row if k not in identifiers and k not in classification and k not in call_info and k not in financials}
+        static_groups = [
+            ('Identifiers', identifiers),
+            ('Classification', classification),
+            ('Call/Redemption', call_info),
+            ('Financials', financials),
+            ('Other Details', others)
+        ]
+    else:
+        static_groups = []
 
     current_app.logger.info(f"Rendering security details page for {decoded_security_id}")
     # Pass the decoded ID to the template
     return render_template('security_details_page.html',
-                           security_id=decoded_security_id, 
+                           security_id=decoded_security_id,
                            metric_name=metric_name,
                            chart_data_json=chart_data_json,
                            latest_date=latest_date_str,
-                           static_info=static_info)
+                           static_groups=static_groups,
+                           reference_missing=(reference_row is None),
+                           is_excluded=is_excluded,
+                           exclusion_comment=exclusion_comment,
+                           open_issues=open_issues,
+                           bloomberg_yas_url=bloomberg_yas_url)
 
 
 @security_bp.route('/static/<path:filename>')
