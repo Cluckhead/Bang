@@ -20,6 +20,8 @@ from views.exclusion_views import load_exclusions # Only import load_exclusions
 from utils import replace_nan_with_none
 # Add import for fund group utility
 from utils import load_fund_groups, parse_fund_list
+# Import get_holdings_for_security for fund holdings tile
+from views.comparison_helpers import get_holdings_for_security
 
 # Define the blueprint
 security_bp = Blueprint('security', __name__, url_prefix='/security')
@@ -669,13 +671,23 @@ def security_details(metric_name, security_id):
                                chart_data_json='{}', # Empty JSON
                                latest_date="N/A",
                                static_info=static_info, # Show static info if any was found
-                               message="No historical data found for this security.")
+                               message="No historical data found for this security.",
+                               holdings_data=None,
+                               chart_dates=None)
 
     # Sort dates and format as strings for labels
     sorted_dates = sorted(list(all_dates))
     # Use .strftime for consistent formatting
     chart_data['labels'] = [d.strftime('%Y-%m-%d') for d in sorted_dates]
     latest_date_str = chart_data['labels'][-1] if chart_data['labels'] else "N/A"
+
+    # --- Fund Holdings Over Time (Based on Chart Dates) ---
+    holdings_data = None
+    chart_dates = chart_data['labels'] if 'labels' in chart_data else None
+    if chart_dates:
+        holdings_data, _, holdings_error = get_holdings_for_security(decoded_security_id, chart_dates, data_folder)
+        if holdings_error:
+            current_app.logger.warning(f"Holdings Error for {decoded_security_id}: {holdings_error}")
 
     # Helper to prepare dataset structure for Chart.js
     def prepare_dataset(df_series, label, color, y_axis_id='y'):
@@ -805,7 +817,9 @@ def security_details(metric_name, security_id):
                            is_excluded=is_excluded,
                            exclusion_comment=exclusion_comment,
                            open_issues=open_issues,
-                           bloomberg_yas_url=bloomberg_yas_url)
+                           bloomberg_yas_url=bloomberg_yas_url,
+                           holdings_data=holdings_data,
+                           chart_dates=chart_dates)
 
 
 @security_bp.route('/static/<path:filename>')

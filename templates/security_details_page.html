@@ -215,6 +215,54 @@ Purpose: Renders the security details page, showing all static info (from refere
       <div id="ytw-chart-container" class="mb-4" style="height: 450px; position: relative;">
         <canvas id="ytwChart"></canvas>
       </div>
+      {# --- Fund Holdings Over Time Table (if available) --- #}
+      {% if holdings_data and chart_dates %}
+      <div class="mb-4"> {# Add margin below for spacing #}
+        <div class="card">
+          <div class="card-header">
+            Fund Holdings Over Time (Based on Chart Dates)
+          </div>
+          <div class="card-body" style="width: 100%; overflow-x: auto;">
+            <table class="table table-bordered table-sm text-center" style="table-layout: fixed; width: 100%;">
+              <thead>
+                <tr>
+                  <th style="width: 100px; vertical-align: bottom;">Fund</th>
+                  {# Rotate date headers - show MM-DD #}
+                  {% for date_str in chart_dates %}
+                  <th style="width: 25px; height: 70px; vertical-align: bottom; text-align: center; padding: 0 1px;">
+                    <span style="display: inline-block; transform: rotate(-75deg); transform-origin: center 5px; white-space: nowrap; font-size: 0.7em;">
+                      {{ date_str[5:] }}
+                    </span>
+                  </th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {# Iterate through funds and their holding status list #}
+                {% for fund, held_list in holdings_data.items() %}
+                <tr>
+                  <td class="fw-bold">{{ fund }}</td>
+                  {% for is_held in held_list %}
+                    <td class="{{ 'bg-success' if is_held else 'bg-danger' }}"></td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% if not holdings_data %}
+            <p class="text-muted mt-2">No fund holdings information found for this security in w_secs.csv during the chart period.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% elif chart_data_json %}
+      <div class="mb-4">
+        <div class="alert alert-light" role="alert">
+          Fund holdings information could not be loaded or is unavailable for the chart period.
+        </div>
+      </div>
+      {% endif %}
+      {# --- End Fund Holdings Table --- #}
       {# Hidden script tag for chart data #}
       <script id="chartJsonData" type="application/json">
         {{ chart_data_json|safe }}
