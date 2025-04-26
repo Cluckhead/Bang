@@ -4,7 +4,7 @@
 - Redo navigation bar
 
 # Code Structure
-- Python Unit testing
+- Python Unit testing - hALF WAY 
 - Speed up security level views, move processing to backend
 - Get rid of div/0 debugs when looking at comparison
 - Every PY file should be below 500 lines
@@ -21,21 +21,14 @@
 - Fund Groups
 - S&P bad securities email
 - Monitor of missing S&P data
-- Add Security level checks - Min yield etc
-- Static completeness checks
 - Watch list for securities - Greg's issue
 - Filter by fund Group
 - Add Is distressed as a filter
 - Make sure S&P toggle works everywhere and is selectable 
-
 - get rid of scores on residuals
-- make sure charts deal with weekends and UK holidays
 - add ability to correct using PCL on Security level
 - have teh ability to dig into the biggest contributers to a change at fund level
-- if min = 0 then exclude toggle
-- Create fund groups 
 - Comparison prerun and save DFs after processing
-- get rid of motonic drops from curves
 - add fund lists to metrics page for filtering
 - Link security to BBG terminal
 - add the static data to the security details page
@@ -45,11 +38,8 @@
 - Add SQLite with enhanced file locking
 - Create an IVP upload File
 - Improve Fake TQS data
-- Bring in PCLID key
 - Create upload process
 
-done -
-Use the list of dates for the x axis on all charts
 
 
 

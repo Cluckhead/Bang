@@ -60,6 +60,46 @@ This application provides a web interface to load, process, and check financial 
     *   Dashboard view (`/maxmin/dashboard`) shows a summary card for each configured file, highlighting breach counts.
     *   Detail view (`/maxmin/details/<file_name>/<breach_type>`) lists securities breaching the specified threshold (max or min).
 
+## Fund Group Filtering (Reusable Feature)
+
+### FundGroups.csv Structure
+- Located in `Data/FundGroups.csv`.
+- Each column header is a fund group name (e.g., `IG`, `S&P Phase 1`, `HY`).
+- Each cell in a column is a fund code belonging to that group. Leave cells blank if not used.
+- Example:
+
+  | IG   | S&P Phase 1 | HY   | All But 1 |
+  |------|-------------|------|-----------|
+  | IG01 | IG01        | IG03 | IG02      |
+  | IG02 | IG02        | IG04 | IG03      |
+  | IG03 |             |      | IG04      |
+  | IG04 |             |      |           |
+
+### How the Fund Group Filter Works
+- On pages like the metric detail page, a scrollable list of fund groups appears under the latest date.
+- Only groups with at least one fund present in the current data are shown.
+- Selecting a group filters the view to only show those funds (and their associated benchmarks).
+- The filter is server-side: the page reloads with the `fund_group` query parameter in the URL.
+- The selected group is highlighted and persists across reloads and navigation.
+- The filter UI is accessible and scalable for large numbers of groups.
+
+### How to Reuse This Feature on Other Pages
+1. **Load Fund Groups:**
+   - Use the utility function `utils.load_fund_groups(data_folder)` to get a dict mapping group names to lists of fund codes.
+2. **Filter Data:**
+   - Get the selected group from the query string: `selected_fund_group = request.args.get('fund_group', None)`.
+   - Filter your data to only include funds in `fund_groups[selected_fund_group]` if a group is selected.
+   - Only show groups that have at least one fund in the current data.
+3. **Pass to Template:**
+   - Pass `fund_groups` (filtered to only non-empty groups in the current data) and `selected_fund_group` to your template context.
+4. **Render the UI:**
+   - Use the scrollable radio list pattern (see `metric_page_js.html`) to render the filter.
+   - Ensure the form preserves other query parameters (e.g., filters, toggles) when submitting.
+5. **Persistence:**
+   - The filter state is maintained in the URL and query string, so it persists across reloads and navigation.
+
+**This approach is scalable and can be reused on any page that displays fund-level data.**
+
 ## File Structure Overview
 
 ```mermaid

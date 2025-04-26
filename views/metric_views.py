@@ -21,13 +21,15 @@ from config import COLOR_PALETTE
 from data_loader import load_and_process_data, LoadResult # Import LoadResult type
 from metric_calculator import calculate_latest_metrics
 from process_data import read_and_sort_dates
+from utils import get_data_folder_path, load_fund_groups
 
 # Define the blueprint for metric routes, using '/metric' as the URL prefix
 metric_bp = Blueprint('metric', __name__, url_prefix='/metric')
 
 @metric_bp.route('/<string:metric_name>')
 def metric_page(metric_name):
-    """Renders the detailed page (`metric_page_js.html`) for a specific metric. X-axis always uses Dates.csv."""
+    """Renders the detailed page (`metric_page_js.html`) for a specific metric. X-axis always uses Dates.csv.
+    Adds support for filtering by fund group (from FundGroups.csv)."""
     primary_filename = f"ts_{metric_name}.csv"
     secondary_filename = f"sp_{primary_filename}"
     fund_code = 'N/A' # Default for logging fallback in case of early error
@@ -36,10 +38,11 @@ def metric_page(metric_name):
 
     try:
         # --- Get Filter State from Query Parameter ---
-        # Default to 'true' if parameter is missing or invalid
         sp_valid_param = request.args.get('sp_valid', 'true').lower()
         filter_sp_valid = sp_valid_param == 'true'
-        current_app.logger.info(f"--- Processing metric: {metric_name}, S&P Valid Filter: {filter_sp_valid} ---")
+        # --- Fund Group Filter: get from query param ---
+        selected_fund_group = request.args.get('fund_group', None)
+        current_app.logger.info(f"--- Processing metric: {metric_name}, S&P Valid Filter: {filter_sp_valid}, Selected Fund Group: {selected_fund_group} ---")
         current_app.logger.info(f"URL Query Params: {request.args}") # Log query params for debugging
 
         # --- Load Data (Primary and Secondary) with Filtering ---
@@ -50,6 +53,21 @@ def metric_page(metric_name):
             filter_sp_valid=filter_sp_valid # Pass the filter flag
         )
         primary_df, pri_fund_cols, pri_bench_col, secondary_df, sec_fund_cols, sec_bench_col = load_result
+
+        # --- Fund Group Filtering: Apply to DataFrames Before Metrics ---
+        data_folder = current_app.config['DATA_FOLDER']
+        fund_groups_dict = load_fund_groups(data_folder)
+        if selected_fund_group and selected_fund_group in fund_groups_dict:
+            allowed_funds = set(fund_groups_dict[selected_fund_group])
+            # Filter primary_df and secondary_df to only include allowed funds
+            if primary_df is not None and not primary_df.empty:
+                idx_names = list(primary_df.index.names)
+                if 'Code' in idx_names:
+                    primary_df = primary_df[primary_df.index.get_level_values('Code').isin(allowed_funds)]
+            if secondary_df is not None and not secondary_df.empty:
+                idx_names = list(secondary_df.index.names)
+                if 'Code' in idx_names:
+                    secondary_df = secondary_df[secondary_df.index.get_level_values('Code').isin(allowed_funds)]
 
         # --- Validate Primary Data (Post-Filtering) ---
         if primary_df is None or primary_df.empty:
@@ -392,6 +410,12 @@ def metric_page(metric_name):
                 'max_abs_z': fund_latest_metrics_row.filter(like='Z-Score').abs().max() if hasattr(fund_latest_metrics_row.filter(like='Z-Score'), 'abs') else None
             }
 
+        # --- Prepare Fund Group Filtering for UI (only groups with funds in current data) ---
+        # This is for the dropdown UI, not for filtering the data
+        all_funds_in_data = set(primary_df.index.get_level_values('Code')) if primary_df is not None and not primary_df.empty else set()
+        filtered_fund_groups = {g: [f for f in funds if f in all_funds_in_data] for g, funds in fund_groups_dict.items()}
+        filtered_fund_groups = {g: funds for g, funds in filtered_fund_groups.items() if funds}
+
         # --- Final JSON Payload ---
         # Recursively ensure all values in json_payload are JSON-safe (no NaN/inf)
         def make_json_safe(obj):
@@ -428,7 +452,9 @@ def metric_page(metric_name):
                                missing_funds=missing_latest,
                                sp_valid_state=filter_sp_valid, # Pass filter state
                                secondary_data_initially_available=secondary_data_available, # Pass initial availability for JS logic
-                               error_message=error_message # Pass potential error message
+                               error_message=error_message, # Pass potential error message
+                               fund_groups=filtered_fund_groups, # Pass available groups for UI
+                               selected_fund_group=selected_fund_group # Pass selected group for UI
                                )
 
     except FileNotFoundError as e:

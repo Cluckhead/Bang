@@ -12,6 +12,7 @@ import logging
 from pathlib import Path # Added pathlib
 from flask import current_app # Added current_app
 import numpy as np
+import csv
 
 # Configure logging
 # Removed basicConfig - logging is now configured centrally in app.py
@@ -338,6 +339,33 @@ def replace_nan_with_none(obj):
         return None
     else:
         return obj
+
+def load_fund_groups(data_folder: str, fund_groups_filename: str = 'FundGroups.csv') -> dict:
+    """
+    Loads fund group definitions from FundGroups.csv in the given data folder.
+    Returns a dict mapping group name to list of fund codes.
+    Skips empty cells and trims whitespace. Ignores empty groups.
+    """
+    logger = logging.getLogger(__name__)
+    fund_groups_path = os.path.join(data_folder, fund_groups_filename)
+    if not os.path.exists(fund_groups_path):
+        logger.warning(f"FundGroups.csv not found at {fund_groups_path}")
+        return {}
+    groups = {}
+    try:
+        with open(fund_groups_path, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            # DictReader uses first row as fieldnames
+            for row in reader:
+                for group, fund in row.items():
+                    if fund and fund.strip():
+                        groups.setdefault(group, []).append(fund.strip())
+        # Remove empty groups
+        groups = {k: v for k, v in groups.items() if v}
+        return groups
+    except Exception as e:
+        logger.error(f"Error loading FundGroups.csv: {e}")
+        return {}
 
 # Example usage (for testing purposes, typically called from app.py or scripts)
 # if __name__ == '__main__':
