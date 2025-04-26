@@ -15,6 +15,8 @@ This application provides a web interface to load, process, and check financial 
 *   **Time-Series Metric Analysis:** Load `ts_*.csv` files, view latest changes, Z-scores, and historical data charts for various metrics per fund.
     *   Optionally loads corresponding `sp_ts_*.csv` files for comparison data
     *   Route: `/metric/<metric_name>` (with toggle switch to show/hide comparison data)
+    *   **S&P Valid Data Toggle:** The S&P Valid Data Only toggle now defaults to ON (checked) when loading metric pages, ensuring only rows marked as 'TRUE' in 'SS Project - In Scope' are shown by default. If the user disables this toggle, the data is aggregated by (Date, Code) using the mean for numeric columns and the first value for non-numeric columns, rather than simply deduplicating.
+    *   **S&P Comparison Data Toggle:** The Show S&P Comparison Data toggle now ensures that all S&P datasets, including the S&P Relative (Port - Bench) line, are visible by default when enabled. The S&P Relative line is no longer hidden by default and does not require a manual legend click to appear. Toggling this control will immediately show or hide all S&P comparison lines and metrics in both the main and relative charts.
 
 *   **Security-Level Analysis:** Load wide-format `sec_*.csv` files, view latest changes and Z-scores across securities, and drill down into historical charts.
     *   Date parsing is now fully flexible: supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others.

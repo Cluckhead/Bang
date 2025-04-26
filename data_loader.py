@@ -202,14 +202,30 @@ def _process_single_file(
             logger.error(f"Error reading file '{filename_for_logging}': {e}")
             return None
 
-        # If not filtering on S&P Valid, deduplicate (Date, Code) pairs to avoid duplicate index errors
+        # If not filtering on S&P Valid, aggregate (Date, Code) pairs to combine TRUE and FALSE rows
         if not filter_sp_valid:
-            # Drop duplicates, keep the first occurrence for each (Date, Code) pair
             before = len(df)
-            df = df.drop_duplicates(subset=[actual_date_col, actual_code_col], keep='first')
+            group_cols = [actual_date_col, actual_code_col]
+            numeric_cols = df.select_dtypes(include='number').columns.tolist()
+            # If numeric columns are empty (e.g., all are object due to initial read), try to coerce fund/benchmark columns
+            if not numeric_cols:
+                possible_value_cols = list(original_fund_val_col_names)
+                if benchmark_col_present and actual_benchmark_col in df.columns:
+                    possible_value_cols.append(actual_benchmark_col)
+                for col in possible_value_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                numeric_cols = df.select_dtypes(include='number').columns.tolist()
+            # Group and aggregate
+            agg_dict = {col: 'mean' for col in numeric_cols}
+            # For non-numeric columns, keep the first
+            for col in df.columns:
+                if col not in group_cols and col not in numeric_cols:
+                    agg_dict[col] = 'first'
+            df = df.groupby(group_cols, as_index=False).agg(agg_dict)
             after = len(df)
             if before != after:
-                logger.warning(f"Dropped {before - after} duplicate (Date, Code) rows in '{filename_for_logging}' to avoid duplicate index errors when S&P Valid filter is OFF.")
+                logger.info(f"Aggregated {before} rows to {after} unique (Date, Code) pairs in '{filename_for_logging}' when S&P Valid filter is OFF.")
 
         df.columns = df.columns.str.strip() # Strip whitespace from loaded columns
 

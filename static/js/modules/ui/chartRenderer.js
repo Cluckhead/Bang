@@ -153,7 +153,19 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
             const chartType = chartConfig.chart_type;
             const chartTitle = chartConfig.title;
             const chartLabels = chartConfig.labels;
-            const chartDatasets = chartConfig.datasets;
+            // Filter datasets based on showSecondary
+            let chartDatasets = chartConfig.datasets;
+            if (!showSecondary) {
+                chartDatasets = chartDatasets.filter(ds => !ds.isSpData);
+            } else {
+                // When showing secondary, ensure all S&P datasets are visible
+                chartDatasets = chartDatasets.map(ds => {
+                    if (ds.isSpData) {
+                        return { ...ds, hidden: false };
+                    }
+                    return { ...ds };
+                });
+            }
             const chartMetrics = chartConfig.latest_metrics;
             const chartId = `${fundCode}-${chartType}`;
 
