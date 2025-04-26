@@ -74,8 +74,16 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('staleness_bp.dashboard') }}">Stale Data Report</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('maxmin_bp.dashboard') }}">Max/Min Value Breach</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownMaxMin" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Max/Min Checks
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="navbarDropdownMaxMin">
+                            <li><a class="dropdown-item" href="{{ url_for('maxmin_bp.dashboard') }}">All Files</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maxmin_bp.dashboard', group_name='Yields') }}">Yields</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maxmin_bp.dashboard', group_name='Spreads') }}">Spreads</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('exclusion_bp.manage_exclusions') }}">Exclusions</a>

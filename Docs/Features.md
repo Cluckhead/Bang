@@ -88,3 +88,18 @@ This feature monitors and identifies stale or missing data in security and curve
 - Add the static data to the security details page
 
 - **Date parsing is fully flexible:** Security-level data now supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others.
+
+*   **Security Level Analysis:** Allows comparison of security-level data files (`sec_*.csv`) to identify discrepancies.
+*   **Max/Min Value Breach:** Checks security-level data (`sec_*.csv`, including Spread, YTM, and YTW) against configurable maximum and minimum value thresholds defined in `config.py` (`MAXMIN_THRESHOLDS`). Default thresholds for YTM/YTW are 0% (min) and 100% (max).
+
+## Views and Functionality
+
+*   **Data Issue Tracking Views:**
+    *   Provides links to close specific issues.
+    *   Includes a form to add new issues with fields for user, date, description, priority, and optional Jira link.
+
+*   **Max/Min Value Breach Views:**
+    *   **Dashboard (`/maxmin/dashboard`):** Displays a summary card for each data file configured for max/min checks. Each card shows the count of securities breaching the maximum and minimum thresholds.
+    *   **Details (`/maxmin/details/<file_name>/<breach_type>`):** Shows a detailed table of securities that breached either the maximum (`max`) or minimum (`min`) threshold for the specified file.
+
+## Technical Details

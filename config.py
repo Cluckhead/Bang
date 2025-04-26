@@ -1,6 +1,7 @@
 # This file defines configuration variables for the Simple Data Checker application.
-# It centralizes settings like file paths and visual parameters (e.g., chart colors)
-# to make them easily adjustable without modifying the core application code.
+# It centralizes settings like file paths, feature configurations (e.g., comparisons, thresholds),
+# and visual parameters (e.g., chart colors) to make them easily adjustable
+# without modifying the core application code.
 
 """
 Configuration settings for the Flask application.
@@ -71,6 +72,55 @@ COMPARISON_CONFIG = {
     #     'file2': 'sec_yieldSP.csv',
     #     'value_label': 'Yield'
     # }
+}
+
+# --- NEW: Max/Min Value Threshold Configuration ---
+# Defines files and their corresponding min/max value thresholds for the Max/Min Breach check.
+# Keys are the filename (relative to DATA_FOLDER) to check.
+# Values are dictionaries containing:
+#   - 'min': The minimum acceptable value (inclusive).
+#   - 'max': The maximum acceptable value (inclusive).
+#   - 'display_name': A user-friendly name for the dashboard card.
+#   - 'group': The name of the dashboard group this file belongs to (e.g., 'Yields', 'Spreads').
+MAXMIN_THRESHOLDS = {
+    'sec_Spread.csv': {
+        'min': -50,  # Example: Minimum spread allowed
+        'max': 1000, # Example: Maximum spread allowed
+        'display_name': 'Spread',
+        'group': 'Spreads'
+    },
+    'sec_SpreadSP.csv': {
+        'min': -50,
+        'max': 1000,
+        'display_name': 'Spread (S&P)',
+        'group': 'Spreads'
+    },
+    'sec_YTM.csv': {
+        'min': 0,    # 0%
+        'max': 100,  # 100%
+        'display_name': 'YTM',
+        'group': 'Yields'
+    },
+    'sec_YTMSP.csv': {
+        'min': 0,    # 0%
+        'max': 100,  # 100%
+        'display_name': 'YTM (S&P)',
+        'group': 'Yields'
+    },
+    'sec_YTW.csv': {
+        'min': 0,    # 0%
+        'max': 100,  # 100%
+        'display_name': 'YTW',
+        'group': 'Yields'
+    },
+    'sec_YTWSP.csv': {
+        'min': 0,    # 0%
+        'max': 100,  # 100%
+        'display_name': 'YTW (S&P)',
+        'group': 'Yields'
+    }
+    # Add other files to check here, e.g.:
+    # 'sec_Price.csv': {'min': 0.01, 'max': 200, 'display_name': 'Price', 'group': 'Other'},
 }
 
 # Logging configuration (optional, Flask's default logging can be used)

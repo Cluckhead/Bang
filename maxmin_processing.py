@@ -1,19 +1,23 @@
-# maxmin_processing.py
-# This module detects securities in Spread files whose values exceed configurable max/min thresholds.
-# It scans sec_Spread.csv and sec_SpreadSP.csv, returning breaches for use in dashboard/detail views.
+# This module contains the core logic for identifying securities
+# that breach predefined maximum or minimum value thresholds.
+# It reads configuration from config.py and processes specified security-level data files (sec_*.csv)
+# to find values outside the configured bounds, providing data for the dashboard and detail views.
 
 import os
 import pandas as pd
 import numpy as np
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
-# Default thresholds
+# Default thresholds (used if not specified in config or overrides)
 DEFAULT_MAX_THRESHOLD = 10000
 DEFAULT_MIN_THRESHOLD = -100
 
 # Metadata columns (same as staleness_processing.py)
 META_COLS = 6  # ISIN, Security Name, Funds, Type, Callable, Currency
+
+# Import the config dictionary
+# from config import MAXMIN_THRESHOLDS
 
 logger = logging.getLogger(__name__)
 
@@ -72,30 +76,79 @@ def find_value_breaches(
     return breaches, total_count
 
 def get_breach_summary(
-    data_folder: str = "Data",
-    max_threshold: float = DEFAULT_MAX_THRESHOLD,
-    min_threshold: float = DEFAULT_MIN_THRESHOLD
+    data_folder: str,
+    threshold_config: Dict[str, Dict[str, Any]], # Pass the relevant subset of MAXMIN_THRESHOLDS
+    override_max: Optional[float] = None,
+    override_min: Optional[float] = None
 ) -> Dict[str, Dict[str, Any]]:
     """
-    Returns a summary for each relevant file (sec_Spread.csv, sec_SpreadSP.csv):
-    - total_count: total securities
-    - max_breach_count: number of max breaches
-    - min_breach_count: number of min breaches
-    - details_url: for dashboard linking
+    Returns a summary for each file defined in the provided threshold_config.
+    Uses override thresholds if provided, otherwise uses thresholds from the config.
+
+    Args:
+        data_folder: Path to the data directory.
+        threshold_config: A dictionary (subset of MAXMIN_THRESHOLDS) containing the files
+                          and their configurations (min, max, display_name, group) to process.
+        override_max: If provided, use this value as the max threshold for all files.
+        override_min: If provided, use this value as the min threshold for all files.
+
+    Returns:
+        A dictionary where keys are filenames and values are summaries containing:
+        - filename: The name of the file checked.
+        - display_name: User-friendly name from config.
+        - total_count: total securities checked.
+        - max_breach_count: number of max breaches using the applied threshold.
+        - min_breach_count: number of min breaches using the applied threshold.
+        - max_threshold: The actual maximum threshold used (override or config).
+        - min_threshold: The actual minimum threshold used (override or config).
+        - has_error: Boolean indicating if processing failed for this file.
     """
     summary = {}
-    for filename in ["sec_Spread.csv", "sec_SpreadSP.csv"]:
-        breaches, total_count = find_value_breaches(
-            filename, data_folder, max_threshold, min_threshold
-        )
-        max_breach_count = sum(1 for b in breaches if b['breach_type'] == 'max')
-        min_breach_count = sum(1 for b in breaches if b['breach_type'] == 'min')
+    for filename, config in threshold_config.items():
+        # Determine the thresholds to use: override or config default
+        if override_max is not None:
+            applied_max_threshold = override_max
+        else:
+            applied_max_threshold = config.get('max', DEFAULT_MAX_THRESHOLD)
+
+        if override_min is not None:
+            applied_min_threshold = override_min
+        else:
+            applied_min_threshold = config.get('min', DEFAULT_MIN_THRESHOLD)
+        
+        display_name = config.get('display_name', filename)
+
+        try:
+            # Use the determined thresholds
+            breaches, total_count = find_value_breaches(
+                filename, data_folder, applied_max_threshold, applied_min_threshold
+            )
+            max_breach_count = sum(1 for b in breaches if b['breach_type'] == 'max')
+            min_breach_count = sum(1 for b in breaches if b['breach_type'] == 'min')
+            has_error = False
+        except FileNotFoundError:
+            logger.warning(f"File not found for Max/Min check: {os.path.join(data_folder, filename)}. Skipping.")
+            total_count = 0
+            max_breach_count = 0
+            min_breach_count = 0
+            has_error = True
+        except Exception as e:
+            logger.error(f"Error processing {filename} for summary: {e}", exc_info=True)
+            total_count = 0
+            max_breach_count = 0
+            min_breach_count = 0
+            has_error = True
+
         summary[filename] = {
             'filename': filename,
+            'display_name': display_name,
             'total_count': total_count,
             'max_breach_count': max_breach_count,
             'min_breach_count': min_breach_count,
-            # 'details_url' to be set in the view
+            'max_threshold': applied_max_threshold, # Report the threshold actually used
+            'min_threshold': applied_min_threshold, # Report the threshold actually used
+            'has_error': has_error # Indicate if processing failed
+            # 'details_url' will be added in the view
         }
     return summary
 

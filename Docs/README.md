@@ -55,6 +55,11 @@ This application provides a web interface to load, process, and check financial 
 
 *   **Attribution Residuals Chart:** Time-series visualization of attribution residuals
 
+*   **Max/Min Value Breach:** Checks security-level data (`sec_*.csv`) against configurable maximum and minimum value thresholds.
+    *   Configurable via `MAXMIN_THRESHOLDS` in `config.py`.
+    *   Dashboard view (`/maxmin/dashboard`) shows a summary card for each configured file, highlighting breach counts.
+    *   Detail view (`/maxmin/details/<file_name>/<breach_type>`) lists securities breaching the specified threshold (max or min).
+
 ## File Structure Overview
 
 ```mermaid
@@ -92,6 +97,7 @@ graph TD
     D --> D12(issue_views.py);
     D --> D13(attribution_views.py);
     D --> D14(generic_comparison_views.py);
+    D --> D15(maxmin_views.py);
 
     E --> E1(base.html);
     E --> E2(index.html);
@@ -109,6 +115,8 @@ graph TD
     E --> E20(attribution_summary.html);
     E --> E21(comparison_summary_base.html);
     E --> E22(comparison_details_base.html);
+    E --> E23(maxmin_dashboard.html);
+    E --> E24(maxmin_details.html);
 
     F --> F1(js);
     F1 --> F1a(main.js);
@@ -288,6 +296,7 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 | `curve_views.py` | Yield curve checking | `/curve/summary`, `/curve/details/<currency>` |
 | `issue_views.py` | Issue tracking | `/issues`, `/issues/close` |
 | `attribution_views.py` | Attribution analysis | `/attribution` |
+| `maxmin_views.py` | Max/Min value breach checking | `/maxmin/dashboard`, `/maxmin/details/<file_name>/<breach_type>` |
 
 ### HTML Templates (`templates/`)
 
@@ -309,6 +318,8 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 | `curve_details.html` | Yield curve details | Chart.js line chart with date selector |
 | `issues_page.html` | Issue tracking | Add/view/close issue forms and tables, user dropdowns, Jira link field |
 | `attribution_summary.html` | Attribution summary | Multiple detail levels with comparison data |
+| `maxmin_dashboard.html` | Max/Min breach summary | Cards summarizing breaches per file |
+| `maxmin_details.html` | Max/Min breach details | Table listing breaching securities |
 
 ### JavaScript Files (`static/js/`)
 

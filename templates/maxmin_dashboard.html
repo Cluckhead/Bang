@@ -1,67 +1,102 @@
 {#
-    Purpose: Dashboard for Max/Min Value Breach feature. Shows summary of max/min breaches for each file and links to details pages.
+    Purpose: Dashboard for Max/Min Value Breach feature. Shows summary of max/min breaches for configured files.
+    Can display all files or filter by group.
+    Allows temporary threshold overrides.
 #}
 {% extends 'base.html' %}
 
-{% block title %}Max/Min Value Breach Dashboard{% endblock %}
+{% block title %}{{ dashboard_title or 'Max/Min Value Breach Dashboard' }}{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <h1>Max/Min Value Breach Dashboard</h1>
-    <p>Overview of securities breaching configured maximum or minimum value thresholds in security files.</p>
+    <h1>{{ dashboard_title or 'Max/Min Value Breach Dashboard' }}</h1>
+    <p>Overview of securities breaching configured maximum or minimum value thresholds.</p>
+    
+    {# Determine form action URL based on whether a group is active #}
+    {% set form_action_url = url_for('maxmin_bp.dashboard', group_name=group_name) if group_name else url_for('maxmin_bp.dashboard') %}
 
-    <form method="GET" action="{{ url_for('maxmin_bp.dashboard') }}" class="row gx-2 gy-2 align-items-center mb-4 p-3 border rounded bg-light">
+    {# --- Threshold Override Form --- #}
+    <form method="GET" action="{{ form_action_url }}" class="row gx-2 gy-2 align-items-center mb-4 p-3 border rounded bg-light">
         <div class="col-auto">
-            <label for="maxInput" class="form-label mb-0">Max Threshold:</label>
+            <label for="maxInput" class="form-label mb-0">Override Max:</label>
         </div>
         <div class="col-auto">
-            <input type="number" step="any" class="form-control form-control-sm" id="maxInput" name="max" value="{{ max_threshold }}" style="width: 100px;">
+            {# Use applied_max (the override value if provided) to pre-fill #}
+            <input type="number" step="any" class="form-control form-control-sm" id="maxInput" name="max" value="{{ applied_max if applied_max is not none else '' }}" placeholder="(Config Default)" style="width: 140px;">
         </div>
         <div class="col-auto">
-            <label for="minInput" class="form-label mb-0">Min Threshold:</label>
+            <label for="minInput" class="form-label mb-0">Override Min:</label>
         </div>
         <div class="col-auto">
-            <input type="number" step="any" class="form-control form-control-sm" id="minInput" name="min" value="{{ min_threshold }}" style="width: 100px;">
+            {# Use applied_min (the override value if provided) to pre-fill #}
+            <input type="number" step="any" class="form-control form-control-sm" id="minInput" name="min" value="{{ applied_min if applied_min is not none else '' }}" placeholder="(Config Default)" style="width: 140px;">
         </div>
         <div class="col-auto">
-            <button type="submit" class="btn btn-primary btn-sm">Update View</button>
+            <button type="submit" class="btn btn-primary btn-sm">Apply Overrides</button>
         </div>
         <div class="col-auto">
-            <small class="text-muted">(Defaults: Max {{ DEFAULT_MAX_THRESHOLD }}, Min {{ DEFAULT_MIN_THRESHOLD }})</small>
+             {# Link to clear overrides (go back to default view for this group/all) #}
+            <a href="{{ form_action_url }}" class="btn btn-outline-secondary btn-sm">Clear Overrides</a>
         </div>
+        {# Optionally display the default thresholds #}
+        {# <small class="text-muted">(Overall Defaults: Max {{ DEFAULT_MAX_THRESHOLD }}, Min {{ DEFAULT_MIN_THRESHOLD }})</small> #}
     </form>
+    
+    {% if applied_max is not none or applied_min is not none %}
+        <div class="alert alert-info small" role="alert">
+            Currently viewing with temporary overrides applied:
+            {% if applied_max is not none %} Max = {{ applied_max }} {% endif %}
+            {% if applied_min is not none %} Min = {{ applied_min }} {% endif %}
+            (Configured defaults are shown per card below).
+        </div>
+    {% endif %}
 
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
         {% for item in summary_data %}
         <div class="col">
+            {# Card border color based on breach status #}
             <div class="card h-100 {% if item.has_error %}border-danger{% elif item.max_breach_count > 0 or item.min_breach_count > 0 %}border-warning{% else %}border-success{% endif %}">
                 <div class="card-body">
-                    <h5 class="card-title">{{ item.filename }}</h5>
+                    {# Display filename and the configured display name #}
+                    <h5 class="card-title">{{ item.display_name }}</h5>
+                    <p class="card-subtitle mb-2 text-muted small">({{ item.filename }})</p>
+                    
                     {% if item.has_error %}
-                        <p class="card-text text-danger">Error processing this file.</p>
-                        <a href="#" class="btn btn-secondary disabled stretched-link">View Details</a>
+                        <p class="card-text text-danger"><i class="fas fa-exclamation-triangle me-1"></i>Error processing this file.</p>
+                        {# Optionally add details about the error if available #}
                     {% else %}
-                        <p class="card-text">
-                            Securities Analyzed: {{ item.total_count }}<br>
-                            <span class="fw-bold {% if item.max_breach_count > 0 %}text-danger{% else %}text-success{% endif %}">
-                                Max Breaches: {{ item.max_breach_count }}
-                            </span><br>
-                            <span class="fw-bold {% if item.min_breach_count > 0 %}text-danger{% else %}text-success{% endif %}">
-                                Min Breaches: {{ item.min_breach_count }}
-                            </span>
+                        <p class="card-text small mb-1">
+                            Total Securities: {{ item.total_count }}
                         </p>
-                        <a href="{{ item.max_details_url }}" class="btn btn-outline-primary btn-sm me-2 {% if item.max_breach_count == 0 %}disabled{% endif %}">Max Details</a>
-                        <a href="{{ item.min_details_url }}" class="btn btn-outline-primary btn-sm {% if item.min_breach_count == 0 %}disabled{% endif %}">Min Details</a>
+                        <p class="card-text small mb-1 {% if item.max_breach_count > 0 %}text-danger fw-bold{% endif %}">
+                            Max Breaches: {{ item.max_breach_count }}
+                        </p>
+                        <p class="card-text small {% if item.min_breach_count > 0 %}text-warning fw-bold{% endif %}">
+                            Min Breaches: {{ item.min_breach_count }}
+                        </p>
+                        {# Display the actual thresholds used for this item (config default or override) #}
+                        <p class="card-text text-muted fst-italic" style="font-size: 0.75rem;">
+                            Thresholds Used: Max={{ item.max_threshold }}, Min={{ item.min_threshold }}
+                        </p>
+                        <div class="mt-auto pt-2">
+                            <a href="{{ item.max_details_url }}" class="btn btn-outline-danger btn-sm me-1 {% if item.max_breach_count == 0 %}disabled{% endif %}" title="View Max Breach Details">
+                                <i class="fas fa-arrow-up me-1"></i>Max
+                            </a>
+                            <a href="{{ item.min_details_url }}" class="btn btn-outline-warning btn-sm {% if item.min_breach_count == 0 %}disabled{% endif %}" title="View Min Breach Details">
+                                <i class="fas fa-arrow-down me-1"></i>Min
+                            </a>
+                        </div>
                     {% endif %}
                 </div>
-                <div class="card-footer {% if item.has_error %}bg-danger-subtle{% elif item.max_breach_count > 0 or item.min_breach_count > 0 %}bg-warning-subtle{% else %}bg-success-subtle{% endif %}">
-                    <small class="text-muted">
+                {# Footer indicating status #}
+                <div class="card-footer text-center {% if item.has_error %}bg-danger-subtle text-danger-emphasis{% elif item.max_breach_count > 0 or item.min_breach_count > 0 %}bg-warning-subtle text-warning-emphasis{% else %}bg-success-subtle text-success-emphasis{% endif %}">
+                    <small>
                         {% if item.has_error %}
                             Processing Error
                         {% elif item.max_breach_count > 0 or item.min_breach_count > 0 %}
-                            {{ item.max_breach_count }} max, {{ item.min_breach_count }} min breach(es) found
+                            Breaches Found
                         {% else %}
-                            No breaches found
+                            No Breaches Found
                         {% endif %}
                     </small>
                 </div>
@@ -69,7 +104,7 @@
         </div>
         {% else %}
         <div class="col-12">
-            <p class="text-info">No relevant data files (sec_*.csv, sp_sec_*.csv) found in the data directory.</p>
+            <p class="text-info">No files configured for this Max/Min group{% if not group_name %} (or overall){% endif %}.</p>
         </div>
         {% endfor %}
     </div>
