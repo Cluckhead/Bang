@@ -1,7 +1,16 @@
 # Purpose: Defines the Attribution summary, charts, radar, and security-level views for the Simple Data Checker app.
-# This blueprint provides a page that loads att_factors.csv and displays the sum of residuals
-# for each fund and day, for two cases: Benchmark and Portfolio, with both Prod and S&P columns.
-# Residuals are calculated as L0 Total - (L1 Rates + L1 Credit + L1 FX), with L1s computed from L2s.
+# This blueprint provides pages that load per-fund attribution files (att_factors_<FUNDCODE>.csv) and display residuals
+# and factor breakdowns for Benchmark and Portfolio, with both Prod and S&P columns. If the file for a fund does not exist,
+# a user-friendly message is shown. Default fund is the first available alphabetically. See comments in each endpoint.
+#
+# Features:
+# - Attribution summary, radar, and security-level views
+# - Handles L0, L1, and L2 factor breakdowns for both Portfolio and Benchmark
+# - Loads and merges static security info from w_secs.csv
+# - Supports filtering by fund, date, characteristic, and more
+# - Used by Flask Blueprint 'attribution_bp'
+#
+# Each endpoint is heavily commented for clarity. See function docstrings for details.
 
 from flask import Blueprint, render_template, current_app, request, jsonify, url_for, Response
 import pandas as pd
@@ -13,18 +22,52 @@ import typing
 
 attribution_bp = Blueprint('attribution_bp', __name__, url_prefix='/attribution')
 
+# Utility: Get available funds from FundList.csv (preferred) or w_secs.csv fallback
+def get_available_funds(data_folder: str) -> list:
+    """
+    Returns a sorted list of available fund codes for attribution, using FundList.csv if present, else w_secs.csv.
+    """
+    fund_list_path = os.path.join(data_folder, 'FundList.csv')
+    if os.path.exists(fund_list_path):
+        df = pd.read_csv(fund_list_path)
+        if 'Fund Code' in df.columns:
+            return sorted(df['Fund Code'].dropna().astype(str).unique())
+    # Fallback: w_secs.csv
+    wsecs_path = os.path.join(data_folder, 'w_secs.csv')
+    if os.path.exists(wsecs_path):
+        wsecs = pd.read_csv(wsecs_path)
+        if 'Fund' in wsecs.columns:
+            return sorted(wsecs['Fund'].dropna().astype(str).unique())
+    return []
+
 @attribution_bp.route('/summary')
 def attribution_summary() -> Response:
     """
-    Loads att_factors.csv and computes residuals for each fund and day for Benchmark and Portfolio,
-    showing both Prod and S&P (SPv3) columns. Supports grouping/filtering by characteristic.
-    Table columns: Date, Fund, (Group by), Residual (Prod), Residual (S&P), Abs Residual (Prod), Abs Residual (S&P)
-    Also supports L1 and L2 breakdowns via a 3-way toggle.
+    Loads att_factors_<FUNDCODE>.csv for the selected fund and computes residuals for each day for Benchmark and Portfolio.
+    If the file does not exist, shows a user-friendly message. Default fund is the first available alphabetically.
     """
     data_folder = current_app.config['DATA_FOLDER']
-    file_path = os.path.join(data_folder, 'att_factors.csv')
-    if not os.path.exists(file_path):
-        return "att_factors.csv not found", 404
+    available_funds = get_available_funds(data_folder)
+    selected_fund = request.args.get('fund', default=available_funds[0] if available_funds else '', type=str)
+    file_path = os.path.join(data_folder, f'att_factors_{selected_fund}.csv')
+    if not selected_fund or not os.path.exists(file_path):
+        return render_template(
+            'attribution_summary.html',
+            benchmark_results=[],
+            portfolio_results=[],
+            available_funds=available_funds,
+            selected_fund=selected_fund,
+            min_date=None,
+            max_date=None,
+            start_date=None,
+            end_date=None,
+            available_characteristics=[],
+            selected_characteristic=None,
+            selected_level='L0',
+            available_characteristic_values=[],
+            selected_characteristic_value=None,
+            no_data_message='No attribution available.'
+        )
 
     # Load data
     df = pd.read_csv(file_path)
@@ -48,21 +91,15 @@ def attribution_summary() -> Response:
     # Join att_factors with w_secs static info
     df = df.merge(wsecs_static, on='ISIN', how='left')
 
-    # Get available funds and date range for UI
-    available_funds = sorted(df['Fund'].dropna().unique())
+    # Get date range for UI
     min_date = df['Date'].min()
     max_date = df['Date'].max()
 
     # Get filter parameters from query string
-    selected_fund = request.args.get('fund', default='', type=str)
     start_date_str = request.args.get('start_date', default=None, type=str)
     end_date_str = request.args.get('end_date', default=None, type=str)
     selected_level = request.args.get('level', default='L0', type=str)
     selected_characteristic_value = request.args.get('characteristic_value', default='', type=str)
-
-    # Default to first fund if none selected
-    if not selected_fund and available_funds:
-        selected_fund = available_funds[0]
 
     # Parse date range
     start_date = pd.to_datetime(start_date_str, errors='coerce') if start_date_str else min_date
@@ -112,8 +149,6 @@ def attribution_summary() -> Response:
         else:
             date, fund = group_keys
             char_val = None
-        if selected_fund and fund != selected_fund:
-            continue
         if not (start_date <= date <= end_date):
             continue
         if selected_characteristic and selected_characteristic_value:
@@ -134,11 +169,11 @@ def attribution_summary() -> Response:
             port_prod_abs = port_prod_res.abs().sum()
             port_sp_abs = port_sp_res.abs().sum()
             row_info_bench = {
-                'Date': date, 'Fund': fund, 'Residual_Prod': bench_prod, 'Residual_SP': bench_sp,
+                'Date': date, 'Fund': selected_fund, 'Residual_Prod': bench_prod, 'Residual_SP': bench_sp,
                 'AbsResidual_Prod': bench_prod_abs, 'AbsResidual_SP': bench_sp_abs
             }
             row_info_port = {
-                'Date': date, 'Fund': fund, 'Residual_Prod': port_prod, 'Residual_SP': port_sp,
+                'Date': date, 'Fund': selected_fund, 'Residual_Prod': port_prod, 'Residual_SP': port_sp,
                 'AbsResidual_Prod': port_prod_abs, 'AbsResidual_SP': port_sp_abs
             }
             if selected_characteristic:
@@ -153,13 +188,13 @@ def attribution_summary() -> Response:
             port_l1_prod = sum_l1s_block(group, 'L2 Port ', l1_groups)
             port_l1_sp = sum_l1s_block(group, 'SPv3_L2 Port ', l1_groups)
             row_info_bench = {
-                'Date': date, 'Fund': fund,
+                'Date': date, 'Fund': selected_fund,
                 'L1Rates_Prod': bench_l1_prod[0], 'L1Rates_SP': bench_l1_sp[0],
                 'L1Credit_Prod': bench_l1_prod[1], 'L1Credit_SP': bench_l1_sp[1],
                 'L1FX_Prod': bench_l1_prod[2], 'L1FX_SP': bench_l1_sp[2]
             }
             row_info_port = {
-                'Date': date, 'Fund': fund,
+                'Date': date, 'Fund': selected_fund,
                 'L1Rates_Prod': port_l1_prod[0], 'L1Rates_SP': port_l1_sp[0],
                 'L1Credit_Prod': port_l1_prod[1], 'L1Credit_SP': port_l1_sp[1],
                 'L1FX_Prod': port_l1_prod[2], 'L1FX_SP': port_l1_sp[2]
@@ -176,11 +211,11 @@ def attribution_summary() -> Response:
             l2prod_port = dict(zip(l2_all, sum_l2s_block(group, 'L2 Port ', l2_all)))
             l2sp_port = dict(zip(l2_all, sum_l2s_block(group, 'SPv3_L2 Port ', l2_all)))
             row_info_bench = {
-                'Date': date, 'Fund': fund,
+                'Date': date, 'Fund': selected_fund,
                 'L2Prod': l2prod, 'L2SP': l2sp, 'L2ProdKeys': l2_all
             }
             row_info_port = {
-                'Date': date, 'Fund': fund,
+                'Date': date, 'Fund': selected_fund,
                 'L2Prod': l2prod_port, 'L2SP': l2sp_port, 'L2ProdKeys': l2_all
             }
             if selected_characteristic:
@@ -217,9 +252,27 @@ def attribution_charts() -> Response:
     with filters and grouping as in the summary view. Data is prepared for JS charts.
     """
     data_folder = current_app.config['DATA_FOLDER']
-    file_path = os.path.join(data_folder, 'att_factors.csv')
-    if not os.path.exists(file_path):
-        return "att_factors.csv not found", 404
+    available_funds = get_available_funds(data_folder)
+    selected_fund = request.args.get('fund', default=available_funds[0] if available_funds else '', type=str)
+    file_path = os.path.join(data_folder, f'att_factors_{selected_fund}.csv')
+    if not selected_fund or not os.path.exists(file_path):
+        return render_template(
+            'attribution_charts.html',
+            chart_data_bench_json='[]',
+            chart_data_port_json='[]',
+            available_funds=available_funds,
+            selected_fund=selected_fund,
+            min_date=None,
+            max_date=None,
+            start_date=None,
+            end_date=None,
+            available_characteristics=[],
+            selected_characteristic=None,
+            available_characteristic_values=[],
+            selected_characteristic_value=None,
+            abs_toggle_default=False,
+            no_data_message='No attribution available.'
+        )
 
     # Load data
     df = pd.read_csv(file_path)
@@ -244,19 +297,13 @@ def attribution_charts() -> Response:
     # Join att_factors with w_secs static info
     df = df.merge(wsecs_static, on='ISIN', how='left')
 
-    # Get available funds and date range for UI
-    available_funds = sorted(df['Fund'].dropna().unique())
+    # Get date range for UI
     min_date = df['Date'].min()
     max_date = df['Date'].max()
 
     # Get filter parameters from query string
-    selected_fund = request.args.get('fund', default='', type=str)
     start_date_str = request.args.get('start_date', default=None, type=str)
     end_date_str = request.args.get('end_date', default=None, type=str)
-
-    # Default to first fund if none selected
-    if not selected_fund and available_funds:
-        selected_fund = available_funds[0]
 
     # Parse date range
     start_date = pd.to_datetime(start_date_str, errors='coerce') if start_date_str else min_date
@@ -271,10 +318,6 @@ def attribution_charts() -> Response:
     # Filter by characteristic value if set
     if selected_characteristic and selected_characteristic_value:
         df = df[df[selected_characteristic] == selected_characteristic_value]
-
-    # Filter by fund
-    if selected_fund:
-        df = df[df['Fund'] == selected_fund]
 
     # Filter by date range
     df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
@@ -378,9 +421,26 @@ def attribution_radar() -> Response:
     for a single fund, over a selected date range and characteristic. Data is prepared for radar charts.
     """
     data_folder = current_app.config['DATA_FOLDER']
-    file_path = os.path.join(data_folder, 'att_factors.csv')
-    if not os.path.exists(file_path):
-        return "att_factors.csv not found", 404
+    available_funds = get_available_funds(data_folder)
+    selected_fund = request.args.get('fund', default=available_funds[0] if available_funds else '', type=str)
+    file_path = os.path.join(data_folder, f'att_factors_{selected_fund}.csv')
+    if not selected_fund or not os.path.exists(file_path):
+        return render_template(
+            'attribution_radar.html',
+            radar_data_json='[]',
+            available_funds=available_funds,
+            selected_fund=selected_fund,
+            min_date=None,
+            max_date=None,
+            start_date=None,
+            end_date=None,
+            available_characteristics=[],
+            selected_characteristic=None,
+            available_characteristic_values=[],
+            selected_characteristic_value=None,
+            selected_level='L2',
+            no_data_message='No attribution available.'
+        )
 
     # Load data
     df = pd.read_csv(file_path)
@@ -405,20 +465,14 @@ def attribution_radar() -> Response:
     # Join att_factors with w_secs static info
     df = df.merge(wsecs_static, on='ISIN', how='left')
 
-    # Get available funds and date range for UI
-    available_funds = sorted(df['Fund'].dropna().unique())
+    # Get date range for UI
     min_date = df['Date'].min()
     max_date = df['Date'].max()
 
     # Get filter parameters from query string
-    selected_fund = request.args.get('fund', default='', type=str)
     start_date_str = request.args.get('start_date', default=None, type=str)
     end_date_str = request.args.get('end_date', default=None, type=str)
     selected_level = request.args.get('level', default='L2', type=str)  # Default to L2
-
-    # Default to first fund if none selected
-    if not selected_fund and available_funds:
-        selected_fund = available_funds[0]
 
     # Parse date range
     start_date = pd.to_datetime(start_date_str, errors='coerce') if start_date_str else min_date
@@ -433,10 +487,6 @@ def attribution_radar() -> Response:
     # Filter by characteristic value if set
     if selected_characteristic and selected_characteristic_value:
         df = df[df[selected_characteristic] == selected_characteristic_value]
-
-    # Filter by fund (only one fund allowed)
-    if selected_fund:
-        df = df[df['Fund'] == selected_fund]
 
     # Filter by date range
     df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
@@ -480,15 +530,16 @@ def attribution_radar() -> Response:
     if selected_level == 'L1':
         radar_labels = list(l1_groups.keys()) + residual_labels
         # Portfolio
-        port_l1_prod = sum_l1s_block(df, 'L2 Port ', l2_all)
-        port_l1_sp = sum_l1s_block(df, 'SPv3_L2 Port ', l2_all)
+        # Use l1_groups (dict of L1 groupings) as required by sum_l1s_block, not l2_all (which is a flat list)
+        port_l1_prod = sum_l1s_block(df, 'L2 Port ', l1_groups)
+        port_l1_sp = sum_l1s_block(df, 'SPv3_L2 Port ', l1_groups)
         port_resid_prod = compute_residual_block(df, 'L0 Port Total Daily ', 'L2 Port ', l2_all)
         port_resid_sp = compute_residual_block(df, 'L0 Port Total Daily ', 'SPv3_L2 Port ', l2_all)
         port_prod = port_l1_prod + [port_resid_prod]
         port_sp = port_l1_sp + [port_resid_sp]
         # Benchmark
-        bench_l1_prod = sum_l1s_block(df, 'L2 Bench ', l2_all)
-        bench_l1_sp = sum_l1s_block(df, 'SPv3_L2 Bench ', l2_all)
+        bench_l1_prod = sum_l1s_block(df, 'L2 Bench ', l1_groups)
+        bench_l1_sp = sum_l1s_block(df, 'SPv3_L2 Bench ', l1_groups)
         bench_resid_prod = compute_residual_block(df, 'L0 Bench Total Daily', 'L2 Bench ', l2_all)
         bench_resid_sp = compute_residual_block(df, 'L0 Bench Total Daily', 'SPv3_L2 Bench ', l2_all)
         bench_prod = bench_l1_prod + [bench_resid_prod]
@@ -549,16 +600,31 @@ def attribution_security_page() -> Response:
     import numpy as np
     from pandas.tseries.offsets import BDay
     data_folder = current_app.config['DATA_FOLDER']
-    att_path = os.path.join(data_folder, 'att_factors.csv')
-    wsecs_path = os.path.join(data_folder, 'w_secs.csv')
-    if not os.path.exists(att_path) or not os.path.exists(wsecs_path):
-        return "Required data files not found", 404
+    available_funds = get_available_funds(data_folder)
+    selected_fund = request.args.get('fund', default=available_funds[0] if available_funds else '', type=str)
+    file_path = os.path.join(data_folder, f'att_factors_{selected_fund}.csv')
+    if not selected_fund or not os.path.exists(file_path):
+        return render_template(
+            'attribution_security_page.html',
+            rows=[],
+            pagination=None,
+            available_funds=available_funds,
+            selected_fund=selected_fund,
+            available_types=[],
+            selected_type='',
+            selected_date='',
+            bench_or_port='bench',
+            mtd=False,
+            normalize=False,
+            no_data_message='No attribution available.'
+        )
 
     # Load data
-    df = pd.read_csv(att_path)
+    df = pd.read_csv(file_path)
     df.columns = df.columns.str.strip()
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     df = df.dropna(subset=['Date', 'Fund', 'ISIN'])
+    wsecs_path = os.path.join(data_folder, 'w_secs.csv')
     wsecs = pd.read_csv(wsecs_path)
     wsecs.columns = wsecs.columns.str.strip()
     static_cols = [col for col in wsecs.columns if col not in ['ISIN'] and not _is_date_like(col)]

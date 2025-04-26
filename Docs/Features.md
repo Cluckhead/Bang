@@ -4,7 +4,43 @@
 
 All security-level and time-series data loaders now support fully flexible date parsing. The application will handle `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`) formats, with pandas' flexible parser as a final fallback for any other date formats. This ensures robust handling of a wide variety of date formats in your data files.
 
-This document provides a more detailed overview of specific application features.
+---
+
+## File Audit & Consistency Checker (NEW)
+
+The File Audit feature provides a comprehensive, automated review of all key data files in the application. It is accessible from the `/get_data` page and produces a detailed, actionable report.
+
+### What It Checks
+- **Date Range Consistency:**
+  - Checks that all files of the same type (e.g., all `ts_*.csv`, all `sec_*.csv`, all key files like `w_Bench.csv`, `w_Funds.csv`, `w_secs.csv`, `att_factors.csv`, `curves.csv`) cover the same date range.
+  - Highlights any files whose date ranges are out of sync with the majority.
+- **File Structure Issues:**
+  - Detects missing headers, blank columns, files with only headers, and columns that are entirely blank.
+  - Flags files that cannot be read or parsed.
+- **Format-Aware:**
+  - Supports both **wide format** (dates as columns, e.g., `w_Bench.csv`, `sec_*.csv`) and **long format** (date in a column, e.g., `ts_*.csv`, `curves.csv`).
+  - Automatically detects the correct date column or columns for each file.
+- **Key Files Always Checked:**
+  - Explicitly includes `w_Bench.csv`, `w_Funds.csv`, `w_secs.csv`, `att_factors.csv`, and `curves.csv` in every audit, regardless of filename prefix.
+- **Summary Table:**
+  - Shows file name, size, number of rows/columns, fund column, detected date range, and any issues for each file.
+  - Provides actionable recommendations for fixing detected problems.
+- **Skipped Files:**
+  - Lists any `.csv` files in the data folder that were not included in the audit, for transparency.
+
+### How to Use
+- Go to the `/get_data` page and click the **Run Data Consistency Audit** button.
+- Review the summary and details, including:
+  - Date range mismatches (with expected and actual ranges)
+  - Structure issues and recommendations
+  - Diagnostics for all key files
+
+### Why This Matters
+- Ensures all your data files are aligned and ready for analysis.
+- Quickly identifies subtle misalignments or missing data that could cause downstream errors.
+- Makes it easy to spot and fix issues before running further processing or analysis.
+
+---
 
 ## Generic Data Comparison
 
@@ -103,3 +139,9 @@ This feature monitors and identifies stale or missing data in security and curve
     *   **Details (`/maxmin/details/<file_name>/<breach_type>`):** Shows a detailed table of securities that breached either the maximum (`max`) or minimum (`min`) threshold for the specified file.
 
 ## Technical Details
+
+- **Attribution Data Loading:**
+  - Attribution dashboards (summary, security, radar, charts) now load data from per-fund files in the format `att_factors_<FUNDCODE>.csv` (e.g., `att_factors_IG01.csv`).
+  - When a user selects a fund, the application loads the corresponding attribution file for that fund only.
+  - If no file exists for the selected fund, a clear message is shown: "No attribution available."
+  - This replaces the previous approach of loading all attribution data from a single `att_factors.csv` file.

@@ -48,6 +48,7 @@ This application provides a web interface to load, process, and check financial 
     *   3-way toggle (L0, L1, L2) for different detail levels
     *   Compares Production vs S&P data for both Benchmark and Portfolio cases
     *   Color-coded cells to highlight discrepancies
+    *   **Attribution data is now loaded from per-fund files in the format `att_factors_<FUNDCODE>.csv` (e.g., `att_factors_IG01.csv`). When a user selects a fund, the application loads the corresponding attribution file for that fund only. If no file exists for the selected fund, a clear message is shown: "No attribution available." This replaces the previous approach of loading all attribution data from a single `att_factors.csv` file.**
 
 *   **Data Simulation & Management:** API simulation via `/get_data`
 
@@ -214,6 +215,7 @@ graph TD
 | `data_issues.csv` | Issue tracking log (ID, dates, users, details, resolution, Jira link) |
 | `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P. **Note:** The `L0 Total` column represents the returns for each security/fund/date. |
 | `users.csv` | List of users for issue tracking dropdowns (`Name` column) |
+| `att_factors_<FUNDCODE>.csv` | Attribution data for a specific fund, used by all attribution dashboards. Replaces the single `att_factors.csv` file. | Used by `/attribution/summary`, `/attribution/security`, `/attribution/radar`, `/attribution/charts` |
 
 ### Python Core Modules
 
