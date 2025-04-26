@@ -24,7 +24,7 @@ from .comparison_helpers import (
 
 # Import shared utilities and processing functions
 try:
-    from utils import load_weights_and_held_status, parse_fund_list # Import parse_fund_list for fund filter logic
+    from utils import load_weights_and_held_status, parse_fund_list, load_fund_groups # Import parse_fund_list for fund filter logic
     from security_processing import load_and_process_security_data # Keep using this standard loader
     from config import COMPARISON_CONFIG, COLOR_PALETTE
     from process_data import read_and_sort_dates
@@ -361,7 +361,7 @@ def load_fund_codes_from_csv(data_folder: str) -> list:
 
 @generic_comparison_bp.route('/<comparison_type>/summary')
 def summary(comparison_type):
-    """Displays the generic comparison summary page with filtering, sorting, and pagination."""
+    """Displays the generic comparison summary page with filtering, sorting, and pagination. Now supports fund group filtering."""
     log = current_app.logger
     log.info(f"--- Starting Generic Comparison Summary Request: Type = {comparison_type} ---")
 
@@ -378,14 +378,16 @@ def summary(comparison_type):
 
     # --- Get Request Parameters ---
     page = request.args.get('page', 1, type=int)
-    sort_by = request.args.get('sort_by', 'Change_Correlation') # Consistent default? Or Max_Abs_Diff?
+    sort_by = request.args.get('sort_by', 'Change_Correlation')
     sort_order = request.args.get('sort_order', 'desc').lower()
     ascending = sort_order == 'asc'
     show_sold = request.args.get('show_sold', 'false').lower() == 'true'
     active_filters = {k.replace('filter_', ''): v
                       for k, v in request.args.items()
                       if k.startswith('filter_') and v}
-    log.info(f"Request Params: Page={page}, SortBy={sort_by}, Order={sort_order}, Filters={active_filters}, ShowSold={show_sold}")
+    # --- Fund Group Filter ---
+    selected_fund_group = request.args.get('fund_group', None)
+    log.info(f"Request Params: Page={page}, SortBy={sort_by}, Order={sort_order}, Filters={active_filters}, ShowSold={show_sold}, FundGroup={selected_fund_group}")
 
     # --- Load Data ---
     data_folder = current_app.config['DATA_FOLDER']
@@ -393,14 +395,14 @@ def summary(comparison_type):
 
     if actual_id_col is None or merged_data.empty:
         log.warning(f"Failed to load or merge data for comparison type '{comparison_type}'. Rendering empty page.")
-        # Flash message might have been set in load function
-        return render_template('comparison_summary_base.html', # Use the new base template
+        return render_template('comparison_summary_base.html',
                                comparison_type=comparison_type,
                                display_name=display_name,
-                               table_data=[], columns_to_display=[], id_column_name='Security', # Default ID name if unknown
+                               table_data=[], columns_to_display=[], id_column_name='Security',
                                filter_options={}, active_filters={}, pagination=None,
                                current_sort_by=sort_by, current_sort_order=sort_order,
                                show_sold=show_sold,
+                               fund_groups={}, selected_fund_group=None,
                                message=f"Could not load data for {display_name} comparison.")
 
     log.info(f"Actual ID column identified for '{comparison_type}': '{actual_id_col}'")
@@ -416,7 +418,39 @@ def summary(comparison_type):
                                filter_options={}, active_filters={}, pagination=None,
                                current_sort_by=sort_by, current_sort_order=sort_order,
                                show_sold=show_sold,
+                               fund_groups={}, selected_fund_group=None,
                                message=f"No {display_name} comparison statistics available.")
+
+    # --- Fund Group Filtering: Apply to DataFrame Before Filters ---
+    fund_groups_dict = load_fund_groups(data_folder)
+    if selected_fund_group and selected_fund_group in fund_groups_dict:
+        allowed_funds = set(fund_groups_dict[selected_fund_group])
+        # If 'Funds' column exists, filter by checking if any allowed fund is in the parsed list
+        if 'Funds' in summary_stats.columns:
+            summary_stats = summary_stats[
+                summary_stats['Funds'].apply(
+                    lambda x: any(f in allowed_funds for f in parse_fund_list(x)) if pd.notna(x) else False
+                )
+            ]
+        else:
+            # Fallback: Try to filter by a static column that matches fund code
+            fund_col_candidates = [col for col in ['Fund', 'Fund Code', 'Code'] if col in summary_stats.columns]
+            if fund_col_candidates:
+                fund_col = fund_col_candidates[0]
+                summary_stats = summary_stats[summary_stats[fund_col].isin(allowed_funds)]
+        # If no fund column, skip filtering (could log a warning)
+    # --- Prepare Fund Group Filtering for UI (only groups with funds in current data) ---
+    all_funds_in_data = set()
+    if 'Funds' in summary_stats.columns:
+        for x in summary_stats['Funds'].dropna():
+            all_funds_in_data.update(parse_fund_list(x))
+    else:
+        fund_col_candidates = [col for col in ['Fund', 'Fund Code', 'Code'] if col in summary_stats.columns]
+        if fund_col_candidates:
+            fund_col = fund_col_candidates[0]
+            all_funds_in_data = set(summary_stats[fund_col].unique())
+    filtered_fund_groups = {g: [f for f in funds if f in all_funds_in_data] for g, funds in fund_groups_dict.items()}
+    filtered_fund_groups = {g: funds for g, funds in filtered_fund_groups.items() if funds}
 
     # --- Load and Merge Held Status ---
     # Assuming 'ISIN' is the standard ID in w_secs.csv, adjust if needed
@@ -525,6 +559,7 @@ def summary(comparison_type):
                                 filter_options=filter_options, active_filters=active_filters, pagination=None,
                                 current_sort_by=sort_by, current_sort_order=sort_order,
                                 show_sold=show_sold,
+                                fund_groups=filtered_fund_groups, selected_fund_group=selected_fund_group,
                                 message=message)
 
     # --- Apply Sorting ---
@@ -608,6 +643,7 @@ def summary(comparison_type):
                            current_sort_order=sort_order,
                            pagination=pagination_context,
                            show_sold=show_sold,
+                           fund_groups=filtered_fund_groups, selected_fund_group=selected_fund_group,
                            message=None) # No message if data is present
 
 

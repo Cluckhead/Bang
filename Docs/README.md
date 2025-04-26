@@ -62,26 +62,20 @@ This application provides a web interface to load, process, and check financial 
 
 ## Fund Group Filtering (Reusable Feature)
 
-### FundGroups.csv Structure
-- Located in `Data/FundGroups.csv`.
-- Each column header is a fund group name (e.g., `IG`, `S&P Phase 1`, `HY`).
-- Each cell in a column is a fund code belonging to that group. Leave cells blank if not used.
-- Example:
-
-  | IG   | S&P Phase 1 | HY   | All But 1 |
-  |------|-------------|------|-----------|
-  | IG01 | IG01        | IG03 | IG02      |
-  | IG02 | IG02        | IG04 | IG03      |
-  | IG03 |             |      | IG04      |
-  | IG04 |             |      |           |
+### Where Fund Group Filtering is Available
+- **Metric Detail Pages** (e.g., `/metric/<metric_name>`)
+- **Security Summary Pages** (e.g., `/security/summary`)
+- **All Generic Comparison Summary Pages** (e.g., `/compare/spread/summary`, `/compare/duration/summary`, etc.)
 
 ### How the Fund Group Filter Works
-- On pages like the metric detail page, a **dropdown** of fund groups appears under the latest date.
+- On supported pages, a **dropdown** of fund groups appears above the main filter form.
 - Only groups with at least one fund present in the current data are shown.
-- Selecting a group filters the view to only show those funds (and their associated benchmarks).
+- Selecting a group filters the view to only show those funds (and their associated benchmarks, if relevant).
 - The filter is server-side: the page reloads with the `fund_group` query parameter in the URL.
 - The selected group is highlighted and persists across reloads and navigation.
 - The filter UI is a compact dropdown and is scalable for large numbers of groups.
+- **On comparison summary pages, the filter works by searching for any fund in the group within the `Funds` column (which is a string). The code uses `parse_fund_list` to convert this string to a list for matching.**
+- The dropdown and logic are automatically available for all comparison types configured in `config.py`.
 
 ### How to Reuse This Feature on Other Pages
 1. **Load Fund Groups:**
@@ -90,16 +84,17 @@ This application provides a web interface to load, process, and check financial 
    - Get the selected group from the query string: `selected_fund_group = request.args.get('fund_group', None)`.
    - Filter your data to only include funds in `fund_groups[selected_fund_group]` if a group is selected.
    - Only show groups that have at least one fund in the current data.
+   - For wide-format security data, if the `Funds` column is a string, use `parse_fund_list` to convert it to a list and check for any overlap with the selected group.
 3. **Pass to Template:**
    - Pass `fund_groups` (filtered to only non-empty groups in the current data) and `selected_fund_group` to your template context.
 4. **Render the UI:**
-   - Use the **dropdown pattern** (see `metric_page_js.html`) to render the filter.
+   - Use the **dropdown pattern** (see `metric_page_js.html` or `comparison_summary_base.html`) to render the filter.
    - Ensure the form preserves other query parameters (e.g., filters, toggles) when submitting.
    - This dropdown approach is recommended for scalability and usability with many groups.
 5. **Persistence:**
    - The filter state is maintained in the URL and query string, so it persists across reloads and navigation.
 
-**This approach is scalable and can be reused on any page that displays fund-level data.**
+**This approach is scalable and can be reused on any page that displays fund-level data, including all generic comparison summary pages.**
 
 ## File Structure Overview
 
