@@ -17,7 +17,6 @@
 
 ### Features v2.1
 - attribution files generator
-- have teh ability to dig into the biggest contributers to a change at fund level - from the Metrics page
 - S&P vs Prod Summary page
 - S&P bad securities email 
 
