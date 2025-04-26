@@ -393,7 +393,7 @@ The Inspect (Contribution Analysis) feature enables root-cause analysis of chang
   - **Date Range:** User selects a subset of the chart's date range.
   - **Data Category:** User selects "Original" or "SP" (S&P) data source.
 - On submission, the backend calculates contributions for each security:
-  - Loads weights from `w_secs.csv` and metric values from `sec_<metric>.csv` or `sp_sec_<metric>.csv`.
+  - Loads weights from `w_secs.csv` and metric values from `sec_<metric>.csv` (for Original) or `sec_<metric>SP.csv` (for SP).
   - For each security and day in the range: `Contribution = Weight × MetricValue`.
   - Computes the average contribution over the range and compares to the baseline (day before the range).
   - Ranks securities by the change; shows top 10 contributors and top 10 detractors.
@@ -414,7 +414,7 @@ The Inspect (Contribution Analysis) feature enables root-cause analysis of chang
 **Key Files and Functions:**
 - `views/metric_views.py` (core logic and routes)
 - `w_secs.csv` (weights)
-- `sec_<metric>.csv`, `sp_sec_<metric>.csv` (metric values)
+- `sec_<metric>.csv` (Original), `sec_<metric>SP.csv` (SP) (metric values)
 - `reference.csv` (static security info)
 
 **Example Calculation:**

@@ -268,9 +268,10 @@ The Inspect feature provides a powerful, interactive workflow for root-cause ana
 
 - **Results Display:**
   - After calculation, a new results page is shown:
-    - **Top 10 Contributors** and **Top 10 Detractors** are listed, with their ISIN, Security Name, baseline, average, and change values.
-    - Each security is linked to its details page for further investigation.
-    - This helps users quickly identify which securities are driving changes in the metric over the selected period.
+    - **Top 10 Contributors** and **Top 10 Detractors** are listed in separate tables, with their ISIN, Security Name, baseline, average, and change values.
+    - Alongside the tables, a **vertical bar chart** visually represents these top contributors (green bars) and detractors (red bars). The chart is sorted by contribution difference, showing the largest positive impact on the left down to the largest negative impact on the right.
+    - Each security listed in the tables is linked to its details page for further investigation.
+    - This combined view helps users quickly identify which securities are driving changes in the metric over the selected period.
 
 - **Supported Analytics:**
   - The Inspect feature is available for all key analytics:

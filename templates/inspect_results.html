@@ -1,92 +1,225 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inspect Results - {{ metric_name }} ({{ fund_code }})</title>
-    <!-- Add link to your main CSS file -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{#
+    inspect_results.html
+    Purpose: Renders the results of the Inspect (Contribution Analysis) feature, showing top contributors and detractors for a selected metric, fund, and date range. This template extends base.html to include the main navigation bar and uses Bootstrap for layout. All logic is handled server-side; this page is for display only.
+#}
+
+{% extends 'base.html' %}
+
+{% block title %}Inspect Results - {{ metric_name }} ({{ fund_code }}){% endblock %}
+
+{% block content %}
     <style>
-        body { font-family: sans-serif; margin: 20px; }
+        /* Custom styles for the Inspect Results page */
         h1, h2 { color: #333; }
-        .results-container { display: flex; gap: 40px; flex-wrap: wrap; }
-        .contribution-list { border: 1px solid #ccc; padding: 15px; border-radius: 5px; min-width: 400px; }
+        .results-container { display: flex; gap: 20px; flex-wrap: wrap; } /* Reduced gap */
+        .contribution-list { border: 1px solid #ccc; padding: 15px; border-radius: 5px; background: #fff; }
+        /* Adjust widths using Bootstrap grid classes */
+        .table-container { flex: 1; min-width: 350px; } /* Flex for tables */
+        .chart-container { flex: 1.5; min-width: 400px; } /* Flex for chart, slightly wider */
         .contribution-list h3 { margin-top: 0; color: #555; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 0.9rem; } /* Slightly smaller font */
         th { background-color: #f2f2f2; }
         tr:nth-child(even) { background-color: #f9f9f9; }
         .no-data { color: #888; font-style: italic; }
+        .back-btn { margin-bottom: 20px; }
+        /* Ensure chart canvas has a reasonable height */
+        #contributionChart {
+            max-height: 500px; /* Limit chart height */
+        }
     </style>
-</head>
-<body>
-    <!-- Basic Navigation/Header (Optional) -->
-    <nav>
-        <a href="{{ url_for('main.index') }}">Home</a> |
-        <a href="{{ url_for('metric.metric_page', metric_name=metric_name) }}">Back to {{ metric_name }} Metric Page</a>
-    </nav>
 
+    <!-- Inspect Results Page Content -->
     <h1>Inspect Metric Contribution</h1>
     <h2>{{ metric_name }} for Fund: {{ fund_code }}</h2>
     <p><strong>Date Range:</strong> {{ start_date }} to {{ end_date }}</p>
+    <!-- Bootstrap-styled Back Button -->
+    <a href="{{ url_for('metric.metric_page', metric_name=metric_name) }}" class="btn btn-secondary back-btn">&larr; Back to {{ metric_name }} Metric Page</a>
 
-    <div class="results-container">
-        <!-- Top Contributors -->
-        <div class="contribution-list">
-            <h3>Top Contributors</h3>
-            {% if top_contributors %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Security ID (ISIN)</th>
-                            <th>Security Name</th>
-                            <th>Contribution Difference</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in top_contributors %}
-                        <tr>
-                            <td><a href="{{ url_for('security.security_details', security_id=item.ISIN, metric_name=metric_name) }}">{{ item.ISIN }}</a></td>
-                            <td>{{ item['Security Name'] }}</td>
-                            <td>{{ item.ContributionDifference | round(4) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <p class="no-data">No significant contributors found for this period.</p>
-            {% endif %}
+    <!-- Main container for tables and chart -->
+    <div class="row">
+        <!-- Column for the two tables -->
+        <div class="col-lg-5">
+            <div class="results-container d-flex flex-column gap-3">
+                <!-- Top Contributors List -->
+                <div class="contribution-list table-container">
+                    <h3>Top Contributors</h3>
+                    {# Table of top 10 positive contributors #}
+                    {% if top_contributors %}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Security ID (ISIN)</th>
+                                    <th>Security Name</th>
+                                    <th>Contribution Diff.</th> {# Shortened Header #}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_contributors %}
+                                <tr>
+                                    <td><a href="{{ url_for('security.security_details', security_id=item.ISIN, metric_name=metric_name) }}">{{ item.ISIN }}</a></td>
+                                    <td>{{ item['Security Name'] }}</td>
+                                    <td>{{ item.ContributionDifference | round(4) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p class="no-data">No significant contributors found.</p> {# Shorter text #}
+                    {% endif %}
+                </div>
+
+                <!-- Top Detractors List -->
+                <div class="contribution-list table-container">
+                    <h3>Top Detractors</h3>
+                    {# Table of top 10 negative contributors #}
+                    {% if top_detractors %}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Security ID (ISIN)</th>
+                                    <th>Security Name</th>
+                                    <th>Contribution Diff.</th> {# Shortened Header #}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_detractors %}
+                                <tr>
+                                    <td><a href="{{ url_for('security.security_details', security_id=item.ISIN, metric_name=metric_name) }}">{{ item.ISIN }}</a></td>
+                                    <td>{{ item['Security Name'] }}</td>
+                                    <td>{{ item.ContributionDifference | round(4) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p class="no-data">No significant detractors found.</p> {# Shorter text #}
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
-        <!-- Top Detractors -->
-        <div class="contribution-list">
-            <h3>Top Detractors</h3>
-            {% if top_detractors %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Security ID (ISIN)</th>
-                            <th>Security Name</th>
-                            <th>Contribution Difference</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in top_detractors %}
-                        <tr>
-                            <td><a href="{{ url_for('security.security_details', security_id=item.ISIN, metric_name=metric_name) }}">{{ item.ISIN }}</a></td>
-                            <td>{{ item['Security Name'] }}</td>
-                            <td>{{ item.ContributionDifference | round(4) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <p class="no-data">No significant detractors found for this period.</p>
-            {% endif %}
+        <!-- Column for the chart -->
+        <div class="col-lg-7">
+            <div class="contribution-list chart-container">
+                <h3>Contribution Visualization</h3>
+                {# Canvas element for the Chart.js chart #}
+                {# Embed data directly into data attributes to avoid JS/Jinja parsing conflicts #}
+                <canvas id="contributionChart"
+                        data-contributors='{{ top_contributors | tojson | safe }}'
+                        data-detractors='{{ top_detractors | tojson | safe }}'>
+                </canvas>
+            </div>
         </div>
     </div>
+    {#
+        All logic for calculation and data preparation is handled in the Flask view.
+        This template is for display only and expects the following context variables:
+        - metric_name, fund_code, start_date, end_date
+        - top_contributors (list of dicts with ISIN, Security Name, ContributionDifference)
+        - top_detractors (list of dicts with ISIN, Security Name, ContributionDifference)
+    #}
+{% endblock %}
 
-    <!-- Add link to your JS file if needed for interactivity -->
-    <!-- <script src="{{ url_for('static', filename='js/inspect_results.js') }}"></script> -->
-</body>
-</html> 
+{% block scripts %}
+    {{ super() }} {# Include scripts from base.html if any #}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const canvas = document.getElementById('contributionChart');
+            if (!canvas) return; // Exit if canvas not found
+            const ctx = canvas.getContext('2d');
+
+            // Retrieve data from data attributes
+            let contributorsData = [];
+            let detractorsData = [];
+            try {
+                contributorsData = JSON.parse(canvas.getAttribute('data-contributors') || '[]');
+                detractorsData = JSON.parse(canvas.getAttribute('data-detractors') || '[]');
+            } catch (e) {
+                console.error("Error parsing chart data from attributes:", e);
+                return; // Stop if data parsing fails
+            }
+
+            // Prepare data: combine contributors and detractors
+            let chartData = [
+                ...contributorsData.map(item => ({
+                    label: item['Security Name'] || item.ISIN, // Use Name, fallback to ISIN
+                    value: item.ContributionDifference,
+                    color: 'rgba(75, 192, 192, 0.6)' // Green for contributors
+                })),
+                ...detractorsData.map(item => ({
+                    label: item['Security Name'] || item.ISIN, // Use Name, fallback to ISIN
+                    value: item.ContributionDifference,
+                    color: 'rgba(255, 99, 132, 0.6)' // Red for detractors
+                }))
+            ];
+
+            // Sort the combined data from highest value to lowest value
+            chartData.sort((a, b) => b.value - a.value);
+
+            const labels = chartData.map(item => item.label);
+            const dataValues = chartData.map(item => item.value);
+            const backgroundColors = chartData.map(item => item.color);
+
+            // Create the Chart.js bar chart (Vertical Bars)
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Contribution Difference',
+                        data: dataValues,
+                        backgroundColor: backgroundColors,
+                        borderColor: backgroundColors.map(color => color.replace('0.6', '1')), // Make border solid color
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // Allow chart to fill container height
+                    // indexAxis: 'y', // REMOVED: Use default vertical bars
+                    scales: {
+                        x: { // Now the category axis (Security Names/ISINs)
+                             ticks: {
+                                 autoSkip: false, // Ensure all labels are shown
+                                 font: {
+                                     size: 10 // Smaller font for x-axis labels if needed
+                                 },
+                                 // Rotate labels if they overlap - might be needed for vertical bars
+                                 maxRotation: 70,
+                                 minRotation: 45
+                             }
+                        },
+                        y: { // Now the value axis (Contribution Difference)
+                            beginAtZero: true, // Keep axis starting at zero
+                            title: {
+                                display: true,
+                                text: 'Contribution Difference'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false // Hide legend as colors indicate type
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    // For vertical bars, the value is on the y-axis
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(4);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+{% endblock %} 
