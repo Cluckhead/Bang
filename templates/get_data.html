@@ -260,6 +260,17 @@
         <tbody></tbody>
     </table>
 
+    <!-- Data Consistency Audit Section -->
+    <div class="mt-4">
+        <button id="run-audit-button" class="btn btn-info">Run Data Consistency Audit</button>
+        <div id="audit-report-area" class="mt-3" style="display: none;">
+            <h4>Data Consistency Audit Report</h4>
+            <div id="audit-report-summary"></div>
+            <div id="audit-report-details" class="mt-2"></div>
+        </div>
+    </div>
+    <!-- End Data Consistency Audit Section -->
+
 </div>
 {% endblock %}
 
@@ -276,7 +287,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const deselectAllButton = document.getElementById('deselect-all-funds');
     const clearButton = document.getElementById('clear-fund-selection');
     // Map of group name to fund codes (populated from server-side context)
-    const fundGroups = {{ fund_groups|tojson|safe }};
+    const fundGroups = JSON.parse('{{ fund_groups|tojson|safe }}');
 
     // When a group is selected, uncheck all funds, then check only those in the group
     if (fundGroupSelect) {
@@ -620,6 +631,148 @@ document.addEventListener('DOMContentLoaded', function() {
              cleanupButton.disabled = false;
         }
     });
+
+    // --- Data Consistency Audit Logic ---
+    const runAuditButton = document.getElementById('run-audit-button');
+    const auditReportArea = document.getElementById('audit-report-area');
+    const auditReportSummary = document.getElementById('audit-report-summary');
+    const auditReportDetails = document.getElementById('audit-report-details');
+
+    if (runAuditButton) {
+        runAuditButton.addEventListener('click', async function() {
+            runAuditButton.disabled = true;
+            runAuditButton.textContent = 'Running Audit...';
+            auditReportArea.style.display = 'none';
+            auditReportSummary.innerHTML = '';
+            auditReportDetails.innerHTML = '';
+            try {
+                const resp = await fetch('/get_data/audit');
+                const data = await resp.json();
+                if (data.success) {
+                    const report = data.report;
+                    // Render summary
+                    let summaryHtml = '<ul>';
+                    for (const item of report.summary) {
+                        summaryHtml += `<li><strong>${item.check}:</strong> ${item.result ? '<span class=\'text-success\'>OK</span>' : '<span class=\'text-danger\'>Issue</span>'}</li>`;
+                    }
+                    summaryHtml += '</ul>';
+                    auditReportSummary.innerHTML = summaryHtml;
+                    // Render details
+                    let detailsHtml = '';
+                    if (report.structure_issues && report.structure_issues.length > 0) {
+                        detailsHtml += '<h5>File Structure Issues</h5><ul>';
+                        for (const issue of report.structure_issues) {
+                            detailsHtml += `<li><strong>${issue.file}:</strong> ${issue.issue}</li>`;
+                        }
+                        detailsHtml += '</ul>';
+                    }
+                    // Date range mismatches
+                    for (const key of ['ts_files', 'sp_ts_files', 'sec_files']) {
+                        if (report[key] && report[key].all_match === false) {
+                            detailsHtml += `<h5>${key.replace('_', '.').toUpperCase()} Date Range Mismatches</h5><ul>`;
+                            for (const [fname, drange] of Object.entries(report[key].date_ranges || {})) {
+                                detailsHtml += `<li><strong>${fname}:</strong> ${drange[0]} to ${drange[1]}</li>`;
+                            }
+                            detailsHtml += '</ul>';
+                        }
+                    }
+                    // Fund presence issues
+                    for (const key of ['ts_files', 'sp_ts_files']) {
+                        if (report[key] && report[key].fund_presence_issues) {
+                            let anyIssues = false;
+                            for (const [fname, issues] of Object.entries(report[key].fund_presence_issues)) {
+                                if (issues && issues.length > 0) {
+                                    anyIssues = true;
+                                    detailsHtml += `<h5>${fname} Fund Presence Issues</h5><ul>`;
+                                    for (const miss of issues) {
+                                        detailsHtml += `<li>Date: ${miss.date}, Missing Funds: ${miss.missing_funds.join(', ')}</li>`;
+                                    }
+                                    detailsHtml += '</ul>';
+                                }
+                            }
+                        }
+                    }
+                    auditReportDetails.innerHTML = detailsHtml || '<span class="text-success">No detailed issues found.</span>';
+                    // --- Simplified: Render File Diagnostics Table (no preview, no date cols, just date range) ---
+                    if (report.file_details) {
+                        // Build a lookup for date ranges by file
+                        const dateRanges = Object.assign({},
+                            report.ts_files && report.ts_files.date_ranges ? report.ts_files.date_ranges : {},
+                            report.sp_ts_files && report.sp_ts_files.date_ranges ? report.sp_ts_files.date_ranges : {},
+                            report.sec_files && report.sec_files.date_ranges ? report.sec_files.date_ranges : {}
+                        );
+                        let fileTable = '<h5>File Diagnostics</h5><table class="table table-sm table-bordered"><thead><tr><th>File</th><th>Size</th><th>Rows</th><th>Cols</th><th>Fund Col</th><th>Date Range</th><th>Issues</th></tr></thead><tbody>';
+                        for (const [fname, info] of Object.entries(report.file_details)) {
+                            let drange = dateRanges[fname] ? `${dateRanges[fname][0]} to ${dateRanges[fname][1]}` : '<span class="text-danger">N/A</span>';
+                            fileTable += `<tr>
+                                <td>${fname}</td>
+                                <td>${info.size}</td>
+                                <td>${info.n_rows}</td>
+                                <td>${info.n_cols}</td>
+                                <td>${info.fund_column || ''}</td>
+                                <td>${drange}</td>
+                                <td>${info.issues && info.issues.length ? info.issues.join('<br>') : '<span class="text-success">None</span>'}</td>
+                            </tr>`;
+                        }
+                        fileTable += '</tbody></table>';
+                        auditReportDetails.innerHTML += fileTable;
+                    }
+                    // --- Highlight Date Range Mismatches ---
+                    function highlightDateRangeMismatches(groupKey, label) {
+                        if (report[groupKey] && report[groupKey].all_match === false) {
+                            const ranges = report[groupKey].date_ranges || {};
+                            // Find the most common date range
+                            const rangeCounts = {};
+                            for (const r of Object.values(ranges)) {
+                                const key = r ? r.join(' to ') : 'N/A';
+                                rangeCounts[key] = (rangeCounts[key] || 0) + 1;
+                            }
+                            // Find the most common range
+                            let commonRange = null, maxCount = 0;
+                            for (const [k, v] of Object.entries(rangeCounts)) {
+                                if (v > maxCount) { commonRange = k; maxCount = v; }
+                            }
+                            let mismatchHtml = `<h5>${label} Date Range Mismatches</h5><ul>`;
+                            for (const [fname, drange] of Object.entries(ranges)) {
+                                const drangeStr = drange ? drange.join(' to ') : 'N/A';
+                                if (drangeStr !== commonRange) {
+                                    mismatchHtml += `<li><strong>${fname}:</strong> ${drangeStr} (expected: ${commonRange})</li>`;
+                                }
+                            }
+                            mismatchHtml += '</ul>';
+                            auditReportDetails.innerHTML += mismatchHtml;
+                        }
+                    }
+                    highlightDateRangeMismatches('ts_files', 'TS Files');
+                    highlightDateRangeMismatches('sp_ts_files', 'SP TS Files');
+                    highlightDateRangeMismatches('sec_files', 'SEC Files');
+                    // --- Enhanced: Render Recommendations ---
+                    if (report.recommendations && report.recommendations.length) {
+                        let recHtml = '<h5>Recommendations</h5><ul>';
+                        for (const rec of report.recommendations) {
+                            recHtml += `<li>${rec}</li>`;
+                        }
+                        recHtml += '</ul>';
+                        auditReportDetails.innerHTML += recHtml;
+                    }
+                    // --- Enhanced: Show Skipped Files ---
+                    if (report.skipped_files && report.skipped_files.length) {
+                        auditReportDetails.innerHTML += `<h5>Skipped Files</h5><p>${report.skipped_files.join(', ')}</p>`;
+                    }
+                    auditReportArea.style.display = '';
+                } else {
+                    auditReportSummary.innerHTML = `<span class='text-danger'>Error: ${data.error}</span>`;
+                    auditReportArea.style.display = '';
+                }
+            } catch (err) {
+                auditReportSummary.innerHTML = `<span class='text-danger'>Error running audit: ${err}</span>`;
+                auditReportArea.style.display = '';
+            } finally {
+                runAuditButton.disabled = false;
+                runAuditButton.textContent = 'Run Data Consistency Audit';
+            }
+        });
+    }
 });
 </script>
 

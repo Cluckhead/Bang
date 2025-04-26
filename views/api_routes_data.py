@@ -11,6 +11,7 @@ import typing
 # Import from our local modules
 from views.api_core import api_bp, get_data_file_statuses
 from utils import load_fund_groups  # Import the fund group loader
+from data_audit import run_data_consistency_audit  # Import the audit function
 
 @api_bp.route('/get_data')
 def get_data_page() -> typing.Union[str, typing.Tuple[str, int], Response]:
@@ -63,4 +64,18 @@ def get_data_page() -> typing.Union[str, typing.Tuple[str, int], Response]:
         return f"An error occurred while preparing the data retrieval page: {e}", 500
 
     # Pass fund_groups and selected_fund_group to the template to avoid Undefined errors
-    return render_template('get_data.html', funds=funds, default_end_date=default_end_date, data_file_statuses=data_file_statuses, fund_groups=fund_groups, selected_fund_group=selected_fund_group) 
+    return render_template('get_data.html', funds=funds, default_end_date=default_end_date, data_file_statuses=data_file_statuses, fund_groups=fund_groups, selected_fund_group=selected_fund_group)
+
+@api_bp.route('/get_data/audit')
+def get_data_audit():
+    """
+    API endpoint to run the Data Consistency Audit and return the report as JSON.
+    This is triggered by the button on the /get_data page.
+    """
+    try:
+        data_folder = current_app.config.get('DATA_FOLDER', 'Data')
+        report = run_data_consistency_audit(data_folder)
+        return jsonify({'success': True, 'report': report})
+    except Exception as e:
+        current_app.logger.error(f"Error running data consistency audit: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}) 

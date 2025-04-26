@@ -13,22 +13,26 @@
 
 # Features v2.2
 - Exclude NaN values from the zscore calculations and the first page where there is no S&P data,Better handing in charts and z-scores when positioning is changing, need to run with real data 
-
+- add ability to correct using PCL on Security level
 
 ### Features v2.1
+- Watch list for securities - Greg's issue
+- add YTM/YTW to securities page
+- add position chart
+- widen securities page
+- Add Is distressed as a filter
+
+- have teh ability to dig into the biggest contributers to a change at fund level - from the Metrics page
+- Security name on attribution/security
 - Attribution Errors
 - S&P vs Prod page
-- S&P bad securities email
+- S&P bad securities email - run from 
 - Monitor of missing S&P data
-- Watch list for securities - Greg's issue
-- Filter by fund Group
-- Add Is distressed as a filter
-- Make sure S&P toggle works everywhere and is selectable 
+
 - get rid of scores on residuals
-- add ability to correct using PCL on Security level
-- have teh ability to dig into the biggest contributers to a change at fund level
+
 - Comparison prerun and save DFs after processing
-- add fund lists to metrics page for filtering
+
 - Link security to BBG terminal
 - add the static data to the security details page
 
