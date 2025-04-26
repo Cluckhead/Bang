@@ -136,6 +136,7 @@ def create_app() -> Flask:
     from views.generic_comparison_views import generic_comparison_bp # NEW Generic Comparison BP
     from views.staleness_views import staleness_bp # Import the staleness blueprint
     from views.maxmin_views import maxmin_bp # Import the max/min value breach blueprint
+    from views.watchlist_views import watchlist_bp # Import the Watchlist blueprint
 
     app.register_blueprint(main_bp)
     app.register_blueprint(metric_bp)
@@ -155,6 +156,7 @@ def create_app() -> Flask:
     app.register_blueprint(generic_comparison_bp, url_prefix='/compare') # NEW - Register generic comparison with a base prefix
     app.register_blueprint(staleness_bp) # Register the staleness blueprint
     app.register_blueprint(maxmin_bp) # Register the max/min value breach blueprint
+    app.register_blueprint(watchlist_bp) # Register the Watchlist blueprint
 
     app.logger.info("Registered Blueprints:")
     app.logger.info(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
@@ -175,6 +177,7 @@ def create_app() -> Flask:
     app.logger.info(f"- {generic_comparison_bp.name} (prefix: {generic_comparison_bp.url_prefix})") # Log NEW generic comparison
     app.logger.info(f"- {staleness_bp.name} (prefix: {staleness_bp.url_prefix})") # Log registration for staleness
     app.logger.info(f"- {maxmin_bp.name} (prefix: {maxmin_bp.url_prefix})") # Log registration for max/min value breach
+    app.logger.info(f"- {watchlist_bp.name} (prefix: {watchlist_bp.url_prefix})") # Log registration for Watchlist
 
     # Add a simple test route to confirm app creation (optional)
     @app.route('/hello')

@@ -12,193 +12,145 @@ This application provides a web interface to load, process, and check financial 
 
 ## Features
 
-*   **Time-Series Metric Analysis:** Load `ts_*.csv` files, view latest changes, Z-scores, and historical data charts for various metrics per fund.
-    *   Optionally loads corresponding `sp_ts_*.csv` files for comparison data
-    *   Route: `/metric/<metric_name>` (with toggle switch to show/hide comparison data)
-    *   **S&P Valid Data Toggle:** The S&P Valid Data Only toggle now defaults to ON (checked) when loading metric pages, ensuring only rows marked as 'TRUE' in 'SS Project - In Scope' are shown by default. If the user disables this toggle, the data is aggregated by (Date, Code) using the mean for numeric columns and the first value for non-numeric columns, rather than simply deduplicating.
-    *   **S&P Comparison Data Toggle:** The Show S&P Comparison Data toggle now ensures that all S&P datasets, including the S&P Relative (Port - Bench) line, are visible by default when enabled. The S&P Relative line is no longer hidden by default and does not require a manual legend click to appear. Toggling this control will immediately show or hide all S&P comparison lines and metrics in both the main and relative charts.
-
-*   **Security-Level Analysis:** Load wide-format `sec_*.csv` files, view latest changes and Z-scores across securities, and drill down into historical charts.
-    *   Date parsing is now fully flexible: supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others.
-    *   Server-side pagination, filtering (search, dropdowns), and sorting
-    *   Routes: `/security/summary` (main page), `/security/details/<metric_name>/<security_id>` (detail view)
-    *   **Detail view now includes time-series charts for YTM and YTW (with S&P overlays), in addition to Duration, Spread, and Spread Duration. Data is loaded from `sec_YTM.csv`, `sec_YTMSP.csv`, `sec_YTW.csv`, and `sec_YTWSP.csv`.**
-    *   Uses an extended color palette for clear chart distinction.
-
-*   **Generic Data Comparison:** Compare pairs of security-level datasets (e.g., Spread vs SpreadSP, Duration vs DurationSP).
-    *   Configurable via `COMPARISON_CONFIG` in `config.py`.
-    *   Provides summary tables with comparison statistics (correlations, differences, date ranges).
-    *   Detail view with overlayed time-series charts.
-    *   **Detail view also includes a Fund Holdings table showing which funds (from `w_secs.csv`) held the security on the dates displayed in the chart (Green = held with value > 0, Red = not held/zero/blank).**
-    *   Features server-side filtering (including held status), sorting, and pagination.
-    *   Routes: `/compare/<comparison_type>/summary`, `/compare/<comparison_type>/details/<security_id>`
-
-*   **Fund-Specific Views:**
-    *   General Fund Overview (`/fund/<fund_code>`): All metrics with comparison data toggle
-    *   Fund Duration Details (`/fund/duration_details/<fund_code>`): Duration changes for securities
-
-*   **Security Exclusions:** Manage exclusion list via `/exclusions` (stored in `Data/exclusions.csv`)
-
-*   **Data Issue Tracking:** Log, view, and manage data issues via `/issues` (stored in `Data/data_issues.csv`)
-    *   Features user selection dropdowns (from `Data/users.csv`), an optional Jira link, and enhanced fund/source options.
-
-*   **Weight Check:** Compare fund and benchmark weights via `/weights/check`
-
-*   **Yield Curve Analysis:** Check curve inconsistencies via `/curve/summary` and `/curve/details/<currency>`
-    * Focuses on identifying stale and missing data as the most important checks
-    * Summary and detail views highlight data staleness and missing values
-
-*   **Attribution Residuals Summary:** Analyze attribution data via `/attribution`
-    *   3-way toggle (L0, L1, L2) for different detail levels
-    *   Compares Production vs S&P data for both Benchmark and Portfolio cases
-    *   Color-coded cells to highlight discrepancies
-    *   **Attribution data is now loaded from per-fund files in the format `att_factors_<FUNDCODE>.csv` (e.g., `att_factors_IG01.csv`). When a user selects a fund, the application loads the corresponding attribution file for that fund only. If no file exists for the selected fund, a clear message is shown: "No attribution available." This replaces the previous approach of loading all attribution data from a single `att_factors.csv` file.**
-
-*   **Data Simulation & Management:** API simulation via `/get_data`
-
-*   **Special Character Handling:** Security IDs with special characters are URL-encoded in templates and decoded in view functions using `urllib.parse.unquote(security_id)`
-
-*   **Attribution Residuals Chart:** Time-series visualization of attribution residuals
-
-*   **Max/Min Value Breach:** Checks security-level data (`sec_*.csv`) against configurable maximum and minimum value thresholds.
-    *   Configurable via `MAXMIN_THRESHOLDS` in `config.py`.
-    *   Dashboard view (`/maxmin/dashboard`) shows a summary card for each configured file, highlighting breach counts.
-    *   Detail view (`/maxmin/details/<file_name>/<breach_type>`) lists securities breaching the specified threshold (max or min).
+| Feature                     | Description / Key Routes / Notes                                                                                  |
+|-----------------------------|------------------------------------------------------------------------------------------------------------------|
+| **Time-Series Metric Analysis** | Load `ts_*.csv`, view changes, Z-scores, charts. Route: `/metric/<metric_name>`. S&P toggles for valid/comparison data. |
+| **Security-Level Analysis**      | Load `sec_*.csv`, view changes/Z-scores, charts for YTM/YTW/Duration/Spread. Routes: `/security/summary`, `/security/details/<metric_name>/<security_id>`. |
+| **Generic Data Comparison**      | Compare pairs of security datasets (e.g., Spread vs SpreadSP). Configurable via `COMPARISON_CONFIG`. Routes: `/compare/<type>/summary`, `/compare/<type>/details/<security_id>`. Fund holdings table included. |
+| **Fund-Specific Views**          | `/fund/<fund_code>` (overview), `/fund/duration_details/<fund_code>` (duration details).                      |
+| **Security Exclusions**          | Manage via `/exclusions` (`Data/exclusions.csv`).                                                            |
+| **Data Issue Tracking**          | Log/manage via `/issues` (`Data/data_issues.csv`). User dropdowns, Jira link.                                 |
+| **Weight Check**                 | Compare fund/benchmark weights via `/weights/check`.                                                         |
+| **Yield Curve Analysis**         | Check curve inconsistencies via `/curve/summary`, `/curve/details/<currency>`. Highlights staleness/missing data. |
+| **Attribution Residuals**        | Analyze via `/attribution`. 3-way toggle (L0/L1/L2), per-fund files, color-coded.                            |
+| **Data Simulation**              | API simulation via `/get_data`.                                                                              |
+| **Special Character Handling**   | Security IDs URL-encoded/decoded.                                                                            |
+| **Max/Min Value Breach**         | Checks `sec_*.csv` against thresholds. Dashboard: `/maxmin/dashboard`. Details: `/maxmin/details/<file>/<type>`. |
+| **Watchlist Management**         | Track/add/clear securities via `/watchlist`. Filterable, auditable, modal UI.                                |
 
 ## Fund Group Filtering (Reusable Feature)
 
-### Where Fund Group Filtering is Available
-- **Metric Detail Pages** (e.g., `/metric/<metric_name>`)
-- **Security Summary Pages** (e.g., `/security/summary`)
-- **All Generic Comparison Summary Pages** (e.g., `/compare/spread/summary`, `/compare/duration/summary`, etc.)
+| Aspect         | Details                                                                                      |
+|----------------|---------------------------------------------------------------------------------------------|
+| **Available On** | Metric Detail, Security Summary, All Comparison Summary pages                              |
+| **UI**           | Dropdown of fund groups above main filter form; only groups with data shown                |
+| **Behavior**     | Selecting a group filters to those funds/benchmarks; persists via URL query param          |
+| **Server-side**  | Filtering, sorting, and pagination are all server-side                                     |
+| **Comparison Pages** | Uses `parse_fund_list` to match funds in group                                         |
+| **Reusable**     | Logic and dropdown available for all comparison types in `config.py`                       |
 
-### How the Fund Group Filter Works
-- On supported pages, a **dropdown** of fund groups appears above the main filter form.
-- Only groups with at least one fund present in the current data are shown.
-- Selecting a group filters the view to only show those funds (and their associated benchmarks, if relevant).
-- The filter is server-side: the page reloads with the `fund_group` query parameter in the URL.
-- The selected group is highlighted and persists across reloads and navigation.
-- The filter UI is a compact dropdown and is scalable for large numbers of groups.
-- **On comparison summary pages, the filter works by searching for any fund in the group within the `Funds` column (which is a string). The code uses `parse_fund_list` to convert this string to a list for matching.**
-- The dropdown and logic are automatically available for all comparison types configured in `config.py`.
-
-### How to Reuse This Feature on Other Pages
-1. **Load Fund Groups:**
-   - Use the utility function `utils.load_fund_groups(data_folder)` to get a dict mapping group names to lists of fund codes.
-2. **Filter Data:**
-   - Get the selected group from the query string: `selected_fund_group = request.args.get('fund_group', None)`.
-   - Filter your data to only include funds in `fund_groups[selected_fund_group]` if a group is selected.
-   - Only show groups that have at least one fund in the current data.
-   - For wide-format security data, if the `Funds` column is a string, use `parse_fund_list` to convert it to a list and check for any overlap with the selected group.
-3. **Pass to Template:**
-   - Pass `fund_groups` (filtered to only non-empty groups in the current data) and `selected_fund_group` to your template context.
-4. **Render the UI:**
-   - Use the **dropdown pattern** (see `metric_page_js.html` or `comparison_summary_base.html`) to render the filter.
-   - Ensure the form preserves other query parameters (e.g., filters, toggles) when submitting.
-   - This dropdown approach is recommended for scalability and usability with many groups.
-5. **Persistence:**
-   - The filter state is maintained in the URL and query string, so it persists across reloads and navigation.
-
-**This approach is scalable and can be reused on any page that displays fund-level data, including all generic comparison summary pages.**
+**How to Reuse:**
+- Load fund groups: `utils.load_fund_groups(data_folder)`
+- Get selected group: `selected_fund_group = request.args.get('fund_group', None)`
+- Filter data: Only include funds in `fund_groups[selected_fund_group]`
+- Pass to template: `fund_groups`, `selected_fund_group`
+- Render UI: Use dropdown pattern (see `metric_page_js.html`)
+- Persistence: State is in URL/query string
 
 ## File Structure Overview
 
+### Python Core Modules
 ```mermaid
 graph TD
-    A[Simple Data Checker] --> B(app.py);
-    A --> C{Python Modules};
-    A --> D{Views};
-    A --> E{Templates};
-    A --> F{Static Files};
-    A --> G(Data);
-    A --> H(Config/Utils);
+    A[app.py]
+    B[data_loader.py]
+    C[metric_calculator.py]
+    D[security_processing.py]
+    E[process_data.py]
+    F[curve_processing.py]
+    G[issue_processing.py]
+    H[weight_processing.py]
+    I[data_validation.py]
+    J[process_w_secs.py]
+    K[process_weights.py]
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    A --> F
+    A --> G
+    A --> H
+    A --> I
+    A --> J
+    A --> K
+```
 
-    C --> C1(data_loader.py);
-    C --> C2(metric_calculator.py);
-    C --> C3(security_processing.py);
-    C --> C4(process_data.py);
-    C --> C5(curve_processing.py);
-    C --> C6(issue_processing.py);
-    C --> C7(weight_processing.py);
-    C --> C8(data_validation.py);
-    C --> C9(process_w_secs.py);
-    C --> C10(process_weights.py);
+### Views
+```mermaid
+graph TD
+    A[main_views.py]
+    B[metric_views.py]
+    C[security_views.py]
+    D[fund_views.py]
+    E[exclusion_views.py]
+    F[weight_views.py]
+    G[api_views.py]
+    H[curve_views.py]
+    I[issue_views.py]
+    J[attribution_views.py]
+    K[generic_comparison_views.py]
+    L[maxmin_views.py]
+    M[watchlist_views.py]
+    G --> G1[api_core.py]
+    G --> G2[api_routes_data.py]
+    G --> G3[api_routes_call.py]
+```
 
-    D --> D1(main_views.py);
-    D --> D2(metric_views.py);
-    D --> D3(security_views.py);
-    D --> D4(fund_views.py);
-    D --> D5(exclusion_views.py);
-    D --> D7(weight_views.py);
-    D --> D8(api_views.py);
-    D8 --> D8a(api_core.py);
-    D8 --> D8b(api_routes_data.py);
-    D8 --> D8c(api_routes_call.py);
-    D --> D11(curve_views.py);
-    D --> D12(issue_views.py);
-    D --> D13(attribution_views.py);
-    D --> D14(generic_comparison_views.py);
-    D --> D15(maxmin_views.py);
+### Templates
+```mermaid
+graph TD
+    A[base.html]
+    B[index.html]
+    C[metric_page_js.html]
+    D[securities_page.html]
+    E[security_details_page.html]
+    F[fund_duration_details.html]
+    G[exclusions_page.html]
+    H[get_data.html]
+    I[fund_detail_page.html]
+    J[weight_check.html]
+    K[curve_summary.html]
+    L[curve_details.html]
+    M[issues_page.html]
+    N[attribution_summary.html]
+    O[comparison_summary_base.html]
+    P[comparison_details_base.html]
+    Q[maxmin_dashboard.html]
+    R[maxmin_details.html]
+    S[watchlist_page.html]
+```
 
-    E --> E1(base.html);
-    E --> E2(index.html);
-    E --> E3(metric_page_js.html);
-    E --> E4(securities_page.html);
-    E --> E5(security_details_page.html);
-    E --> E6(fund_duration_details.html);
-    E --> E7(exclusions_page.html);
-    E --> E8(get_data.html);
-    E --> E11(fund_detail_page.html);
-    E --> E12(weight_check.html);
-    E --> E17(curve_summary.html);
-    E --> E18(curve_details.html);
-    E --> E19(issues_page.html);
-    E --> E20(attribution_summary.html);
-    E --> E21(comparison_summary_base.html);
-    E --> E22(comparison_details_base.html);
-    E --> E23(maxmin_dashboard.html);
-    E --> E24(maxmin_details.html);
+### Static Files
+```mermaid
+graph TD
+    A[js/]
+    B[modules/]
+    B1[ui/]
+    B2[utils/]
+    B3[charts/]
+    B1a[chartRenderer.js]
+    B1b[securityTableFilter.js]
+    B1c[tableSorter.js]
+    B1d[toggleSwitchHandler.js]
+    B2a[helpers.js]
+    B3a[timeSeriesChart.js]
+    A --> B
+    B --> B1
+    B --> B2
+    B --> B3
+    B1 --> B1a
+    B1 --> B1b
+    B1 --> B1c
+    B1 --> B1d
+    B2 --> B2a
+    B3 --> B3a
+```
 
-    F --> F1(js);
-    F1 --> F1a(main.js);
-    F1 --> F1b(modules);
-    F1b --> F1b1(ui);
-    F1b1 --> F1b1a(chartRenderer.js);
-    F1b1 --> F1b1b(securityTableFilter.js);
-    F1b1 --> F1b1c(tableSorter.js);
-    F1b1 --> F1b1d(toggleSwitchHandler.js);
-    F1b --> F1b2(utils);
-    F1b2 --> F1b2a(helpers.js);
-    F1b --> F1b3(charts);
-    F1b3 --> F1b3a(timeSeriesChart.js);
-
-    G --> G1(ts_*.csv);
-    G --> G2(sec_*.csv);
-    G --> G3(pre_*.csv);
-    G --> G4(new_*.csv);
-    G --> G5(exclusions.csv);
-    G --> G6(QueryMap.csv);
-    G --> G7(FundList.csv);
-    G --> G8(w_Funds.csv);
-    G --> G9(w_Bench.csv);
-    G --> G10(curves.csv);
-    G --> G11(data_issues.csv);
-    G --> G12(w_secs.csv);
-    G --> G13(att_factors.csv);
-    G --> G14(users.csv);
-    G --> G15(sec_YTM.csv);
-    G --> G16(sec_YTMSP.csv);
-    G --> G17(sec_YTW.csv);
-    G --> G18(sec_YTWSP.csv);
-
-    H --> H1(config.py);
-    H --> H2(utils.py);
-
-    B --> D;
-    D --> C;
-    D --> H;
-    D --> E;
-    E --> F;
+### Config/Utils
+```mermaid
+graph TD
+    A[config.py]
+    B[utils.py]
 ```
 
 ## Application Components
@@ -344,6 +296,7 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 | `issue_views.py` | Issue tracking | `/issues`, `/issues/close` |
 | `attribution_views.py` | Attribution analysis | `/attribution` |
 | `maxmin_views.py` | Max/Min value breach checking | `/maxmin/dashboard`, `/maxmin/details/<file_name>/<breach_type>` |
+| `watchlist_views.py` | **Watchlist management: add, clear, and audit securities of interest. Uses CSV storage and pandas for data.** | `/watchlist` |
 
 ### HTML Templates (`templates/`)
 
@@ -367,6 +320,7 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 | `attribution_summary.html` | Attribution summary | Multiple detail levels with comparison data |
 | `maxmin_dashboard.html` | Max/Min breach summary | Cards summarizing breaches per file |
 | `maxmin_details.html` | Max/Min breach details | Table listing breaching securities |
+| `watchlist_page.html` | **Watchlist UI: Add/clear modal, filterable/scrollable security list, autofill prevention, user/reason tracking.** | Add to Watchlist modal, filter/search, audit trail |
 
 ### JavaScript Files (`static/js/`)
 

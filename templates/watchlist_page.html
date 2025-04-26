@@ -1,0 +1,290 @@
+{#
+    watchlist_page.html
+    Purpose: Displays and manages the global Watchlist feature.
+    - Shows all active and cleared watchlist entries
+    - Allows adding a new security to the watchlist (now via popup)
+    - Allows clearing (not deleting) entries, recording who/why/when
+    - ISIN is a clickable link to security details
+    - Cleared entries are hidden by default, toggle to show
+#}
+{% extends 'base.html' %}
+
+{% block title %}Watchlist{% endblock %}
+
+{% block content %}
+<div class="container" style="width: 98vw; max-width: 1800px; min-width: 900px;">
+    <h2>Watchlist</h2>
+    <hr>
+
+    {# Display messages if any #}
+    {% if message %}
+        <div class="alert alert-{{ message_type }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="mb-3 d-flex justify-content-between align-items-center">
+        <div>
+            <label class="form-check-label me-2" for="showClearedToggle"><strong>Show Cleared Entries</strong></label>
+            <input class="form-check-input" type="checkbox" id="showClearedToggle">
+        </div>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addWatchlistModal">Add to Watchlist</button>
+    </div>
+
+    <div class="table-responsive">
+    <table class="table table-striped table-bordered w-100" id="watchlist-table">
+        <thead class="table-light">
+            <tr>
+                <th>ISIN</th>
+                <th>Security Name</th>
+                <th style="min-width: 350px; width: 35%;">Reason</th>
+                <th>Date Added</th>
+                <th>Added By</th>
+                <th>Last Checked</th>
+                <th>Status</th>
+                {# Cleared columns only shown if showCleared is true #}
+                <th class="cleared-col" style="display:none;">Cleared By</th>
+                <th class="cleared-col" style="display:none;">Cleared Date</th>
+                <th class="cleared-col" style="display:none;">Clear Reason</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in watchlist %}
+                <tr class="watchlist-row {% if entry.Status == 'Cleared' %}table-secondary cleared-row{% endif %}" {% if entry.Status == 'Cleared' %}style="display:none;"{% endif %}>
+                    <td>
+                        <a href="{{ url_for('watchlist_bp.check_watchlist_entry', isin=entry.ISIN) }}" class="fw-bold text-decoration-underline">{{ entry.ISIN }}</a>
+                    </td>
+                    <td>{{ entry['Security Name'] }}</td>
+                    <td style="min-width: 350px; width: 35%;">{{ entry.Reason }}</td>
+                    <td>{{ entry.DateAdded }}</td>
+                    <td>{{ entry.AddedBy }}</td>
+                    <td>{{ entry.LastChecked or 'Never' }}</td>
+                    <td>
+                        {% if entry.Status == 'Active' %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Cleared</span>
+                        {% endif %}
+                    </td>
+                    <td class="cleared-col" style="display:none;">{{ entry.ClearedBy }}</td>
+                    <td class="cleared-col" style="display:none;">{{ entry.ClearedDate }}</td>
+                    <td class="cleared-col" style="display:none;">{{ entry.ClearReason }}</td>
+                    <td>
+                        {% if entry.Status == 'Active' %}
+                            <button type="button" class="btn btn-danger btn-sm mb-1" data-bs-toggle="modal" data-bs-target="#clearModal-{{ entry.ISIN }}">
+                                Clear
+                            </button>
+                            {# Modal for clearing #}
+                            <div class="modal fade" id="clearModal-{{ entry.ISIN }}" tabindex="-1" aria-labelledby="clearModalLabel-{{ entry.ISIN }}" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="clearModalLabel-{{ entry.ISIN }}">Clear Watchlist Entry: {{ entry.ISIN }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <form method="POST" action="{{ url_for('watchlist_bp.clear_watchlist') }}">
+                                            <div class="modal-body">
+                                                <input type="hidden" name="isin" value="{{ entry.ISIN }}">
+                                                <div class="mb-3">
+                                                    <label for="cleared_by-{{ entry.ISIN }}" class="form-label">Cleared By:</label>
+                                                    <select class="form-select" id="cleared_by-{{ entry.ISIN }}" name="cleared_by" required>
+                                                        <option value="" disabled selected>Select User</option>
+                                                        {% for user in users %}
+                                                            <option value="{{ user }}">{{ user }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="clear_reason-{{ entry.ISIN }}" class="form-label">Reason for Clearing:</label>
+                                                    <textarea class="form-control" id="clear_reason-{{ entry.ISIN }}" name="clear_reason" rows="3" required></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-danger">Clear Entry</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    {# Add to Watchlist Modal #}
+    <div class="modal fade" id="addWatchlistModal" tabindex="-1" aria-labelledby="addWatchlistModalLabel" aria-hidden="true">
+      <div class="modal-dialog" style="max-width: 900px; min-width: 600px; width: 70vw;">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="addWatchlistModalLabel">Add to Watchlist</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <form method="POST" action="{{ url_for('watchlist_bp.manage_watchlist') }}" autocomplete="off">
+            <div class="modal-body">
+                {# --- New: Filter dropdowns for Ticker and Security Sub Type --- #}
+                <div class="mb-3 row">
+                  <div class="col-6">
+                    <label for="ticker-filter" class="form-label">Filter by Ticker:</label>
+                    <select class="form-select" id="ticker-filter" autocomplete="off">
+                      <option value="">All</option>
+                      {% set tickers = securities | map(attribute='Ticker') | select | unique | list %}
+                      {% for ticker in tickers %}
+                        <option value="{{ ticker }}">{{ ticker }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-6">
+                    <label for="subtype-filter" class="form-label">Filter by Security Sub Type:</label>
+                    <select class="form-select" id="subtype-filter" autocomplete="off">
+                      <option value="">All</option>
+                      {% set subtypes = securities | map(attribute='Security Sub Type') | select | unique | list %}
+                      {% for subtype in subtypes %}
+                        <option value="{{ subtype }}">{{ subtype }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <div class="mb-3">
+                    <label for="isin-search-input" class="form-label">Search & Select Security (ISIN):</label>
+                    <input type="text" id="isin-search-input" class="form-control mb-2" placeholder="Type to filter ISINs, names, tickers..." autocomplete="off">
+                    {# --- Scrollable, filterable security list --- #}
+                    <div id="isin-list-container" style="max-height: 250px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; background: #fff;">
+                        <ul id="isin-list" class="list-group list-group-flush mb-0">
+                            {% for sec in securities %}
+                                <li class="list-group-item isin-list-item" 
+                                    data-isin="{{ sec.ISIN }}" 
+                                    data-ticker="{{ sec.Ticker }}" 
+                                    data-subtype="{{ sec['Security Sub Type'] }}"
+                                    style="cursor:pointer;">
+                                    <strong>{{ sec.ISIN }}</strong> - {{ sec['Security Name'] }}{% if sec.Ticker %} (<span class="text-primary">{{ sec.Ticker }}</span>){% endif %}{% if sec['Security Sub Type'] %} [{{ sec['Security Sub Type'] }}]{% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <input type="hidden" id="selected-isin" name="isin" required autocomplete="off">
+                    <div id="isin-selection-feedback" class="form-text text-danger" style="display:none;">Please select a security from the list.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="reason" class="form-label">Reason for Watchlist:</label>
+                    <textarea class="form-control" id="reason" name="reason" rows="3" required autocomplete="off"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="user-select" class="form-label">Added By (User):</label>
+                    <select class="form-select" id="user-select" name="user" required autocomplete="off">
+                        <option value="" disabled selected>Select User</option>
+                        {% for user in users %}
+                            <option value="{{ user }}">{{ user }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add to Watchlist</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// --- Enhanced client-side filtering and selection for the ISIN scrollable list ---
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('isin-search-input');
+    const isinList = document.getElementById('isin-list');
+    const isinItems = Array.from(document.getElementsByClassName('isin-list-item'));
+    const tickerFilter = document.getElementById('ticker-filter');
+    const subtypeFilter = document.getElementById('subtype-filter');
+    const selectedIsinInput = document.getElementById('selected-isin');
+    const feedback = document.getElementById('isin-selection-feedback');
+    let selectedItem = null;
+
+    function applyFilters() {
+        const search = searchInput.value.trim().toLowerCase();
+        const ticker = tickerFilter ? tickerFilter.value : '';
+        const subtype = subtypeFilter ? subtypeFilter.value : '';
+        let anyVisible = false;
+        isinItems.forEach(item => {
+            let show = true;
+            const text = item.textContent.toLowerCase();
+            if (search && !text.includes(search)) show = false;
+            if (ticker && item.getAttribute('data-ticker') !== ticker) show = false;
+            if (subtype && item.getAttribute('data-subtype') !== subtype) show = false;
+            item.style.display = show ? '' : 'none';
+            if (show) anyVisible = true;
+        });
+        // If the selected item is now hidden, clear selection
+        if (selectedItem && selectedItem.style.display === 'none') {
+            selectedItem.classList.remove('active');
+            selectedItem = null;
+            selectedIsinInput.value = '';
+        }
+    }
+
+    // Handle clicking a security in the list
+    isinItems.forEach(item => {
+        item.addEventListener('click', function() {
+            if (selectedItem) selectedItem.classList.remove('active');
+            selectedItem = this;
+            selectedItem.classList.add('active');
+            selectedIsinInput.value = selectedItem.getAttribute('data-isin');
+            feedback.style.display = 'none';
+        });
+    });
+
+    searchInput.addEventListener('input', applyFilters);
+    if (tickerFilter) tickerFilter.addEventListener('change', applyFilters);
+    if (subtypeFilter) subtypeFilter.addEventListener('change', applyFilters);
+    applyFilters();
+
+    // Validate selection on form submit
+    const form = selectedIsinInput.closest('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!selectedIsinInput.value) {
+                feedback.style.display = '';
+                e.preventDefault();
+            }
+        });
+    }
+
+    // --- Toggle for showing/hiding cleared entries and columns ---
+    const showClearedToggle = document.getElementById('showClearedToggle');
+    function updateClearedVisibility() {
+        const show = showClearedToggle.checked;
+        document.querySelectorAll('.cleared-row').forEach(row => {
+            row.style.display = show ? '' : 'none';
+        });
+        document.querySelectorAll('.cleared-col').forEach(col => {
+            col.style.display = show ? '' : 'none';
+        });
+    }
+    if (showClearedToggle) {
+        showClearedToggle.addEventListener('change', updateClearedVisibility);
+        updateClearedVisibility();
+    }
+});
+</script>
+{% endblock %} 

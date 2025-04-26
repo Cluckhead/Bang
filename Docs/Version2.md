@@ -17,7 +17,9 @@
 
 ### Features v2.1
 - Watch list for securities - Greg's issue
-- Add Is distressed as a filter
+- attribution files generator
+
+
 
 - have teh ability to dig into the biggest contributers to a change at fund level - from the Metrics page
 - Security name on attribution/security
