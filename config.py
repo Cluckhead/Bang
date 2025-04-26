@@ -59,6 +59,18 @@ COMPARISON_CONFIG = {
         'file1': 'sec_Spread duration.csv', # Note the space in filename
         'file2': 'sec_Spread durationSP.csv', # Note the space in filename
         'value_label': 'Spread Duration'
+    },
+    'ytm': {
+        'display_name': 'YTM',
+        'file1': 'sec_YTM.csv',
+        'file2': 'sec_YTMSP.csv',
+        'value_label': 'YTM'
+    },
+    'ytw': {
+        'display_name': 'YTW',
+        'file1': 'sec_YTW.csv',
+        'file2': 'sec_YTWSP.csv',
+        'value_label': 'YTW'
     }
     # Add new comparison types here in the future
     # 'yield': {

@@ -155,3 +155,9 @@ This feature monitors and identifies stale or missing data in security and curve
 - The layout uses a two-column design: static info on the left (Identifiers, Classification, Financials, etc.), and all time-series charts on the right, making full use of the screen width.
 - **Exclusion status** (if the security is on the exclusion list) and **open data issues** (if any) are shown in bold red in the static tile, with all open issues listed.
 - A **Bloomberg YAS link** is generated for each security using the 'BBG Ticker Yellow' field, and opens in a new tab. The link format is now configurable via the `BLOOMBERG_YAS_URL_FORMAT` variable in `config.py`, making it easy to change or reuse the link format elsewhere in the app.
+- The security details page now includes a **Fund Holdings Over Time (Based on Chart Dates)** tile above the first chart in the right column. This tile:
+    - Uses the same table structure and color scheme (green for held, red for not held) as the comparison details page.
+    - Shows which funds held the security on each date shown in the chart x-axis, using data from `w_secs.csv`.
+    - Is only displayed if both holdings data and chart dates are available for the security.
+    - Provides a clear message if holdings data is missing or unavailable for the chart period.
+    - This brings the security details page in line with the comparison details view for fund holdings visualization.

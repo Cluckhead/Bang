@@ -17,8 +17,6 @@
 
 ### Features v2.1
 - Watch list for securities - Greg's issue
-- add position chart
-- widen securities page
 - Add Is distressed as a filter
 
 - have teh ability to dig into the biggest contributers to a change at fund level - from the Metrics page
