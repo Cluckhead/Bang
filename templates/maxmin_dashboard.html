@@ -1,0 +1,77 @@
+{#
+    Purpose: Dashboard for Max/Min Value Breach feature. Shows summary of max/min breaches for each file and links to details pages.
+#}
+{% extends 'base.html' %}
+
+{% block title %}Max/Min Value Breach Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Max/Min Value Breach Dashboard</h1>
+    <p>Overview of securities breaching configured maximum or minimum value thresholds in security files.</p>
+
+    <form method="GET" action="{{ url_for('maxmin_bp.dashboard') }}" class="row gx-2 gy-2 align-items-center mb-4 p-3 border rounded bg-light">
+        <div class="col-auto">
+            <label for="maxInput" class="form-label mb-0">Max Threshold:</label>
+        </div>
+        <div class="col-auto">
+            <input type="number" step="any" class="form-control form-control-sm" id="maxInput" name="max" value="{{ max_threshold }}" style="width: 100px;">
+        </div>
+        <div class="col-auto">
+            <label for="minInput" class="form-label mb-0">Min Threshold:</label>
+        </div>
+        <div class="col-auto">
+            <input type="number" step="any" class="form-control form-control-sm" id="minInput" name="min" value="{{ min_threshold }}" style="width: 100px;">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm">Update View</button>
+        </div>
+        <div class="col-auto">
+            <small class="text-muted">(Defaults: Max {{ DEFAULT_MAX_THRESHOLD }}, Min {{ DEFAULT_MIN_THRESHOLD }})</small>
+        </div>
+    </form>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for item in summary_data %}
+        <div class="col">
+            <div class="card h-100 {% if item.has_error %}border-danger{% elif item.max_breach_count > 0 or item.min_breach_count > 0 %}border-warning{% else %}border-success{% endif %}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ item.filename }}</h5>
+                    {% if item.has_error %}
+                        <p class="card-text text-danger">Error processing this file.</p>
+                        <a href="#" class="btn btn-secondary disabled stretched-link">View Details</a>
+                    {% else %}
+                        <p class="card-text">
+                            Securities Analyzed: {{ item.total_count }}<br>
+                            <span class="fw-bold {% if item.max_breach_count > 0 %}text-danger{% else %}text-success{% endif %}">
+                                Max Breaches: {{ item.max_breach_count }}
+                            </span><br>
+                            <span class="fw-bold {% if item.min_breach_count > 0 %}text-danger{% else %}text-success{% endif %}">
+                                Min Breaches: {{ item.min_breach_count }}
+                            </span>
+                        </p>
+                        <a href="{{ item.max_details_url }}" class="btn btn-outline-primary btn-sm me-2 {% if item.max_breach_count == 0 %}disabled{% endif %}">Max Details</a>
+                        <a href="{{ item.min_details_url }}" class="btn btn-outline-primary btn-sm {% if item.min_breach_count == 0 %}disabled{% endif %}">Min Details</a>
+                    {% endif %}
+                </div>
+                <div class="card-footer {% if item.has_error %}bg-danger-subtle{% elif item.max_breach_count > 0 or item.min_breach_count > 0 %}bg-warning-subtle{% else %}bg-success-subtle{% endif %}">
+                    <small class="text-muted">
+                        {% if item.has_error %}
+                            Processing Error
+                        {% elif item.max_breach_count > 0 or item.min_breach_count > 0 %}
+                            {{ item.max_breach_count }} max, {{ item.min_breach_count }} min breach(es) found
+                        {% else %}
+                            No breaches found
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <p class="text-info">No relevant data files (sec_*.csv, sp_sec_*.csv) found in the data directory.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %} 

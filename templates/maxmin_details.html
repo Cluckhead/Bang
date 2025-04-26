@@ -1,0 +1,59 @@
+{#
+    Purpose: Details page for Max/Min Value Breach feature. Shows list of securities breaching max or min thresholds for a given file.
+#}
+{% extends 'base.html' %}
+
+{% block title %}Max/Min Value Breach Details{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <a href="{{ dashboard_url }}" class="btn btn-secondary mb-3">&larr; Back to Dashboard</a>
+    <h1>Max/Min Value Breach Details</h1>
+    <p>Below are the securities in <strong>{{ filename }}</strong> that have breached their configured maximum or minimum value thresholds.</p>
+
+    {% if breach_type %}
+        <p>Showing <span class="fw-bold">{{ breach_type|capitalize }}</span> breaches only.</p>
+    {% endif %}
+
+    {% if breaches %}
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>{{ id_column }}</th>
+                    {% for col_name in static_columns %}
+                        <th>{{ col_name }}</th>
+                    {% endfor %}
+                    <th>Value</th>
+                    <th>Breach Type</th>
+                    <th>Threshold</th>
+                    <th>Last Update</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sec in breaches %}
+                <tr>
+                    <td>
+                        {% if sec.details_url %}
+                            <a href="{{ sec.details_url }}" target="_blank" title="View details for {{ sec.id }}">{{ sec.id }}</a>
+                        {% else %}
+                            {{ sec.id }}
+                        {% endif %}
+                    </td>
+                    {% for col_name in static_columns %}
+                        <td>{{ sec.static_info.get(col_name, '') }}</td>
+                    {% endfor %}
+                    <td>{{ sec.value }}</td>
+                    <td class="fw-bold {% if sec.breach_type == 'max' %}text-danger{% else %}text-warning{% endif %}">{{ sec.breach_type|capitalize }}</td>
+                    <td>{{ sec.threshold }}</td>
+                    <td>{{ sec.date }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <div class="alert alert-success">No securities have breached the max/min thresholds in this file.</div>
+    {% endif %}
+</div>
+{% endblock %} 
