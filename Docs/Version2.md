@@ -16,24 +16,17 @@
 - add ability to correct using PCL on Security level
 
 ### Features v2.1
-- Watch list for securities - Greg's issue
 - attribution files generator
-
-
-
 - have teh ability to dig into the biggest contributers to a change at fund level - from the Metrics page
-- Security name on attribution/security
-- Attribution Errors
-- S&P vs Prod page
-- S&P bad securities email - run from 
-- Monitor of missing S&P data
+- S&P vs Prod Summary page
+- S&P bad securities email 
 
-- get rid of scores on residuals
 
-- Comparison prerun and save DFs after processing
+- Monitor of missing S&P data from Raw Files
+- Monitor Minneapolis files
 
-- Link security to BBG terminal
-- add the static data to the security details page
+- get rid of scores on residuals?? i dont know what this is 
+
 
 
 # Version 3
