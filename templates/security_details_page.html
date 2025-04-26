@@ -41,6 +41,18 @@
         <canvas id="spreadChart"></canvas>
     </div>
 
+    {# YTM Chart Area #}
+    <h2>YTM Time Series</h2>
+    <div id="ytm-chart-container" class="mb-4" style="height: 450px; position: relative;">
+        <canvas id="ytmChart"></canvas>
+    </div>
+
+    {# YTW Chart Area #}
+    <h2>YTW Time Series</h2>
+    <div id="ytw-chart-container" class="mb-4" style="height: 450px; position: relative;">
+        <canvas id="ytwChart"></canvas>
+    </div>
+
     {# Hidden script tag for chart data #}
     <script id="chartJsonData" type="application/json">
         {{ chart_data_json|safe }}
@@ -235,6 +247,60 @@
         } else {
              console.log('No data found for Spread or SP Spread chart.');
              document.getElementById('spread-chart-container').innerHTML = '<p class="text-info">Spread data not available for this security.</p>';
+        }
+
+        // --- Render YTM Chart (Includes SP) ---
+        const ytmCtx = document.getElementById('ytmChart').getContext('2d');
+        const ytmDatasets = [];
+        if (chartData.ytm_dataset && chartData.ytm_dataset.data && chartData.ytm_dataset.data.some(v => v !== null)) {
+            ytmDatasets.push(chartData.ytm_dataset);
+        }
+        if (chartData.sp_ytm_dataset && chartData.sp_ytm_dataset.data && chartData.sp_ytm_dataset.data.some(v => v !== null)) {
+            ytmDatasets.push(chartData.sp_ytm_dataset);
+        }
+        if (ytmDatasets.length > 0) {
+            new Chart(ytmCtx, {
+                type: 'line',
+                data: { labels: chartData.labels, datasets: ytmDatasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false, spanGaps: true,
+                    scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'YTM Value' } } },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    }
+                }
+            });
+        } else {
+            console.log('No data found for YTM or SP YTM chart.');
+            document.getElementById('ytm-chart-container').innerHTML = '<p class="text-info">YTM data not available for this security.</p>';
+        }
+
+        // --- Render YTW Chart (Includes SP) ---
+        const ytwCtx = document.getElementById('ytwChart').getContext('2d');
+        const ytwDatasets = [];
+        if (chartData.ytw_dataset && chartData.ytw_dataset.data && chartData.ytw_dataset.data.some(v => v !== null)) {
+            ytwDatasets.push(chartData.ytw_dataset);
+        }
+        if (chartData.sp_ytw_dataset && chartData.sp_ytw_dataset.data && chartData.sp_ytw_dataset.data.some(v => v !== null)) {
+            ytwDatasets.push(chartData.sp_ytw_dataset);
+        }
+        if (ytwDatasets.length > 0) {
+            new Chart(ytwCtx, {
+                type: 'line',
+                data: { labels: chartData.labels, datasets: ytwDatasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false, spanGaps: true,
+                    scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'YTW Value' } } },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    }
+                }
+            });
+        } else {
+            console.log('No data found for YTW or SP YTW chart.');
+            document.getElementById('ytw-chart-container').innerHTML = '<p class="text-info">YTW data not available for this security.</p>';
         }
 
     });

@@ -27,16 +27,8 @@ EXCLUSIONS_FILE = 'exclusions.csv'
 # Define a list of distinct colors for chart lines
 # Add more colors if you expect more fund columns
 COLOR_PALETTE = [
-    '#1f77b4',  # Muted Blue
-    '#ff7f0e',  # Safety Orange
-    '#2ca02c',  # Cooked Asparagus Green
-    '#d62728',  # Brick Red
-    '#9467bd',  # Muted Purple
-    '#8c564b',  # Chestnut Brown
-    '#e377c2',  # Raspberry Yogurt Pink
-    '#7f7f7f',  # Middle Gray
-    '#bcbd22',  # Curry Yellow-Green
-    '#17becf'   # Blue-Teal
+    'blue', 'red', 'green', 'purple', '#FF7F50', '#6495ED', '#DC143C', '#00FFFF',
+    '#FFA500', '#8A2BE2', '#228B22', '#FF1493', '#A52A2A', '#20B2AA'
 ]
 
 # --- NEW: Comparison Configuration ---
@@ -179,10 +171,8 @@ LOGGING_CONFIG = {
 # Define a list of distinct colors for chart lines
 # Add more colors if you expect more fund columns
 COLOR_PALETTE = [
-    'blue', 'red', 'green', 'purple', '#FF7F50', # Coral
-    '#6495ED', # CornflowerBlue
-    '#DC143C', # Crimson
-    '#00FFFF'  # Aqua
+    'blue', 'red', 'green', 'purple', '#FF7F50', '#6495ED', '#DC143C', '#00FFFF',
+    '#FFA500', '#8A2BE2', '#228B22', '#FF1493', '#A52A2A', '#20B2AA'
 ]
 
 # Define allowed data sources for issue tracking and related features

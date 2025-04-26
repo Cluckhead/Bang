@@ -580,6 +580,21 @@ def security_details(metric_name, security_id):
     all_dates.update(sp_spread_dates)
     static_info.update(sp_spread_static)
 
+    # 5. YTM + SP YTM
+    ytm_filename = "sec_YTM.csv"
+    sp_ytm_filename = "sec_YTMSP.csv"
+    ytm_series, ytm_dates, _ = load_filter_and_extract(ytm_filename, decoded_security_id)
+    sp_ytm_series, sp_ytm_dates, _ = load_filter_and_extract(sp_ytm_filename, decoded_security_id)
+    all_dates.update(ytm_dates)
+    all_dates.update(sp_ytm_dates)
+
+    # 6. YTW + SP YTW
+    ytw_filename = "sec_YTW.csv"
+    sp_ytw_filename = "sec_YTWSP.csv"
+    ytw_series, ytw_dates, _ = load_filter_and_extract(ytw_filename, decoded_security_id)
+    sp_ytw_series, sp_ytw_dates, _ = load_filter_and_extract(sp_ytw_filename, decoded_security_id)
+    all_dates.update(ytw_dates)
+    all_dates.update(sp_ytw_dates)
 
     # --- Prepare Data for Chart.js ---
     if not all_dates:
@@ -680,6 +695,14 @@ def security_details(metric_name, security_id):
     # Spread Chart Datasets
     chart_data['spread_dataset'] = prepare_dataset(spread_series, 'Spread', COLOR_PALETTE[6])
     chart_data['sp_spread_dataset'] = prepare_dataset(sp_spread_series, 'SP Spread', COLOR_PALETTE[7])
+
+    # YTM Chart Datasets
+    chart_data['ytm_dataset'] = prepare_dataset(ytm_series, 'YTM', COLOR_PALETTE[8])
+    chart_data['sp_ytm_dataset'] = prepare_dataset(sp_ytm_series, 'SP YTM', COLOR_PALETTE[9])
+
+    # YTW Chart Datasets
+    chart_data['ytw_dataset'] = prepare_dataset(ytw_series, 'YTW', COLOR_PALETTE[10])
+    chart_data['sp_ytw_dataset'] = prepare_dataset(sp_ytw_series, 'SP YTW', COLOR_PALETTE[11])
 
     # Convert the entire chart_data dictionary to JSON safely
     chart_data_json = json.dumps(chart_data, default=replace_nan_with_none, indent=4) # Use helper for NaN->null
