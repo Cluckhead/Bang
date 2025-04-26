@@ -21,19 +21,41 @@ META_COLS = 6  # ISIN, Security Name, Funds, Type, Callable, Currency
 
 logger = logging.getLogger(__name__)
 
+def _load_distressed_isins(data_folder: str) -> set:
+    """
+    Loads the set of ISINs from reference.csv where 'Is Distressed' is TRUE.
+    Returns a set of ISIN strings.
+    """
+    distressed_isins = set()
+    ref_path = os.path.join(data_folder, 'reference.csv')
+    if not os.path.exists(ref_path):
+        return distressed_isins
+    try:
+        df = pd.read_csv(ref_path, dtype=str)
+        if 'ISIN' in df.columns and 'Is Distressed' in df.columns:
+            # Normalize and filter
+            mask = df['Is Distressed'].astype(str).str.strip().str.upper() == 'TRUE'
+            distressed_isins = set(df.loc[mask, 'ISIN'].astype(str).str.strip().str.upper())
+    except Exception as e:
+        logger.warning(f"Could not load or parse reference.csv for distressed ISINs: {e}")
+    return distressed_isins
+
 def find_value_breaches(
     filename: str,
     data_folder: str = "Data",
     max_threshold: float = DEFAULT_MAX_THRESHOLD,
-    min_threshold: float = DEFAULT_MIN_THRESHOLD
+    min_threshold: float = DEFAULT_MIN_THRESHOLD,
+    include_distressed: bool = False
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
     Scan a security-level file for values above max_threshold or below min_threshold.
     Ignores NaN/null values. Returns a list of breaches and total securities checked.
+    Excludes securities marked as distressed in reference.csv unless include_distressed is True.
     """
     file_path = os.path.join(data_folder, filename)
     breaches = []
     total_count = 0
+    distressed_isins = _load_distressed_isins(data_folder) if not include_distressed else set()
     try:
         df = pd.read_csv(file_path)
         id_column = df.columns[0]  # ISIN
@@ -41,7 +63,10 @@ def find_value_breaches(
         date_columns = df.columns[META_COLS:]
         total_count = len(df)
         for idx, row in df.iterrows():
-            security_id = str(row[id_column])
+            # Normalize ISIN for comparison
+            security_id = str(row[id_column]).strip().upper()
+            if not include_distressed and security_id in distressed_isins:
+                continue  # Exclude distressed
             static_info = {col: row[col] for col in meta_columns if col != id_column}
             for date_col in date_columns:
                 val = row[date_col]
@@ -79,7 +104,8 @@ def get_breach_summary(
     data_folder: str,
     threshold_config: Dict[str, Dict[str, Any]], # Pass the relevant subset of MAXMIN_THRESHOLDS
     override_max: Optional[float] = None,
-    override_min: Optional[float] = None
+    override_min: Optional[float] = None,
+    include_distressed: bool = False
 ) -> Dict[str, Dict[str, Any]]:
     """
     Returns a summary for each file defined in the provided threshold_config.
@@ -91,6 +117,7 @@ def get_breach_summary(
                           and their configurations (min, max, display_name, group) to process.
         override_max: If provided, use this value as the max threshold for all files.
         override_min: If provided, use this value as the min threshold for all files.
+        include_distressed: If True, include securities marked as distressed in the summary.
 
     Returns:
         A dictionary where keys are filenames and values are summaries containing:
@@ -121,7 +148,7 @@ def get_breach_summary(
         try:
             # Use the determined thresholds
             breaches, total_count = find_value_breaches(
-                filename, data_folder, applied_max_threshold, applied_min_threshold
+                filename, data_folder, applied_max_threshold, applied_min_threshold, include_distressed=include_distressed
             )
             max_breach_count = sum(1 for b in breaches if b['breach_type'] == 'max')
             min_breach_count = sum(1 for b in breaches if b['breach_type'] == 'min')
@@ -157,13 +184,35 @@ def get_breach_details(
     breach_type: str = 'max',
     data_folder: str = "Data",
     max_threshold: float = DEFAULT_MAX_THRESHOLD,
-    min_threshold: float = DEFAULT_MIN_THRESHOLD
+    min_threshold: float = DEFAULT_MIN_THRESHOLD,
+    include_distressed: bool = False
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
     Returns a list of breaches of the specified type (max or min) for the given file.
+    Aggregates by security, counting the number of days breaching.
     """
     breaches, total_count = find_value_breaches(
-        filename, data_folder, max_threshold, min_threshold
+        filename, data_folder, max_threshold, min_threshold, include_distressed=include_distressed
     )
     filtered = [b for b in breaches if b['breach_type'] == breach_type]
-    return filtered, total_count 
+    # Aggregate by security id
+    agg = {}
+    for b in filtered:
+        sec_id = b['id']
+        if sec_id not in agg:
+            agg[sec_id] = {
+                'id': sec_id,
+                'static_info': b['static_info'],
+                'count': 0,
+                'dates': [],
+                'values': [],
+                'breach_type': b['breach_type'],
+                'threshold': b['threshold'],
+                'file': b['file']
+            }
+        agg[sec_id]['count'] += 1
+        agg[sec_id]['dates'].append(b['date'])
+        agg[sec_id]['values'].append(b['value'])
+    # Prepare output: one row per security
+    result = list(agg.values())
+    return result, total_count 

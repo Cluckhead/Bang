@@ -46,6 +46,13 @@ The File Audit feature provides a comprehensive, automated review of all key dat
 
 This feature allows users to compare two related security-level datasets side-by-side. It's configured via the `COMPARISON_CONFIG` dictionary in `config.py`.
 
+**Available Comparison Types:**
+- Spread vs SpreadSP
+- Duration vs DurationSP
+- Spread Duration vs Spread DurationSP
+- **YTM vs YTMSP**
+- **YTW vs YTWSP**
+
 ### Summary View (`/compare/<comparison_type>/summary`)
 
 *   Displays a table summarizing comparison statistics for multiple securities.
@@ -77,6 +84,10 @@ This feature allows users to compare two related security-level datasets side-by
     *   Provides 'All Funds' and 'No Funds' options in the fund selector.
     *   Added 'Rimes' as a potential data source.
 *   **Weight Check:** Compare fund and benchmark weights via `/weights/check`
+
+---
+
+**Note:** YTM and YTW comparisons are now available in the navigation and behave identically to other comparison types. Simply select "YTM Comparison" or "YTW Comparison" from the Checks & Comparisons menu to access these features.
 
 ## Data Staleness Detection
 

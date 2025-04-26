@@ -16,30 +16,27 @@
     {% set form_action_url = url_for('maxmin_bp.dashboard', group_name=group_name) if group_name else url_for('maxmin_bp.dashboard') %}
 
     {# --- Threshold Override Form --- #}
-    <form method="GET" action="{{ form_action_url }}" class="row gx-2 gy-2 align-items-center mb-4 p-3 border rounded bg-light">
+    <form method="GET" action="{{ form_action_url }}" class="row gx-2 gy-2 align-items-center mb-4 p-3 border rounded bg-light" id="dashboard-filter-form">
         <div class="col-auto">
-            <label for="maxInput" class="form-label mb-0">Override Max:</label>
+            <label for="maxInput" class="form-label mb-0">Max:</label>
         </div>
         <div class="col-auto">
-            {# Use applied_max (the override value if provided) to pre-fill #}
-            <input type="number" step="any" class="form-control form-control-sm" id="maxInput" name="max" value="{{ applied_max if applied_max is not none else '' }}" placeholder="(Config Default)" style="width: 140px;">
+            {# Show config default as placeholder if no override, and value if override #}
+            <input type="number" step="any" class="form-control form-control-sm" id="maxInput" name="max" value="{{ applied_max if applied_max is not none else '' }}" placeholder="{{ DEFAULT_MAX_THRESHOLD if applied_max is none else '' }}" style="width: 140px;" onchange="this.form.submit()" onkeydown="if(event.key==='Enter'){this.form.submit();}">
         </div>
         <div class="col-auto">
-            <label for="minInput" class="form-label mb-0">Override Min:</label>
+            <label for="minInput" class="form-label mb-0">Min:</label>
         </div>
         <div class="col-auto">
-            {# Use applied_min (the override value if provided) to pre-fill #}
-            <input type="number" step="any" class="form-control form-control-sm" id="minInput" name="min" value="{{ applied_min if applied_min is not none else '' }}" placeholder="(Config Default)" style="width: 140px;">
+            {# Show config default as placeholder if no override, and value if override #}
+            <input type="number" step="any" class="form-control form-control-sm" id="minInput" name="min" value="{{ applied_min if applied_min is not none else '' }}" placeholder="{{ DEFAULT_MIN_THRESHOLD if applied_min is none else '' }}" style="width: 140px;" onchange="this.form.submit()" onkeydown="if(event.key==='Enter'){this.form.submit();}">
         </div>
         <div class="col-auto">
-            <button type="submit" class="btn btn-primary btn-sm">Apply Overrides</button>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="includeDistressed" name="include_distressed" value="1" {% if include_distressed %}checked{% endif %} onchange="this.form.submit()">
+                <label class="form-check-label" for="includeDistressed">Include Distressed</label>
+            </div>
         </div>
-        <div class="col-auto">
-             {# Link to clear overrides (go back to default view for this group/all) #}
-            <a href="{{ form_action_url }}" class="btn btn-outline-secondary btn-sm">Clear Overrides</a>
-        </div>
-        {# Optionally display the default thresholds #}
-        {# <small class="text-muted">(Overall Defaults: Max {{ DEFAULT_MAX_THRESHOLD }}, Min {{ DEFAULT_MIN_THRESHOLD }})</small> #}
     </form>
     
     {% if applied_max is not none or applied_min is not none %}

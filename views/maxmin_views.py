@@ -61,12 +61,15 @@ def dashboard(group_name=None):
         # Check for user overrides from query parameters
         override_max, override_min = _get_threshold_overrides(request.args)
         
+        include_distressed = request.args.get('include_distressed', '0') == '1'
+        
         # Fetch summary data using the appropriate config and overrides
         summary_data = get_breach_summary(
             data_folder=current_app.config['DATA_FOLDER'],
             threshold_config=threshold_config,
             override_max=override_max,
-            override_min=override_min
+            override_min=override_min,
+            include_distressed=include_distressed
         )
 
         # Determine the thresholds that were actually applied for display
@@ -105,7 +108,8 @@ def dashboard(group_name=None):
             applied_min=applied_min,
             # Pass defaults for the form placeholder text
             DEFAULT_MAX_THRESHOLD=DEFAULT_MAX_THRESHOLD, 
-            DEFAULT_MIN_THRESHOLD=DEFAULT_MIN_THRESHOLD
+            DEFAULT_MIN_THRESHOLD=DEFAULT_MIN_THRESHOLD,
+            include_distressed=include_distressed
         )
     except Exception as e:
         current_app.logger.error(f"Error generating max/min dashboard (group: {group_name}): {e}", exc_info=True)
@@ -141,14 +145,18 @@ def details(filename, breach_type):
         if not file_config:
              current_app.logger.warning(f"Max/Min thresholds not configured for file: {filename}. Using defaults.")
 
-        current_app.logger.debug(f"Calling get_breach_details for {filename}/{breach_type} with Max={max_threshold}, Min={min_threshold}")
+        include_distressed = request.args.get('include_distressed', '0') == '1'
+
+        current_app.logger.debug(f"DETAILS: filename={filename}, breach_type={breach_type}, max={max_threshold}, min={min_threshold}, include_distressed={include_distressed}")
         breaches, total_count = get_breach_details(
             filename,
             breach_type=breach_type,
             data_folder=current_app.config['DATA_FOLDER'],
             max_threshold=max_threshold, # Use file-specific or override threshold
-            min_threshold=min_threshold  # Use file-specific or override threshold
+            min_threshold=min_threshold,  # Use file-specific or override threshold
+            include_distressed=include_distressed
         )
+        current_app.logger.debug(f"DETAILS: Returned {len(breaches)} breaches (total_count={total_count}) for include_distressed={include_distressed}")
         # Prepare static columns for table header (from first item if available)
         static_columns = []
         if breaches:
@@ -181,7 +189,8 @@ def details(filename, breach_type):
             total_count=total_count,
             static_columns=static_columns,
             id_column=ID_COLUMN,
-            dashboard_url=dashboard_url # Add URL for back button
+            dashboard_url=dashboard_url, # Add URL for back button
+            include_distressed=include_distressed
         )
     except FileNotFoundError:
         current_app.logger.error(f"Data file not found for max/min details: {os.path.join(current_app.config['DATA_FOLDER'], filename)}")

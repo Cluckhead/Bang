@@ -87,6 +87,9 @@ def create_app() -> Flask:
         file_handler.setFormatter(log_formatter)
         file_handler.setLevel(logging.DEBUG) # Log DEBUG and higher to file
         app.logger.addHandler(file_handler)
+        # --- Add file handler to root logger ---
+        logging.getLogger().addHandler(file_handler)
+        logging.getLogger().setLevel(logging.DEBUG)
         app.logger.info(f"File logging configured to: {log_file_path} (Level: DEBUG)")
     except Exception as e:
         app.logger.error(f"Failed to configure file logging to {log_file_path}: {e}", exc_info=True)
@@ -97,6 +100,8 @@ def create_app() -> Flask:
     # Set console level potentially higher for less noise (e.g., INFO) or keep DEBUG for development
     console_handler.setLevel(logging.DEBUG)
     app.logger.addHandler(console_handler)
+    # --- Add console handler to root logger ---
+    logging.getLogger().addHandler(console_handler)
 
     app.logger.info("Centralized logging configured (File & Console).")
     # --- End Logging Configuration ---

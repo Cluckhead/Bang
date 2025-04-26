@@ -28,6 +28,22 @@
     
     <p class="text-muted small">Total securities analyzed in this file: {{ total_count }}</p>
 
+    <form method="GET" action="" class="row gx-2 gy-2 align-items-center mb-3" id="details-filter-form">
+        {# Preserve max/min and other query params as hidden fields #}
+        {% if max_threshold is not none %}
+            <input type="hidden" name="max" value="{{ max_threshold }}">
+        {% endif %}
+        {% if min_threshold is not none %}
+            <input type="hidden" name="min" value="{{ min_threshold }}">
+        {% endif %}
+        <div class="col-auto">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="includeDistressed" name="include_distressed" value="1" {% if include_distressed %}checked{% endif %} onchange="this.form.submit()">
+                <label class="form-check-label" for="includeDistressed">Include Distressed</label>
+            </div>
+        </div>
+    </form>
+
     {% if breaches %}
     <div class="table-responsive">
         <table class="table table-sm table-striped table-hover small">
@@ -38,8 +54,7 @@
                     {% for col_name in static_columns %}
                         <th>{{ col_name }}</th>
                     {% endfor %}
-                    <th>Breach Date</th>
-                    <th>Breaching Value</th>
+                    <th>Days Breaching</th>
                     {# Threshold column might be redundant given the page description #}
                     {# <th>Threshold ({{ breach_type|capitalize }})</th> #}
                 </tr>
@@ -60,8 +75,7 @@
                     {% for col_name in static_columns %}
                         <td>{{ sec.static_info.get(col_name, '') }}</td>
                     {% endfor %}
-                    <td>{{ sec.date }}</td>
-                    <td class="fw-bold">{{ "%.4f"|format(sec.value) if sec.value is number else sec.value }}</td>
+                    <td class="fw-bold">{{ sec.count }}</td>
                     {# <td>{{ sec.threshold }}</td> #}
                 </tr>
                 {% endfor %}
