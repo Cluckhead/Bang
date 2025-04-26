@@ -31,6 +31,38 @@ STD_CODE_COL = 'Code'
 STD_BENCHMARK_COL = 'Benchmark'
 STD_SCOPE_COL = 'SS Project - In Scope' # Standardized name for the scope column
 
+# --- NEW HELPER FUNCTION --- 
+def load_simple_csv(filepath: str, filename_for_logging: str) -> Optional[pd.DataFrame]:
+    """Loads a CSV file into a DataFrame with basic error handling.
+    
+    Args:
+        filepath (str): The full path to the CSV file.
+        filename_for_logging (str): The filename used for logging messages.
+
+    Returns:
+        Optional[pd.DataFrame]: DataFrame if loaded successfully, else None.
+    """
+    if not os.path.exists(filepath):
+        logger.warning(f"File not found, skipping: {filepath}")
+        return None
+    try:
+        df = pd.read_csv(
+            filepath,
+            encoding='utf-8',
+            encoding_errors='replace',
+            on_bad_lines='skip'
+        )
+        df.columns = df.columns.str.strip() # Clean column names
+        logger.info(f"Successfully loaded simple CSV: '{filename_for_logging}' ({len(df)} rows)")
+        return df
+    except pd.errors.EmptyDataError:
+        logger.warning(f"File is empty: {filepath}")
+        return pd.DataFrame() # Return empty DataFrame for consistency
+    except Exception as e:
+        logger.error(f"Error reading simple CSV '{filename_for_logging}': {e}", exc_info=True)
+        return None
+# --- END NEW HELPER FUNCTION --- 
+
 def _find_column(pattern: str, columns: List[str], filename_for_logging: str, col_type: str) -> str:
     """Helper function to find a single column matching a pattern (case-insensitive)."""
     matches = [col for col in columns if re.search(pattern, col, re.IGNORECASE)]

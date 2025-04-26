@@ -2,12 +2,13 @@
 // related to charts and associated metric tables within the application.
 // It separates the logic for generating the visual components from the main application flow.
 // Updated to handle optional secondary data sources and toggle visibility.
+// Added 'Inspect' button and modal functionality for contribution analysis.
 
 // static/js/modules/ui/chartRenderer.js
 // Handles creating DOM elements for charts and tables
 
 import { createTimeSeriesChart } from '../charts/timeSeriesChart.js';
-import { formatNumber } from '../utils/helpers.js';
+import { formatNumber, getIsoDateString } from '../utils/helpers.js'; // Import helper for date formatting
 
 // Store chart instances to manage them later (e.g., for toggling)
 const chartInstances = {};
@@ -23,8 +24,7 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
     const metadata = payload.metadata;
     const fundsData = payload.funds; // Renamed from chartsData for clarity
     const metricName = metadata.metric_name;
-    const latestDate = metadata.latest_date;
-    // Keep original column names from metadata for table generation
+    const latestDate = metadata.latest_date; // Expecting YYYY-MM-DD format from backend
     const primaryFundColsMeta = metadata.fund_col_names;
     const primaryBenchColMeta = metadata.benchmark_col_name;
     const secondaryFundColsMeta = metadata.secondary_fund_col_names;
@@ -54,9 +54,7 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
 
     // --- Setup Toggle Switch --- 
     const toggleContainer = document.getElementById('sp-toggle-container');
-    // Event listener will be attached by the caller (main.js)
     if (toggleContainer) {
-        // Show toggle if *any* secondary data is potentially available based on metadata
         if (secondaryDataAvailableOverall) {
             console.log("[chartRenderer] Overall secondary data available, ensuring toggle container is visible.");
             toggleContainer.style.display = 'block'; 
@@ -68,6 +66,30 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
         console.warn("[chartRenderer] Toggle switch container not found in the DOM.");
     }
 
+    // --- Create Modal Structure (once per page load) --- 
+    if (!document.getElementById('inspectModal')) {
+        createInspectModal();
+        
+        // Add event listener for the submit button ONCE after creating the modal
+        const submitBtn = document.getElementById('inspectSubmitBtn');
+        if (submitBtn) {
+            submitBtn.removeEventListener('click', handleInspectSubmit); 
+            submitBtn.addEventListener('click', handleInspectSubmit);
+            console.log("[chartRenderer] Submit button event listener attached.");
+        } else {
+            console.error("[chartRenderer] Inspect modal submit button not found after creation!");
+        }
+    } else {
+        // Ensure submit listener is attached even if modal existed (e.g., partial page update)
+        const submitBtn = document.getElementById('inspectSubmitBtn');
+         if (submitBtn && !submitBtn.hasAttribute('data-listener-attached')) {
+             submitBtn.removeEventListener('click', handleInspectSubmit);
+             submitBtn.addEventListener('click', handleInspectSubmit);
+             submitBtn.setAttribute('data-listener-attached', 'true');
+             console.log("[chartRenderer] Submit button event listener RE-attached.");
+         }
+    }
+    
     // --- Render Charts and Tables for Each Fund --- 
     // Sort fundsData by max absolute Z-score (descending)
     const sortedFunds = Object.entries(fundsData).map(([fundCode, fundData]) => {
@@ -153,12 +175,10 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
             const chartType = chartConfig.chart_type;
             const chartTitle = chartConfig.title;
             const chartLabels = chartConfig.labels;
-            // Filter datasets based on showSecondary
             let chartDatasets = chartConfig.datasets;
             if (!showSecondary) {
                 chartDatasets = chartDatasets.filter(ds => !ds.isSpData);
             } else {
-                // When showing secondary, ensure all S&P datasets are visible
                 chartDatasets = chartDatasets.map(ds => {
                     if (ds.isSpData) {
                         return { ...ds, hidden: false };
@@ -173,114 +193,408 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
 
              // --- Create DOM Elements for Each Chart --- 
             const chartWrapper = document.createElement('div');
-            // Add column class for side-by-side layout on large screens
-            chartWrapper.className = `chart-container-wrapper chart-type-${chartType} col-lg-6`; 
+            chartWrapper.className = `chart-container-wrapper chart-type-${chartType} col-lg-6 mb-3`; 
             chartWrapper.id = `chart-wrapper-${chartId}`;
+            chartWrapper.style.position = 'relative';
 
-        // Create Chart Canvas
-        const canvas = document.createElement('canvas');
+            // --- Add Inspect Button (WITHOUT data-* attributes for toggle) --- 
+            const inspectButton = document.createElement('button');
+            inspectButton.textContent = 'Inspect';
+            inspectButton.className = 'btn btn-outline-secondary btn-sm inspect-button';
+            inspectButton.style.position = 'absolute';
+            inspectButton.style.top = '5px';
+            inspectButton.style.right = '5px';
+            // Still add data attributes for our handler to read
+            inspectButton.dataset.metricName = metricName;
+            inspectButton.dataset.fundCode = fundCode;
+            inspectButton.dataset.latestDate = latestDate || getIsoDateString(new Date());
+            // REMOVE Bootstrap 4 modal attributes 
+            // inspectButton.setAttribute('data-toggle', 'modal'); 
+            // inspectButton.setAttribute('data-target', '#inspectModal'); 
+            
+            // --- Add DIRECT Click Listener --- 
+            inspectButton.addEventListener('click', handleInspectButtonClick);
+            
+            chartWrapper.appendChild(inspectButton);
+
+            // Create Chart Canvas
+            const canvas = document.createElement('canvas');
             canvas.id = `chart-${chartId}`;
-        canvas.className = 'chart-canvas';
+            canvas.className = 'chart-canvas';
             chartWrapper.appendChild(canvas);
 
-            // Create Metrics Table (pass specific metrics and chart type)
-        const table = createMetricsTable(
+            // Create Metrics Table
+            const table = createMetricsTable(
                 chartMetrics,
-            latestDate,
-                chartType, // Pass chart type to determine columns
-                metadata, // Pass full metadata for context
-                showSecondary // Pass showSecondary
+                latestDate,
+                chartType,
+                metadata,
+                showSecondary
             );
             chartWrapper.appendChild(table);
             
-            // Append chartWrapper to the row, not the fundWrapper directly
             chartsRow.appendChild(chartWrapper); 
 
-        // --- Render Chart --- 
-        setTimeout(() => {
-            const chartCanvas = document.getElementById(canvas.id);
-             if (chartCanvas && chartCanvas.getContext('2d')) {
+            // --- Render Chart (setTimeout remains) --- 
+            setTimeout(() => {
+                 const chartCanvas = document.getElementById(canvas.id);
+                 if (chartCanvas && chartCanvas.getContext('2d')) {
                     console.log(`[chartRenderer] Rendering chart for ${chartId}`);
-                    
-                    // Prepare chart data object for the charting function
                     const chartDataForFunction = {
                         labels: chartLabels,
                         datasets: chartDatasets
                     };
-                    
-                    // Pass specific Z-score ONLY if it's the main chart
                     const zScoreForChartTitle = (chartType === 'main') ? primaryZScoreForTitle : null;
-
                     const chart = createTimeSeriesChart(
                         canvas.id, 
-                        chartDataForFunction, // Pass the structured data
-                        chartTitle, // Use the title from config
-                        fundCode, // Keep fund code for context if needed
-                        zScoreForChartTitle, // Pass main Z-score only to main chart
-                        isMissingLatest, // Still relevant at fund level
-                        chartType // Pass chartType so title logic is correct
+                        chartDataForFunction, 
+                        chartTitle, 
+                        fundCode, 
+                        zScoreForChartTitle, 
+                        isMissingLatest, 
+                        chartType 
                     );
-                 if (chart) {
-                        chartInstances[chartId] = chart; // Store chart instance with unique ID
-                        console.log(`[chartRenderer] Stored chart instance for ${chartId}`);
-                 } else {
-                        console.error(`[chartRenderer] Failed to create chart instance for ${chartId}`);
-                 }
-            } else {
-                console.error(`[chartRenderer] Could not get 2D context for canvas ${canvas.id}`);
-                const errorP = document.createElement('p');
-                errorP.textContent = 'Error rendering chart.';
-                errorP.className = 'text-danger';
-                if (chartCanvas && chartCanvas.parentNode) {
-                    chartCanvas.parentNode.replaceChild(errorP, chartCanvas);
+                     if (chart) {
+                            chartInstances[chartId] = chart; 
+                            console.log(`[chartRenderer] Stored chart instance for ${chartId}`);
+                     } else {
+                            console.error(`[chartRenderer] Failed to create chart instance for ${chartId}`);
+                     }
+                } else {
+                    console.error(`[chartRenderer] Could not get 2D context for canvas ${canvas.id}`);
+                    const errorP = document.createElement('p');
+                    errorP.textContent = 'Error rendering chart.';
+                    errorP.className = 'text-danger';
+                    if (chartCanvas && chartCanvas.parentNode) {
+                        chartCanvas.parentNode.replaceChild(errorP, chartCanvas);
                     } else if (chartWrapper) {
                         chartWrapper.appendChild(errorP);
+                    }
                 }
-            }
-        }, 0); 
+            }, 0); 
         }); // End loop through charts for the fund
 
-        // Append the row containing the charts to the main fund wrapper
         fundWrapper.appendChild(chartsRow);
-
-        container.appendChild(fundWrapper); // Add the fund's wrapper to the main container
+        container.appendChild(fundWrapper); 
 
     } // End loop through funds
     console.log("[chartRenderer] Finished processing all funds.");
+}
+
+// --- NEW: Direct button click handler (adapted for BS4/jQuery) --- 
+function handleInspectButtonClick(event) {
+    const button = event.currentTarget;
+    console.log("[Inspect Button] Clicked:", button);
+
+    // 1. Populate the data FIRST (using the existing separate function)
+    // Create a mock event object for populateInspectModalData
+    const mockEvent = { 
+        relatedTarget: button, 
+        currentTarget: document.getElementById('inspectModal') // Ensure modal element exists
+    };
+    if (!mockEvent.currentTarget) {
+        console.error("[Inspect Button] Modal element #inspectModal not found when preparing to populate!");
+        return;
+    }
+    populateInspectModalData(mockEvent); // Call data population function
+
+    // 2. Show the modal using Bootstrap 4 jQuery method
+    try {
+        // Use jQuery selector and Bootstrap 4 modal method
+        const modalElement = document.getElementById('inspectModal'); // Get element for logging
+        if (!modalElement) throw new Error("Modal element #inspectModal not found for jQuery selector.");
+        
+        if (typeof $ !== 'undefined' && $.fn.modal) {
+            $('#inspectModal').modal('show'); 
+            console.log("[Inspect Button] Modal shown via jQuery $('#inspectModal').modal('show').");
+        } else {
+            console.error("[Inspect Button] jQuery or Bootstrap modal function not available.");
+            alert("Error: Could not trigger modal. jQuery or Bootstrap JS might be missing.");
+        }
+    } catch (e) {
+        console.error("[Inspect Button] Error showing modal via jQuery/BS4 API:", e);
+        alert("Could not open inspect modal. Check console for errors.");
+    }
+}
+
+// --- Function to populate modal data (called by click handler now) --- 
+function populateInspectModalData(event) {
+    const button = event.relatedTarget;
+    if (!button) {
+        console.error("[Modal Populate] No relatedTarget provided in the event");
+        return;
+    }
+
+    // --- DEBUG: Log the button element and its attributes --- 
+    console.log("[Modal Populate] Triggering Button:", button);
+    console.log("[Modal Populate] Button data-metric-name:", button.getAttribute('data-metric-name'));
+    console.log("[Modal Populate] Button data-fund-code:", button.getAttribute('data-fund-code'));
+    console.log("[Modal Populate] Button dataset:", JSON.stringify(button.dataset));
+    // --- END DEBUG --- 
+
+    const metricName = button.dataset.metricName || button.getAttribute('data-metric-name');
+    const fundCode = button.dataset.fundCode || button.getAttribute('data-fund-code');
+    const latestDateStr = button.dataset.latestDate || button.getAttribute('data-latest-date');
+
+    // --- DEBUG: Log the retrieved values --- 
+    console.log(`[Modal Populate] Retrieved - Metric: ${metricName}, Fund: ${fundCode}, Date: ${latestDateStr}`);
+    // --- END DEBUG --- 
+
+    if (!metricName || !fundCode) {
+        console.error("[Modal Populate] Missing data attributes on button AFTER retrieval attempt:", {
+            metricName,
+            fundCode,
+            latestDateStr,
+            buttonHTML: button.outerHTML
+        });
+        // Populate with placeholders to avoid breaking UI further down, but log error
+        // metricName = 'Error'; 
+        // fundCode = 'Error';
+    }
+
+    const modalElement = event.currentTarget;
+
+    // Populate modal title/text
+    const modalTitle = modalElement.querySelector('#inspectModalLabel');
+    const metricNameSpan = modalElement.querySelector('#inspectModalMetricName');
+    const fundCodeSpan = modalElement.querySelector('#inspectModalFundCode');
+    
+    if (modalTitle) modalTitle.textContent = `Inspect Contribution - ${metricName || 'Unknown'} (${fundCode || 'Unknown'})`;
+    if (metricNameSpan) metricNameSpan.textContent = metricName || 'Unknown';
+    if (fundCodeSpan) fundCodeSpan.textContent = fundCode || 'Unknown';
+
+    // Set default dates
+    const endDateInput = modalElement.querySelector('#inspectEndDate');
+    const startDateInput = modalElement.querySelector('#inspectStartDate');
+    if (endDateInput && startDateInput) {
+        endDateInput.value = latestDateStr || getIsoDateString(new Date());
+        try {
+            const endDate = new Date(endDateInput.value);
+            const startDate = new Date(endDate);
+            startDate.setMonth(startDate.getMonth() - 1);
+            startDateInput.value = getIsoDateString(startDate);
+        } catch (e) {
+            console.error("Error setting default start date:", e);
+            const today = new Date();
+            const defaultStartDate = new Date(today);
+            defaultStartDate.setMonth(defaultStartDate.getMonth() - 1);
+            startDateInput.value = getIsoDateString(defaultStartDate);
+            if (!latestDateStr) endDateInput.value = getIsoDateString(today);
+        }
+    } else {
+        console.error("[Modal Populate] Date input fields not found in modal!");
+    }
+
+    // Clear previous error messages
+    const errorMsgDiv = document.getElementById('inspectErrorMsg');
+    if(errorMsgDiv) {
+        errorMsgDiv.textContent = '';
+        errorMsgDiv.style.display = 'none';
+    }
+    
+    // Store data needed for submit handler on the modal itself
+    // --- DEBUG: Log the data being stored --- 
+    console.log("[Modal Populate] Storing data on modal:", { metricName: metricName || '', fundCode: fundCode || '' });
+    // --- END DEBUG --- 
+    modalElement.dataset.metricName = metricName || '';
+    modalElement.dataset.fundCode = fundCode || '';
+    modalElement.setAttribute('data-metric-name', metricName || '');
+    modalElement.setAttribute('data-fund-code', fundCode || '');
+    window.currentInspectData = {
+        metricName: metricName || '',
+        fundCode: fundCode || ''
+    };
+    
+    // Reset submit button state
+    const submitBtn = document.getElementById('inspectSubmitBtn');
+    if(submitBtn){
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Analyze';
+    }
+}
+
+/**
+ * Handles the submission of the inspect modal.
+ * Fetches contribution data and redirects to the results page.
+ */
+async function handleInspectSubmit() {
+    const modalElement = document.getElementById('inspectModal');
+    let metricName = '';
+    let fundCode = '';
+    
+    // --- Retrieve stored data (priority: window > dataset > attribute) ---
+    if (window.currentInspectData) {
+        metricName = window.currentInspectData.metricName;
+        fundCode = window.currentInspectData.fundCode;
+    } else if (modalElement) {
+        metricName = modalElement.dataset.metricName || modalElement.getAttribute('data-metric-name') || '';
+        fundCode = modalElement.dataset.fundCode || modalElement.getAttribute('data-fund-code') || '';
+    }
+    console.log("[Inspect] Submit using data:", { metricName, fundCode });
+
+    // --- Get Dates AND Data Source --- 
+    const startDate = document.getElementById('inspectStartDate').value;
+    const endDate = document.getElementById('inspectEndDate').value;
+    const dataSourceSelected = document.querySelector('input[name="inspectDataSource"]:checked');
+    const dataSource = dataSourceSelected ? dataSourceSelected.value : 'Original'; // Default to Original if none selected
+    
+    const errorMsgDiv = document.getElementById('inspectErrorMsg');
+    const submitBtn = document.getElementById('inspectSubmitBtn');
+
+    // --- Validation --- 
+    if (!startDate || !endDate) {
+        errorMsgDiv.textContent = 'Please select both a start and end date.';
+        errorMsgDiv.style.display = 'block';
+        return;
+    }
+    if (new Date(startDate) >= new Date(endDate)) {
+        errorMsgDiv.textContent = 'Start date must be before end date.';
+        errorMsgDiv.style.display = 'block';
+        return;
+    }
+    if (!metricName || !fundCode) {
+        console.error("[Inspect] Missing required data for submission", { metricName, fundCode }); // Keep detailed log
+        errorMsgDiv.textContent = 'Missing metric name or fund code information. Please close modal and try again.';
+        errorMsgDiv.style.display = 'block';
+        return;
+    }
+    if (!dataSource) { // Should have default, but check anyway
+        errorMsgDiv.textContent = 'Please select a data source (Original or S&P).';
+        errorMsgDiv.style.display = 'block';
+        return;
+    }
+
+    errorMsgDiv.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Analyzing...';
+
+    try {
+        const apiUrl = `/metric/${encodeURIComponent(metricName)}/inspect`;
+        const requestBody = { 
+            fund_code: fundCode,
+            start_date: startDate, 
+            end_date: endDate,
+            data_source: dataSource // Include data source in the request
+        };
+        console.log(`[Inspect] Sending POST to ${apiUrl} with body:`, requestBody);
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json' 
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            let errorJson = {};
+            try { errorJson = await response.json(); } catch (parseError) { /* ignore */ }
+            const errorText = errorJson.error || `Error ${response.status}: ${response.statusText}`;
+            throw new Error(errorText);
+        }
+
+        const resultsData = await response.json();
+        console.log("[Inspect] API Success. Response:", resultsData);
+
+        // Redirect to results page
+        const resultsUrl = `/metric/inspect/results?metric_name=${encodeURIComponent(metricName)}&fund_code=${encodeURIComponent(fundCode)}&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&data_source=${encodeURIComponent(dataSource)}`; // Pass data source
+        window.location.href = resultsUrl;
+        
+        // Close modal (may not happen due to redirect)
+        const modal = $('#inspectModal').modal('hide'); // Use jQuery for BS4 hide just in case
+
+    } catch (error) {
+        console.error("[Inspect] Fetch Error:", error);
+        errorMsgDiv.textContent = `Analysis failed: ${error.message}`;
+        errorMsgDiv.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Analyze';
+    }
+}
+
+/**
+ * Creates the Bootstrap modal structure and appends it to the body.
+ */
+function createInspectModal() {
+     const modalHtml = `
+        <div class="modal fade" id="inspectModal" tabindex="-1" role="dialog" aria-labelledby="inspectModalLabel" aria-hidden="true">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="inspectModalLabel">Inspect Contribution</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Analyze contribution to the change in <strong id="inspectModalMetricName">[Metric]</strong> for fund <strong id="inspectModalFundCode">[Fund]</strong>.</p>
+                        
+                        <!-- Date Range Selection -->
+                        <div class="form-group">
+                            <label for="inspectStartDate" class="form-label">Start Date (Exclusive)</label>
+                            <input type="date" class="form-control" id="inspectStartDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="inspectEndDate" class="form-label">End Date (Inclusive)</label>
+                            <input type="date" class="form-control" id="inspectEndDate" required>
+                        </div>
+
+                        <!-- Data Source Selection -->
+                        <div class="form-group">
+                            <label class="form-label">Data Source:</label>
+                            <div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="inspectDataSource" id="inspectDataSourceOriginal" value="Original" checked>
+                                    <label class="form-check-label" for="inspectDataSourceOriginal">Original</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="inspectDataSource" id="inspectDataSourceSP" value="SP">
+                                    <label class="form-check-label" for="inspectDataSourceSP">S&P</label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="inspectErrorMsg" class="text-danger mt-2" style="display: none;"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="inspectSubmitBtn">Analyze</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    console.log("[chartRenderer] Inspect modal HTML created.");
 }
 
 /**
  * Updates the visibility of secondary/SP data datasets across all managed charts.
  * @param {boolean} show - Whether to show or hide the secondary/SP datasets.
  */
-export function toggleSecondaryDataVisibility(show) { // Make sure this is exported if used by main.js
+export function toggleSecondaryDataVisibility(show) {
     console.log(`[chartRenderer] Toggling SP data visibility to: ${show}`);
-    // Iterate through the centrally stored chart instances
     Object.entries(chartInstances).forEach(([chartId, chart]) => {
-        if (!chart || typeof chart.destroy === 'undefined') { // Check if chart instance is valid
+        if (!chart || typeof chart.destroy === 'undefined') { 
             console.warn(`[chartRenderer] Skipping invalid chart instance for ID: ${chartId}`);
             return;
         }
         let spDatasetToggled = false;
         try {
         chart.data.datasets.forEach((dataset, index) => {
-            // Check the isSpData flag added from Python
             if (dataset.isSpData === true) {
-                // Use setDatasetVisibility for better control than just 'hidden' property
                 chart.setDatasetVisibility(index, show);
                     console.log(`[chartRenderer] Chart ${chart.canvas.id} (${chartId}) - Setting SP dataset ${index} ('${dataset.label}') visibility to ${show}`);
                 spDatasetToggled = true;
             }
         });
-        // Only update if an SP dataset was actually toggled for this chart
         if (spDatasetToggled) {
-            chart.update(); // Update the chart to reflect visibility changes
+            chart.update(); 
                 console.log(`[chartRenderer] Updated chart ${chart.canvas.id} (${chartId})`);
             }
         } catch (error) {
             console.error(`[chartRenderer] Error toggling visibility for chart ${chartId}:`, error);
-             // Potentially remove the instance if it's causing persistent errors?
-            // delete chartInstances[chartId]; 
         }
     });
 }
@@ -309,7 +623,7 @@ function createMetricsTable(
     const headerRow = thead.insertRow();
     const tbody = table.createTBody();
 
-    const secondaryAvailable = metadata.secondary_data_available; // Overall flag
+    const secondaryAvailable = metadata.secondary_data_available; 
     const primaryFundColsMeta = metadata.fund_col_names || [];
     const primaryBenchColMeta = metadata.benchmark_col_name;
     const secondaryFundColsMeta = metadata.secondary_fund_col_names || [];
@@ -318,14 +632,13 @@ function createMetricsTable(
 
     if (!metrics || Object.keys(metrics).length === 0) {
         console.warn(`[createMetricsTable] Metrics object is null or empty for chart type: ${chartType}.`);
-        headerRow.innerHTML = '<th>Metrics</th>'; // Simple header
+        headerRow.innerHTML = '<th>Metrics</th>';
         const row = tbody.insertRow();
         const cell = row.insertCell();
         cell.textContent = 'Metrics not available.';
         return table;
     }
 
-    // --- Define Headers based on Chart Type --- 
     let headers = ['Column', `Latest Value (${latestDate})`, 'Change', 'Mean', 'Max', 'Min', 'Change Z-Score'];
     let secondaryHeaders = ['S&P Latest', 'S&P Change', 'S&P Mean', 'S&P Max', 'S&P Min', 'S&P Z-Score'];
     let showSecondaryColumns = false;
@@ -333,7 +646,7 @@ function createMetricsTable(
     if (showSecondary) {
         if (chartType === 'relative') {
             showSecondaryColumns = Object.keys(metrics).some(key => key.startsWith(secondaryPrefix + 'Relative '));
-        } else { // chartType === 'main'
+        } else { 
             showSecondaryColumns = Object.keys(metrics).some(key => key.startsWith(secondaryPrefix) && !key.startsWith(secondaryPrefix + 'Relative '));
         }
     }
@@ -341,69 +654,6 @@ function createMetricsTable(
     headerRow.innerHTML = `<th>${headers.join('</th><th>')}</th>` + 
                          (showSecondaryColumns ? `<th class="text-muted">${secondaryHeaders.join('</th><th class="text-muted">')}</th>` : '');
 
-    // --- Populate Rows based on Chart Type --- 
-
-    const addRow = (displayName, baseKey, isSecondary = false) => {
-        const prefix = isSecondary ? secondaryPrefix : '';
-        const fullBaseKey = prefix + baseKey;
-        
-        // Check if *any* metric exists for this base key and prefix
-        const latestValKey = `${fullBaseKey} Latest Value`;
-        const changeKey = `${fullBaseKey} Change`;
-        const meanKey = `${fullBaseKey} Mean`;
-        const maxKey = `${fullBaseKey} Max`;
-        const minKey = `${fullBaseKey} Min`;
-        const zScoreKey = `${fullBaseKey} Change Z-Score`;
-
-        // Only add row if at least one relevant metric is present
-        if (
-            metrics.hasOwnProperty(latestValKey) || metrics.hasOwnProperty(changeKey) || 
-            metrics.hasOwnProperty(meanKey) || metrics.hasOwnProperty(maxKey) || 
-            metrics.hasOwnProperty(minKey) || metrics.hasOwnProperty(zScoreKey)
-        ) {
-            const row = tbody.insertRow();
-            const zScore = metrics[zScoreKey];
-            let zClass = '';
-            if (zScore !== null && typeof zScore !== 'undefined' && !isNaN(zScore)) {
-                const absZ = Math.abs(zScore);
-                if (absZ > 3) { zClass = 'very-high-z'; }
-                else if (absZ > 2) { zClass = 'high-z'; }
-        }
-            row.className = zClass;
-            
-            row.insertCell().textContent = displayName;
-            row.insertCell().textContent = formatNumber(metrics[latestValKey]);
-            row.insertCell().textContent = formatNumber(metrics[changeKey]);
-            row.insertCell().textContent = formatNumber(metrics[meanKey]);
-            row.insertCell().textContent = formatNumber(metrics[maxKey]);
-            row.insertCell().textContent = formatNumber(metrics[minKey]);
-            row.insertCell().textContent = formatNumber(metrics[zScoreKey]);
-
-            if (showSecondaryColumns && !isSecondary) {
-                // Add placeholder cells if primary row but secondary columns shown
-                for (let i = 0; i < secondaryHeaders.length; i++) {
-                    row.insertCell().textContent = '-';
-                }
-            }
-        } else if (isSecondary && showSecondaryColumns) {
-            // Add secondary row even if primary version doesn't exist, but only if secondary columns are shown
-            const row = tbody.insertRow();
-            row.insertCell().textContent = displayName;
-            row.insertCell().textContent = formatNumber(metrics[latestValKey]);
-            row.insertCell().textContent = formatNumber(metrics[changeKey]);
-            row.insertCell().textContent = formatNumber(metrics[meanKey]);
-            row.insertCell().textContent = formatNumber(metrics[maxKey]);
-            row.insertCell().textContent = formatNumber(metrics[minKey]);
-            row.insertCell().textContent = formatNumber(metrics[zScoreKey]);
-            
-            // Add empty primary cells
-             for (let i = 0; i < headers.length -1; i++) { // -1 for the name column
-                 row.insertCell(1).textContent = '-'; // Insert after name
-             }
-             row.className = 'text-muted'; // Mute the secondary row
-        }
-    };
-    
     const addPairedRow = (displayName, baseKey) => {
         const primaryExists = Object.keys(metrics).some(k => k.startsWith(baseKey) && !k.startsWith(secondaryPrefix));
         const secondaryExists = showSecondaryColumns && Object.keys(metrics).some(k => k.startsWith(secondaryPrefix + baseKey));
@@ -411,7 +661,7 @@ function createMetricsTable(
         if (primaryExists || secondaryExists) {
             const row = tbody.insertRow();
             const zScoreKey = `${baseKey} Change Z-Score`;
-            const zScore = metrics[zScoreKey]; // Use primary Z for highlight
+            const zScore = metrics[zScoreKey]; 
             let zClass = '';
             if (zScore !== null && typeof zScore !== 'undefined' && !isNaN(zScore)) {
                 const absZ = Math.abs(zScore);
@@ -421,7 +671,6 @@ function createMetricsTable(
             row.className = zClass;
 
             row.insertCell().textContent = displayName;
-            // Primary Metrics
             row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Latest Value`]) : '-';
             row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Change`]) : '-';
             row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Mean`]) : '-';
@@ -429,7 +678,6 @@ function createMetricsTable(
             row.insertCell().textContent = primaryExists ? formatNumber(metrics[`${baseKey} Min`]) : '-';
             row.insertCell().textContent = primaryExists ? formatNumber(metrics[zScoreKey]) : '-';
 
-            // Secondary Metrics (if columns are shown)
             if (showSecondaryColumns) {
                 row.insertCell().textContent = secondaryExists ? formatNumber(metrics[`${secondaryPrefix}${baseKey} Latest Value`]) : '-';
                 row.insertCell().textContent = secondaryExists ? formatNumber(metrics[`${secondaryPrefix}${baseKey} Change`]) : '-';
@@ -443,20 +691,16 @@ function createMetricsTable(
 
 
     if (chartType === 'relative') {
-        // Add row specifically for 'Relative' if its metrics exist
         addPairedRow('Relative (Port - Bench)', 'Relative');
-    } else { // chartType === 'main'
-        // Add Benchmark row first if it exists
+    } else { 
         if (primaryBenchColMeta) {
              addPairedRow(primaryBenchColMeta, primaryBenchColMeta);
         }
-        // Add rows for Fund columns
         primaryFundColsMeta.forEach(fundCol => {
             addPairedRow(fundCol, fundCol);
         });
     }
 
-    // Ensure tbody is not empty, add placeholder if needed
     if (tbody.rows.length === 0) {
         const row = tbody.insertRow();
         const cell = row.insertCell();
@@ -551,7 +795,7 @@ export function renderSingleSecurityChart(canvasId, chartData, securityId, metri
         console.error(`Error creating chart for ${securityId} - ${metricName}:`, error);
         ctx.parentElement.innerHTML = '<p class="text-danger">Error rendering chart.</p>';
     }
-} 
+}
 
 /**
  * Renders multiple charts onto a single page (like the Fund Detail page).
@@ -561,19 +805,16 @@ export function renderSingleSecurityChart(canvasId, chartData, securityId, metri
  */
 export function renderFundCharts(container, allChartData) {
     console.log("[chartRenderer] Rendering charts for fund detail page.");
-    console.log("[chartRenderer] Received Data:", JSON.parse(JSON.stringify(allChartData))); // Deep copy for logging
+    console.log("[chartRenderer] Received Data:", JSON.parse(JSON.stringify(allChartData)));
     
-    container.innerHTML = ''; // Clear previous content
-    // Clear previous chart instances for this specific rendering context
+    container.innerHTML = ''; 
     Object.keys(chartInstances).forEach(key => delete chartInstances[key]); 
 
     if (!allChartData || !Array.isArray(allChartData) || allChartData.length === 0) {
         console.warn("[chartRenderer] No chart data provided for the fund page.");
-        // Message should be handled by the template, but log it here.
         return;
     }
 
-    // Iterate through each metric's chart data
     allChartData.forEach((metricData, index) => {
         if (!metricData || !metricData.metricName || !metricData.labels || !metricData.datasets) {
             console.warn(`[chartRenderer] Skipping chart at index ${index} due to missing data:`, metricData);
@@ -581,53 +822,44 @@ export function renderFundCharts(container, allChartData) {
         }
 
         const metricName = metricData.metricName;
-        const safeMetricName = metricName.replace(/[^a-zA-Z0-9]/g, '-') || 'metric'; // Create a CSS-safe ID part
+        const safeMetricName = metricName.replace(/[^a-zA-Z0-9]/g, '-') || 'metric'; 
         console.log(`[chartRenderer] Processing metric: ${metricName}`);
 
-        // Create wrapper div for each chart (using Bootstrap columns for layout)
         const wrapper = document.createElement('div');
-        // Uses the col classes defined in the template's fundChartsArea (row-cols-1 row-cols-lg-2)
         wrapper.className = `chart-container-wrapper fund-chart-item`; 
         wrapper.id = `fund-chart-wrapper-${safeMetricName}-${index}`;
 
-        // Create Chart Canvas
         const canvas = document.createElement('canvas');
-        // Ensure unique ID for each canvas
         canvas.id = `fund-chart-${safeMetricName}-${index}`; 
         canvas.className = 'chart-canvas';
         wrapper.appendChild(canvas);
         console.log(`[chartRenderer] Created canvas with id: ${canvas.id} for metric: ${metricName}`);
 
-        // Append the wrapper to the main container
         container.appendChild(wrapper);
         console.log(`[chartRenderer] Appended wrapper for ${metricName} to container.`);
 
-        // Render Chart using the existing time series chart function
-        // Use setTimeout to ensure the canvas is in the DOM and sized
         setTimeout(() => {
             console.log(`[chartRenderer] Preparing to render chart for metric: ${metricName} in setTimeout.`);
              if (canvas.getContext('2d')) {
                  console.log(`[chartRenderer] Canvas context obtained. Calling createTimeSeriesChart with:`, {
                     canvasId: canvas.id,
-                    data: JSON.parse(JSON.stringify(metricData)), // Log deep copy
-                    titlePrefix: metricName, // Use metric name as the main title part
-                    fundCodeOrSecurityId: null, // Not needed for title here
-                    zScoreForTitle: null, // No specific Z-score for the whole page/chart
-                    is_missing_latest: null // Not applicable here
+                    data: JSON.parse(JSON.stringify(metricData)), 
+                    titlePrefix: metricName, 
+                    fundCodeOrSecurityId: null, 
+                    zScoreForTitle: null, 
+                    is_missing_latest: null 
                  });
                  
-                 // Create the chart AND store the instance
                  const chartInstance = createTimeSeriesChart(
-                     canvas.id,         // The unique canvas ID
-                     metricData,        // Data object with labels and datasets
-                     metricName,        // Title prefix (e.g., "Yield")
-                     null,              // fundCodeOrSecurityId (not needed for title)
-                     null,              // zScoreForTitle (not applicable)
-                     null               // is_missing_latest (not applicable)
+                     canvas.id,         
+                     metricData,        
+                     metricName,        
+                     null,              
+                     null,              
+                     null               
                  );
                  
                  if (chartInstance) {
-                     // Store the instance in the module-level object
                      chartInstances[canvas.id] = chartInstance;
                      console.log(`[chartRenderer] Stored chart instance for ${metricName} with key ${canvas.id}`);
                  } else {
@@ -638,13 +870,10 @@ export function renderFundCharts(container, allChartData) {
                 const errorP = document.createElement('p');
                 errorP.textContent = `Error rendering chart for ${metricName}.`;
                 errorP.className = 'text-danger';
-                canvas.parentNode.replaceChild(errorP, canvas); // Replace canvas with error message
+                canvas.parentNode.replaceChild(errorP, canvas); 
             }
         }, 0); 
     });
 
     console.log("[chartRenderer] Finished rendering all fund charts.");
 } 
-
-// Export necessary functions
-// REMOVED: export { toggleSecondaryDataVisibility }; // Export toggle function 

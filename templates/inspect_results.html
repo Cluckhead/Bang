@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inspect Results - {{ metric_name }} ({{ fund_code }})</title>
+    <!-- Add link to your main CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        h1, h2 { color: #333; }
+        .results-container { display: flex; gap: 40px; flex-wrap: wrap; }
+        .contribution-list { border: 1px solid #ccc; padding: 15px; border-radius: 5px; min-width: 400px; }
+        .contribution-list h3 { margin-top: 0; color: #555; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .no-data { color: #888; font-style: italic; }
+    </style>
+</head>
+<body>
+    <!-- Basic Navigation/Header (Optional) -->
+    <nav>
+        <a href="{{ url_for('main.index') }}">Home</a> |
+        <a href="{{ url_for('metric.metric_page', metric_name=metric_name) }}">Back to {{ metric_name }} Metric Page</a>
+    </nav>
+
+    <h1>Inspect Metric Contribution</h1>
+    <h2>{{ metric_name }} for Fund: {{ fund_code }}</h2>
+    <p><strong>Date Range:</strong> {{ start_date }} to {{ end_date }}</p>
+
+    <div class="results-container">
+        <!-- Top Contributors -->
+        <div class="contribution-list">
+            <h3>Top Contributors</h3>
+            {% if top_contributors %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Security ID (ISIN)</th>
+                            <th>Security Name</th>
+                            <th>Contribution Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in top_contributors %}
+                        <tr>
+                            <td><a href="{{ url_for('security.security_details', security_id=item.ISIN, metric_name=metric_name) }}">{{ item.ISIN }}</a></td>
+                            <td>{{ item['Security Name'] }}</td>
+                            <td>{{ item.ContributionDifference | round(4) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="no-data">No significant contributors found for this period.</p>
+            {% endif %}
+        </div>
+
+        <!-- Top Detractors -->
+        <div class="contribution-list">
+            <h3>Top Detractors</h3>
+            {% if top_detractors %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Security ID (ISIN)</th>
+                            <th>Security Name</th>
+                            <th>Contribution Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in top_detractors %}
+                        <tr>
+                            <td><a href="{{ url_for('security.security_details', security_id=item.ISIN, metric_name=metric_name) }}">{{ item.ISIN }}</a></td>
+                            <td>{{ item['Security Name'] }}</td>
+                            <td>{{ item.ContributionDifference | round(4) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="no-data">No significant detractors found for this period.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add link to your JS file if needed for interactivity -->
+    <!-- <script src="{{ url_for('static', filename='js/inspect_results.js') }}"></script> -->
+</body>
+</html> 
