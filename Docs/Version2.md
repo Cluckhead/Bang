@@ -17,7 +17,6 @@
 
 ### Features v2.1
 - Watch list for securities - Greg's issue
-- add YTM/YTW to securities page
 - add position chart
 - widen securities page
 - Add Is distressed as a filter

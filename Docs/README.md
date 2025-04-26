@@ -20,6 +20,8 @@ This application provides a web interface to load, process, and check financial 
     *   Date parsing is now fully flexible: supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others.
     *   Server-side pagination, filtering (search, dropdowns), and sorting
     *   Routes: `/security/summary` (main page), `/security/details/<metric_name>/<security_id>` (detail view)
+    *   **Detail view now includes time-series charts for YTM and YTW (with S&P overlays), in addition to Duration, Spread, and Spread Duration. Data is loaded from `sec_YTM.csv`, `sec_YTMSP.csv`, `sec_YTW.csv`, and `sec_YTWSP.csv`.**
+    *   Uses an extended color palette for clear chart distinction.
 
 *   **Generic Data Comparison:** Compare pairs of security-level datasets (e.g., Spread vs SpreadSP, Duration vs DurationSP).
     *   Configurable via `COMPARISON_CONFIG` in `config.py`.
@@ -182,6 +184,10 @@ graph TD
     G --> G12(w_secs.csv);
     G --> G13(att_factors.csv);
     G --> G14(users.csv);
+    G --> G15(sec_YTM.csv);
+    G --> G16(sec_YTMSP.csv);
+    G --> G17(sec_YTW.csv);
+    G --> G18(sec_YTWSP.csv);
 
     H --> H1(config.py);
     H --> H2(utils.py);
@@ -216,6 +222,7 @@ graph TD
 | `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P. **Note:** The `L0 Total` column represents the returns for each security/fund/date. |
 | `users.csv` | List of users for issue tracking dropdowns (`Name` column) |
 | `att_factors_<FUNDCODE>.csv` | Attribution data for a specific fund, used by all attribution dashboards. Replaces the single `att_factors.csv` file. | Used by `/attribution/summary`, `/attribution/security`, `/attribution/radar`, `/attribution/charts` |
+| `sec_YTM.csv`, `sec_YTMSP.csv`, `sec_YTW.csv`, `sec_YTWSP.csv` | Security-level YTM and YTW data (main and S&P overlays), used for new charts on the security details page. |
 
 ### Python Core Modules
 

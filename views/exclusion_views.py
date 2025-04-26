@@ -2,6 +2,9 @@
 This module defines the Flask Blueprint for handling security exclusion management.
 It provides routes to view the current exclusion list and add new securities
 to the list.
+
+Major update: The available securities list for exclusions is now loaded from reference.csv
+and includes ISIN, Security Name, CCY, Security Sub Type, and Country Of Risk for client-side filtering.
 """
 import os
 import pandas as pd
@@ -52,58 +55,77 @@ def load_exclusions(data_folder_path: str):
         return [] # Return empty list on error
 
 def load_available_securities(data_folder_path: str):
-    """Loads the list of available security IDs from the source file.
+    """
+    Loads the list of available securities from reference.csv, including ISIN, Security Name,
+    CCY, Security Sub Type, and Country Of Risk. This supports client-side filtering and
+    searching for the exclusions page.
 
     Args:
         data_folder_path (str): The absolute path to the data folder.
 
     Returns:
-        list[str]: A sorted list of unique available security IDs, or [] if error.
+        list[dict]: A list of dicts, each with keys: ISIN, Security Name, CCY, Security Sub Type, Country Of Risk.
     """
     if not data_folder_path:
         logger.error("No data_folder_path provided to load_available_securities.")
         return []
-    securities_file_path = os.path.join(data_folder_path, SECURITIES_SOURCE_FILE)
+    reference_file_path = os.path.join(data_folder_path, 'reference.csv')
     try:
-        if os.path.exists(securities_file_path):
-            # Load only the necessary column
-            # Use security_processing logic if more complex loading is needed
-            df_securities = pd.read_csv(securities_file_path, usecols=[SECURITY_ID_COLUMN], encoding_errors='replace', on_bad_lines='skip')
-            df_securities.dropna(subset=[SECURITY_ID_COLUMN], inplace=True)
-            security_ids = df_securities[SECURITY_ID_COLUMN].astype(str).unique().tolist()
-            security_ids.sort() # Sort for dropdown consistency
-            return security_ids
+        if os.path.exists(reference_file_path):
+            # Only load the required columns for performance
+            usecols = ['ISIN', 'Security Name', 'CCY', 'Security Sub Type', 'Country Of Risk']
+            df = pd.read_csv(reference_file_path, usecols=usecols, encoding_errors='replace', on_bad_lines='skip')
+            df = df.dropna(subset=['ISIN', 'Security Name'])
+            # Remove duplicates by ISIN (keep first occurrence)
+            df = df.drop_duplicates(subset=['ISIN'])
+            # Convert to list of dicts for template/JS
+            securities = df.to_dict('records')
+            # Sort by ISIN for consistency
+            securities.sort(key=lambda x: x['ISIN'])
+            return securities
         else:
-            logger.warning(f"Securities source file '{SECURITIES_SOURCE_FILE}' not found at {securities_file_path}.")
+            logger.warning(f"reference.csv not found at {reference_file_path}.")
             return []
-    except KeyError:
-        logger.error(f"Column '{SECURITY_ID_COLUMN}' not found in '{SECURITIES_SOURCE_FILE}'. Cannot load available securities.")
-        return []
     except Exception as e:
-        logger.error(f"Error loading available securities from {securities_file_path}: {e}")
+        logger.error(f"Error loading available securities from {reference_file_path}: {e}")
         return []
 
-def add_exclusion(data_folder_path: str, security_id, end_date_str, comment):
-    """Adds a new exclusion to the CSV file.
-
-    Args:
-        data_folder_path (str): The absolute path to the data folder.
-        security_id:
-        end_date_str:
-        comment:
-
-    Returns:
-        tuple[bool, str]: (Success status, Message)
+def load_users(data_folder_path: str):
     """
+    Loads the list of users from users.csv for the 'Added By' dropdown.
+    Returns a list of user names (strings).
+    """
+    if not data_folder_path:
+        logger.error("No data_folder_path provided to load_users.")
+        return []
+    users_file_path = os.path.join(data_folder_path, 'users.csv')
+    try:
+        if os.path.exists(users_file_path):
+            df = pd.read_csv(users_file_path)
+            if 'Name' in df.columns:
+                users = df['Name'].dropna().astype(str).tolist()
+                return users
+            else:
+                logger.warning("'Name' column not found in users.csv.")
+                return []
+        else:
+            logger.warning(f"users.csv not found at {users_file_path}.")
+            return []
+    except Exception as e:
+        logger.error(f"Error loading users from {users_file_path}: {e}")
+        return []
+
+def add_exclusion(data_folder_path: str, security_id, end_date_str, comment, user):
+    """Adds a new exclusion to the CSV file, now including the user who added it."""
     if not data_folder_path:
         logger.error("No data_folder_path provided to add_exclusion.")
         return False, "Internal Server Error: Data folder path not configured."
     exclusions_path = os.path.join(data_folder_path, EXCLUSIONS_FILE)
     try:
         # Basic validation
-        if not security_id or not comment:
-            logger.warning("Attempted to add exclusion with missing SecurityID or Comment.")
-            return False, "Security ID and Comment are required."
+        if not security_id or not comment or not user:
+            logger.warning("Attempted to add exclusion with missing SecurityID, Comment, or User.")
+            return False, "Security ID, Comment, and User are required."
 
         add_date = datetime.now().strftime('%Y-%m-%d')
         # Parse end_date, allow it to be empty
@@ -113,7 +135,8 @@ def add_exclusion(data_folder_path: str, security_id, end_date_str, comment):
             'SecurityID': [str(security_id)],
             'AddDate': [add_date],
             'EndDate': [end_date],
-            'Comment': [str(comment)]
+            'Comment': [str(comment)],
+            'User': [str(user)]
         })
 
         # Append to CSV, create header if file doesn't exist or is empty
@@ -122,7 +145,7 @@ def add_exclusion(data_folder_path: str, security_id, end_date_str, comment):
         write_header = not file_exists or is_empty
 
         new_exclusion.to_csv(exclusions_path, mode='a', header=write_header, index=False)
-        logger.info(f"Added exclusion for SecurityID: {security_id}")
+        logger.info(f"Added exclusion for SecurityID: {security_id} by {user}")
         return True, "Exclusion added successfully."
     except Exception as e:
         logger.error(f"Error adding exclusion to {exclusions_path}: {e}")
@@ -195,9 +218,10 @@ def manage_exclusions():
         security_id = request.form.get('security_id')
         end_date_str = request.form.get('end_date')
         comment = request.form.get('comment')
+        user = request.form.get('user')
 
         # Pass the absolute data_folder path to the helper function
-        success, msg = add_exclusion(data_folder, security_id, end_date_str, comment)
+        success, msg = add_exclusion(data_folder, security_id, end_date_str, comment, user)
         if success:
             # Redirect to the same page using GET to prevent form resubmission
             return redirect(url_for('exclusion_bp.manage_exclusions', _external=True))
@@ -210,10 +234,12 @@ def manage_exclusions():
     # Pass the absolute data_folder path to the helper functions
     current_exclusions = load_exclusions(data_folder)
     available_securities = load_available_securities(data_folder)
+    users = load_users(data_folder)
 
     return render_template('exclusions_page.html',
                            exclusions=current_exclusions,
                            available_securities=available_securities,
+                           users=users,
                            message=message,
                            message_type=message_type)
 

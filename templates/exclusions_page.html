@@ -3,7 +3,7 @@
 {% block title %}Manage Security Exclusions{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container" style="width: 90%; max-width: 90vw; min-width: 900px;">
     <h2>Manage Security Exclusions</h2>
     <hr>
 
@@ -24,9 +24,11 @@
                     <thead>
                         <tr>
                             <th>Security ID</th>
+                            <th>Is Distressed</th>
                             <th>Date Added</th>
                             <th>End Date</th>
                             <th>Comment</th>
+                            <th>Added By</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -34,9 +36,11 @@
                         {% for exclusion in exclusions %}
                             <tr>
                                 <td>{{ exclusion.SecurityID }}</td>
+                                <td>{{ exclusion['Is Distressed'] if 'Is Distressed' in exclusion else '' }}</td>
                                 <td>{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else 'N/A' }}</td>
                                 <td>{{ exclusion.EndDate.strftime('%Y-%m-%d') if exclusion.EndDate else '' }}</td>
-                                <td>{{ exclusion.Comment }}</td>
+                                <td style="max-width: 350px; word-break: break-word;">{{ exclusion.Comment }}</td>
+                                <td>{{ exclusion.User if exclusion.User is defined else '' }}</td>
                                 <td>
                                     <form method="POST" action="{{ url_for('exclusion_bp.remove_exclusion_route') }}" style="display: inline;">
                                         <input type="hidden" name="security_id" value="{{ exclusion.SecurityID }}">
@@ -57,13 +61,53 @@
         <div class="col-md-5">
             <h4>Add New Exclusion</h4>
             <form method="POST" action="{{ url_for('exclusion_bp.manage_exclusions') }}">
+                {# --- Filter dropdowns for CCY, Security Sub Type, Country Of Risk --- #}
                 <div class="mb-3">
-                    <label for="security-search-input" class="form-label">Search & Select Security ID:</label>
+                    <div class="row g-2">
+                        <div class="col">
+                            <label for="filter-ccy" class="form-label">CCY</label>
+                            <select id="filter-ccy" class="form-select form-select-sm">
+                                <option value="">All</option>
+                                {% set ccy_options = available_securities | map(attribute='CCY') | unique | list | sort %}
+                                {% for ccy in ccy_options %}
+                                    <option value="{{ ccy }}">{{ ccy }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label for="filter-subtype" class="form-label">Security Sub Type</label>
+                            <select id="filter-subtype" class="form-select form-select-sm">
+                                <option value="">All</option>
+                                {% set subtype_options = available_securities | map(attribute='Security Sub Type') | unique | list | sort %}
+                                {% for subtype in subtype_options %}
+                                    <option value="{{ subtype }}">{{ subtype }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label for="filter-country" class="form-label">Country Of Risk</label>
+                            <select id="filter-country" class="form-select form-select-sm">
+                                <option value="">All</option>
+                                {% set country_options = available_securities | map(attribute='Country Of Risk') | unique | list | sort %}
+                                {% for country in country_options %}
+                                    <option value="{{ country }}">{{ country }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                {# --- End filter dropdowns --- #}
+
+                <div class="mb-3">
+                    <label for="security-search-input" class="form-label">Search & Select Security:</label>
                     <input type="text" id="security-search-input" class="form-control mb-2" placeholder="Type to filter securities...">
                     <select class="form-select" id="security-select" name="security_id" required>
-                        <option value="" disabled selected>Select a Security ID</option>
-                        {% for sec_id in available_securities %}
-                            <option value="{{ sec_id }}">{{ sec_id }}</option>
+                        <option value="" disabled selected>Select a Security</option>
+                        {# Show ISIN - Security Name in the dropdown, and add Is Distressed as a data attribute #}
+                        {% for sec in available_securities %}
+                            <option value="{{ sec.ISIN }}" data-ccy="{{ sec.CCY }}" data-subtype="{{ sec['Security Sub Type'] }}" data-country="{{ sec['Country Of Risk'] }}" data-distressed="{{ sec['Is Distressed'] if 'Is Distressed' in sec else '' }}">
+                                {{ sec.ISIN }} - {{ sec['Security Name'] }}{% if sec['Is Distressed'] == 'TRUE' %} (Distressed){% endif %}
+                            </option>
                         {% endfor %}
                     </select>
                 </div>
@@ -72,8 +116,17 @@
                     <input type="date" class="form-control" id="end_date" name="end_date">
                 </div>
                 <div class="mb-3">
+                    <label for="user-select" class="form-label">Added By (User):</label>
+                    <select class="form-select" id="user-select" name="user" required>
+                        <option value="" disabled selected>Select User</option>
+                        {% for user in users %}
+                            <option value="{{ user }}">{{ user }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
                     <label for="comment" class="form-label">Comment (Required):</label>
-                    <textarea class="form-control" id="comment" name="comment" rows="3" required></textarea>
+                    <textarea class="form-control" id="comment" name="comment" rows="4" style="width: 98%; min-width: 400px; max-width: 99%;"></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary">Add Exclusion</button>
             </form>
@@ -84,48 +137,66 @@
 {% endblock %}
 
 {% block scripts %}
-{{ super() }} {# Include scripts from base.html #}
-{# We will add specific JS for the dynamic dropdown here later #}
+{{ super() }}
 <script>
-    // Basic dynamic filtering for the dropdown
-    document.getElementById('security-search-input').addEventListener('input', function() {
-        let filter = this.value.toLowerCase();
-        let select = document.getElementById('security-select');
-        let options = select.options;
-        let firstVisibleOption = null;
+// --- Client-side filtering for the security dropdown ---
+// This script filters the main security dropdown based on the three filter dropdowns and the search box.
+// It is designed to be fast and work for up to 10,000 options.
 
-        for (let i = 0; i < options.length; i++) {
-            let option = options[i];
-            // Skip the placeholder option
-            if (option.value === "") {
-                option.style.display = ""; // Always show placeholder if input is empty, hide otherwise
-                option.style.display = filter ? "none" : "";
-                continue;
-            }
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('security-search-input');
+    const select = document.getElementById('security-select');
+    const filterCCY = document.getElementById('filter-ccy');
+    const filterSubtype = document.getElementById('filter-subtype');
+    const filterCountry = document.getElementById('filter-country');
 
-            let txtValue = option.textContent || option.innerText;
-            if (txtValue.toLowerCase().indexOf(filter) > -1) {
-                option.style.display = "";
-                if (!firstVisibleOption) {
-                     firstVisibleOption = option; // Keep track of the first match
-                }
-            } else {
-                option.style.display = "none";
+    // Store all options in memory for fast filtering
+    const allOptions = Array.from(select.options).filter(opt => opt.value !== ""); // Exclude placeholder
+
+    // Helper: Apply all filters and search
+    function applyFilters() {
+        const search = searchInput.value.trim().toLowerCase();
+        const ccy = filterCCY.value;
+        const subtype = filterSubtype.value;
+        const country = filterCountry.value;
+        let firstVisible = null;
+
+        // Hide all options initially
+        allOptions.forEach(opt => {
+            let show = true;
+            // Filter by CCY
+            if (ccy && opt.getAttribute('data-ccy') !== ccy) show = false;
+            // Filter by Subtype
+            if (subtype && opt.getAttribute('data-subtype') !== subtype) show = false;
+            // Filter by Country
+            if (country && opt.getAttribute('data-country') !== country) show = false;
+            // Filter by search (ISIN or Name)
+            if (show && search) {
+                const text = opt.textContent.toLowerCase();
+                if (!text.includes(search)) show = false;
             }
-        }
-         // Optionally, select the first visible option if the user hasn't selected one manually
-        // This part can be enhanced, maybe select only if input length > N or on specific event
-        // if (filter && firstVisibleOption && select.selectedIndex <= 0) {
-            // select.value = firstVisibleOption.value;
-        // }
+            opt.style.display = show ? '' : 'none';
+            if (show && !firstVisible) firstVisible = opt;
+        });
+        // Optionally, select the first visible option if none is selected
+        // (Do not auto-select to avoid accidental submissions)
+    }
+
+    // Event listeners for all filters
+    searchInput.addEventListener('input', applyFilters);
+    filterCCY.addEventListener('change', applyFilters);
+    filterSubtype.addEventListener('change', applyFilters);
+    filterCountry.addEventListener('change', applyFilters);
+
+    // Optional: Reset search/filter when dropdown is focused
+    select.addEventListener('focus', function() {
+        // Uncomment to clear search on focus:
+        // searchInput.value = '';
+        // applyFilters();
     });
 
-    // Reset filter when dropdown is clicked (to show all options again initially)
-    document.getElementById('security-select').addEventListener('mousedown', function(){
-       // Optional: Uncomment below to clear search on dropdown click
-       // document.getElementById('security-search-input').value = '';
-       // let event = new Event('input');
-       // document.getElementById('security-search-input').dispatchEvent(event);
-    });
+    // Initial filter (in case filters are pre-selected)
+    applyFilters();
+});
 </script>
 {% endblock %} 

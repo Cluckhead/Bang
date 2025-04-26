@@ -125,8 +125,11 @@ This feature monitors and identifies stale or missing data in security and curve
 
 - **Date parsing is fully flexible:** Security-level data now supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others.
 
-*   **Security Level Analysis:** Allows comparison of security-level data files (`sec_*.csv`) to identify discrepancies.
-*   **Max/Min Value Breach:** Checks security-level data (`sec_*.csv`, including Spread, YTM, and YTW) against configurable maximum and minimum value thresholds defined in `config.py` (`MAXMIN_THRESHOLDS`). Default thresholds for YTM/YTW are 0% (min) and 100% (max).
+- **Security-Level Analysis:**
+    - The Securities summary and details pages now include time-series charts for YTM and YTW (with S&P overlays), in addition to Duration, Spread, and Spread Duration. Data is loaded from `sec_YTM.csv`, `sec_YTMSP.csv`, `sec_YTW.csv`, and `sec_YTWSP.csv`.
+    - These charts use an extended color palette for clear distinction.
+    - Allows comparison of security-level data files (`sec_*.csv`) to identify discrepancies.
+    - **Max/Min Value Breach:** Checks security-level data (`sec_*.csv`, including Spread, YTM, and YTW) against configurable maximum and minimum value thresholds defined in `config.py` (`MAXMIN_THRESHOLDS`). Default thresholds for YTM/YTW are 0% (min) and 100% (max).
 
 ## Views and Functionality
 
