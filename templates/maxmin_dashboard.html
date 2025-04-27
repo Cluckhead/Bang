@@ -2,6 +2,7 @@
     Purpose: Dashboard for Max/Min Value Breach feature. Shows summary of max/min breaches for configured files.
     Can display all files or filter by group.
     Allows temporary threshold overrides.
+    Layout: Dashboard grid with summary tiles as cards. H2 heading for main title. Card border and footer use status colors based on breach status. Buttons styled as danger/warning outline.
 #}
 {% extends 'base.html' %}
 
@@ -9,7 +10,7 @@
 
 {% block content %}
 <div class="p-4"> {# Replaced container mt-4 #}
-    <h1 class="text-3xl font-bold font-heading mb-2">{{ dashboard_title or 'Max/Min Value Breach Dashboard' }}</h1>
+    <h2 class="text-3xl font-bold font-heading mb-2">{{ dashboard_title or 'Max/Min Value Breach Dashboard' }}</h2>
     <p class="text-base text-gray-700 mb-4">Overview of securities breaching configured maximum or minimum value thresholds.</p>
     
     {# Determine form action URL based on whether a group is active #}

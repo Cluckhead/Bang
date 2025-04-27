@@ -3,8 +3,19 @@
 {% block title %}Manage Security Exclusions{% endblock %}
 
 {% block content %}
+{#
+    Purpose: Exclusions management page.
+    Allows users to view, add, and remove security exclusions.
+    Layout: Two-column grid (list left, form right) on large screens, single column on small screens.
+    Cards: Exclusions list and add form are wrapped in styled cards.
+    Typography: H2/H4 headings, table/form label fonts per style guide.
+    Buttons: 'Remove' (Danger), 'Add Exclusion' (Primary), with hover/focus states.
+    Tables: Styled per Section 5.2 (hairline dividers, row hover, sticky header optional).
+    Forms: Inputs, selects, textarea styled per Section 7.
+    Interactions: Button/card hover, empty state message.
+#}
 <div class="p-4">
-    <h1 class="text-2xl font-bold font-heading mb-3">Manage Security Exclusions</h1>
+    <h2 class="text-2xl font-bold font-heading mb-3">Manage Security Exclusions</h2>
 
     {% if message %}
         {% set alert_colors = {

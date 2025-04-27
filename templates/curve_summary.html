@@ -2,6 +2,7 @@
     Purpose: Displays a summary of yield curve checks for different currencies.
     Highlights currencies with potential issues like stale or missing data.
     Provides links to view detailed curve data for each currency.
+    Layout: Main content area. Table is wrapped in a styled card. H2 heading for main title. Status badges use Tailwind status colors. Buttons styled as secondary accent.
 #}
 {% extends "base.html" %}
 
@@ -9,7 +10,7 @@
 
 {% block content %}
 <div class="p-4"> {# Replaced container mt-4 #}
-    <h1 class="text-2xl font-bold font-heading mb-2">Yield Curve Check Summary</h1>
+    <h2 class="text-2xl font-bold font-heading mb-2">Yield Curve Check Summary</h2>
     <p class="text-lg text-gray-700 mb-1">Summary of potential inconsistencies found in the yield curve data for the latest available date: <strong class="font-semibold">{{ latest_date }}</strong>.</p>
     <p class="text-sm text-gray-600 mb-4">Checks focus on stale and missing data as the most important issues for yield curve quality.</p>
 

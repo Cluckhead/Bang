@@ -1,6 +1,7 @@
 {#
     Purpose: Weight Check Page. Displays Fund and Benchmark weights from specified files,
              highlighting any sums that are not exactly 100%.
+    Layout: Main content area. Fund and Benchmark tables are wrapped in styled cards. H2 heading for main title. Table cells use status color for non-100% values. Buttons styled as secondary accent.
 #}
 {% extends "base.html" %}
 
@@ -8,7 +9,7 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold font-merriweather mb-4">Weight Check (100% Target)</h1>
+    <h2 class="text-3xl font-bold font-merriweather mb-4">Weight Check (100% Target)</h2>
     <p class="mb-6 text-gray-700">The following tables show weights from <code>{{ fund_filename }}</code> and <code>{{ bench_filename }}</code>. Cells highlighted in <span class="text-red-600 font-semibold">red</span> indicate weights that are not exactly 100.00%.</p>
 
     {% macro render_weight_table(title, filename, data, date_headers) %}

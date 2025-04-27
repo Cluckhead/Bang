@@ -1,204 +1,208 @@
 {#
-    watchlist_page.html
-    Purpose: Displays and manages the global Watchlist feature.
-    - Shows all active and cleared watchlist entries
-    - Allows adding a new security to the watchlist (now via popup)
-    - Allows clearing (not deleting) entries, recording who/why/when
-    - ISIN is a clickable link to security details
-    - Cleared entries are hidden by default, toggle to show
+    Purpose: Watchlist management page.
+    Displays and manages the global Watchlist feature. Shows all active and cleared watchlist entries. Allows adding a new security to the watchlist (via popup) and clearing entries. ISIN is a clickable link to security details. Cleared entries are hidden by default, toggle to show.
+    Layout: Main content area. Table is wrapped in a styled card. H2 heading for main title. Status badges use Tailwind status colors. Buttons styled as success/danger. Modals styled as cards.
 #}
 {% extends 'base.html' %}
 
 {% block title %}Watchlist{% endblock %}
 
 {% block content %}
-<div class="container" style="width: 98vw; max-width: 1800px; min-width: 900px;">
-    <h2>Watchlist</h2>
-    <hr>
+<div class="max-w-7xl mx-auto px-4 py-6">
+    <h2 class="text-2xl font-bold font-heading mb-3">Watchlist</h2>
 
     {# Display messages if any #}
     {% if message %}
-        <div class="alert alert-{{ message_type }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="mb-4 p-3 border rounded-md text-sm flex justify-between items-center 
+            {% if message_type == 'success' %}border-green-300 bg-green-50 text-green-700
+            {% elif message_type == 'warning' %}border-yellow-300 bg-yellow-50 text-yellow-700
+            {% elif message_type == 'danger' %}border-red-300 bg-red-50 text-red-700
+            {% else %}border-blue-300 bg-blue-50 text-blue-700{% endif %}">
+            <span>{{ message }}</span>
         </div>
     {% endif %}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, msg in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-            {{ msg }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          <div class="mb-4 p-3 border rounded-md text-sm flex justify-between items-center 
+            {% if category == 'success' %}border-green-300 bg-green-50 text-green-700
+            {% elif category == 'warning' %}border-yellow-300 bg-yellow-50 text-yellow-700
+            {% elif category == 'danger' %}border-red-300 bg-red-50 text-red-700
+            {% else %}border-blue-300 bg-blue-50 text-blue-700{% endif %}">
+            <span>{{ msg }}</span>
           </div>
         {% endfor %}
       {% endif %}
     {% endwith %}
 
-    <div class="mb-3 d-flex justify-content-between align-items-center">
-        <div>
-            <label class="form-check-label me-2" for="showClearedToggle"><strong>Show Cleared Entries</strong></label>
-            <input class="form-check-input" type="checkbox" id="showClearedToggle">
+    <div class="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div class="flex items-center gap-2">
+            <label for="showClearedToggle" class="text-sm font-medium text-gray-700">Show Cleared Entries</label>
+            <input class="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" type="checkbox" id="showClearedToggle">
         </div>
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addWatchlistModal">Add to Watchlist</button>
+        <button class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition" onclick="document.getElementById('addWatchlistModal-tailwind').classList.remove('hidden')">Add to Watchlist</button>
     </div>
 
-    <div class="table-responsive">
-    <table class="table table-striped table-bordered w-100" id="watchlist-table">
-        <thead class="table-light">
-            <tr>
-                <th>ISIN</th>
-                <th>Security Name</th>
-                <th style="min-width: 350px; width: 35%;">Reason</th>
-                <th>Date Added</th>
-                <th>Added By</th>
-                <th>Last Checked</th>
-                <th>Status</th>
-                {# Cleared columns only shown if showCleared is true #}
-                <th class="cleared-col" style="display:none;">Cleared By</th>
-                <th class="cleared-col" style="display:none;">Cleared Date</th>
-                <th class="cleared-col" style="display:none;">Clear Reason</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for entry in watchlist %}
-                <tr class="watchlist-row {% if entry.Status == 'Cleared' %}table-secondary cleared-row{% endif %}" {% if entry.Status == 'Cleared' %}style="display:none;"{% endif %}>
-                    <td>
-                        <a href="{{ url_for('watchlist_bp.check_watchlist_entry', isin=entry.ISIN) }}" class="fw-bold text-decoration-underline">{{ entry.ISIN }}</a>
-                    </td>
-                    <td>{{ entry['Security Name'] }}</td>
-                    <td style="min-width: 350px; width: 35%;">{{ entry.Reason }}</td>
-                    <td>{{ entry.DateAdded }}</td>
-                    <td>{{ entry.AddedBy }}</td>
-                    <td>{{ entry.LastChecked or 'Never' }}</td>
-                    <td>
-                        {% if entry.Status == 'Active' %}
-                            <span class="badge bg-success">Active</span>
-                        {% else %}
-                            <span class="badge bg-secondary">Cleared</span>
-                        {% endif %}
-                    </td>
-                    <td class="cleared-col" style="display:none;">{{ entry.ClearedBy }}</td>
-                    <td class="cleared-col" style="display:none;">{{ entry.ClearedDate }}</td>
-                    <td class="cleared-col" style="display:none;">{{ entry.ClearReason }}</td>
-                    <td>
-                        {% if entry.Status == 'Active' %}
-                            <button type="button" class="btn btn-danger btn-sm mb-1" data-bs-toggle="modal" data-bs-target="#clearModal-{{ entry.ISIN }}">
-                                Clear
-                            </button>
-                            {# Modal for clearing #}
-                            <div class="modal fade" id="clearModal-{{ entry.ISIN }}" tabindex="-1" aria-labelledby="clearModalLabel-{{ entry.ISIN }}" aria-hidden="true">
-                                <div class="modal-dialog">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title" id="clearModalLabel-{{ entry.ISIN }}">Clear Watchlist Entry: {{ entry.ISIN }}</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <form method="POST" action="{{ url_for('watchlist_bp.clear_watchlist') }}">
-                                            <div class="modal-body">
-                                                <input type="hidden" name="isin" value="{{ entry.ISIN }}">
-                                                <div class="mb-3">
-                                                    <label for="cleared_by-{{ entry.ISIN }}" class="form-label">Cleared By:</label>
-                                                    <select class="form-select" id="cleared_by-{{ entry.ISIN }}" name="cleared_by" required>
-                                                        <option value="" disabled selected>Select User</option>
-                                                        {% for user in users %}
-                                                            <option value="{{ user }}">{{ user }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label for="clear_reason-{{ entry.ISIN }}" class="form-label">Reason for Clearing:</label>
-                                                    <textarea class="form-control" id="clear_reason-{{ entry.ISIN }}" name="clear_reason" rows="3" required></textarea>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                <button type="submit" class="btn btn-danger">Clear Entry</button>
-                                            </div>
-                                        </form>
-                                    </div>
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm" id="watchlist-table">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ISIN</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Security Name</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="min-width: 350px; width: 35%;">Reason</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Added</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Added By</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Checked</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="cleared-col px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="display:none;">Cleared By</th>
+                        <th class="cleared-col px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="display:none;">Cleared Date</th>
+                        <th class="cleared-col px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="display:none;">Clear Reason</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% if watchlist|length == 0 %}
+                        <tr><td colspan="11" class="text-center py-4 text-gray-500 italic">No watchlist entries found.</td></tr>
+                    {% else %}
+                    {% for entry in watchlist %}
+                        <tr class="watchlist-row {% if entry.Status == 'Cleared' %}bg-gray-100 cleared-row{% endif %}" {% if entry.Status == 'Cleared' %}style="display:none;"{% endif %}>
+                            <td class="px-4 py-2 whitespace-nowrap font-semibold text-primary hover:underline">
+                                <a href="{{ url_for('watchlist_bp.check_watchlist_entry', isin=entry.ISIN) }}">{{ entry.ISIN }}</a>
+                            </td>
+                            <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ entry['Security Name'] }}</td>
+                            <td class="px-4 py-2 text-gray-700 max-w-xs break-words" style="min-width: 350px; width: 35%;">{{ entry.Reason }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ entry.DateAdded }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ entry.AddedBy }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ entry.LastChecked or 'Never' }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                {% if entry.Status == 'Active' %}
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Active</span>
+                                {% else %}
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-200 text-gray-700">Cleared</span>
+                                {% endif %}
+                            </td>
+                            <td class="cleared-col px-4 py-2 whitespace-nowrap text-gray-700" style="display:none;">{{ entry.ClearedBy }}</td>
+                            <td class="cleared-col px-4 py-2 whitespace-nowrap text-gray-700" style="display:none;">{{ entry.ClearedDate }}</td>
+                            <td class="cleared-col px-4 py-2 text-gray-700 max-w-xs break-words" style="display:none;">{{ entry.ClearReason }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                {% if entry.Status == 'Active' %}
+                                    <button type="button" class="px-3 py-1 bg-red-600 text-white text-xs font-medium rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition mb-1" onclick="document.getElementById('clearModal-{{ entry.ISIN }}-tailwind').classList.remove('hidden')">
+                                        Clear
+                                    </button>
+                                {% else %}
+                                    <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {# Modal for clearing (now inside the loop) #}
+                        <div class="fixed z-50 inset-0 overflow-y-auto hidden" id="clearModal-{{ entry.ISIN }}-tailwind" tabindex="-1" aria-labelledby="clearModalLabel-{{ entry.ISIN }}" aria-modal="true" role="dialog">
+                          <div class="flex items-center justify-center min-h-screen px-4">
+                            <div class="bg-white rounded-lg shadow-lg max-w-md w-full">
+                              <div class="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                                <h5 class="text-lg font-semibold text-gray-800" id="clearModalLabel-{{ entry.ISIN }}">Clear Watchlist Entry: {{ entry.ISIN }}</h5>
+                                <button type="button" class="text-gray-400 hover:text-gray-700 focus:outline-none" onclick="document.getElementById('clearModal-{{ entry.ISIN }}-tailwind').classList.add('hidden')" aria-label="Close">
+                                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                              <form method="POST" action="{{ url_for('watchlist_bp.clear_watchlist') }}">
+                                <div class="px-4 py-3 space-y-4">
+                                  <input type="hidden" name="isin" value="{{ entry.ISIN }}">
+                                  <div>
+                                    <label for="cleared_by-{{ entry.ISIN }}" class="block text-sm font-medium text-gray-700 mb-1">Cleared By:</label>
+                                    <select class="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="cleared_by-{{ entry.ISIN }}" name="cleared_by" required>
+                                      <option value="" disabled selected>Select User</option>
+                                      {% for user in users %}
+                                        <option value="{{ user }}">{{ user }}</option>
+                                      {% endfor %}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label for="clear_reason-{{ entry.ISIN }}" class="block text-sm font-medium text-gray-700 mb-1">Reason for Clearing:</label>
+                                    <textarea class="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="clear_reason-{{ entry.ISIN }}" name="clear_reason" rows="3" required></textarea>
+                                  </div>
                                 </div>
+                                <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-200">
+                                  <button type="button" class="px-3 py-1.5 border border-gray-300 text-gray-700 bg-white text-xs font-medium rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition" onclick="document.getElementById('clearModal-{{ entry.ISIN }}-tailwind').classList.add('hidden')">Cancel</button>
+                                  <button type="submit" class="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition">Clear Entry</button>
+                                </div>
+                              </form>
                             </div>
-                        {% else %}
-                            <span class="text-muted">-</span>
-                        {% endif %}
-                    </td>
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                          </div>
+                        </div>
+                    {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
     {# Add to Watchlist Modal #}
-    <div class="modal fade" id="addWatchlistModal" tabindex="-1" aria-labelledby="addWatchlistModalLabel" aria-hidden="true">
-      <div class="modal-dialog" style="max-width: 900px; min-width: 600px; width: 70vw;">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="addWatchlistModalLabel">Add to Watchlist</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="fixed z-50 inset-0 overflow-y-auto hidden" id="addWatchlistModal-tailwind" tabindex="-1" aria-labelledby="addWatchlistModalLabel" aria-modal="true" role="dialog">
+      <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="bg-white rounded-lg shadow-lg max-w-2xl w-full">
+          <div class="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+            <h5 class="text-lg font-semibold text-gray-800" id="addWatchlistModalLabel">Add to Watchlist</h5>
+            <button type="button" class="text-gray-400 hover:text-gray-700 focus:outline-none" onclick="document.getElementById('addWatchlistModal-tailwind').classList.add('hidden')" aria-label="Close">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
           </div>
           <form method="POST" action="{{ url_for('watchlist_bp.manage_watchlist') }}" autocomplete="off">
-            <div class="modal-body">
-                {# --- New: Filter dropdowns for Ticker and Security Sub Type --- #}
-                <div class="mb-3 row">
-                  <div class="col-6">
-                    <label for="ticker-filter" class="form-label">Filter by Ticker:</label>
-                    <select class="form-select" id="ticker-filter" autocomplete="off">
-                      <option value="">All</option>
-                      {% set tickers = securities | map(attribute='Ticker') | select | unique | list %}
-                      {% for ticker in tickers %}
-                        <option value="{{ ticker }}">{{ ticker }}</option>
-                      {% endfor %}
-                    </select>
-                  </div>
-                  <div class="col-6">
-                    <label for="subtype-filter" class="form-label">Filter by Security Sub Type:</label>
-                    <select class="form-select" id="subtype-filter" autocomplete="off">
-                      <option value="">All</option>
-                      {% set subtypes = securities | map(attribute='Security Sub Type') | select | unique | list %}
-                      {% for subtype in subtypes %}
-                        <option value="{{ subtype }}">{{ subtype }}</option>
-                      {% endfor %}
-                    </select>
-                  </div>
+            <div class="px-4 py-3 space-y-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="ticker-filter" class="block text-sm font-medium text-gray-700 mb-1">Filter by Ticker:</label>
+                  <select class="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="ticker-filter" autocomplete="off">
+                    <option value="">All</option>
+                    {% set tickers = securities | map(attribute='Ticker') | select | unique | list %}
+                    {% for ticker in tickers %}
+                      <option value="{{ ticker }}">{{ ticker }}</option>
+                    {% endfor %}
+                  </select>
                 </div>
-                <div class="mb-3">
-                    <label for="isin-search-input" class="form-label">Search & Select Security (ISIN):</label>
-                    <input type="text" id="isin-search-input" class="form-control mb-2" placeholder="Type to filter ISINs, names, tickers..." autocomplete="off">
-                    {# --- Scrollable, filterable security list --- #}
-                    <div id="isin-list-container" style="max-height: 250px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; background: #fff;">
-                        <ul id="isin-list" class="list-group list-group-flush mb-0">
-                            {% for sec in securities %}
-                                <li class="list-group-item isin-list-item" 
-                                    data-isin="{{ sec.ISIN }}" 
-                                    data-ticker="{{ sec.Ticker }}" 
-                                    data-subtype="{{ sec['Security Sub Type'] }}"
-                                    style="cursor:pointer;">
-                                    <strong>{{ sec.ISIN }}</strong> - {{ sec['Security Name'] }}{% if sec.Ticker %} (<span class="text-primary">{{ sec.Ticker }}</span>){% endif %}{% if sec['Security Sub Type'] %} [{{ sec['Security Sub Type'] }}]{% endif %}
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                    <input type="hidden" id="selected-isin" name="isin" required autocomplete="off">
-                    <div id="isin-selection-feedback" class="form-text text-danger" style="display:none;">Please select a security from the list.</div>
+                <div>
+                  <label for="subtype-filter" class="block text-sm font-medium text-gray-700 mb-1">Filter by Security Sub Type:</label>
+                  <select class="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="subtype-filter" autocomplete="off">
+                    <option value="">All</option>
+                    {% set subtypes = securities | map(attribute='Security Sub Type') | select | unique | list %}
+                    {% for subtype in subtypes %}
+                      <option value="{{ subtype }}">{{ subtype }}</option>
+                    {% endfor %}
+                  </select>
                 </div>
-                <div class="mb-3">
-                    <label for="reason" class="form-label">Reason for Watchlist:</label>
-                    <textarea class="form-control" id="reason" name="reason" rows="3" required autocomplete="off"></textarea>
+              </div>
+              <div>
+                <label for="isin-search-input" class="block text-sm font-medium text-gray-700 mb-1">Search & Select Security (ISIN):</label>
+                <input type="text" id="isin-search-input" class="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary mb-2" placeholder="Type to filter ISINs, names, tickers..." autocomplete="off">
+                <div id="isin-list-container" class="max-h-64 overflow-y-auto border border-gray-300 rounded bg-white">
+                  <ul id="isin-list" class="divide-y divide-gray-100">
+                    {% for sec in securities %}
+                      <li class="px-3 py-2 cursor-pointer hover:bg-gray-100 isin-list-item" data-isin="{{ sec.ISIN }}" data-ticker="{{ sec.Ticker }}" data-subtype="{{ sec['Security Sub Type'] }}">
+                        <span class="font-semibold">{{ sec.ISIN }}</span> - {{ sec['Security Name'] }}{% if sec.Ticker %} (<span class="text-primary">{{ sec.Ticker }}</span>){% endif %}{% if sec['Security Sub Type'] %} [{{ sec['Security Sub Type'] }}]{% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
                 </div>
-                <div class="mb-3">
-                    <label for="user-select" class="form-label">Added By (User):</label>
-                    <select class="form-select" id="user-select" name="user" required autocomplete="off">
-                        <option value="" disabled selected>Select User</option>
-                        {% for user in users %}
-                            <option value="{{ user }}">{{ user }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+                <input type="hidden" id="selected-isin" name="isin" required autocomplete="off">
+                <div id="isin-selection-feedback" class="text-xs text-red-600 mt-1" style="display:none;">Please select a security from the list.</div>
+              </div>
+              <div>
+                <label for="reason" class="block text-sm font-medium text-gray-700 mb-1">Reason for Watchlist:</label>
+                <textarea class="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="reason" name="reason" rows="3" required autocomplete="off"></textarea>
+              </div>
+              <div>
+                <label for="user-select" class="block text-sm font-medium text-gray-700 mb-1">Added By (User):</label>
+                <select class="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="user-select" name="user" required autocomplete="off">
+                  <option value="" disabled selected>Select User</option>
+                  {% for user in users %}
+                    <option value="{{ user }}">{{ user }}</option>
+                  {% endfor %}
+                </select>
+              </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary">Add to Watchlist</button>
+            <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-200">
+              <button type="button" class="px-3 py-1.5 border border-gray-300 text-gray-700 bg-white text-xs font-medium rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition" onclick="document.getElementById('addWatchlistModal-tailwind').classList.add('hidden')">Cancel</button>
+              <button type="submit" class="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition">Add to Watchlist</button>
             </div>
           </form>
         </div>
@@ -209,6 +213,13 @@
 
 {% block scripts %}
 {{ super() }}
+<style>
+/* Visually highlight the selected ISIN list item */
+.isin-list-item.active {
+  background-color: #DBEAFE; /* Tailwind bg-blue-100 */
+  color: #1D4ED8;            /* Tailwind text-blue-700 */
+}
+</style>
 <script>
 // --- Enhanced client-side filtering and selection for the ISIN scrollable list ---
 document.addEventListener('DOMContentLoaded', function() {

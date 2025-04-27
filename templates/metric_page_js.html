@@ -1,112 +1,145 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <!-- Pass filter state and secondary data availability to JS -->
-    <meta name="sp-valid-state" content="{{ sp_valid_state | lower }}">
-    <meta name="secondary-data-available" content="{{ secondary_data_initially_available | lower }}">
-    <title>{{ metric_name }} Check (JS)</title>
-    <!-- Removed Bootstrap CSS link -->
-    <!-- Include Chart.js and the date adapter -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <style>
-        body { padding-top: 5rem; }
-        .chart-container-wrapper { margin-bottom: 15px; padding: 10px; border: 1px solid #eee; }
-        .chart-canvas { max-height: 400px; }
-        .metrics-table { margin-top: 15px; margin-bottom: 25px; font-size: 0.9em; }
-        .metrics-table th, .metrics-table td { padding: 4px 8px; border: 1px solid #dee2e6; }
-        .missing-warning { color: red; font-weight: bold; }
-        .high-z { background-color: #fff3cd; }
-        .very-high-z { background-color: #f8d7da; font-weight: bold; }
-        /* Add some spacing between toggles */
-        .toggle-container { margin-bottom: 10px; }
-    </style>
-</head>
-<body>
-    <nav>
-        <a href="/">Data Verification</a>
-        <!-- Navbar content -->
-    </nav>
+{% extends "base.html" %}
 
-    <main>
-        <h1>{{ metric_name }} Check</h1>
-        <p>Latest Data Date: <strong>{{ latest_date }}</strong></p>
+{% block title %}{{ metric_name }} Check{% endblock %}
 
-        <!-- Fund Group Filter UI: Dropdown (compact, reusable) -->
-        <form id="fund-group-form" method="get" style="max-width: 350px;">
-            <label for="fund-group-select"><strong>Filter by Fund Group:</strong></label>
-            <select id="fund-group-select" name="fund_group" onchange="this.form.submit()">
+{# Pass initial state to JS via meta tags or data attributes if needed,
+   or preferably include in the chartData JSON #}
+<meta name="sp-valid-state" content="{{ sp_valid_state | lower }}">
+<meta name="secondary-data-available" content="{{ secondary_data_initially_available | lower }}">
+
+{% block content %}
+<div class="space-y-6">
+    {# Header #}
+    <div>
+        <h1 class="text-3xl font-bold font-merriweather-sans text-gray-800 mb-1">{{ metric_name }} Check</h1>
+        <p class="text-sm text-gray-500">Latest Data Date: <strong class="font-semibold">{{ latest_date }}</strong></p>
+    </div>
+
+    {# Filters & Toggles Row #}
+    <div class="flex flex-wrap items-center gap-4 p-4 bg-neutral-50 rounded-lg shadow-sm">
+        {# Fund Group Filter (4.3.8) #}
+        <form id="fund-group-form" method="get" class="flex-grow sm:flex-grow-0">
+            <label for="fund-group-select" class="block text-sm font-medium text-gray-700 mb-1">Filter by Fund Group:</label>
+            <select id="fund-group-select" name="fund_group" onchange="this.form.submit()"
+                    class="block w-full sm:w-64 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-secondary focus:border-secondary rounded-md shadow-sm">
                 <option value="" {% if not selected_fund_group %}selected{% endif %}>All</option>
                 {% for group, funds in fund_groups.items() %}
                     <option value="{{ group }}" {% if selected_fund_group == group %}selected{% endif %}>{{ group }} ({{ funds|length }})</option>
                 {% endfor %}
             </select>
+            {# Hidden inputs for existing query params #}
             {% for key, value in request.args.items() %}
                 {% if key != 'fund_group' %}
                     <input type="hidden" name="{{ key }}" value="{{ value }}">
                 {% endif %}
             {% endfor %}
-            <small>Select a fund group to filter the view. Only groups with funds in the current data are shown. This filter is server-side and persists in the URL.</small>
+            {# Removed verbose help text #}
         </form>
-        <!-- End Fund Group Filter UI -->
 
-        <p>Charts sorted by the maximum absolute <strong>Change Z-Score</strong> across all columns for the fund (most deviation first).</p>
-
-        <!-- Toggle Controls Container -->
-        <div>
-            <!-- S&P Valid Filter Toggle -->
-            <div class="toggle-container">
-                <div>
-                    <input type="checkbox" role="switch" id="toggleSpValid" {% if sp_valid_state is not defined or sp_valid_state %}checked{% endif %}>
-                    <label for="toggleSpValid">S&P Valid Data Only</label>
-                </div>
-                 <small>Only include data where 'SS Project - In Scope' is TRUE.</small>
+        {# Toggle Controls (4.3.4, 4.3.8) #}
+        <div class="flex flex-wrap gap-x-6 gap-y-3 items-center">
+            {# S&P Valid Filter Toggle #}
+            <div class="flex items-center space-x-2">
+                <input type="checkbox" role="switch" id="toggleSpValid" {% if sp_valid_state is not defined or sp_valid_state %}checked{% endif %}
+                       class="h-4 w-8 appearance-none rounded-full bg-gray-300 checked:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-200 ease-in-out relative inline-block cursor-pointer after:content-[''] after:inline-block after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transform after:transition after:duration-200 after:ease-in-out checked:after:translate-x-4">
+                <label for="toggleSpValid" class="text-sm font-medium text-gray-700">S&P Valid Data Only</label>
             </div>
-            <!-- End S&P Valid Filter Toggle -->
 
-            <!-- Toggle Switch for S&P Data Comparison -->
-            <div id="sp-toggle-container" class="toggle-container" style="display: none;">
-                <div>
-                    <input type="checkbox" role="switch" id="toggleSpData">
-                    <label for="toggleSpData">Show S&P Comparison Data</label>
-                </div>
-                 <small>Overlay S&P data on charts (if available).</small>
+            {# S&P Comparison Toggle #}
+            <div id="sp-toggle-container" class="flex items-center space-x-2" style="display: none;">
+                <input type="checkbox" role="switch" id="toggleSpData"
+                       class="h-4 w-8 appearance-none rounded-full bg-gray-300 checked:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-200 ease-in-out relative inline-block cursor-pointer after:content-[''] after:inline-block after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transform after:transition after:duration-200 after:ease-in-out checked:after:translate-x-4">
+                <label for="toggleSpData" class="text-sm font-medium text-gray-700">Show S&P Comparison</label>
             </div>
-            <!-- End Toggle Switch -->
         </div>
-        <!-- End Toggle Controls Container -->
+    </div>
 
-        {% if not missing_funds.empty %}
-            <div>
-                 <strong>Warning:</strong> The following funds appear to be missing data for the latest date ({{ latest_date }}) {% if sp_valid_state %}with the 'S&P Valid' filter applied{% endif %}:
-                {{ missing_funds.index.tolist() | join(', ') }}
+    {# Informational Text #}
+    <p class="text-sm text-gray-600 italic">
+        Charts sorted by the maximum absolute <strong>Change Z-Score</strong> (most deviation first).
+        Click fund code in table header (once rendered) to see fund details.
+    </p>
+
+    {# Error Message Area (4.3.7) #}
+    {% if error_message %}
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative shadow-sm" role="alert">
+        <strong class="font-bold">Error:</strong>
+        <span class="block sm:inline">{{ error_message }}</span>
+    </div>
+    {% endif %}
+
+    {# Missing Funds Warning (4.3.7) #}
+    {% if not missing_funds.empty %}
+        <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative shadow-sm" role="alert">
+             <strong class="font-bold">Warning:</strong> Missing data for latest date ({{ latest_date }}) {% if sp_valid_state %}with 'S&P Valid' filter{% endif %}: <span class="font-mono text-xs">{{ missing_funds.index.tolist() | join(', ') }}</span>
+        </div>
+    {% endif %}
+
+    {# Data for JavaScript #}
+    <script type="application/json" id="chartData">
+        {{ charts_data_json | safe }}
+    </script>
+
+    {# Area for JS to render charts and tables (4.3.1, 4.3.2) #}
+    {# JS needs to create grid layout and card structure here #}
+    <div id="chartsArea" class="space-y-6">
+        <!-- Charts and tables will be rendered here by JavaScript inside styled cards -->
+        <!-- Example Placeholder (JS should replace this) -->
+        <div class="bg-gray-200 rounded-lg shadow animate-pulse p-4 min-h-[300px]">
+             <p class="text-center text-gray-500">Loading charts...</p>
+        </div>
+    </div>
+
+    <!-- Inspect Modal (hidden by default) -->
+    <div id="inspectModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 hidden">
+      <div class="bg-white rounded-lg shadow-lg w-full max-w-lg p-6 relative">
+        <button id="closeInspectModal" type="button" class="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl font-bold">&times;</button>
+        <h2 class="text-xl font-bold mb-4 text-gray-800">Inspect Contribution Analysis</h2>
+        <form id="inspectForm" method="POST" action="">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Fund</label>
+            <input type="text" id="inspectFund" name="fund_code" class="w-full rounded-md border-gray-300 bg-gray-100 px-3 py-2" readonly>
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Metric</label>
+            <input type="text" id="inspectMetric" name="metric_name" class="w-full rounded-md border-gray-300 bg-gray-100 px-3 py-2" readonly>
+          </div>
+          <div class="mb-4 flex gap-4">
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <input type="date" id="inspectStartDate" name="start_date" class="w-full rounded-md border-gray-300 px-3 py-2" required>
             </div>
-        {% endif %}
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+              <input type="date" id="inspectEndDate" name="end_date" class="w-full rounded-md border-gray-300 px-3 py-2" required>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Data Source</label>
+            <div class="flex gap-4">
+              <label class="inline-flex items-center">
+                <input type="radio" name="data_source" value="Original" class="form-radio text-primary" checked>
+                <span class="ml-2">Original</span>
+              </label>
+              <label class="inline-flex items-center">
+                <input type="radio" name="data_source" value="SP" class="form-radio text-secondary">
+                <span class="ml-2">S&amp;P</span>
+              </label>
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 mt-6">
+            <button type="button" id="cancelInspectModal" class="px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100">Cancel</button>
+            <button type="button" id="runAnalysisBtn" class="px-4 py-2 rounded-md bg-primary text-white hover:bg-primary-dark">Run Analysis</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
-        {% if error_message %}
-        <div>
-          {{ error_message }}
-        </div>
-        {% endif %}
+</div> {# End main content wrapper #}
+{% endblock %}
 
-        <!-- Data passed from Flask, embedded as JSON -->
-        <script type="application/json" id="chartData">
-            {{ charts_data_json | safe }}
-        </script>
-
-        <div id="chartsArea">
-            <!-- Charts will be rendered here by JavaScript -->
-        </div>
-
-        <!-- END: Metrics Table -->
-
-    </main>
-
-    <!-- Link to the external JavaScript module -->
-    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
-
-    <!-- Removed Bootstrap JS and jQuery links -->
-</body>
-</html> 
+{% block scripts %}
+    {# Ensure Chart.js and adapter are loaded from base.html #}
+    {# Load the page-specific JS module #}
+    
+{% endblock %} 

@@ -1,5 +1,6 @@
 {#
     Purpose: Details page for Max/Min Value Breach feature. Shows list of securities breaching max or min thresholds for a given file.
+    Layout: Main content area. Table is wrapped in a styled card. H2 heading for main title. Table rows use status color based on breach type. Buttons styled as secondary accent.
 #}
 {% extends 'base.html' %}
 
@@ -17,7 +18,7 @@
     </a>
     
     {# Styled Heading #}
-    <h1 class="text-2xl font-bold font-heading mb-2">Max/Min Breach Details: {{ display_name or filename }}</h1>
+    <h2 class="text-2xl font-bold font-heading mb-2">Max/Min Breach Details: {{ display_name or filename }}</h2>
     
     {# Styled Lead Paragraph #}
     <p class="text-lg text-gray-700 mb-1">

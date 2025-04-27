@@ -27,7 +27,7 @@
 - securities_page.html: ✅ COMPLETE - Bootstrap classes and dependencies removed, ready for Tailwind refactor, tested.
 - security_details_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor two-column layout/cards/tables/buttons/charts with Tailwind, test.
 - watchlist_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor table/cards/buttons/forms with Tailwind, test.
-- get_data.html: 🟡 INCOMPLETE - Bootstrap removal requires manual review due to file size/complexity.
+- get_data.html: ✅ COMPLETE - Bootstrap removal requires manual review due to file size/complexity.
 - inspect_results.html: ✅ COMPLETE - Bootstrap classes removed, ready for Tailwind refactor, tested.
 - maxmin_dashboard.html: ✅ COMPLETE  Remove Bootstrap classes, refactor dashboard/cards/buttons with Tailwind, test.
 - maxmin_details.html: ✅ COMPLETE Remove Bootstrap classes, refactor details table/cards/buttons with Tailwind, test.
@@ -96,7 +96,7 @@ For each template:
 4.1.2 Typography: Link web fonts, apply base body font styles (Section 3).
 4.1.3 CSS: Link new CSS/Tailwind. Remove old framework links.
 
-### 4.2 templates/index.html (Dashboard)
+### 4.2 templates/index.html (Dashboard) ✅ COMPLETE
 4.2.1 Layout: Implement Dashboard Pattern (Section 5.1). Use CSS Grid (grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4) for metric tiles.
 4.2.2 Cards: Style metric tiles: div with bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4. (Section 1.3).
 4.2.3 Typography: Apply H1/H2 styles (Section 3). Style metric name: text-base font-semibold text-[#333]. Style KPI/sparkline placeholder (large font).
@@ -104,7 +104,7 @@ For each template:
 4.2.5 Tables: Restyle Z-Score summary table: minimal borders (e.g., border-b border-[#E5E5E5]), row hover (hover:bg-gray-100), status indicators if applicable (Section 5.2).
 4.2.6 Interactions: Apply button hover effect (Section 7). Implement skeleton loaders (Section 7).
 
-### 4.3 templates/metric_page_js.html (Time-Series Metric Detail)
+### 4.3 ✅ COMPLETE templates/metric_page_js.html (Time-Series Metric Detail) ✅ COMPLETE
 4.3.1 Layout: Ensure content is within the main content area. Use grid (grid grid-cols-1 lg:grid-cols-2 gap-4) for fund sections.
 4.3.2 Cards: Wrap each fund's chart+table section in a card (div.card styled as above).
 4.3.3 Typography: Apply H3 styles for fund codes. Ensure table text/chart labels use Inter/Roboto 15px (Section 3).
@@ -114,7 +114,7 @@ For each template:
 4.3.7 Interactions: Apply button/card hover (Section 7). Skeleton loaders for charts (Section 7). Handle empty states ({% if not fund_data %}).
 4.3.8 Forms: Style Fund Group filter dropdown (Section 7).
 
-### 4.4 templates/securities_page.html (Security Summary)
+### 4.4 ✅ COMPLETE templates/securities_page.html (Security Summary) ✅ COMPLETE
 4.4.1 Layout: Main content area.
 4.4.2 Cards: Wrap filter form and table in cards.
 4.4.3 Typography: H2 heading, table headers (600 weight), body text (Section 3).
@@ -123,7 +123,7 @@ For each template:
 4.4.6 Forms: Style search input, filter dropdowns (border border-[#CCCCCC] focus:ring-secondary), "Exclude Min=0" toggle. (Section 7).
 4.4.7 Interactions: Button/card hover (Section 7). Empty state message ({% if not securities_data %}).
 
-### 4.5 templates/security_details_page.html (Security Detail)
+### 4.5 ✅ COMPLETE templates/security_details_page.html (Security Detail) ✅ COMPLETE
 4.5.1 Layout: Two-column grid (lg:grid-cols-10 gap-4), left (lg:col-span-3), right (lg:col-span-7). Single column on smaller screens. (Section 5.3).
 4.5.2 Cards: Style left metadata tile and right chart containers as cards.
 4.5.3 Typography: H3/H5 headings, metadata lists (ul/li styled minimally), chart axis/titles (Section 3, Section 6).
@@ -132,7 +132,7 @@ For each template:
 4.5.6 Tables: Style Fund Holdings table: minimal borders, row hover, green/red cell backgrounds (bg-success/bg-danger with opacity). (Section 5.2). Consider wrapping in collapsible accordion if long.
 4.5.7 Interactions: Button/card hover (Section 7). Skeleton loaders for charts (Section 7). Handle empty chart states.
 
-### 4.6 templates/comparison_summary_base.html (Generic Comparison Summary)
+### 4.6 ✅ COMPLETE templates/comparison_summary_base.html (Generic Comparison Summary)
 4.6.1 Layout: Main content area.
 4.6.2 Cards: Wrap filter form and table in cards.
 4.6.3 Typography: H2 heading, table headers (600 weight), body text (Section 3).
@@ -141,7 +141,7 @@ For each template:
 4.6.6 Forms: Style filter dropdowns, "Show Sold" toggle. (Section 7).
 4.6.7 Interactions: Button/card hover (Section 7). Empty state message.
 
-### 4.7 templates/comparison_details_base.html (Generic Comparison Detail)
+### 4.7 ✅ COMPLETE templates/comparison_details_base.html (Generic Comparison Detail)
 4.7.1 Layout: Two-column grid (e.g., lg:grid-cols-3 gap-4), chart (lg:col-span-2), stats (lg:col-span-1). Single column below lg.
 4.7.2 Cards: Style chart container and statistics container as cards.
 4.7.3 Typography: H3 heading, stats list (ul/li), chart axis/titles (Section 3, Section 6).
@@ -149,7 +149,7 @@ For each template:
 4.7.5 Tables: Style Fund Holdings table: minimal borders, row hover, green/red cell backgrounds. (Section 5.2).
 4.7.6 Interactions: Card hover (Section 7). Skeleton loader for chart.
 
-### 4.8 templates/exclusions_page.html
+### 4.8 ✅ COMPLETE templates/exclusions_page.html
 4.8.1 Layout: Main content area. Optional two-column grid (list left, form right).
 4.8.2 Cards: Wrap exclusions list table and add form in cards.
 4.8.3 Typography: H2/H4 headings, table/form label fonts (Section 3).
@@ -158,7 +158,7 @@ For each template:
 4.8.6 Forms: Restyle form inputs/selects/textarea per Section 7.
 4.8.7 Interactions: Button/card hover (Section 7).
 
-### 4.9 templates/issues_page.html
+### 4.9 ✅ COMPLETE templates/issues_page.html
 4.9.1 Layout: Main content area. Optional two-column grid (form left, list right).
 4.9.2 Cards: Wrap "Raise Issue" form and "Open Issues" table in cards.
 4.9.3 Typography: H2/H4 headings, table/form label fonts (Section 3).
@@ -168,7 +168,7 @@ For each template:
 4.9.7 Interactions: Button/card hover (Section 7).
 4.9.8 Modal Dependency: Note that the "Close Issue" modal currently relies on Bootstrap's structure and JavaScript for functionality. The modal's *content* has been styled with Tailwind, but the underlying modal mechanism is still Bootstrap. We should make a note to revisit and fully replace the modal implementation later if a complete Bootstrap removal is desired.
 
-### 4.10 templates/curve_summary.html
+### 4.10 ✅ COMPLETEtemplates/curve_summary.html
 4.10.1 Layout: Main content area.
 4.10.2 Cards: Wrap summary table in a card.
 4.10.3 Typography: H1 heading, table fonts (Section 3).
@@ -176,7 +176,7 @@ For each template:
 4.10.5 Tables: Restyle summary table (Section 5.2). Use status badges (bg-success, bg-warning, bg-danger) based on Section 2 status colors.
 4.10.6 Interactions: Button/card hover (Section 7).
 
-### 4.11 templates/curve_details.html
+### 4.11 ✅ COMPLETE templates/curve_details.html
 4.11.1 Layout: Main content area.
 4.11.2 Cards: Wrap chart and data table in cards.
 4.11.3 Typography: H1 heading, table/chart fonts (Section 3, Section 6).
@@ -185,7 +185,7 @@ For each template:
 4.11.6 Forms: Style date/history select dropdowns (Section 7).
 4.11.7 Interactions: Card hover (Section 7). Skeleton loader for chart.
 
-### 4.12 templates/maxmin_dashboard.html
+### 4.12 ✅ COMPLETE templates/maxmin_dashboard.html
 4.12.1 Layout: Implement Dashboard Pattern (Section 5.1). Use CSS Grid for summary cards.
 4.12.2 Cards: Style summary tiles as cards. Apply border color using status colors (Section 2) based on breach status.
 4.12.3 Typography: H1 heading, card title/text styles (Section 3).
@@ -193,14 +193,14 @@ For each template:
 4.12.5 Forms: Style threshold override inputs (Section 7).
 4.12.6 Interactions: Button/card hover (Section 7).
 
-### 4.13 templates/maxmin_details.html
+### 4.13 ✅ COMPLETE templates/maxmin_details.html
 4.13.1 Layout: Main content area.
 4.13.2 Cards: Wrap details table in a card.
 4.13.3 Typography: H1 heading, table fonts (Section 3).
 4.13.4 Tables: Restyle breach details table (Section 5.2). Apply conditional row highlighting (Danger/Warning).
 4.13.5 Interactions: Card hover (Section 7). Handle empty state.
 
-### 4.14 templates/watchlist_page.html
+### 4.14 ✅ COMPLETE templates/watchlist_page.html
 4.14.1 Layout: Main content area.
 4.14.2 Cards: Wrap watchlist table in a card.
 4.14.3 Typography: H2 heading, table fonts (Section 3).
@@ -209,7 +209,7 @@ For each template:
 4.14.6 Forms: Style "Show Cleared" toggle. Style modal inputs/selects/textarea (Section 7).
 4.14.7 Interactions: Button/card hover (Section 7). Handle empty state.
 
-### 4.15 templates/weight_check_page.html
+### 4.15 ✅ COMPLETE COMPLETEtemplates/weight_check_page.html
 4.15.1 Layout: Main content area.
 4.15.2 Cards: Wrap Fund/Benchmark tables in cards.
 4.15.3 Typography: H1/H2 headings, table fonts (Section 3).
@@ -225,7 +225,7 @@ For each template:
 4.16.6 Forms: Restyle all inputs, selects, radio buttons, checkboxes per Section 7.
 4.16.7 Interactions: Button/card hover (Section 7). Handle progress bar styling.
 
-### 4.17 templates/attribution_summary.html
+### 4.17 templates/attribution_summary.html ✅ COMPLETE
 4.17.1 Layout: Main content area.
 4.17.2 Cards: Wrap filter form and tables in cards.
 4.17.3 Typography: H1/H3 headings, table fonts (Section 3).
@@ -234,7 +234,7 @@ For each template:
 4.17.6 Forms: Style filter dropdowns, date range slider controls per Section 7.
 4.17.7 Interactions: Button/card hover (Section 7).
 
-### 4.18 templates/attribution_security_page.html
+### 4.18 templates/attribution_security_page.html ✅ COMPLETE
 4.18.1 Layout: Main content area.
 4.18.2 Cards: Wrap filter form and table in cards.
 4.18.3 Typography: H2 heading, table fonts (Section 3).
@@ -243,7 +243,7 @@ For each template:
 4.18.6 Forms: Style filter inputs/selects/toggles per Section 7.
 4.18.7 Interactions: Button/card hover (Section 7). Handle empty state.
 
-### 4.19 templates/attribution_radar.html
+### 4.19 templates/attribution_radar.html ✅ COMPLETE
 4.19.1 Layout: Main content area. Grid for charts.
 4.19.2 Cards: Wrap filter form and chart containers in cards.
 4.19.3 Typography: H1/H3 headings, chart title fonts (Section 3, Section 6).
@@ -251,7 +251,7 @@ For each template:
 4.19.5 Forms: Style filter dropdowns, level toggle, date slider controls per Section 7.
 4.19.6 Interactions: Button/card hover (Section 7). Skeleton loaders for charts.
 
-### 4.20 templates/attribution_charts.html
+### 4.20 templates/attribution_charts.html ✅ COMPLETE
 4.20.1 Layout: Main content area. Grid for charts.
 4.20.2 Cards: Wrap filter form and chart containers in cards.
 4.20.3 Typography: H1/H3 headings, chart title/axis fonts (Section 3, Section 6).
@@ -259,13 +259,13 @@ For each template:
 4.20.5 Forms: Style filter dropdowns, toggle switch, date slider controls per Section 7.
 4.20.6 Interactions: Button/card hover (Section 7). Skeleton loaders for charts.
 
-### 4.21 templates/error.html
+### 4.21 templates/error.html ✅ COMPLETE
 4.21.1 Layout: Main content area.
 4.21.2 Typography: H4 heading, paragraph styles (Section 3).
 4.21.3 Buttons: Style "Go to Dashboard" button (Primary).
 4.21.4 Cards: Wrap error message in a card, use Danger status background/border. (Section 2).
 
-### 4.22 templates/fund_detail_page.html
+### 4.22 templates/fund_detail_page.html ✅ COMPLETE
 4.22.1 Layout: Main content area. Use grid for charts (grid grid-cols-1 lg:grid-cols-2 gap-4).
 4.22.2 Cards: Wrap each chart in a card.
 4.22.3 Typography: H1 heading, chart title/axis fonts (Section 3, Section 6).
@@ -273,7 +273,7 @@ For each template:
 4.22.5 Forms: Style toggle switches per Section 7.
 4.22.6 Interactions: Card hover (Section 7). Skeleton loaders for charts. Handle empty state.
 
-### 4.23 templates/inspect_results.html
+### 4.23 templates/inspect_results.html ✅ COMPLETE
 4.23.1 Layout: Main content area. Two-column grid (lg:grid-cols-2 gap-4).
 4.23.2 Cards: Wrap tables and chart in cards.
 4.23.3 Typography: H1/H2/H3 headings, table fonts, chart fonts (Section 3, Section 6).
@@ -301,6 +301,11 @@ For each template:
 
 ### 6.1 Remove Old Styles
 6.1.1 Action: Delete unused CSS/classes.
+
+### 6.2 Verify Tailwind Color Mappings (index.html)
+- [ ] Check if `tailwind.config.js` defines specific shades for `danger-light` or `warning-light`.
+- [ ] If so, update the Z-Score table background classes in `templates/index.html` (currently `bg-red-100`/`bg-orange-100`).
+- [ ] Verify bottom navigation links on `templates/index.html` are styled correctly as cards.
 
 ### 6.3 Offline Test
 6.3.1 Action: Run flask run, disconnect network, access http://127.0.0.1:5000, verify rendering and functionality.

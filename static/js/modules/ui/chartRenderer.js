@@ -66,30 +66,6 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
         console.warn("[chartRenderer] Toggle switch container not found in the DOM.");
     }
 
-    // --- Create Modal Structure (once per page load) --- 
-    if (!document.getElementById('inspectModal')) {
-        createInspectModal();
-        
-        // Add event listener for the submit button ONCE after creating the modal
-        const submitBtn = document.getElementById('inspectSubmitBtn');
-        if (submitBtn) {
-            submitBtn.removeEventListener('click', handleInspectSubmit); 
-            submitBtn.addEventListener('click', handleInspectSubmit);
-            console.log("[chartRenderer] Submit button event listener attached.");
-        } else {
-            console.error("[chartRenderer] Inspect modal submit button not found after creation!");
-        }
-    } else {
-        // Ensure submit listener is attached even if modal existed (e.g., partial page update)
-        const submitBtn = document.getElementById('inspectSubmitBtn');
-         if (submitBtn && !submitBtn.hasAttribute('data-listener-attached')) {
-             submitBtn.removeEventListener('click', handleInspectSubmit);
-             submitBtn.addEventListener('click', handleInspectSubmit);
-             submitBtn.setAttribute('data-listener-attached', 'true');
-             console.log("[chartRenderer] Submit button event listener RE-attached.");
-         }
-    }
-    
     // --- Render Charts and Tables for Each Fund --- 
     // Sort fundsData by max absolute Z-score (descending)
     const sortedFunds = Object.entries(fundsData).map(([fundCode, fundData]) => {
@@ -193,34 +169,54 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
 
              // --- Create DOM Elements for Each Chart --- 
             const chartWrapper = document.createElement('div');
-            chartWrapper.className = `chart-container-wrapper chart-type-${chartType} col-lg-6 mb-3`; 
+            // Use fixed height and full width for chart container
+            chartWrapper.className = `chart-container-wrapper chart-type-${chartType} col-lg-6 mb-3 h-80 w-full`;
             chartWrapper.id = `chart-wrapper-${chartId}`;
             chartWrapper.style.position = 'relative';
 
-            // --- Add Inspect Button (WITHOUT data-* attributes for toggle) --- 
+            // --- Add Inspect Button (VANILLA JS, NO BOOTSTRAP) --- 
             const inspectButton = document.createElement('button');
             inspectButton.textContent = 'Inspect';
-            inspectButton.className = 'btn btn-outline-secondary btn-sm inspect-button';
+            inspectButton.className = 'inspect-btn px-3 py-1 rounded-md bg-secondary text-white hover:bg-secondary-dark text-sm mt-2';
             inspectButton.style.position = 'absolute';
             inspectButton.style.top = '5px';
             inspectButton.style.right = '5px';
-            // Still add data attributes for our handler to read
-            inspectButton.dataset.metricName = metricName;
-            inspectButton.dataset.fundCode = fundCode;
-            inspectButton.dataset.latestDate = latestDate || getIsoDateString(new Date());
-            // REMOVE Bootstrap 4 modal attributes 
-            // inspectButton.setAttribute('data-toggle', 'modal'); 
-            // inspectButton.setAttribute('data-target', '#inspectModal'); 
-            
-            // --- Add DIRECT Click Listener --- 
-            inspectButton.addEventListener('click', handleInspectButtonClick);
-            
+            inspectButton.dataset.fund = fundCode;
+            inspectButton.dataset.metric = metricName;
+            // Gather all dates from all charts for this fund
+            let allDates = [];
+            (fundData.charts || []).forEach(chartConfig => {
+                if (Array.isArray(chartConfig.labels)) {
+                    allDates = allDates.concat(chartConfig.labels);
+                }
+            });
+            allDates = Array.from(new Set(allDates)).sort(); // deduplicate and sort
+            inspectButton.dataset.minDate = allDates[0] || '';
+            inspectButton.dataset.maxDate = allDates[allDates.length - 1] || '';
+            // No Bootstrap data-toggle/data-target
+            // No jQuery event handler
+            // Attach click event directly to open the modal
+            inspectButton.addEventListener('click', function(e) {
+                const btn = e.currentTarget;
+                const inspectModal = document.getElementById('inspectModal');
+                const inspectForm = document.getElementById('inspectForm');
+                document.getElementById('inspectFund').value = btn.dataset.fund;
+                document.getElementById('inspectMetric').value = btn.dataset.metric;
+                document.getElementById('inspectStartDate').min = btn.dataset.minDate;
+                document.getElementById('inspectStartDate').max = btn.dataset.maxDate;
+                document.getElementById('inspectEndDate').min = btn.dataset.minDate;
+                document.getElementById('inspectEndDate').max = btn.dataset.maxDate;
+                document.getElementById('inspectStartDate').value = btn.dataset.minDate;
+                document.getElementById('inspectEndDate').value = btn.dataset.maxDate;
+                inspectForm.action = `/metric/${btn.dataset.metric}/inspect`;
+                inspectModal.classList.remove('hidden');
+            });
             chartWrapper.appendChild(inspectButton);
 
             // Create Chart Canvas
             const canvas = document.createElement('canvas');
             canvas.id = `chart-${chartId}`;
-            canvas.className = 'chart-canvas';
+            canvas.className = 'w-full h-full';
             chartWrapper.appendChild(canvas);
 
             // Create Metrics Table
@@ -279,294 +275,6 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
 
     } // End loop through funds
     console.log("[chartRenderer] Finished processing all funds.");
-}
-
-// --- NEW: Direct button click handler (adapted for BS4/jQuery) --- 
-function handleInspectButtonClick(event) {
-    const button = event.currentTarget;
-    console.log("[Inspect Button] Clicked:", button);
-
-    // 1. Populate the data FIRST (using the existing separate function)
-    // Create a mock event object for populateInspectModalData
-    const mockEvent = { 
-        relatedTarget: button, 
-        currentTarget: document.getElementById('inspectModal') // Ensure modal element exists
-    };
-    if (!mockEvent.currentTarget) {
-        console.error("[Inspect Button] Modal element #inspectModal not found when preparing to populate!");
-        return;
-    }
-    populateInspectModalData(mockEvent); // Call data population function
-
-    // 2. Show the modal using Bootstrap 4 jQuery method
-    try {
-        // Use jQuery selector and Bootstrap 4 modal method
-        const modalElement = document.getElementById('inspectModal'); // Get element for logging
-        if (!modalElement) throw new Error("Modal element #inspectModal not found for jQuery selector.");
-        
-        if (typeof $ !== 'undefined' && $.fn.modal) {
-            $('#inspectModal').modal('show'); 
-            console.log("[Inspect Button] Modal shown via jQuery $('#inspectModal').modal('show').");
-        } else {
-            console.error("[Inspect Button] jQuery or Bootstrap modal function not available.");
-            alert("Error: Could not trigger modal. jQuery or Bootstrap JS might be missing.");
-        }
-    } catch (e) {
-        console.error("[Inspect Button] Error showing modal via jQuery/BS4 API:", e);
-        alert("Could not open inspect modal. Check console for errors.");
-    }
-}
-
-// --- Function to populate modal data (called by click handler now) --- 
-function populateInspectModalData(event) {
-    const button = event.relatedTarget;
-    if (!button) {
-        console.error("[Modal Populate] No relatedTarget provided in the event");
-        return;
-    }
-
-    // --- DEBUG: Log the button element and its attributes --- 
-    console.log("[Modal Populate] Triggering Button:", button);
-    console.log("[Modal Populate] Button data-metric-name:", button.getAttribute('data-metric-name'));
-    console.log("[Modal Populate] Button data-fund-code:", button.getAttribute('data-fund-code'));
-    console.log("[Modal Populate] Button dataset:", JSON.stringify(button.dataset));
-    // --- END DEBUG --- 
-
-    const metricName = button.dataset.metricName || button.getAttribute('data-metric-name');
-    const fundCode = button.dataset.fundCode || button.getAttribute('data-fund-code');
-    const latestDateStr = button.dataset.latestDate || button.getAttribute('data-latest-date');
-
-    // --- DEBUG: Log the retrieved values --- 
-    console.log(`[Modal Populate] Retrieved - Metric: ${metricName}, Fund: ${fundCode}, Date: ${latestDateStr}`);
-    // --- END DEBUG --- 
-
-    if (!metricName || !fundCode) {
-        console.error("[Modal Populate] Missing data attributes on button AFTER retrieval attempt:", {
-            metricName,
-            fundCode,
-            latestDateStr,
-            buttonHTML: button.outerHTML
-        });
-        // Populate with placeholders to avoid breaking UI further down, but log error
-        // metricName = 'Error'; 
-        // fundCode = 'Error';
-    }
-
-    const modalElement = event.currentTarget;
-
-    // Populate modal title/text
-    const modalTitle = modalElement.querySelector('#inspectModalLabel');
-    const metricNameSpan = modalElement.querySelector('#inspectModalMetricName');
-    const fundCodeSpan = modalElement.querySelector('#inspectModalFundCode');
-    
-    if (modalTitle) modalTitle.textContent = `Inspect Contribution - ${metricName || 'Unknown'} (${fundCode || 'Unknown'})`;
-    if (metricNameSpan) metricNameSpan.textContent = metricName || 'Unknown';
-    if (fundCodeSpan) fundCodeSpan.textContent = fundCode || 'Unknown';
-
-    // Set default dates
-    const endDateInput = modalElement.querySelector('#inspectEndDate');
-    const startDateInput = modalElement.querySelector('#inspectStartDate');
-    if (endDateInput && startDateInput) {
-        endDateInput.value = latestDateStr || getIsoDateString(new Date());
-        try {
-            const endDate = new Date(endDateInput.value);
-            const startDate = new Date(endDate);
-            startDate.setMonth(startDate.getMonth() - 1);
-            startDateInput.value = getIsoDateString(startDate);
-        } catch (e) {
-            console.error("Error setting default start date:", e);
-            const today = new Date();
-            const defaultStartDate = new Date(today);
-            defaultStartDate.setMonth(defaultStartDate.getMonth() - 1);
-            startDateInput.value = getIsoDateString(defaultStartDate);
-            if (!latestDateStr) endDateInput.value = getIsoDateString(today);
-        }
-    } else {
-        console.error("[Modal Populate] Date input fields not found in modal!");
-    }
-
-    // Clear previous error messages
-    const errorMsgDiv = document.getElementById('inspectErrorMsg');
-    if(errorMsgDiv) {
-        errorMsgDiv.textContent = '';
-        errorMsgDiv.style.display = 'none';
-    }
-    
-    // Store data needed for submit handler on the modal itself
-    // --- DEBUG: Log the data being stored --- 
-    console.log("[Modal Populate] Storing data on modal:", { metricName: metricName || '', fundCode: fundCode || '' });
-    // --- END DEBUG --- 
-    modalElement.dataset.metricName = metricName || '';
-    modalElement.dataset.fundCode = fundCode || '';
-    modalElement.setAttribute('data-metric-name', metricName || '');
-    modalElement.setAttribute('data-fund-code', fundCode || '');
-    window.currentInspectData = {
-        metricName: metricName || '',
-        fundCode: fundCode || ''
-    };
-    
-    // Reset submit button state
-    const submitBtn = document.getElementById('inspectSubmitBtn');
-    if(submitBtn){
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Analyze';
-    }
-}
-
-/**
- * Handles the submission of the inspect modal.
- * Fetches contribution data and redirects to the results page.
- */
-async function handleInspectSubmit() {
-    const modalElement = document.getElementById('inspectModal');
-    let metricName = '';
-    let fundCode = '';
-    
-    // --- Retrieve stored data (priority: window > dataset > attribute) ---
-    if (window.currentInspectData) {
-        metricName = window.currentInspectData.metricName;
-        fundCode = window.currentInspectData.fundCode;
-    } else if (modalElement) {
-        metricName = modalElement.dataset.metricName || modalElement.getAttribute('data-metric-name') || '';
-        fundCode = modalElement.dataset.fundCode || modalElement.getAttribute('data-fund-code') || '';
-    }
-    console.log("[Inspect] Submit using data:", { metricName, fundCode });
-
-    // --- Get Dates AND Data Source --- 
-    const startDate = document.getElementById('inspectStartDate').value;
-    const endDate = document.getElementById('inspectEndDate').value;
-    const dataSourceSelected = document.querySelector('input[name="inspectDataSource"]:checked');
-    const dataSource = dataSourceSelected ? dataSourceSelected.value : 'Original'; // Default to Original if none selected
-    
-    const errorMsgDiv = document.getElementById('inspectErrorMsg');
-    const submitBtn = document.getElementById('inspectSubmitBtn');
-
-    // --- Validation --- 
-    if (!startDate || !endDate) {
-        errorMsgDiv.textContent = 'Please select both a start and end date.';
-        errorMsgDiv.style.display = 'block';
-        return;
-    }
-    if (new Date(startDate) >= new Date(endDate)) {
-        errorMsgDiv.textContent = 'Start date must be before end date.';
-        errorMsgDiv.style.display = 'block';
-        return;
-    }
-    if (!metricName || !fundCode) {
-        console.error("[Inspect] Missing required data for submission", { metricName, fundCode }); // Keep detailed log
-        errorMsgDiv.textContent = 'Missing metric name or fund code information. Please close modal and try again.';
-        errorMsgDiv.style.display = 'block';
-        return;
-    }
-    if (!dataSource) { // Should have default, but check anyway
-        errorMsgDiv.textContent = 'Please select a data source (Original or S&P).';
-        errorMsgDiv.style.display = 'block';
-        return;
-    }
-
-    errorMsgDiv.style.display = 'none';
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Analyzing...';
-
-    try {
-        const apiUrl = `/metric/${encodeURIComponent(metricName)}/inspect`;
-        const requestBody = { 
-            fund_code: fundCode,
-            start_date: startDate, 
-            end_date: endDate,
-            data_source: dataSource // Include data source in the request
-        };
-        console.log(`[Inspect] Sending POST to ${apiUrl} with body:`, requestBody);
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json' 
-            },
-            body: JSON.stringify(requestBody)
-        });
-
-        if (!response.ok) {
-            let errorJson = {};
-            try { errorJson = await response.json(); } catch (parseError) { /* ignore */ }
-            const errorText = errorJson.error || `Error ${response.status}: ${response.statusText}`;
-            throw new Error(errorText);
-        }
-
-        const resultsData = await response.json();
-        console.log("[Inspect] API Success. Response:", resultsData);
-
-        // Redirect to results page
-        const resultsUrl = `/metric/inspect/results?metric_name=${encodeURIComponent(metricName)}&fund_code=${encodeURIComponent(fundCode)}&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&data_source=${encodeURIComponent(dataSource)}`; // Pass data source
-        window.location.href = resultsUrl;
-        
-        // Close modal (may not happen due to redirect)
-        const modal = $('#inspectModal').modal('hide'); // Use jQuery for BS4 hide just in case
-
-    } catch (error) {
-        console.error("[Inspect] Fetch Error:", error);
-        errorMsgDiv.textContent = `Analysis failed: ${error.message}`;
-        errorMsgDiv.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Analyze';
-    }
-}
-
-/**
- * Creates the Bootstrap modal structure and appends it to the body.
- */
-function createInspectModal() {
-     const modalHtml = `
-        <div class="modal fade" id="inspectModal" tabindex="-1" role="dialog" aria-labelledby="inspectModalLabel" aria-hidden="true">
-            <div class="modal-dialog" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="inspectModalLabel">Inspect Contribution</h5>
-                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                    </div>
-                    <div class="modal-body">
-                        <p>Analyze contribution to the change in <strong id="inspectModalMetricName">[Metric]</strong> for fund <strong id="inspectModalFundCode">[Fund]</strong>.</p>
-                        
-                        <!-- Date Range Selection -->
-                        <div class="form-group">
-                            <label for="inspectStartDate" class="form-label">Start Date (Exclusive)</label>
-                            <input type="date" class="form-control" id="inspectStartDate" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="inspectEndDate" class="form-label">End Date (Inclusive)</label>
-                            <input type="date" class="form-control" id="inspectEndDate" required>
-                        </div>
-
-                        <!-- Data Source Selection -->
-                        <div class="form-group">
-                            <label class="form-label">Data Source:</label>
-                            <div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="inspectDataSource" id="inspectDataSourceOriginal" value="Original" checked>
-                                    <label class="form-check-label" for="inspectDataSourceOriginal">Original</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="inspectDataSource" id="inspectDataSourceSP" value="SP">
-                                    <label class="form-check-label" for="inspectDataSourceSP">S&P</label>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div id="inspectErrorMsg" class="text-danger mt-2" style="display: none;"></div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-primary" id="inspectSubmitBtn">Analyze</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    console.log("[chartRenderer] Inspect modal HTML created.");
 }
 
 /**

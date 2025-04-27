@@ -3,79 +3,106 @@
 {% block title %}Data Verification Dashboard{% endblock %}
 
 {% block content %}
-    <div> {# Removed jumbotron and mt-4 #}
-        <h1>Dashboard</h1>
-        <p>Select a metric below to view the detailed checks, or see the latest Z-Score summary below.</p>
+    <div class="space-y-8"> {# Add spacing between sections #}
+        {# Main Dashboard Title Section #}
         <div>
+            <h1 class="text-3xl font-bold font-merriweather-sans text-gray-800 mb-2">Dashboard</h1>
+            <p class="text-base text-gray-600">Select a metric below to view the detailed checks, or see the latest Z-Score summary below.</p>
+        </div>
+
+        {# Metric Tiles Section - Applying Grid Layout and Card Styling #}
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
             {% for metric in metrics %}
-            <div>
-                <div>
-                    <div>
-                        <h5>{{ metric }}</h5>
-                        <p>View details for {{ metric }}.</p>
-                        {% set metric_url = url_for('metric.metric_page', metric_name=metric) %}
-                        <a href="{{ metric_url }}">View Details</a>
-                        <span>Debug URL: {{ metric_url }}</span>
-                    </div>
-                </div>
+            {# Metric Card - Applying Card Styling (4.2.2) #}
+            <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+                {# Removed nested divs #}
+                {# Metric Name Typography (4.2.3) #}
+                <h5 class="text-base font-semibold text-gray-800 mb-1">{{ metric }}</h5>
+                {# Metric Description Typography #}
+                <p class="text-sm text-gray-600 mb-3">View details for {{ metric }}.</p>
+                {# Button Styling (4.2.4) #}
+                {% set metric_url = url_for('metric.metric_page', metric_name=metric) %}
+                <a href="{{ metric_url }}"
+                   class="inline-block bg-primary text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-opacity-90 transition-colors">
+                   View Details
+                </a>
+                {# Removed debug span #}
             </div>
             {% endfor %}
         </div>
-    </div>
 
-    <!-- Z-Score Summary Table -->
-    {% if not summary_data.empty %}
-    <h2>Latest Change Z-Score Summary</h2>
-    <div>
-        <table>
-            <thead>
-                <tr>
-                    <th>Fund Code</th>
-                    {% for full_metric_name in summary_metrics %}
-                    <th>{{ full_metric_name }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for fund_code, row in summary_data.iterrows() %}
-                <tr>
-                    <td><a href="{{ url_for('fund.fund_detail', fund_code=fund_code) }}" title="View all metrics for {{ fund_code }}">{{ fund_code }}</a></td>
-                    {% for full_metric_name in summary_metrics %}
-                        {% set z_score = row[full_metric_name] %}
-                        {% if z_score is none or z_score != z_score %}
-                            <td>N/A</td>
-                        {% else %}
-                            {% set z_abs = z_score|abs %}
-                            {% set cell_class = '' %}
-                            {% if z_abs > 3.0 %}
-                                {% set cell_class = 'table-danger' %}
-                            {% elif z_abs > 2.0 %}
-                                {% set cell_class = 'table-warning' %}
-                            {% endif %}
-                            <td class="{{ cell_class }}">{{ "%.2f"|format(z_score) }}</td>
-                        {% endif %}
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div>
-        No Z-score data could be generated for the summary table. Check the console logs for errors.
-    </div>
-    {% endif %}
+        <!-- Z-Score Summary Table Section -->
+        {% if not summary_data.empty %}
+        <div>
+            <h2 class="text-2xl font-semibold font-merriweather-sans text-gray-700 mb-3">Latest Change Z-Score Summary</h2>
+            {# Table Styling (4.2.5) - Added wrapper and table classes #}
+            <div class="overflow-x-auto bg-white rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)]">
+                <table class="w-full text-left border-collapse">
+                    <thead class="border-b border-gray-300 bg-gray-50">
+                        <tr>
+                            {# Header Styling #}
+                            <th class="px-4 py-2 text-sm font-medium text-gray-600 uppercase tracking-wider">Fund Code</th>
+                            {% for full_metric_name in summary_metrics %}
+                            <th class="px-4 py-2 text-sm font-medium text-gray-600 uppercase tracking-wider">{{ full_metric_name }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fund_code, row in summary_data.iterrows() %}
+                        {# Row Styling - Added hover and border #}
+                        <tr class="border-b border-gray-200 last:border-b-0 hover:bg-gray-100 transition-colors">
+                            {# Cell Styling - Added padding #}
+                            <td class="px-4 py-2 text-sm text-gray-700">
+                                <a href="{{ url_for('fund.fund_detail', fund_code=fund_code) }}"
+                                   title="View all metrics for {{ fund_code }}"
+                                   class="text-secondary hover:text-primary hover:underline">
+                                   {{ fund_code }}
+                                </a>
+                            </td>
+                            {% for full_metric_name in summary_metrics %}
+                                {% set z_score = row[full_metric_name] %}
+                                {# Conditional Cell Styling - Replaced table-* classes with Tailwind bg-* #}
+                                {% set cell_class = '' %}
+                                {% if z_score is not none and z_score == z_score %} {# Check for non-None and non-NaN #}
+                                    {% set z_abs = z_score|abs %}
+                                    {% if z_abs > 3.0 %}
+                                        {% set cell_class = 'bg-red-100 text-red-800' %} {# Assumes danger-light equivalent #}
+                                    {% elif z_abs > 2.0 %}
+                                        {% set cell_class = 'bg-orange-100 text-orange-800' %} {# Assumes warning-light equivalent #}
+                                    {% endif %}
+                                {% endif %}
+                                <td class="px-4 py-2 text-sm {{ cell_class }}">
+                                    {{ "N/A" if z_score is none or z_score != z_score else "%.2f"|format(z_score) }}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        {# Empty State Styling #}
+        <div class="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+             <strong class="font-bold">No Data:</strong>
+             <span class="block sm:inline">No Z-score data could be generated for the summary table. Check the console logs for errors.</span>
+        </div>
+        {% endif %}
 
-    <div>
-        <h5>Get Data via API (Simulated)</h5>
-        <p>Select funds and dates to simulate retrieving data from the Rex API.</p>
-        <a href="{{ url_for('api_bp.get_data_page') }}">Go to Get Data Page</a>
-    </div>
+        {# Other Links Section - Styled as cards #}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+                <h5 class="text-base font-semibold text-gray-800 mb-1">Get Data via API (Simulated)</h5>
+                <p class="text-sm text-gray-600 mb-3">Select funds and dates to simulate retrieving data from the Rex API.</p>
+                <a href="{{ url_for('api_bp.get_data_page') }}" class="inline-block bg-secondary text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-opacity-90 transition-colors">Go to Get Data Page</a>
+            </div>
 
-    <div>
-        <h5>Securities Data Check</h5>
-        <p>View checks for individual securities based on latest daily changes.</p>
-        <a href="{{ url_for('security.securities_page') }}">View Securities Check</a>
+            <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+                <h5 class="text-base font-semibold text-gray-800 mb-1">Securities Data Check</h5>
+                <p class="text-sm text-gray-600 mb-3">View checks for individual securities based on latest daily changes.</p>
+                <a href="{{ url_for('security.securities_page') }}" class="inline-block bg-secondary text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-opacity-90 transition-colors">View Securities Check</a>
+            </div>
+        </div>
     </div>
 {% endblock %}
 

@@ -3,6 +3,11 @@
 {#
     Purpose: Base template for comparison detail pages (e.g., spread, duration).
     Displays a comparison chart, key statistics, and fund holdings over time for a specific security.
+    Layout: Two-column grid (lg:grid-cols-3 gap-4), chart (lg:col-span-2), stats (lg:col-span-1). Single column below lg.
+    Cards: Chart and stats containers styled as cards. Fund holdings table styled with minimal borders and row hover.
+    Typography: H3 headings, stats list, chart axis/titles per style guide.
+    Charts: Chart.js config uses Blue (#1F77B4) and Orange (#FF7F0E) for comparison lines, with correct grid and axis styling.
+    Interactions: Card hover, empty state message, and optional skeleton loader for chart.
 #}
 
 {# Base template for comparison detail pages #}
@@ -151,13 +156,13 @@
                     'Security Name', 
                     'is_held'
                 ] %}
-                {% set show_other_attrs_card = false %}
+                {% set ns = namespace(other_attrs=[]) %}
                 {% for key, value in stats.items() %}
-                    {% if key not in displayed_keys and value is not none %}
-                        {% set show_other_attrs_card = true %}
-                        {% break %}
-                    {% endif %}
+                  {% if key not in displayed_keys and value is not none %}
+                    {% set _ = ns.other_attrs.append((key, value)) %}
+                  {% endif %}
                 {% endfor %}
+                {% set show_other_attrs_card = ns.other_attrs|length > 0 %}
 
                 {% if show_other_attrs_card %}
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
@@ -167,13 +172,11 @@
                      <div class="p-4">
                          {# Styled List #}
                         <ul class="space-y-2 text-sm">
-                             {% for key, value in stats.items() %}
-                                 {% if key not in displayed_keys and value is not none %}
-                                     <li class="flex justify-between items-center">
-                                         <span class="text-gray-600">{{ key.replace('_', ' ') | title }}:</span>
-                                         <span class="text-gray-800 text-right">{{ value }}</span> {# Ensure right alignment if needed #}
-                                     </li>
-                                 {% endif %}
+                             {% for key, value in ns.other_attrs %}
+                                 <li class="flex justify-between items-center">
+                                     <span class="text-gray-600">{{ key.replace('_', ' ') | title }}:</span>
+                                     <span class="text-gray-800 text-right">{{ value }}</span> {# Ensure right alignment if needed #}
+                                 </li>
                              {% endfor %}
                          </ul>
                     </div>
@@ -246,8 +249,14 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('comparisonChart').getContext('2d');
-        const chartData = {{ chart_data | tojson }};
-        
+        let chartData = {{ chart_data | tojson }};
+        // Ensure datasets use Blue/Orange for comparison lines
+        if (chartData.datasets && chartData.datasets.length >= 2) {
+            chartData.datasets[0].borderColor = '#1F77B4'; // Blue
+            chartData.datasets[0].backgroundColor = '#1F77B4';
+            chartData.datasets[1].borderColor = '#FF7F0E'; // Orange
+            chartData.datasets[1].backgroundColor = '#FF7F0E';
+        }
         const comparisonChart = new Chart(ctx, {
             type: 'line',
             data: chartData, 

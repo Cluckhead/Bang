@@ -59,21 +59,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // --- END: S&P Valid Filter Toggle Logic ---
 
-
-        // --- Existing S&P Comparison Toggle Logic ---
         try {
             const chartDataJson = metricChartDataElement.textContent;
             console.log("Raw JSON string from script tag:", chartDataJson);
             const fullChartData = JSON.parse(chartDataJson);
             console.log('Parsed fullChartData object:', fullChartData);
-            // Metadata needed for toggle logic
             const metadata = fullChartData ? fullChartData.metadata : null; 
             console.log('Checking fullChartData.metadata:', metadata);
             console.log('Checking fullChartData.funds:', fullChartData ? fullChartData.funds : 'fullChartData is null/undefined');
 
             if (metadata && fullChartData.funds && Object.keys(fullChartData.funds).length > 0) {
                 console.log("Conditional check passed. Calling renderChartsAndTables...");
-                // Determine initial toggle state
                 let showSecondary = true;
                 if (spComparisonToggle) {
                     showSecondary = spComparisonToggle.checked;
@@ -87,6 +83,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Now, attach the event listener if the toggle exists and data is available
                 if (spComparisonToggle && metadata.secondary_data_available) {
                     console.log("[main.js] Attaching toggle listener for S&P Comparison Data on Metric Page.");
+                    spComparisonToggle.disabled = false;
+                    // Show the comparison toggle container
+                    const spToggleContainer = document.getElementById('sp-toggle-container');
+                    if (spToggleContainer) spToggleContainer.style.display = 'block';
+
                     spComparisonToggle.addEventListener('change', (event) => {
                         const showSecondary = event.target.checked;
                         console.log(`[main.js Metric Page Toggle] S&P Comparison toggle changed. Show Secondary: ${showSecondary}`);
@@ -96,10 +97,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             showSecondary
                         );
                     });
-                    // Show the comparison toggle container if data is available
-                    const spToggleContainer = document.getElementById('sp-toggle-container');
-                    if (spToggleContainer) spToggleContainer.style.display = 'block';
-
                 } else if (spComparisonToggle) {
                      console.log("[main.js] S&P Comparison toggle exists, but secondary data not available for Metric Page.");
                      spComparisonToggle.disabled = true;
@@ -112,6 +109,105 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log("[main.js] S&P Comparison toggle switch (#toggleSpData) not found for Metric Page.");
                 }
 
+                // --- START: Inspect Modal Logic (MOVED INSIDE TRY BLOCK) ---
+                function addInspectButtonsToCharts(chartDataForButtons) { // Use parameter
+                    if (!chartDataForButtons || !chartDataForButtons.funds) return;
+                    Object.keys(chartDataForButtons.funds).forEach(fundCode => {
+                        const card = document.getElementById(`fund-card-${fundCode}`); // Assumes chartRenderer creates this ID
+                        if (!card) {
+                           console.warn(`[Inspect Logic] Card container 'fund-card-${fundCode}' not found. Cannot add Inspect button.`);
+                           return;
+                        }
+                        // Check if button already exists to prevent duplicates on re-render
+                        if (card.querySelector('.inspect-btn')) return; 
+                        
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'inspect-btn px-3 py-1 rounded-md bg-secondary text-white hover:bg-secondary-dark text-sm mt-2 absolute top-1 right-1 z-10'; // Added positioning and z-index
+                        btn.textContent = 'Inspect';
+                        btn.dataset.fund = fundCode;
+                        btn.dataset.metric = chartDataForButtons.metadata?.metric_name || '';
+                        
+                        // Gather dates robustly
+                        let allDates = [];
+                        (chartDataForButtons.funds[fundCode]?.charts || []).forEach(chartConfig => {
+                            if (Array.isArray(chartConfig.labels)) {
+                                allDates = allDates.concat(chartConfig.labels);
+                            }
+                        });
+                        allDates = Array.from(new Set(allDates)).sort();
+                        btn.dataset.minDate = allDates[0] || '';
+                        btn.dataset.maxDate = allDates[allDates.length - 1] || '';
+                        
+                        console.log(`[main.js] Adding Inspect button for ${fundCode}. Min: ${btn.dataset.minDate}, Max: ${btn.dataset.maxDate}.`); // DEBUG
+                        btn.addEventListener('click', openInspectModalFromButton); // Attach listener
+                        card.appendChild(btn);
+                    });
+                }
+
+                // Initial call to add buttons after first render
+                addInspectButtonsToCharts(fullChartData);
+                
+                // Ensure buttons are re-added if charts re-render (e.g., SP toggle)
+                 const origRenderChartsAndTables = window.renderChartsAndTables; // Get potentially patched version
+                 window.renderChartsAndTables = function(...args) {
+                     origRenderChartsAndTables.apply(this, args);
+                     addInspectButtonsToCharts(args[1]); // args[1] is fullChartData
+                 };
+
+                // Modal elements and open/close/submit logic
+                const inspectModal = document.getElementById('inspectModal');
+                const closeInspectModalBtn = document.getElementById('closeInspectModal');
+                const cancelInspectModalBtn = document.getElementById('cancelInspectModal');
+                const inspectForm = document.getElementById('inspectForm');
+                const runAnalysisBtn = document.getElementById('runAnalysisBtn');
+
+                function openInspectModalFromButton(e) {
+                    console.log('[main.js] openInspectModalFromButton triggered!'); // DEBUG
+                    const btn = e.currentTarget;
+                    console.log('[main.js] Button clicked:', btn); // DEBUG
+                    document.getElementById('inspectFund').value = btn.dataset.fund;
+                    document.getElementById('inspectMetric').value = btn.dataset.metric;
+                    document.getElementById('inspectStartDate').min = btn.dataset.minDate;
+                    document.getElementById('inspectStartDate').max = btn.dataset.maxDate;
+                    document.getElementById('inspectEndDate').min = btn.dataset.minDate;
+                    document.getElementById('inspectEndDate').max = btn.dataset.maxDate;
+                    document.getElementById('inspectStartDate').value = btn.dataset.minDate;
+                    document.getElementById('inspectEndDate').value = btn.dataset.maxDate;
+                    // Ensure form action is set if needed (though we redirect directly now)
+                    // inspectForm.action = `/metric/${btn.dataset.metric}/inspect`; 
+                    inspectModal.classList.remove('hidden');
+                }
+
+                function closeInspectModal() {
+                    inspectModal.classList.add('hidden');
+                }
+
+                // Attach listeners ONLY if elements exist
+                if (closeInspectModalBtn) closeInspectModalBtn.addEventListener('click', closeInspectModal);
+                if (cancelInspectModalBtn) cancelInspectModalBtn.addEventListener('click', closeInspectModal);
+                if (inspectModal) inspectModal.addEventListener('click', (e) => {
+                    if (e.target === inspectModal) closeInspectModal();
+                });
+
+                if (runAnalysisBtn) runAnalysisBtn.addEventListener('click', function() {
+                    console.log('[Inspect Modal] Run Analysis button clicked'); // DEBUG
+                    const fund_code = document.getElementById('inspectFund').value;
+                    const metric_name = document.getElementById('inspectMetric').value;
+                    const start_date = document.getElementById('inspectStartDate').value;
+                    const end_date = document.getElementById('inspectEndDate').value;
+                    const dataSourceRadio = inspectForm.querySelector('input[name="data_source"]:checked');
+                    const data_source = dataSourceRadio ? dataSourceRadio.value : 'Original'; 
+                    if (start_date > end_date) {
+                        alert('Start date must be before or equal to end date.');
+                        return;
+                    }
+                    const resultsUrl = `/metric/inspect/results?metric_name=${encodeURIComponent(metric_name)}&fund_code=${encodeURIComponent(fund_code)}&start_date=${encodeURIComponent(start_date)}&end_date=${encodeURIComponent(end_date)}&data_source=${encodeURIComponent(data_source)}`;
+                    console.log('[Inspect Modal] Redirecting to:', resultsUrl);
+                    window.location.href = resultsUrl;
+                });
+                // --- END Inspect Modal Logic ---
+
             } else {
                 console.error('Parsed metric chart data is missing expected structure or funds are empty:', fullChartData);
                 metricChartsArea.innerHTML = '<div class="alert alert-danger">Error: Invalid data structure or no fund data.</div>';
@@ -120,7 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error processing metric chart data:', e);
             metricChartsArea.innerHTML = '<div class="alert alert-danger">Error loading chart data. Check console.</div>';
         }
-        // --- END: Existing S&P Comparison Toggle Logic ---
     }
 
     // --- Fund Detail Page Logic --- 

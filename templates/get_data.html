@@ -3,48 +3,48 @@
 {% block title %}Get Data via API{% endblock %}
 
 {% block content %}
-<div>
+<div class="space-y-8">
 
     {# --- Display Data File Statuses --- #}
-    <div class="card mb-4">
-        <div class="card-header">
+    <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+        <h4 class="text-xl font-semibold border-b border-neutral-300 mb-3 pb-2">
             Current Data File Status
-        </div>
-        <div class="card-body">
-            <p class="card-text"><small class="text-muted">Data Folder: <code>{{ data_folder }}</code></small></p>
+        </h4>
+        <div class="mt-2">
+            <p class="text-sm text-neutral-500">Data Folder: <code>{{ data_folder }}</code></p>
             {% if data_file_statuses %}
-            <table class="table table-sm table-striped table-bordered">
+            <table class="w-full text-left text-sm border-collapse">
                 <thead>
-                    <tr>
-                        <th>File Name</th>
-                        <th>Latest Data Date (in file)</th>
-                        <th>File Last Modified</th>
-                        <th>Funds Included</th>
+                    <tr class="border-b border-neutral-300">
+                        <th class="py-2 px-1 font-semibold">File Name</th>
+                        <th class="py-2 px-1 font-semibold">Latest Data Date (in file)</th>
+                        <th class="py-2 px-1 font-semibold">File Last Modified</th>
+                        <th class="py-2 px-1 font-semibold">Funds Included</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for status in data_file_statuses %}
-                    <tr>
-                        <td>{{ status.filename }}</td>
-                        <td>
+                    <tr class="border-b border-neutral-200 hover:bg-neutral-50">
+                        <td class="py-2 px-1">{{ status.filename }}</td>
+                        <td class="py-2 px-1">
                             {% if status.exists %}
                                 {{ status.latest_data_date }}
                             {% else %}
-                                <span class="text-muted">File Not Found</span>
+                                <span class="text-neutral-500">File Not Found</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td class="py-2 px-1">
                              {% if status.exists %}
                                 {{ status.last_modified }}
                             {% else %}
-                                <span class="text-muted">N/A</span>
+                                <span class="text-neutral-500">N/A</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td class="py-2 px-1">
                              {% if status.exists %}
                                 {{ status.funds_included }}
                             {% else %}
-                                <span class="text-muted">N/A</span>
+                                <span class="text-neutral-500">N/A</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -52,118 +52,164 @@
                 </tbody>
             </table>
             {% else %}
-            <p class="text-muted">Could not retrieve data file statuses. Check QueryMap.csv or server logs.</p>
+            <p class="text-neutral-500">Could not retrieve data file statuses. Check QueryMap.csv or server logs.</p>
             {% endif %}
         </div>
     </div>
     {# --- End Display Data File Statuses --- #}
 
-    <h2>Get Data via API</h2>
-    <p>Select funds and date range to retrieve and process data using the API.</p>
-    <p>The API calls and processing will be printed in the terminal where the Flask app is running.</p>
+    {# --- Run API Form --- #}
+    <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-bold mb-2">Get Data via API</h2>
+        <p class="text-sm mb-4">Select funds and date range to retrieve and process data using the API. The API calls and processing will be printed in the terminal where the Flask app is running.</p>
 
-    <form id="get-data-form">
-        <div class="row mb-3">
-            <div class="col-md-4">
-                <label for="daysBack" class="form-label">Days Back:</label>
-                <input type="number" class="form-control" id="daysBack" name="days_back" value="30" required>
-                <div class="form-text">Number of days of history to retrieve ending on the End Date.</div>
-            </div>
-            <div class="col-md-4">
-                <label for="endDate" class="form-label">End Date:</label>
-                <input type="date" class="form-control" id="endDate" name="end_date" value="{{ default_end_date }}" required>
-                <div class="form-text">Defaults to the previous business day.</div>
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Date Range Mode:</label>
-                <div class="form-check">
-                    <input class="form-check-input" type="radio" name="date_mode" id="dateModeQuick" value="quick" checked>
-                    <label class="form-check-label" for="dateModeQuick">Use Days Back & End Date</label>
+        <form id="get-data-form">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label for="daysBack" class="block text-sm font-medium text-neutral-700 mb-1">Days Back:</label>
+                    <input type="number"
+                           id="daysBack" name="days_back" value="30" required
+                           class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm
+                                  focus:ring-secondary focus:border-secondary sm:text-sm">
+                    <p class="mt-1 text-xs text-neutral-500">Number of days of history to retrieve ending on the End Date.</p>
                 </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="radio" name="date_mode" id="dateModeRange" value="range">
-                    <label class="form-check-label" for="dateModeRange">Use Custom Date Range</label>
+                <div>
+                    <label for="endDate" class="block text-sm font-medium text-neutral-700 mb-1">End Date:</label>
+                    <input type="date" id="endDate" name="end_date" value="{{ default_end_date }}" required
+                           class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm
+                                  focus:ring-secondary focus:border-secondary sm:text-sm">
+                    <p class="mt-1 text-xs text-neutral-500">Defaults to the previous business day.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-neutral-700 mb-1">Date Range Mode:</label>
+                    <div class="flex items-center mb-1">
+                        <input id="dateModeQuick" name="date_mode" type="radio" value="quick" checked
+                               class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
+                        <label for="dateModeQuick" class="ml-2 block text-sm text-neutral-700">Use Days Back & End Date</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input id="dateModeRange" name="date_mode" type="radio" value="range"
+                               class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
+                        <label for="dateModeRange" class="ml-2 block text-sm text-neutral-700">Use Custom Date Range</label>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="row mb-3" id="custom-date-range-row" style="display: none;">
-            <div class="col-md-4">
-                <label for="startDate" class="form-label">Start Date:</label>
-                <input type="date" class="form-control" id="startDate" name="start_date">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4" id="custom-date-range-row" style="display: none;">
+                <div>
+                    <label for="startDate" class="block text-sm font-medium text-neutral-700 mb-1">Start Date:</label>
+                    <input type="date" id="startDate" name="start_date"
+                           class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm
+                                  focus:ring-secondary focus:border-secondary sm:text-sm">
+                </div>
+                <div>
+                    <label for="customEndDate" class="block text-sm font-medium text-neutral-700 mb-1">End Date:</label>
+                    <input type="date" id="customEndDate" name="custom_end_date"
+                           class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm
+                                  focus:ring-secondary focus:border-secondary sm:text-sm">
+                </div>
             </div>
-            <div class="col-md-4">
-                <label for="customEndDate" class="form-label">End Date:</label>
-                <input type="date" class="form-control" id="customEndDate" name="custom_end_date">
+            <div class="mb-3">
+                <label class="block text-sm font-medium text-neutral-700 mb-1">Data Write Mode:</label>
+                <div class="flex items-center mb-1">
+                    <input id="writeModeExpand" name="write_mode" type="radio" value="expand" checked
+                           class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
+                    <label for="writeModeExpand" class="ml-2 block text-sm text-neutral-700">Expand (append new data, overwrite overlaps)</label>
+                </div>
+                <div class="flex items-center">
+                    <input id="writeModeOverwrite" name="write_mode" type="radio" value="overwrite_all"
+                           class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
+                    <label for="writeModeOverwrite" class="ml-2 block text-sm text-neutral-700">Run and Overwrite All (start every file from scratch)</label>
+                </div>
             </div>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Data Write Mode:</label>
-            <div class="form-check">
-                <input class="form-check-input" type="radio" name="write_mode" id="writeModeExpand" value="expand" checked>
-                <label class="form-check-label" for="writeModeExpand">Expand (append new data, overwrite overlaps)</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="radio" name="write_mode" id="writeModeOverwrite" value="overwrite_all">
-                <label class="form-check-label" for="writeModeOverwrite">Run and Overwrite All (start every file from scratch)</label>
-            </div>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Select Funds:</label>
-            <!-- Fund Group Dropdown for fast selection -->
-            {% if fund_groups %}
-            <div class="mb-2" style="max-width: 350px;">
-                <label for="fund-group-select" class="form-label"><strong>Fund Group:</strong></label>
-                <select class="form-select" id="fund-group-select">
-                    <option value="">-- Select Group --</option>
-                    {% for group, funds in fund_groups.items() %}
-                        <option value="{{ group }}">{{ group }} ({{ funds|length }})</option>
+            <div class="mb-3">
+                <label class="block text-sm font-medium text-neutral-700 mb-1">Select Funds:</label>
+                <!-- Fund Group Dropdown -->
+                {% if fund_groups %}
+                <div class="mb-2" style="max-width: 350px;">
+                    <label for="fund-group-select" class="block text-sm font-medium text-neutral-700 mb-1"><strong>Fund Group:</strong></label>
+                    <select id="fund-group-select"
+                            class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm bg-white
+                                   focus:ring-secondary focus:border-secondary sm:text-sm">
+                        <option value="">-- Select Group --</option>
+                        {% for group, funds in fund_groups.items() %}
+                            <option value="{{ group }}">{{ group }} ({{ funds|length }})</option>
+                        {% endfor %}
+                    </select>
+                    <small class="mt-1 text-xs text-neutral-500">Selecting a group will instantly select all funds in that group. You can then add/remove individual funds as needed.</small>
+                </div>
+                {% endif %}
+                <div class="my-2 space-x-2">
+                     <button type="button" id="select-all-funds"
+                            class="px-3 py-1 text-xs rounded-md border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
+                         Select All
+                     </button>
+                     <button type="button" id="deselect-all-funds"
+                             class="px-3 py-1 text-xs rounded-md border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
+                         Deselect All
+                     </button>
+                     <button type="button" id="clear-fund-selection"
+                             class="px-3 py-1 text-xs rounded-md border border-danger bg-white text-danger hover:bg-danger-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-danger">
+                         Clear
+                     </button>
+                </div>
+                <div id="fund-list" class="border border-neutral-300 rounded-md p-3 bg-white" style="max-height: 300px; overflow-y: auto;">
+                    {% for fund in funds %}
+                    <div class="flex items-center mb-1">
+                        <input class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300 rounded fund-checkbox" type="checkbox" value="{{ fund['Fund Code'] }}" id="fund-{{ fund['Fund Code'] }}" name="funds"
+                               {% if fund['Picked'] %}checked{% endif %}>
+                        <label class="ml-2 block text-sm text-neutral-700" for="fund-{{ fund['Fund Code'] }}">
+                            {{ fund['Fund Code'] }} (AUM: {{ fund['Total Asset Value USD']|int }})
+                        </label>
+                    </div>
+                    {% else %}
+                    <p class="text-danger">No funds found or FundList.csv could not be loaded correctly.</p>
                     {% endfor %}
-                </select>
-                <small class="form-text text-muted">Selecting a group will instantly select all funds in that group. You can then add/remove individual funds as needed.</small>
-            </div>
-            {% endif %}
-            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="select-all-funds">Select All</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="deselect-all-funds">Deselect All</button>
-            <button type="button" class="btn btn-sm btn-outline-danger ms-1" id="clear-fund-selection">Clear</button>
-            <div id="fund-list" class="border p-3" style="max-height: 300px; overflow-y: auto;">
-                {% for fund in funds %}
-                <div class="form-check">
-                    <input class="form-check-input fund-checkbox" type="checkbox" value="{{ fund['Fund Code'] }}" id="fund-{{ fund['Fund Code'] }}" name="funds"
-                           {% if fund['Picked'] %}checked{% endif %}>
-                    <label class="form-check-label" for="fund-{{ fund['Fund Code'] }}">
-                        {{ fund['Fund Code'] }} (AUM: {{ fund['Total Asset Value USD']|int }})
-                    </label>
                 </div>
-                {% else %}
-                <p class="text-danger">No funds found or FundList.csv could not be loaded correctly.</p>
-                {% endfor %}
+                <div class="text-danger text-sm mt-1 hidden" id="fund-selection-error">Please select at least one fund.</div>
             </div>
-            <div class="form-text text-danger d-none" id="fund-selection-error">Please select at least one fund.</div>
-        </div>
 
-        <button type="submit" class="btn btn-primary">Run API Calls</button>
-        <button type="button" id="run-overwrite-button" class="btn btn-warning ms-2">Run and Overwrite Data</button>
-        <button type="button" id="run-cleanup-button" class="btn btn-secondary ms-2">Run Data Cleanup</button>
-    </form>
+            <div class="flex space-x-2">
+                <button type="submit"
+                        class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                    Run API Calls
+                </button>
+                <button type="button" id="run-overwrite-button"
+                        class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-warning hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-warning">
+                    Run and Overwrite Data
+                </button>
+                <button type="button" id="run-cleanup-button"
+                        class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-secondary hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
+                    Run Data Cleanup
+                </button>
+            </div>
+        </form>
+    </div>
+    {# --- End Run API Form --- #}
 
+
+    {# --- Status Area --- #}
     <div id="status-area" class="mt-4" style="display: none;">
-        <h4>Processing Status</h4>
-        <div class="progress mb-2" style="height: 20px;">
-            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        <h4 class="text-xl font-semibold mb-2">Processing Status</h4>
+        <div class="w-full bg-neutral-200 rounded-full h-5 overflow-hidden mb-2">
+            <div id="progress-bar"
+                 class="h-full bg-primary text-white text-xs font-medium text-center leading-5 transition-all duration-300 ease-linear"
+                 role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                 0%
+            </div>
         </div>
-        <p id="status-message"></p>
+        <p id="status-message" class="text-sm mb-3"></p>
         <div id="results-summary" class="mt-3">
-            <h5>Results Summary</h5>
-            <table class="table table-sm table-striped">
+            <h5 class="text-lg font-semibold mb-2">Results Summary</h5>
+            <table class="w-full text-left text-sm border-collapse">
                 <thead>
-                    <tr>
-                        <th>Query ID</th>
-                        <th>File Name</th>
-                        <th>Rows Returned</th>
-                        <th>File Lines</th>
-                        <th>Last Written</th>
-                        <th>Status</th>
-                        <th>Actions</th>
+                    <tr class="border-b border-neutral-300">
+                        <th class="py-2 px-1 font-semibold">Query ID</th>
+                        <th class="py-2 px-1 font-semibold">File Name</th>
+                        <th class="py-2 px-1 font-semibold">Rows Returned</th>
+                        <th class="py-2 px-1 font-semibold">File Lines</th>
+                        <th class="py-2 px-1 font-semibold">Last Written</th>
+                        <th class="py-2 px-1 font-semibold">Status</th>
+                        <th class="py-2 px-1 font-semibold">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="results-table-body">
@@ -171,105 +217,140 @@
                 </tbody>
             </table>
         </div>
-         <div id="error-message" class="alert alert-danger mt-3" style="display: none;">
+         <div id="error-message" class="mt-3 p-4 bg-danger-light border border-danger text-danger rounded-md" style="display: none;">
              <!-- Errors shown here -->
          </div>
     </div>
+    {# --- End Status Area --- #}
 
-    <!-- Schedule TQS Calls Section -->
-    <hr>
-    <h2>Schedule TQS Calls</h2>
-    <p>Set up daily scheduled runs of the API calls by choosing funds, date range, overwrite mode, and time.</p>
-    <form id="schedule-form" class="mb-4">
-        <div class="row mb-3">
-            <div class="col-md-3">
-                <label for="scheduleHour" class="form-label">Run Time:</label>
-                <!-- Hour and minute dropdowns for easier time selection -->
-                <div class="d-flex align-items-center">
-                    <select class="form-select me-1" id="scheduleHour" name="schedule_hour" style="width:auto;">
-                        {% for h in range(0,24) %}
-                        <option value="{{ '%02d' % h }}">{{ '%02d' % h }}</option>
-                        {% endfor %}
-                    </select>
-                    <span>:</span>
-                    <select class="form-select ms-1" id="scheduleMinute" name="schedule_minute" style="width:auto;">
-                        {% for m in range(0,60,5) %}
-                        <option value="{{ '%02d' % m }}">{{ '%02d' % m }}</option>
-                        {% endfor %}
+
+    {# --- Schedule TQS Calls Section --- #}
+    <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-bold mb-2">Schedule TQS Calls</h2>
+        <p class="text-sm mb-4">Set up daily scheduled runs of the API calls by choosing funds, date range, overwrite mode, and time.</p>
+        <form id="schedule-form" class="mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label for="scheduleHour" class="block text-sm font-medium text-neutral-700 mb-1">Run Time:</label>
+                    <div class="flex items-center space-x-1">
+                        <select id="scheduleHour" name="schedule_hour" style="width:auto;"
+                                class="block w-auto border border-neutral-300 rounded-md px-3 py-2 shadow-sm bg-white focus:ring-secondary focus:border-secondary sm:text-sm">
+                            {% for h in range(0,24) %}
+                            <option value="{{ '%02d' % h }}">{{ '%02d' % h }}</option>
+                            {% endfor %}
+                        </select>
+                        <span>:</span>
+                        <select id="scheduleMinute" name="schedule_minute" style="width:auto;"
+                                class="block w-auto border border-neutral-300 rounded-md px-3 py-2 shadow-sm bg-white focus:ring-secondary focus:border-secondary sm:text-sm">
+                            {% for m in range(0,60,5) %}
+                            <option value="{{ '%02d' % m }}">{{ '%02d' % m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label for="scheduleWriteMode" class="block text-sm font-medium text-neutral-700 mb-1">Write Mode:</label>
+                    <select id="scheduleWriteMode" name="write_mode"
+                            class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm bg-white focus:ring-secondary focus:border-secondary sm:text-sm">
+                        <option value="expand" selected>Expand (append/merge)</option>
+                        <option value="overwrite_all">Overwrite All</option>
                     </select>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <label for="scheduleWriteMode" class="form-label">Write Mode:</label>
-                <select class="form-select" id="scheduleWriteMode" name="write_mode">
-                    <option value="expand" selected>Expand (append/merge)</option>
-                    <option value="overwrite_all">Overwrite All</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Date Mode:</label>
-                <select class="form-select" id="scheduleDateMode" name="date_mode">
-                    <option value="quick" selected>Quick (Days Back)</option>
-                    <option value="range">Custom Range (relative)</option>
-                </select>
-            </div>
-            <div class="col-md-3" id="scheduleDaysBackContainer">
-                <label for="scheduleDaysBack" class="form-label">Days Back:</label>
-                <input type="number" class="form-control" id="scheduleDaysBack" name="days_back" value="30">
-                <div class="form-text">End date will always be the most recent business day when the schedule runs.</div>
-            </div>
-        </div>
-        <div class="row mb-3" id="scheduleDatesContainer" style="display:none;">
-            <div class="col-md-4">
-                <label for="scheduleStartOffset" class="form-label">Start Offset (days before end):</label>
-                <input type="number" class="form-control" id="scheduleStartOffset" name="start_offset" value="30">
-            </div>
-            <div class="col-md-4">
-                <label for="scheduleEndOffset" class="form-label">End Offset (days before today):</label>
-                <input type="number" class="form-control" id="scheduleEndOffset" name="end_offset" value="0">
-                <div class="form-text">0 = most recent business day</div>
-            </div>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Funds:</label>
-            <!-- Searchable checkbox list for large fund lists -->
-            <div class="mb-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="schedule-select-all">Select All</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="schedule-deselect-all">Deselect All</button>
-            </div>
-            <input type="text" class="form-control mb-2" id="schedule-fund-search" placeholder="Search funds...">
-            <div id="schedule-fund-list" class="border p-3" style="max-height: 200px; overflow-y: auto;">
-                {% for fund in funds %}
-                <div class="form-check">
-                    <input class="form-check-input schedule-fund-checkbox" type="checkbox" value="{{ fund['Fund Code'] }}" id="sched-fund-{{ fund['Fund Code'] }}">
-                    <label class="form-check-label" for="sched-fund-{{ fund['Fund Code'] }}">{{ fund['Fund Code'] }}</label>
+                <div>
+                    <label for="scheduleDateMode" class="block text-sm font-medium text-neutral-700 mb-1">Date Mode:</label>
+                    <select id="scheduleDateMode" name="date_mode"
+                            class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm bg-white focus:ring-secondary focus:border-secondary sm:text-sm">
+                        <option value="quick" selected>Quick (Days Back)</option>
+                        <option value="range">Custom Range (relative)</option>
+                    </select>
                 </div>
-                {% endfor %}
+                <div id="scheduleDaysBackContainer">
+                    <label for="scheduleDaysBack" class="block text-sm font-medium text-neutral-700 mb-1">Days Back:</label>
+                    <input type="number" id="scheduleDaysBack" name="days_back" value="30"
+                           class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm focus:ring-secondary focus:border-secondary sm:text-sm">
+                    <p class="mt-1 text-xs text-neutral-500">End date will always be the most recent business day when the schedule runs.</p>
+                </div>
             </div>
-            <div class="form-text">Type to search and tick funds. Use Select All/Deselect All for bulk actions.</div>
-        </div>
-        <div class="text-danger d-none" id="schedule-error">Please fill out all fields and select at least one fund.</div>
-        <button type="submit" class="btn btn-success">Add Schedule</button>
-    </form>
-    <table class="table table-sm table-striped" id="schedule-table">
-        <thead>
-            <tr>
-                <th>ID</th><th>Time</th><th>Funds</th><th>Date Mode</th><th>Params</th><th>Write Mode</th><th>Actions</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4" id="scheduleDatesContainer" style="display:none;">
+                <div>
+                    <label for="scheduleStartOffset" class="block text-sm font-medium text-neutral-700 mb-1">Start Offset (days before end):</label>
+                    <input type="number" id="scheduleStartOffset" name="start_offset" value="30"
+                           class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm focus:ring-secondary focus:border-secondary sm:text-sm">
+                </div>
+                <div>
+                    <label for="scheduleEndOffset" class="block text-sm font-medium text-neutral-700 mb-1">End Offset (days before today):</label>
+                    <input type="number" id="scheduleEndOffset" name="end_offset" value="0"
+                           class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm focus:ring-secondary focus:border-secondary sm:text-sm">
+                    <p class="mt-1 text-xs text-neutral-500">0 = most recent business day</p>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="block text-sm font-medium text-neutral-700 mb-1">Funds:</label>
+                <div class="mb-2 space-x-2">
+                    <button type="button" id="schedule-select-all"
+                            class="px-3 py-1 text-xs rounded-md border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
+                        Select All
+                    </button>
+                    <button type="button" id="schedule-deselect-all"
+                            class="px-3 py-1 text-xs rounded-md border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
+                         Deselect All
+                    </button>
+                </div>
+                <input type="text" id="schedule-fund-search" placeholder="Search funds..."
+                       class="block w-full border border-neutral-300 rounded-md px-3 py-2 mb-2 shadow-sm focus:ring-secondary focus:border-secondary sm:text-sm">
+                <div id="schedule-fund-list" class="border border-neutral-300 rounded-md p-3 bg-white" style="max-height: 200px; overflow-y: auto;">
+                    {% for fund in funds %}
+                    <div class="flex items-center mb-1">
+                        <input class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300 rounded schedule-fund-checkbox" type="checkbox" value="{{ fund['Fund Code'] }}" id="sched-fund-{{ fund['Fund Code'] }}">
+                        <label class="ml-2 block text-sm text-neutral-700" for="sched-fund-{{ fund['Fund Code'] }}">{{ fund['Fund Code'] }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+                <p class="mt-1 text-xs text-neutral-500">Type to search and tick funds. Use Select All/Deselect All for bulk actions.</p>
+            </div>
+            <div class="text-danger text-sm hidden mb-3" id="schedule-error">Please fill out all fields and select at least one fund.</div>
+            <button type="submit"
+                    class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-success hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-success">
+                Add Schedule
+            </button>
+        </form>
 
-    <!-- Data Consistency Audit Section -->
-    <div class="mt-4">
-        <button id="run-audit-button" class="btn btn-info">Run Data Consistency Audit</button>
+        <h4 class="text-xl font-semibold mt-6 mb-2">Current Schedules</h4>
+        <table class="w-full text-left text-sm border-collapse" id="schedule-table">
+            <thead>
+                <tr class="border-b border-neutral-300">
+                    <th class="py-2 px-1 font-semibold">ID</th>
+                    <th class="py-2 px-1 font-semibold">Time</th>
+                    <th class="py-2 px-1 font-semibold">Funds</th>
+                    <th class="py-2 px-1 font-semibold">Date Mode</th>
+                    <th class="py-2 px-1 font-semibold">Params</th>
+                    <th class="py-2 px-1 font-semibold">Write Mode</th>
+                    <th class="py-2 px-1 font-semibold">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {# Populated by JS - Needs JS update for Tailwind classes in rows/buttons #}
+            </tbody>
+        </table>
+    </div>
+    {# --- End Schedule TQS Calls Section --- #}
+
+
+    {# --- Data Consistency Audit Section --- #}
+    <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mt-4 hover:shadow-md transition-shadow">
+        <h4 class="text-xl font-semibold mb-3">Data Consistency Audit</h4>
+        <button id="run-audit-button"
+                class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-info hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info">
+            Run Data Consistency Audit
+        </button>
         <div id="audit-report-area" class="mt-3" style="display: none;">
-            <h4>Data Consistency Audit Report</h4>
-            <div id="audit-report-summary"></div>
-            <div id="audit-report-details" class="mt-2"></div>
+            <h5 class="text-lg font-semibold mb-2">Audit Report Summary</h5>
+            <div id="audit-report-summary" class="text-sm"></div>
+            <h5 class="text-lg font-semibold mt-4 mb-2">Audit Report Details</h5>
+            <div id="audit-report-details" class="mt-2 text-sm space-y-3"></div>
         </div>
     </div>
-    <!-- End Data Consistency Audit Section -->
+    {# --- End Data Consistency Audit Section --- #}
 
 </div>
 {% endblock %}
@@ -286,6 +367,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectAllButton = document.getElementById('select-all-funds');
     const deselectAllButton = document.getElementById('deselect-all-funds');
     const clearButton = document.getElementById('clear-fund-selection');
+    const fundList = document.getElementById('fund-list'); // Need the container
     // Map of group name to fund codes (populated from server-side context)
     const fundGroups = JSON.parse('{{ fund_groups|tojson|safe }}');
 
@@ -293,8 +375,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (fundGroupSelect) {
         fundGroupSelect.addEventListener('change', function() {
             const group = fundGroupSelect.value;
-            // Always get the latest checkboxes in case DOM changes
-            const checkboxes = document.querySelectorAll('.fund-checkbox');
+            // Always get the latest checkboxes inside the container
+            const checkboxes = fundList.querySelectorAll('.fund-checkbox');
             // Uncheck all first
             checkboxes.forEach(cb => cb.checked = false);
             if (group && fundGroups[group]) {
@@ -310,17 +392,17 @@ document.addEventListener('DOMContentLoaded', function() {
     // Select All/Deselect All/Clear logic
     if (selectAllButton) {
         selectAllButton.addEventListener('click', () => {
-            document.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = true);
+            fundList.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = true);
         });
     }
     if (deselectAllButton) {
         deselectAllButton.addEventListener('click', () => {
-            document.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = false);
+            fundList.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = false);
         });
     }
     if (clearButton) {
         clearButton.addEventListener('click', () => {
-            document.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = false);
+            fundList.querySelectorAll('.fund-checkbox').forEach(cb => cb.checked = false);
             if (fundGroupSelect) fundGroupSelect.value = '';
         });
     }
@@ -337,9 +419,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const runOverwriteButton = document.getElementById('run-overwrite-button');
     const cleanupStatus = document.createElement('div');
     cleanupStatus.id = 'cleanup-status';
-    cleanupStatus.className = 'mt-2';
-    cleanupButton.parentNode.insertBefore(cleanupStatus, cleanupButton.nextSibling);
-    const fundCheckboxes = document.querySelectorAll('.fund-checkbox');
+    cleanupStatus.className = 'mt-2'; // Will be replaced by alert classes
+    // Insert after the buttons row
+    const buttonsContainer = cleanupButton.parentElement;
+    buttonsContainer.parentNode.insertBefore(cleanupStatus, buttonsContainer.nextSibling);
+
     const dateModeQuick = document.getElementById('dateModeQuick');
     const dateModeRange = document.getElementById('dateModeRange');
     const customDateRangeRow = document.getElementById('custom-date-range-row');
@@ -351,9 +435,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Show/hide custom date range row based on radio selection
     function updateDateRangeVisibility() {
         if (dateModeRange.checked) {
-            customDateRangeRow.style.display = '';
+            customDateRangeRow.style.display = ''; // Show
         } else {
-            customDateRangeRow.style.display = 'none';
+            customDateRangeRow.style.display = 'none'; // Hide
         }
     }
     dateModeQuick.addEventListener('change', updateDateRangeVisibility);
@@ -363,24 +447,25 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Function to handle the API call logic ---
     async function handleApiCall(forceOverwriteButton = false) {
         // Clear previous results and errors
-        statusArea.style.display = 'none';
+        statusArea.style.display = 'none'; // Hide status area initially
         resultsTableBody.innerHTML = '';
         errorMessageDiv.style.display = 'none';
         errorMessageDiv.textContent = '';
-        cleanupButton.style.display = 'none';
         cleanupStatus.textContent = '';
-        cleanupStatus.className = 'mt-2';
+        cleanupStatus.className = 'mt-2'; // Reset classes
+        cleanupStatus.style.display = 'none'; // Hide cleanup status
         statusMessage.textContent = '';
         progressBar.style.width = '0%';
         progressBar.textContent = '0%';
-        progressBar.classList.remove('bg-success', 'bg-danger');
-        fundSelectionError.classList.add('d-none');
+        progressBar.classList.remove('bg-success', 'bg-warning', 'bg-danger');
+        progressBar.classList.add('bg-primary'); // Reset to primary
+        fundSelectionError.classList.add('hidden'); // Use Tailwind hidden
 
         // Get selected funds
-        const selectedFunds = Array.from(document.querySelectorAll('input[name="funds"]:checked'))
+        const selectedFunds = Array.from(fundList.querySelectorAll('input[name="funds"]:checked'))
                                  .map(cb => cb.value);
         if (selectedFunds.length === 0) {
-            fundSelectionError.classList.remove('d-none');
+            fundSelectionError.classList.remove('hidden');
             return;
         }
 
@@ -405,10 +490,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // Write mode
-        const writeMode = writeModeOverwrite.checked ? 'overwrite_all' : 'expand';
+        // Write mode - determine based on which radio is checked OR if overwrite button was clicked
+        let writeMode = 'expand'; // Default
+        if (forceOverwriteButton) {
+            writeMode = 'overwrite_all';
+        } else if (writeModeOverwrite.checked) {
+            writeMode = 'overwrite_all';
+        }
 
-        // --- New: Progress bar in navbar ---
+        // Show status area now that we are starting
+        statusArea.style.display = '';
+
+        // --- Progress bar in navbar ---
         updateNavbarStatusBar({ current: 0, total: 1, text: 'Preparing API calls...' });
 
         try {
@@ -426,8 +519,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 requestBody.end_date = endDate;
             }
 
-            // --- New: Fetch the list of queries to determine total steps ---
-            // We'll get this from the backend response (summary.length)
             let totalSteps = 1;
             let completedSteps = 0;
             // Start the API call
@@ -437,10 +528,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify(requestBody)
             });
             const result = await response.json();
-            // If we have a summary, update progress for each item
+
             if (result.summary && Array.isArray(result.summary)) {
                 totalSteps = result.summary.length;
                 completedSteps = 0;
+                // Initial update
+                updateNavbarStatusBar({
+                    current: completedSteps,
+                    total: totalSteps,
+                    text: `Processing 0/${totalSteps}...`
+                });
+                await new Promise(r => setTimeout(r, 50)); // Small delay
+
                 for (const item of result.summary) {
                     completedSteps++;
                     updateNavbarStatusBar({
@@ -449,23 +548,21 @@ document.addEventListener('DOMContentLoaded', function() {
                         text: `Processing ${completedSteps}/${totalSteps}: ${item.file_name}`,
                         error: item.status && item.status.toLowerCase().includes('error')
                     });
-                    // Optionally, add a small delay for UI update
-                    await new Promise(r => setTimeout(r, 100));
+                    await new Promise(r => setTimeout(r, 100)); // Small delay for UI update
                 }
-                // When done, show cleanup button
                 updateNavbarStatusBar({ complete: true });
             } else {
-                // Fallback: just show complete
-                updateNavbarStatusBar({ complete: true });
+                updateNavbarStatusBar({ complete: true }); // Fallback
             }
 
             if (response.ok && (result.status === 'completed' || result.status === 'completed_with_errors')) {
                 statusMessage.textContent = result.message;
                 progressBar.style.width = '100%';
                 progressBar.textContent = '100%';
+                progressBar.classList.remove('bg-primary');
                 progressBar.classList.add(result.status === 'completed_with_errors' ? 'bg-warning' : 'bg-success');
 
-                // Populate results table (add Last Written column)
+                // Populate results table with Tailwind classes
                 resultsTableBody.innerHTML = '';
                 if (result.summary && result.summary.length > 0) {
                     result.summary.forEach(item => {
@@ -480,48 +577,63 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                         let fundCodeForRerun = item.fund_code || null;
                         if (!fundCodeForRerun && item.query_id && typeof item.query_id === 'string') {
-                            const match = item.query_id.match(/some_pattern_to_extract_fund_code/);
+                            // Example: Extract fund code if pattern exists (adjust regex as needed)
+                            const match = item.query_id.match(/_([A-Z0-9]+)$/); // Simple example: extract code after last underscore
                             if (match && match[1]) {
                                 fundCodeForRerun = match[1];
                             }
                         }
+                        // Rerun button styling
                         const rerunButtonHtml = fundCodeForRerun
-                            ? `<button class="btn btn-sm btn-outline-primary rerun-button" data-fund-code="${fundCodeForRerun}">Rerun</button>`
-                            : `<span class="text-muted">Rerun N/A</span>`;
-                        const row = `<tr data-query-id="${item.query_id}">
-                                        <td>${item.query_id}</td>
-                                        <td>${item.file_name}</td>
-                                        <td>${rowsCellContent}</td>
-                                        <td>${linesCellContent}</td>
-                                        <td>${item.last_written ? item.last_written : 'N/A'}</td>
-                                        <td><span class="badge ${item.status.includes('OK') || item.status.includes('Saved') ? 'bg-success' : (item.status.includes('Warning') ? 'bg-warning' : 'bg-danger')}">${item.status}</span></td>
-                                        <td>${rerunButtonHtml}</td>
+                            ? `<button class="px-2 py-0.5 text-xs rounded-md border border-primary text-primary hover:bg-primary-light focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary rerun-button" data-fund-code="${fundCodeForRerun}">Rerun</button>`
+                            : `<span class="text-xs text-neutral-500">Rerun N/A</span>`;
+                        // Status badge styling
+                        const statusClass = item.status.includes('OK') || item.status.includes('Saved')
+                                          ? 'bg-success text-white'
+                                          : (item.status.includes('Warning')
+                                              ? 'bg-warning text-black'
+                                              : 'bg-danger text-white');
+                        const statusBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}">${item.status}</span>`;
+
+                        const row = `<tr class="border-b border-neutral-200 hover:bg-neutral-50" data-query-id="${item.query_id}">
+                                        <td class="py-2 px-1">${item.query_id}</td>
+                                        <td class="py-2 px-1">${item.file_name}</td>
+                                        <td class="py-2 px-1">${rowsCellContent}</td>
+                                        <td class="py-2 px-1">${linesCellContent}</td>
+                                        <td class="py-2 px-1">${item.last_written ? item.last_written : 'N/A'}</td>
+                                        <td class="py-2 px-1">${statusBadge}</td>
+                                        <td class="py-2 px-1">${rerunButtonHtml}</td>
                                      </tr>`;
                         resultsTableBody.innerHTML += row;
                     });
                 } else {
-                    resultsTableBody.innerHTML = '<tr><td colspan="7">No summary data returned.</td></tr>';
+                    resultsTableBody.innerHTML = '<tr><td colspan="7" class="py-2 px-1 text-neutral-500">No summary data returned.</td></tr>';
                 }
                 errorMessageDiv.style.display = 'none';
-                cleanupButton.style.display = 'inline-block';
             } else {
                 statusMessage.textContent = 'Processing failed.';
                 progressBar.style.width = '100%';
                 progressBar.textContent = 'Error';
+                progressBar.classList.remove('bg-primary');
                 progressBar.classList.add('bg-danger');
                 errorMessageDiv.textContent = `Error: ${result.message || 'Unknown error'}`;
-                errorMessageDiv.style.display = 'block';
+                errorMessageDiv.style.display = 'block'; // Show error message div
             }
         } catch (error) {
             updateNavbarStatusBar({ text: 'Error during API calls', error: true });
             console.error("Fetch error:", error);
-            progressBar.classList.remove('progress-bar-animated');
             progressBar.style.width = '100%';
             progressBar.textContent = 'Error';
+            progressBar.classList.remove('bg-primary');
             progressBar.classList.add('bg-danger');
             statusMessage.textContent = 'An error occurred during the request.';
             errorMessageDiv.textContent = 'Network error or server unreachable. Check console for details.';
-            errorMessageDiv.style.display = 'block';
+            errorMessageDiv.style.display = 'block'; // Show error message div
+        } finally {
+             // Ensure status area remains visible if there was an error or success
+             if (statusMessage.textContent || errorMessageDiv.textContent) {
+                 statusArea.style.display = '';
+             }
         }
     }
     // --- End of API call handler function ---
@@ -529,10 +641,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Event Listener for the original "Run API Calls" button (which is type="submit") ---
     form.addEventListener('submit', function(event) {
         event.preventDefault();
-        handleApiCall(false);
+        handleApiCall(false); // Don't force overwrite
     });
+    // --- Event Listener for the "Run and Overwrite Data" button ---
     runOverwriteButton.addEventListener('click', function() {
-        handleApiCall(true);
+        handleApiCall(true); // Force overwrite
     });
 
     // Add event listener for the Rerun buttons using event delegation
@@ -544,91 +657,126 @@ document.addEventListener('DOMContentLoaded', function() {
             const fundCode = button.dataset.fundCode;
             const daysBack = document.getElementById('daysBack').value;
             const endDate = document.getElementById('endDate').value;
-            const cells = row.cells; // Define cells here so it's available in all blocks
+            const cells = row.cells;
 
             if (!fundCode || !queryId) {
                 console.error('Missing fund code or query ID for rerun');
-                // Optionally display an error to the user near the button/row
                 return;
             }
 
             // Provide visual feedback
             button.disabled = true;
             button.textContent = 'Running...';
-            // You could also add a temporary status cell or highlight the row
+            button.classList.add('opacity-50', 'cursor-not-allowed');
+
+            // Target the status cell (assuming 6th cell, 0-indexed)
+            const statusCell = cells[5];
+            const originalStatusHtml = statusCell.innerHTML; // Store original status badge
+            statusCell.innerHTML = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-info text-white animate-pulse">Running</span>`;
 
             try {
-                const response = await fetch('/rerun-api-call', { // New endpoint needed
+                const response = await fetch('/rerun-api-call', { // Endpoint remains the same
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         query_id: queryId,
-                        // Send fundCode as a list in the 'funds' key
-                        funds: [fundCode],
+                        funds: [fundCode], // Send as list
                         days_back: parseInt(daysBack, 10),
-                        end_date: endDate
+                        end_date: endDate,
+                        // Ensure write_mode is consistent with initial run or default (e.g., 'expand')
+                        write_mode: 'expand' // Or get current setting if needed
                     })
                 });
-
                 const result = await response.json();
 
-                // Use actual_rows/actual_lines as default, fallback to simulated if not present
-                if (response.ok && result.status && result.status.includes('OK')) {
+                if (response.ok && result.status && (result.status.includes('OK') || result.status.includes('Saved'))) {
                     cells[2].textContent = result.actual_rows !== undefined ? result.actual_rows : (result.simulated_rows !== undefined ? result.simulated_rows : 'N/A');
                     cells[3].textContent = result.actual_lines !== undefined ? result.actual_lines : (result.simulated_lines !== undefined ? result.simulated_lines : 'N/A');
-                    cells[4].innerHTML = `<span class="badge bg-success">${result.status}</span>`;
-                    button.textContent = 'Rerun Success';
-                    setTimeout(() => { button.textContent = 'Rerun'; }, 2000);
+                    cells[4].textContent = result.last_written || 'N/A'; // Update last written
+                    // Update status badge
+                    const statusClass = 'bg-success text-white';
+                    statusCell.innerHTML = `<span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}">${result.status}</span>`;
+                    button.textContent = 'Rerun OK';
+                    button.classList.remove('border-primary', 'text-primary', 'hover:bg-primary-light');
+                    button.classList.add('border-success', 'text-success', 'hover:bg-success-light');
+                    setTimeout(() => {
+                        button.textContent = 'Rerun';
+                         button.classList.remove('border-success', 'text-success', 'hover:bg-success-light');
+                         button.classList.add('border-primary', 'text-primary', 'hover:bg-primary-light');
+                    }, 2500);
                 } else {
-                    cells[4].innerHTML = `<span class="badge bg-danger">Error</span>`;
+                    // Update status badge to Error
+                    const statusClass = 'bg-danger text-white';
+                    statusCell.innerHTML = `<span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}">Error</span>`;
                     console.error("Rerun failed:", result.message || 'Unknown error');
                     button.textContent = 'Rerun Failed';
-                    setTimeout(() => { button.textContent = 'Rerun'; }, 3000);
+                     button.classList.remove('border-primary', 'text-primary', 'hover:bg-primary-light');
+                     button.classList.add('border-danger', 'text-danger', 'hover:bg-danger-light');
+                    setTimeout(() => {
+                        button.textContent = 'Rerun';
+                        statusCell.innerHTML = originalStatusHtml; // Restore original badge on fail timeout
+                        button.classList.remove('border-danger', 'text-danger', 'hover:bg-danger-light');
+                        button.classList.add('border-primary', 'text-primary', 'hover:bg-primary-light');
+                    }, 3500);
                 }
 
             } catch (error) {
                 console.error("Rerun fetch error:", error);
-                cells[4].innerHTML = `<span class="badge bg-danger">Network Error</span>`;
+                // Update status badge to Network Error
+                const statusClass = 'bg-danger text-white';
+                statusCell.innerHTML = `<span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}">Net Error</span>`;
                 button.textContent = 'Rerun Error';
-                setTimeout(() => { button.textContent = 'Rerun'; }, 3000);
+                button.classList.remove('border-primary', 'text-primary', 'hover:bg-primary-light');
+                button.classList.add('border-danger', 'text-danger', 'hover:bg-danger-light');
+                setTimeout(() => {
+                     button.textContent = 'Rerun';
+                     statusCell.innerHTML = originalStatusHtml; // Restore original badge on fail timeout
+                     button.classList.remove('border-danger', 'text-danger', 'hover:bg-danger-light');
+                     button.classList.add('border-primary', 'text-primary', 'hover:bg-primary-light');
+                }, 3500);
             } finally {
                 button.disabled = false;
+                button.classList.remove('opacity-50', 'cursor-not-allowed');
             }
         }
     });
 
-    // Add event listener for the new Cleanup button
+    // Add event listener for the Cleanup button
     cleanupButton.addEventListener('click', async function() {
         cleanupStatus.textContent = 'Starting cleanup process...';
-        cleanupStatus.className = 'mt-2 alert alert-info';
+        // Style as info alert
+        cleanupStatus.className = 'mt-2 p-4 bg-info-light border border-info text-info rounded-md';
+        cleanupStatus.style.display = 'block'; // Show it
         cleanupButton.disabled = true;
+        cleanupButton.classList.add('opacity-50', 'cursor-not-allowed');
 
         try {
             const response = await fetch('/run-cleanup', {
                 method: 'POST',
-                 headers: {
-                    'Content-Type': 'application/json',
-                },
+                 headers: { 'Content-Type': 'application/json' },
             });
-
             const result = await response.json();
 
             if (response.ok && result.status === 'success') {
-                cleanupStatus.textContent = `Cleanup process finished successfully. Output:\n${result.output}`;
-                cleanupStatus.className = 'mt-2 alert alert-success';
+                cleanupStatus.textContent = `Cleanup process finished successfully. Output:
+${result.output}`;
+                // Style as success alert
+                 cleanupStatus.className = 'mt-2 p-4 bg-success-light border border-success text-success rounded-md whitespace-pre-wrap'; // Added whitespace
             } else {
-                 cleanupStatus.textContent = `Cleanup process failed. Error:\n${result.error || result.message || 'Unknown error'}`;
-                 cleanupStatus.className = 'mt-2 alert alert-danger';
+                 cleanupStatus.textContent = `Cleanup process failed. Error:
+${result.error || result.message || 'Unknown error'}`;
+                 // Style as danger alert
+                 cleanupStatus.className = 'mt-2 p-4 bg-danger-light border border-danger text-danger rounded-md whitespace-pre-wrap'; // Added whitespace
             }
 
         } catch (error) {
             console.error("Cleanup fetch error:", error);
             cleanupStatus.textContent = 'Failed to trigger cleanup process. Network error or server unreachable.';
-            cleanupStatus.className = 'mt-2 alert alert-danger';
+            // Style as danger alert
+            cleanupStatus.className = 'mt-2 p-4 bg-danger-light border border-danger text-danger rounded-md';
         } finally {
              cleanupButton.disabled = false;
+             cleanupButton.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     });
 
@@ -642,151 +790,191 @@ document.addEventListener('DOMContentLoaded', function() {
         runAuditButton.addEventListener('click', async function() {
             runAuditButton.disabled = true;
             runAuditButton.textContent = 'Running Audit...';
+            runAuditButton.classList.add('opacity-50', 'cursor-not-allowed', 'animate-pulse');
             auditReportArea.style.display = 'none';
             auditReportSummary.innerHTML = '';
             auditReportDetails.innerHTML = '';
             try {
                 const resp = await fetch('/get_data/audit');
                 const data = await resp.json();
-                if (data.success) {
-                    const report = data.report;
-                    // Render summary
-                    let summaryHtml = '<ul>';
+
+                // --- Helper to render audit report elements ---
+                function renderAuditReport(report) {
+                    // Summary
+                    let summaryHtml = '<ul class="list-disc list-inside space-y-1">';
                     for (const item of report.summary) {
-                        summaryHtml += `<li><strong>${item.check}:</strong> ${item.result ? '<span class=\'text-success\'>OK</span>' : '<span class=\'text-danger\'>Issue</span>'}</li>`;
+                        const statusClass = item.result ? 'text-success font-semibold' : 'text-danger font-semibold';
+                        summaryHtml += `<li><strong>${item.check}:</strong> <span class="${statusClass}">${item.result ? 'OK' : 'Issue'}</span></li>`;
                     }
                     summaryHtml += '</ul>';
                     auditReportSummary.innerHTML = summaryHtml;
-                    // Render details
+
                     let detailsHtml = '';
+
+                    // Structure Issues
                     if (report.structure_issues && report.structure_issues.length > 0) {
-                        detailsHtml += '<h5>File Structure Issues</h5><ul>';
+                        detailsHtml += '<h5>File Structure Issues</h5><ul class="list-disc list-inside space-y-1">';
                         for (const issue of report.structure_issues) {
                             detailsHtml += `<li><strong>${issue.file}:</strong> ${issue.issue}</li>`;
                         }
                         detailsHtml += '</ul>';
                     }
-                    // Date range mismatches
-                    for (const key of ['ts_files', 'sp_ts_files', 'sec_files']) {
-                        if (report[key] && report[key].all_match === false) {
-                            detailsHtml += `<h5>${key.replace('_', '.').toUpperCase()} Date Range Mismatches</h5><ul>`;
-                            for (const [fname, drange] of Object.entries(report[key].date_ranges || {})) {
-                                detailsHtml += `<li><strong>${fname}:</strong> ${drange[0]} to ${drange[1]}</li>`;
-                            }
-                            detailsHtml += '</ul>';
-                        }
-                    }
-                    // Fund presence issues
-                    for (const key of ['ts_files', 'sp_ts_files']) {
-                        if (report[key] && report[key].fund_presence_issues) {
-                            let anyIssues = false;
-                            for (const [fname, issues] of Object.entries(report[key].fund_presence_issues)) {
-                                if (issues && issues.length > 0) {
-                                    anyIssues = true;
-                                    detailsHtml += `<h5>${fname} Fund Presence Issues</h5><ul>`;
-                                    for (const miss of issues) {
-                                        detailsHtml += `<li>Date: ${miss.date}, Missing Funds: ${miss.missing_funds.join(', ')}</li>`;
-                                    }
-                                    detailsHtml += '</ul>';
+
+                    // Date Range Mismatches Highlighting (Improved)
+                    function highlightDateRangeMismatches(groupKey, label) {
+                         if (report[groupKey] && report[groupKey].date_ranges && Object.keys(report[groupKey].date_ranges).length > 0) {
+                            const ranges = report[groupKey].date_ranges;
+                            const allMatch = report[groupKey].all_match;
+                            let mismatchHtml = `<h5>${label} Date Ranges ${allMatch ? '<span class="text-success font-semibold">(Consistent)</span>' : '<span class="text-danger font-semibold">(Inconsistent)</span>'}</h5>`;
+                            if (!allMatch) {
+                                // Find the most common date range
+                                const rangeCounts = {};
+                                for (const r of Object.values(ranges)) {
+                                    const key = r ? r.join(' to ') : 'N/A';
+                                    rangeCounts[key] = (rangeCounts[key] || 0) + 1;
                                 }
+                                let commonRange = null, maxCount = 0;
+                                for (const [k, v] of Object.entries(rangeCounts)) {
+                                    if (v > maxCount) { commonRange = k; maxCount = v; }
+                                }
+                                mismatchHtml += `<p class="text-xs text-neutral-600 mb-1">Most common range: ${commonRange || 'N/A'}</p>`;
+                                mismatchHtml += '<ul class="list-disc list-inside space-y-1">';
+                                for (const [fname, drange] of Object.entries(ranges)) {
+                                    const drangeStr = drange ? drange.join(' to ') : 'N/A';
+                                    if (drangeStr !== commonRange) {
+                                        mismatchHtml += `<li><strong>${fname}:</strong> <span class="text-warning">${drangeStr}</span></li>`;
+                                    } else {
+                                         mismatchHtml += `<li><strong>${fname}:</strong> ${drangeStr}</li>`; // Show matching ones too for context
+                                    }
+                                }
+                                mismatchHtml += '</ul>';
+                            } else if (Object.keys(ranges).length > 0) {
+                                // If all match, just show the common range
+                                const firstRange = Object.values(ranges)[0];
+                                const commonRangeStr = firstRange ? firstRange.join(' to ') : 'N/A';
+                                mismatchHtml += `<p class="text-xs text-neutral-600">All files: ${commonRangeStr}</p>`
                             }
+                             detailsHtml += mismatchHtml;
                         }
                     }
-                    auditReportDetails.innerHTML = detailsHtml || '<span class="text-success">No detailed issues found.</span>';
-                    // --- Simplified: Render File Diagnostics Table (no preview, no date cols, just date range) ---
-                    if (report.file_details) {
-                        // Build a lookup for date ranges by file
+                    highlightDateRangeMismatches('ts_files', 'Time Series');
+                    highlightDateRangeMismatches('sp_ts_files', 'SP Time Series');
+                    highlightDateRangeMismatches('sec_files', 'Security');
+
+                    // Fund Presence Issues
+                    for (const key of ['ts_files', 'sp_ts_files']) {
+                         if (report[key] && report[key].fund_presence_issues) {
+                             let hasIssues = false;
+                             let fundPresenceHtml = '';
+                             for (const [fname, issues] of Object.entries(report[key].fund_presence_issues)) {
+                                 if (issues && issues.length > 0) {
+                                     hasIssues = true;
+                                     fundPresenceHtml += `<h6 class="font-semibold mt-2">${fname} Fund Presence Issues</h6><ul class="list-disc list-inside space-y-1">`;
+                                     for (const miss of issues) {
+                                         fundPresenceHtml += `<li>Date: ${miss.date}, Missing Funds: <span class="text-warning">${miss.missing_funds.join(', ')}</span></li>`;
+                                     }
+                                     fundPresenceHtml += '</ul>';
+                                 }
+                             }
+                             if(hasIssues) {
+                                 const label = key === 'ts_files' ? 'Time Series' : 'SP Time Series';
+                                 detailsHtml += `<h5>${label} Fund Presence Issues</h5>${fundPresenceHtml}`;
+                             }
+                         }
+                     }
+
+                     // File Diagnostics Table (Styled)
+                    if (report.file_details && Object.keys(report.file_details).length > 0) {
                         const dateRanges = Object.assign({},
                             report.ts_files && report.ts_files.date_ranges ? report.ts_files.date_ranges : {},
                             report.sp_ts_files && report.sp_ts_files.date_ranges ? report.sp_ts_files.date_ranges : {},
                             report.sec_files && report.sec_files.date_ranges ? report.sec_files.date_ranges : {}
                         );
-                        let fileTable = '<h5>File Diagnostics</h5><table class="table table-sm table-bordered"><thead><tr><th>File</th><th>Size</th><th>Rows</th><th>Cols</th><th>Fund Col</th><th>Date Range</th><th>Issues</th></tr></thead><tbody>';
+                        let fileTable = `<h5>File Diagnostics</h5>
+                            <table class="w-full text-left text-xs border-collapse mt-1">
+                                <thead>
+                                    <tr class="border-b border-neutral-400">
+                                        <th class="py-1 px-1 font-semibold">File</th>
+                                        <th class="py-1 px-1 font-semibold">Size</th>
+                                        <th class="py-1 px-1 font-semibold">Rows</th>
+                                        <th class="py-1 px-1 font-semibold">Cols</th>
+                                        <th class="py-1 px-1 font-semibold">Fund Col</th>
+                                        <th class="py-1 px-1 font-semibold">Date Range</th>
+                                        <th class="py-1 px-1 font-semibold">Issues</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
                         for (const [fname, info] of Object.entries(report.file_details)) {
-                            let drange = dateRanges[fname] ? `${dateRanges[fname][0]} to ${dateRanges[fname][1]}` : '<span class="text-danger">N/A</span>';
-                            fileTable += `<tr>
-                                <td>${fname}</td>
-                                <td>${info.size}</td>
-                                <td>${info.n_rows}</td>
-                                <td>${info.n_cols}</td>
-                                <td>${info.fund_column || ''}</td>
-                                <td>${drange}</td>
-                                <td>${info.issues && info.issues.length ? info.issues.join('<br>') : '<span class="text-success">None</span>'}</td>
+                            let drangeData = dateRanges[fname];
+                            let drange = drangeData ? `${drangeData[0]} to ${drangeData[1]}` : '<span class="text-neutral-500">N/A</span>';
+                            let issueText;
+                            if (info.issues && info.issues.length) {
+                                issueText = `<span class="text-warning">${info.issues.join('<br>')}</span>`;
+                            } else {
+                                issueText = `<span class="text-success">None</span>`;
+                            }
+                            fileTable += `<tr class="border-b border-neutral-200 hover:bg-neutral-50">
+                                <td class="py-1 px-1">${fname}</td>
+                                <td class="py-1 px-1">${info.size}</td>
+                                <td class="py-1 px-1">${info.n_rows}</td>
+                                <td class="py-1 px-1">${info.n_cols}</td>
+                                <td class="py-1 px-1">${info.fund_column || ''}</td>
+                                <td class="py-1 px-1">${drange}</td>
+                                <td class="py-1 px-1">${issueText}</td>
                             </tr>`;
                         }
                         fileTable += '</tbody></table>';
-                        auditReportDetails.innerHTML += fileTable;
+                        detailsHtml += fileTable;
                     }
-                    // --- Highlight Date Range Mismatches ---
-                    function highlightDateRangeMismatches(groupKey, label) {
-                        if (report[groupKey] && report[groupKey].all_match === false) {
-                            const ranges = report[groupKey].date_ranges || {};
-                            // Find the most common date range
-                            const rangeCounts = {};
-                            for (const r of Object.values(ranges)) {
-                                const key = r ? r.join(' to ') : 'N/A';
-                                rangeCounts[key] = (rangeCounts[key] || 0) + 1;
-                            }
-                            // Find the most common range
-                            let commonRange = null, maxCount = 0;
-                            for (const [k, v] of Object.entries(rangeCounts)) {
-                                if (v > maxCount) { commonRange = k; maxCount = v; }
-                            }
-                            let mismatchHtml = `<h5>${label} Date Range Mismatches</h5><ul>`;
-                            for (const [fname, drange] of Object.entries(ranges)) {
-                                const drangeStr = drange ? drange.join(' to ') : 'N/A';
-                                if (drangeStr !== commonRange) {
-                                    mismatchHtml += `<li><strong>${fname}:</strong> ${drangeStr} (expected: ${commonRange})</li>`;
-                                }
-                            }
-                            mismatchHtml += '</ul>';
-                            auditReportDetails.innerHTML += mismatchHtml;
-                        }
-                    }
-                    highlightDateRangeMismatches('ts_files', 'TS Files');
-                    highlightDateRangeMismatches('sp_ts_files', 'SP TS Files');
-                    highlightDateRangeMismatches('sec_files', 'SEC Files');
-                    // --- Enhanced: Render Recommendations ---
+
+                    // Recommendations
                     if (report.recommendations && report.recommendations.length) {
-                        let recHtml = '<h5>Recommendations</h5><ul>';
+                        detailsHtml += '<h5>Recommendations</h5><ul class="list-disc list-inside space-y-1">';
                         for (const rec of report.recommendations) {
-                            recHtml += `<li>${rec}</li>`;
+                            detailsHtml += `<li>${rec}</li>`;
                         }
-                        recHtml += '</ul>';
-                        auditReportDetails.innerHTML += recHtml;
+                        detailsHtml += '</ul>';
                     }
-                    // --- Enhanced: Show Skipped Files ---
+
+                    // Skipped Files
                     if (report.skipped_files && report.skipped_files.length) {
-                        auditReportDetails.innerHTML += `<h5>Skipped Files</h5><p>${report.skipped_files.join(', ')}</p>`;
+                        detailsHtml += `<h5>Skipped Files</h5><p class="text-xs text-neutral-600">${report.skipped_files.join(', ')}</p>`;
                     }
-                    auditReportArea.style.display = '';
+
+                    auditReportDetails.innerHTML = detailsHtml || '<p class="text-success">No detailed issues found.</p>';
+                }
+                // --- End of render helper ---
+
+                if (data.success) {
+                    renderAuditReport(data.report);
+                    auditReportArea.style.display = ''; // Show report area
                 } else {
-                    auditReportSummary.innerHTML = `<span class='text-danger'>Error: ${data.error}</span>`;
+                    auditReportSummary.innerHTML = `<p class='text-danger'>Error: ${data.error}</p>`;
                     auditReportArea.style.display = '';
                 }
             } catch (err) {
-                auditReportSummary.innerHTML = `<span class='text-danger'>Error running audit: ${err}</span>`;
+                console.error("Audit fetch error:", err);
+                auditReportSummary.innerHTML = `<p class='text-danger'>Error running audit: ${err}</p>`;
                 auditReportArea.style.display = '';
             } finally {
                 runAuditButton.disabled = false;
                 runAuditButton.textContent = 'Run Data Consistency Audit';
+                runAuditButton.classList.remove('opacity-50', 'cursor-not-allowed', 'animate-pulse');
             }
         });
     }
+
 });
 </script>
 
 <!-- Schedule TQS Calls JS -->
 <script>
-// This script handles the new Schedule TQS Calls UI:
-// - Combines hour/minute dropdowns into a time string
-// - Implements a searchable multi-select for funds
-// - Handles relative date offsets for scheduling
-// - Adds Select All/Deselect All for large fund lists
-// - Submits the form with the new structure
-
 document.addEventListener('DOMContentLoaded', function() {
-    // --- Time selector: combine hour and minute dropdowns into a time string ---
+    const scheduleForm = document.getElementById('schedule-form');
+    const scheduleTableBody = document.getElementById('schedule-table').querySelector('tbody');
+    const scheduleErrorDiv = document.getElementById('schedule-error');
+
+    // --- Time selector helper ---
     function getScheduleTime() {
         const hour = document.getElementById('scheduleHour').value;
         const minute = document.getElementById('scheduleMinute').value;
@@ -796,75 +984,165 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Fund checkbox search/filter logic ---
     const fundSearch = document.getElementById('schedule-fund-search');
     const fundListDiv = document.getElementById('schedule-fund-list');
-    const fundCheckboxes = () => fundListDiv.querySelectorAll('.schedule-fund-checkbox');
-    fundSearch.addEventListener('input', function() {
-        const filter = fundSearch.value.toLowerCase();
-        fundCheckboxes().forEach(cb => {
-            const label = cb.nextElementSibling.textContent.toLowerCase();
-            cb.parentElement.style.display = label.includes(filter) ? '' : 'none';
-        });
-    });
-    // Select All/Deselect All for fund checkboxes
-    document.getElementById('schedule-select-all').addEventListener('click', function() {
-        fundCheckboxes().forEach(cb => { cb.checked = true; });
-    });
-    document.getElementById('schedule-deselect-all').addEventListener('click', function() {
-        fundCheckboxes().forEach(cb => { cb.checked = false; });
-    });
+    const scheduleFundCheckboxes = () => fundListDiv.querySelectorAll('.schedule-fund-checkbox'); // Use specific class
 
-    // --- Date mode toggle for relative offsets ---
+    if (fundSearch) {
+        fundSearch.addEventListener('input', function() {
+            const filter = fundSearch.value.toLowerCase();
+            scheduleFundCheckboxes().forEach(cb => {
+                const label = cb.nextElementSibling.textContent.toLowerCase();
+                cb.parentElement.style.display = label.includes(filter) ? 'flex' : 'none'; // Use flex for alignment
+            });
+        });
+    }
+    // Select All/Deselect All
+    const scheduleSelectAll = document.getElementById('schedule-select-all');
+    const scheduleDeselectAll = document.getElementById('schedule-deselect-all');
+
+    if(scheduleSelectAll) {
+        scheduleSelectAll.addEventListener('click', function() {
+            scheduleFundCheckboxes().forEach(cb => {
+                // Only check visible boxes if search is active? Optional.
+                if (cb.parentElement.style.display !== 'none') {
+                     cb.checked = true;
+                }
+            });
+        });
+    }
+     if(scheduleDeselectAll) {
+        scheduleDeselectAll.addEventListener('click', function() {
+            scheduleFundCheckboxes().forEach(cb => { cb.checked = false; });
+        });
+    }
+
+    // --- Date mode toggle ---
     const dateModeSelect = document.getElementById('scheduleDateMode');
-    const daysBackContainer = document.getElementById('scheduleDaysBackContainer');
+    const daysBackContainer = document.getElementById('scheduleDaysBackContainer'); // Reference the container div
     const datesContainer = document.getElementById('scheduleDatesContainer');
     function toggleScheduleDateFields() {
         if (dateModeSelect.value === 'range') {
-            datesContainer.style.display = '';
-            daysBackContainer.style.display = 'none';
+            datesContainer.style.display = ''; // Show relative range inputs
+            daysBackContainer.style.display = 'none'; // Hide days back input
         } else {
-            datesContainer.style.display = 'none';
-            daysBackContainer.style.display = '';
+            datesContainer.style.display = 'none'; // Hide relative range inputs
+            daysBackContainer.style.display = ''; // Show days back input
         }
     }
-    dateModeSelect.addEventListener('change', toggleScheduleDateFields);
-    toggleScheduleDateFields();
+    if(dateModeSelect) {
+        dateModeSelect.addEventListener('change', toggleScheduleDateFields);
+        toggleScheduleDateFields(); // Initial call
+    }
 
-    // --- Form submission for schedule ---
-    document.getElementById('schedule-form').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const time = getScheduleTime();
-        const writeMode = document.getElementById('scheduleWriteMode').value;
-        const dateMode = dateModeSelect.value;
-        const daysBack = document.getElementById('scheduleDaysBack').value;
-        const startOffset = document.getElementById('scheduleStartOffset').value;
-        const endOffset = document.getElementById('scheduleEndOffset').value;
-        const checkedFunds = Array.from(fundCheckboxes()).filter(cb => cb.checked);
-        if (!time || checkedFunds.length === 0 || (dateMode === 'quick' && !daysBack) || (dateMode === 'range' && (!startOffset || !endOffset))) {
-            document.getElementById('schedule-error').textContent = 'Please fill out all fields and select at least one fund.';
-            document.getElementById('schedule-error').classList.remove('d-none');
-            return;
-        }
-        const funds = checkedFunds.map(cb => cb.value);
-        const payload = { schedule_time: time, write_mode: writeMode, date_mode: dateMode, funds };
-        if (dateMode === 'quick') { payload.days_back = parseInt(daysBack,10); }
-        else { payload.start_offset = parseInt(startOffset,10); payload.end_offset = parseInt(endOffset,10); }
+    // --- Load existing schedules ---
+    async function loadSchedules() {
         try {
-            const res = await fetch('{{ url_for("api_bp.add_schedule") }}', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            const response = await fetch('{{ url_for("api_bp.list_schedules") }}');
+            const schedules = await response.json();
+            scheduleTableBody.innerHTML = ''; // Clear existing rows
+            schedules.forEach(schedule => {
+                let paramsDisplay = '';
+                if (schedule.date_mode === 'quick') {
+                    paramsDisplay = `Days Back: ${schedule.days_back}`;
+                } else if (schedule.date_mode === 'range') {
+                     paramsDisplay = `Offsets: ${schedule.start_offset}d / ${schedule.end_offset}d`;
+                }
+                // Add Tailwind classes for button
+                const deleteButton = `<button class="px-2 py-0.5 text-xs rounded-md border border-danger text-danger hover:bg-danger-light focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-danger delete-schedule-button" data-schedule-id="${schedule.id}">Delete</button>`;
+                const row = `
+                    <tr class="border-b border-neutral-200 hover:bg-neutral-50">
+                        <td class="py-2 px-1">${schedule.id}</td>
+                        <td class="py-2 px-1">${schedule.schedule_time}</td>
+                        <td class="py-2 px-1">${schedule.funds.join(', ')}</td>
+                        <td class="py-2 px-1">${schedule.date_mode}</td>
+                        <td class="py-2 px-1">${paramsDisplay}</td>
+                        <td class="py-2 px-1">${schedule.write_mode}</td>
+                        <td class="py-2 px-1">${deleteButton}</td>
+                    </tr>`;
+                scheduleTableBody.innerHTML += row;
             });
-            if (res.ok) {
-                document.getElementById('schedule-form').reset();
-                toggleScheduleDateFields();
-                // Reload schedules (existing logic)
-                if (typeof loadSchedules === 'function') loadSchedules();
-            } else {
-                const err = await res.json();
-                document.getElementById('schedule-error').textContent = err.message || 'Failed to add schedule.';
-                document.getElementById('schedule-error').classList.remove('d-none');
-            }
         } catch (e) {
-            console.error('Error adding schedule', e);
+            console.error('Error loading schedules', e);
+            scheduleErrorDiv.textContent = 'Error loading existing schedules.';
+            scheduleErrorDiv.classList.remove('hidden');
+        }
+    }
+
+    // --- Add new schedule ---
+    if (scheduleForm) {
+        scheduleForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            scheduleErrorDiv.classList.add('hidden'); // Hide error initially
+
+            const time = getScheduleTime();
+            const writeMode = document.getElementById('scheduleWriteMode').value;
+            const dateMode = dateModeSelect.value;
+            const daysBack = document.getElementById('scheduleDaysBack').value;
+            const startOffset = document.getElementById('scheduleStartOffset').value;
+            const endOffset = document.getElementById('scheduleEndOffset').value;
+            const checkedFunds = Array.from(scheduleFundCheckboxes()).filter(cb => cb.checked);
+
+            if (!time || checkedFunds.length === 0 || (dateMode === 'quick' && !daysBack) || (dateMode === 'range' && (startOffset === '' || endOffset === ''))) {
+                scheduleErrorDiv.textContent = 'Please fill out time, select at least one fund, and provide date parameters.';
+                scheduleErrorDiv.classList.remove('hidden');
+                return;
+            }
+
+            const funds = checkedFunds.map(cb => cb.value);
+            const payload = { schedule_time: time, write_mode: writeMode, date_mode: dateMode, funds };
+            if (dateMode === 'quick') { payload.days_back = parseInt(daysBack,10); }
+            else { payload.start_offset = parseInt(startOffset,10); payload.end_offset = parseInt(endOffset,10); }
+
+            try {
+                const res = await fetch('{{ url_for("api_bp.add_schedule") }}', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    scheduleForm.reset();
+                    // Reset checkboxes (needed after form.reset())
+                    scheduleFundCheckboxes().forEach(cb => cb.checked = false);
+                    toggleScheduleDateFields(); // Reset date field visibility
+                    loadSchedules(); // Reload the list
+                } else {
+                    const err = await res.json();
+                    scheduleErrorDiv.textContent = err.message || 'Failed to add schedule.';
+                    scheduleErrorDiv.classList.remove('hidden');
+                }
+            } catch (e) {
+                console.error('Error adding schedule', e);
+                scheduleErrorDiv.textContent = 'Network error adding schedule.';
+                scheduleErrorDiv.classList.remove('hidden');
+            }
+        });
+    }
+
+    // --- Delete schedule (using event delegation) ---
+    scheduleTableBody.addEventListener('click', async function(e) {
+        if (e.target.classList.contains('delete-schedule-button')) {
+            const scheduleId = e.target.dataset.scheduleId;
+            if (confirm(`Are you sure you want to delete schedule ${scheduleId}?`)) {
+                try {
+                    const res = await fetch(`{{ url_for("api_bp.delete_schedule", schedule_id=0) }}`.replace('/0', `/${scheduleId}`), {
+                        method: 'DELETE'
+                    });
+                    if (res.ok) {
+                        loadSchedules(); // Reload list after delete
+                    } else {
+                        const err = await res.json();
+                         scheduleErrorDiv.textContent = err.message || `Failed to delete schedule ${scheduleId}.`;
+                         scheduleErrorDiv.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    console.error('Error deleting schedule', error);
+                    scheduleErrorDiv.textContent = `Network error deleting schedule ${scheduleId}.`;
+                    scheduleErrorDiv.classList.remove('hidden');
+                }
+            }
         }
     });
+
+    // --- Initial load ---
+    loadSchedules();
+
 });
 </script>
 {% endblock %} 

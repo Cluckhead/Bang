@@ -3,6 +3,7 @@
     Displays a line chart of the yield curve for a selected currency and date,
     optionally showing previous days' curves for comparison.
     Also shows a table with the curve data and daily changes/Z-scores.
+    Layout: Main content area. Chart and table are wrapped in styled cards. H2 heading for main title. Table uses status color highlighting for Z-Score. Buttons styled as secondary accent.
 #}
 {% extends "base.html" %}
 
@@ -11,7 +12,7 @@
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-4">
-        <h1 class="text-3xl font-bold font-merriweather">Yield Curve Details: <strong class="font-semibold">{{ currency }}</strong></h1>
+        <h2 class="text-3xl font-bold font-merriweather">Yield Curve Details: <strong class="font-semibold">{{ currency }}</strong></h2>
         <a href="{{ url_for('curve_bp.curve_summary') }}" class="inline-flex items-center bg-secondary text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />

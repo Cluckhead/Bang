@@ -1,7 +1,14 @@
 {#
-    Purpose: Page for tracking data issues.
-    Allows users to raise new issues via a form and view/close open issues.
-    Also displays a table of closed issues.
+    Purpose: Data issues tracking page.
+    Allows users to raise new issues, view open/closed issues, and close issues via modal.
+    Layout: Two-column grid (form left, list right) on large screens, single column on small screens.
+    Cards: 'Raise Issue' form and 'Open Issues' table are wrapped in styled cards.
+    Typography: H2/H4 headings, table/form label fonts per style guide.
+    Buttons: 'Raise Issue' (Primary), 'Close' (Success), with hover/focus states.
+    Tables: Styled per Section 5.2 (hairline dividers, row hover, sticky header optional, status badges for Open).
+    Forms: Inputs, selects, textarea, radio buttons styled per Section 7.
+    Interactions: Button/card hover, empty state message.
+    Modal: Bootstrap JS for modal, Tailwind for modal content. (Note: revisit for full Bootstrap removal.)
 #}
 {% extends 'base.html' %}
 
@@ -9,7 +16,7 @@
 
 {% block content %}
 <div class="p-4"> {# Replaced container mt-4 #}
-    <h1 class="text-2xl font-bold font-heading mb-4">Track Data Issues</h1> {# Adjusted heading style/margin #}
+    <h2 class="text-2xl font-bold font-heading mb-4">Track Data Issues</h2> {# Adjusted heading style/margin #}
     {# Removed hr #}
 
     {# --- Flashed Messages --- #}

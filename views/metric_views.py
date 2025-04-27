@@ -844,8 +844,15 @@ def inspect_metric_contribution(metric_name):
     Uses the _calculate_contributions helper function.
     """
     current_app.logger.info(f"--- API Request: Inspect Metric {metric_name} ---")
+    current_app.logger.info(f"Debug - Request Content-Type: {request.content_type}")
+    current_app.logger.info(f"Debug - Request Method: {request.method}")
+    current_app.logger.info(f"Debug - Request Data Raw: {request.data}")
+    current_app.logger.info(f"Debug - Request Form: {request.form}")
+    current_app.logger.info(f"Debug - Request JSON: {request.get_json(silent=True)}")
+    
     data = request.get_json()
     if not data:
+        current_app.logger.error(f"Debug - Invalid request: No JSON body received. Content-Type: {request.content_type}")
         return jsonify({"error": "Invalid request: No JSON body received."}), 400
 
     start_date_str = data.get('start_date')
