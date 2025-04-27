@@ -112,7 +112,17 @@
          </ul>
     </div>
 
-    <main class="ml-[220px] pt-[60px] p-4">
+    <!-- Breadcrumbs Placeholder -->
+    <div class="ml-[220px] pt-[60px] px-4 py-2 text-sm text-gray-600">
+        {% block breadcrumbs %}{% endblock %}
+    </div>
+
+    <main class="ml-[220px] p-4">
+        <!-- Placeholder Button to trigger filters drawer -->
+        <button id="show-filters-btn" class="mb-4 px-4 py-2 bg-secondary text-white rounded hover:bg-opacity-90">
+            Show Filters (Placeholder)
+        </button>
+        
         {% block content %}
         {# Page specific content will go here #}
         {% endblock %}
@@ -133,5 +143,14 @@
     {% block scripts %}
     {# Page specific scripts can go here #}
     {% endblock %}
+
+    <!-- Filters Drawer -->
+    <aside id="filters-drawer" class="fixed top-0 right-0 bottom-0 w-80 bg-white shadow-lg transform translate-x-full transition-transform duration-300 ease-in-out z-30 p-6 overflow-y-auto">
+        <h3 class="text-lg font-semibold mb-4">Filters</h3>
+        <!-- Filter content will go here -->
+        <p>Filter options will appear here...</p>
+        <button id="close-filters-btn" class="mt-4 px-3 py-1 bg-gray-300 rounded text-sm">Close</button>
+    </aside>
+
 </body>
 </html> 

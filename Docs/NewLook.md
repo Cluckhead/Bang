@@ -54,14 +54,14 @@ For each template:
 3. Test for correct layout and functionality.
 
 ### 2.2 Typography Setup
-2.2.1 Action: Integrate Merriweather Sans and Inter , plus Roboto Mono web fonts.
+2.2.1 Action: Integrate Merriweather Sans and Inter , plus Roboto Mono web fonts. ✅ COMPLETE
 2.2.2 File(s): templates/base.html, static/css/style.css (or Tailwind config).
 2.2.3 Details:
 - Add Google Fonts <link> tags in templates/base.html.
 - Configure Tailwind's theme.fontFamily or define base CSS: body { font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.5; color: #333; }, h1 { font-family: 'Merriweather Sans', sans-serif; font-size: 32px; font-weight: 700; } etc. (Section 3).
 
 ### 2.3 Color Palette Implementation
-2.3.1 Action: Define the color palette for use in styles.
+2.3.1 Action: Define the color palette for use in styles. ✅ COMPLETE
 2.3.2 File(s): static/css/style.css (CSS variables) or tailwind.config.js (Tailwind theme colors).
 2.3.3 Details:
 - Configure Tailwind's theme.extend.colors (e.g., primary: '#E34A33', secondary: '#1F7A8C', ...) or define CSS variables (--color-primary-accent: #E34A33; etc.) based on Section 2.
@@ -69,21 +69,23 @@ For each template:
 ## Phase 3: Core Layout Refactoring
 
 ### 3.1 Base Template Structure (base.html)
-3.1.1 Action: Rebuild the main layout in templates/base.html using the new navigation structure (Section 4).
-3.1.2 File(s): templates/base.html, static/css/style.css, static/js/main.js.
-3.1.3 Details:
+3.1.1 Action: Rebuild the main layout in templates/base.html using the new navigation structure (Section 4). ✅ COMPLETE
+3.1.2 File(s): templates/base.html, static/css/style.css, static/js/main.js. ✅ COMPLETE
+3.1.3 Details: ✅ COMPLETE
 - Top Bar (60px): Create a <div> with fixed position, height 60px. Use Flexbox/Grid for layout: Logo, Product Name, Env Pill (left); Search, User Avatar (right). Apply neutral background, padding. (Section 4.1).
-- Sidebar (220px): Create a <div> with fixed position, width 220px. Populate <ul> with navigation links (<a>) for primary sections (Time-Series, Checks & Comparisons, etc.). Add Feather icons (<i> or <img> with SVG). Style links, active state (border-l-4 border-primary text-primary font-semibold or similar CSS). Implement JS toggle for collapse/expand. (Section 4.2).
-- Main Content Area: Create a <main> element with margin-left: 220px; padding-top: 60px;
+- Sidebar (220px): Create a <div> with fixed position, width 220px. Populate <ul> with navigation links (<a>) for primary sections (Time-Series, Checks & Comparisons, etc.). Apply basic styling. (Section 4.2).
 
-### 3.2 Breadcrumbs (Optional)
-3.2.1 Action: Add a {% block breadcrumbs %}{% endblock %} placeholder in templates/base.html below the top bar.
-3.2.2 File(s): templates/base.html.
-3.2.3 Details: Style minimally (e.g., small font size, neutral color). Individual templates will populate this block. (Section 4.3).
+- Main Content Area: Create a <main> element with `ml-[220px] pt-[60px]`.
+
+### 3.2 Breadcrumbs
+3.2.1 Action: Add a {% block breadcrumbs %}{% endblock %} placeholder in templates/base.html below the top bar. ✅ COMPLETE
+3.2.2 File(s): templates/base.html. ✅ COMPLETE
+3.2.3 Details: Style minimally (e.g., small font size, neutral color). Individual templates will populate this block. ✅ COMPLETE
 
 ### 3.3 Filters Drawer
-3.3.1 Action: Implement the slide-in filters drawer.
-3.3.2 File(s): templates/base.html (add <aside> structure, initially positioned off-screen right), static/css/style.css (add styles for positioning, background, shadow, transform: translateX(100%); transition: transform...;), static/js/main.js (add event listener to "Show Filters" button to toggle a class like .filters-drawer-open on the <body>, which CSS uses to apply transform: translateX(0);). (Section 4.4).
+3.3.1 Action: Implement the slide-in filters drawer. ✅ COMPLETE
+3.3.2 File(s): templates/base.html (add <aside> structure, initially positioned off-screen right), static/css/style.css (add styles for positioning, background, shadow, transform: translateX(100%); transition: transform...;), static/js/main.js (add event listener to "Show Filters" button to toggle a class like .filters-drawer-open on the <body>, which CSS uses to apply transform: translateX(0);). (Section 4.4). ✅ COMPLETE
+3.3.3 Details: HTML structure added to base.html with Tailwind classes for positioning, initial state (translate-x-full), and transitions. JS added to main.js to toggle translate-x-full class on button click. ✅ COMPLETE
 
 ## Phase 4: Component & Page Styling (Template-by-Template)
 
@@ -292,13 +294,13 @@ For each template:
 5.2.1 Action: Implement hover effects, loading states, empty states (Section 7).
 5.2.2 File(s): static/css/style.css, static/js/main.js, relevant templates.
 5.2.3 Details: Add CSS for card hover (raise/shadow). Replace spinners with CSS skeleton loaders. Add empty state messages/illustrations ({% if not data %}).
-
-
+   *Note: Implement sidebar collapse/expand toggle functionality here.*
+  *Note: Adding Feather icons and implementing active link styling (e.g., `border-l-4 border-primary`) will be addressed in later component styling phases.*
+  *Note: The JavaScript toggle for sidebar collapse/expand will be implemented in Phase 5 (Interaction Refinement).*
 ## Phase 6: Cleanup & Testing
 
 ### 6.1 Remove Old Styles
 6.1.1 Action: Delete unused CSS/classes.
-
 
 ### 6.3 Offline Test
 6.3.1 Action: Run flask run, disconnect network, access http://127.0.0.1:5000, verify rendering and functionality.

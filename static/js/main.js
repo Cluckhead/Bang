@@ -231,6 +231,31 @@ document.addEventListener('DOMContentLoaded', () => {
         initTableSorter('fund-duration-table'); 
     }
 
+    // --- Filters Drawer Logic ---
+    const showFiltersBtn = document.getElementById('show-filters-btn');
+    const closeFiltersBtn = document.getElementById('close-filters-btn');
+    const filtersDrawer = document.getElementById('filters-drawer');
+
+    if (showFiltersBtn && filtersDrawer && closeFiltersBtn) {
+        console.log("Initializing filters drawer toggle.");
+        showFiltersBtn.addEventListener('click', () => {
+            console.log("Show filters clicked");
+            filtersDrawer.classList.remove('translate-x-full');
+            filtersDrawer.classList.add('translate-x-0'); // Although not strictly necessary if removing the other
+        });
+
+        closeFiltersBtn.addEventListener('click', () => {
+            console.log("Close filters clicked");
+            filtersDrawer.classList.add('translate-x-full');
+            filtersDrawer.classList.remove('translate-x-0');
+        });
+    } else {
+        console.log("Filters drawer elements not found, skipping initialization.");
+        if (!showFiltersBtn) console.log("Missing: #show-filters-btn");
+        if (!closeFiltersBtn) console.log("Missing: #close-filters-btn");
+        if (!filtersDrawer) console.log("Missing: #filters-drawer");
+    }
+
     // Add any other global initializations here
 });
 
