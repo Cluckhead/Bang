@@ -45,8 +45,13 @@
 <body>
     <!-- Top Bar (Fixed) -->
     <div class="fixed top-0 left-0 right-0 h-[60px] bg-neutral-100 border-b border-neutral-300 z-20 flex items-center px-4 justify-between">
-        <!-- Left Side: Logo, Title -->
+        <!-- Left Side: Logo, Title, Toggle -->
         <div class="flex items-center">
+            <!-- Sidebar Toggle Button -->
+            <button id="sidebar-toggle-btn" class="mr-4 p-1 text-gray-600 hover:text-gray-900 focus:outline-none">
+                <!-- Placeholder Icon/Text -->
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
              <a href="{{ url_for('main.index') }}" class="flex items-center text-xl font-semibold text-gray-800">
                 <img src="{{ url_for('static', filename='images/bang.jpg') }}" alt="Logo" class="h-10 mr-2"> <!-- Adjusted height -->
                 Data Checker
@@ -60,68 +65,70 @@
     </div>
 
     <!-- Sidebar (Fixed) -->
-    <div class="fixed top-[60px] left-0 bottom-0 w-[220px] bg-neutral-50 border-r border-neutral-300 z-10 p-4 overflow-y-auto">
+    <div id="sidebar" class="fixed top-[60px] left-0 bottom-0 w-[220px] bg-neutral-50 border-r border-neutral-300 z-10 p-4 overflow-y-auto transition-all duration-300 ease-in-out">
         <!-- Navigation Links -->
         <ul class="space-y-2">
              <li>
-                <a href="{{ url_for('main.index') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Time Series Dashboard</a>
+                <a href="{{ url_for('main.index') }}" class="nav-link block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">
+                    <span class="nav-text">Time Series Dashboard</span>
+                </a>
             </li>
              <li>
-                <span class="block px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Checks & Comparisons</span>
+                <span class="nav-section-header block px-3 py-2 text-xs font-semibold text-gray-500 uppercase"><span class="nav-text">Checks & Comparisons</span></span>
                 <ul class="mt-1 space-y-1 ml-3">
-                     <li><a href="{{ url_for('security.securities_page') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Securities Check</a></li>
-                     <li><a href="{{ url_for('weight.weight_check') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Weight Check</a></li>
-                     <li><a href="{{ url_for('curve_bp.curve_summary') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Yield Curve Check</a></li>
-                     <li><a href="{{ url_for('attribution_bp.attribution_summary') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Attribution Residuals</a></li>
-                     <li><a href="{{ url_for('attribution_bp.attribution_security_page') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Attribution Security-Level</a></li>
-                     <li><a href="{{ url_for('attribution_bp.attribution_radar') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Attribution Radar</a></li>
-                     <li><span class="block px-3 pt-2 text-xs font-semibold text-gray-500 uppercase">Comparisons</span></li>
-                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='spread') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Spread Comparison</a></li>
-                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='duration') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Duration Comparison</a></li>
-                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='spread_duration') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Spread Duration Comparison</a></li>
-                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='ytm') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">YTM Comparison</a></li>
-                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='ytw') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">YTW Comparison</a></li>
+                     <li><a href="{{ url_for('security.securities_page') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Securities Check</span></a></li>
+                     <li><a href="{{ url_for('weight.weight_check') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Weight Check</span></a></li>
+                     <li><a href="{{ url_for('curve_bp.curve_summary') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Yield Curve Check</span></a></li>
+                     <li><a href="{{ url_for('attribution_bp.attribution_summary') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Attribution Residuals</span></a></li>
+                     <li><a href="{{ url_for('attribution_bp.attribution_security_page') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Attribution Security-Level</span></a></li>
+                     <li><a href="{{ url_for('attribution_bp.attribution_radar') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Attribution Radar</span></a></li>
+                     <li><span class="nav-section-header block px-3 pt-2 text-xs font-semibold text-gray-500 uppercase"><span class="nav-text">Comparisons</span></span></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='spread') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Spread Comparison</span></a></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='duration') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Duration Comparison</span></a></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='spread_duration') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Spread Duration Comparison</span></a></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='ytm') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">YTM Comparison</span></a></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='ytw') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">YTW Comparison</span></a></li>
                  </ul>
              </li>
              <li>
-                <a href="{{ url_for('staleness_bp.dashboard') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Stale Data Report</a>
+                <a href="{{ url_for('staleness_bp.dashboard') }}" class="nav-link block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium"><span class="nav-text">Stale Data Report</span></a>
             </li>
              <li>
-                 <span class="block px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Max/Min Checks</span>
+                 <span class="nav-section-header block px-3 py-2 text-xs font-semibold text-gray-500 uppercase"><span class="nav-text">Max/Min Checks</span></span>
                  <ul class="mt-1 space-y-1 ml-3">
-                    <li><a href="{{ url_for('maxmin_bp.dashboard') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">All Files</a></li>
-                    <li><a href="{{ url_for('maxmin_bp.dashboard', group_name='Yields') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Yields</a></li>
-                    <li><a href="{{ url_for('maxmin_bp.dashboard', group_name='Spreads') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Spreads</a></li>
+                    <li><a href="{{ url_for('maxmin_bp.dashboard') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">All Files</span></a></li>
+                    <li><a href="{{ url_for('maxmin_bp.dashboard', group_name='Yields') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Yields</span></a></li>
+                    <li><a href="{{ url_for('maxmin_bp.dashboard', group_name='Spreads') }}" class="nav-link block px-3 py-1 rounded hover:bg-neutral-200 text-sm"><span class="nav-text">Spreads</span></a></li>
                  </ul>
             </li>
              <li>
-                <a href="{{ url_for('exclusion_bp.manage_exclusions') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Exclusions</a>
+                <a href="{{ url_for('exclusion_bp.manage_exclusions') }}" class="nav-link block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium"><span class="nav-text">Exclusions</span></a>
             </li>
              <li>
-                <a href="{{ url_for('watchlist_bp.manage_watchlist') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Watchlist</a>
+                <a href="{{ url_for('watchlist_bp.manage_watchlist') }}" class="nav-link block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium"><span class="nav-text">Watchlist</span></a>
             </li>
              <li>
-                <a href="{{ url_for('issue_bp.manage_issues') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Track Issues</a>
+                <a href="{{ url_for('issue_bp.manage_issues') }}" class="nav-link block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium"><span class="nav-text">Track Issues</span></a>
             </li>
              <li>
-                <a href="{{ url_for('api_bp.get_data_page') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Data Management</a>
+                <a href="{{ url_for('api_bp.get_data_page') }}" class="nav-link block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium"><span class="nav-text">Data Management</span></a>
             </li>
              <li>
-                <a href="{{ url_for('attribution_bp.attribution_charts') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Attribution Residuals Charts</a>
+                <a href="{{ url_for('attribution_bp.attribution_charts') }}" class="nav-link block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium"><span class="nav-text">Attribution Residuals Charts</span></a>
             </li>
          </ul>
     </div>
 
     <!-- Breadcrumbs Placeholder -->
-    <div class="ml-[220px] pt-[60px] px-4 py-2 text-sm text-gray-600">
+    <div id="breadcrumbs-container" class="ml-[220px] pt-[60px] px-4 py-2 text-sm text-gray-600 transition-all duration-300 ease-in-out">
         {% block breadcrumbs %}{% endblock %}
     </div>
 
-    <main class="ml-[220px] p-4">
+    <main id="main-content" class="ml-[220px] p-4 transition-all duration-300 ease-in-out">
         <!-- Placeholder Button to trigger filters drawer -->
-        <button id="show-filters-btn" class="mb-4 px-4 py-2 bg-secondary text-white rounded hover:bg-opacity-90">
-            Show Filters (Placeholder)
-        </button>
+        <!-- <button id="show-filters-btn" class="mb-4 px-4 py-2 bg-secondary text-white rounded hover:bg-opacity-90"> -->
+        <!--     Show Filters (Placeholder) -->
+        <!-- </button> -->
         
         {% block content %}
         {# Page specific content will go here #}

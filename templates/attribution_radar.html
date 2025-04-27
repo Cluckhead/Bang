@@ -74,17 +74,17 @@
 
     <!-- Radar Charts Card -->
     <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div class="grid grid-cols-1 gap-8 items-start">
             <div class="flex flex-col items-center">
                 <h3 class="text-xl font-semibold mb-4">Portfolio Attribution</h3>
-                <div class="w-full max-w-md"> {/* Constrain chart width */}
-                    <canvas id="portfolioRadar"></canvas>
+                <div class="w-full h-[500px]">
+                    <canvas id="portfolioRadar" class="h-full w-full"></canvas>
                 </div>
             </div>
             <div class="flex flex-col items-center">
                 <h3 class="text-xl font-semibold mb-4">Benchmark Attribution</h3>
-                 <div class="w-full max-w-md"> {/* Constrain chart width */}
-                    <canvas id="benchmarkRadar"></canvas>
+                 <div class="w-full h-[500px]">
+                    <canvas id="benchmarkRadar" class="h-full w-full"></canvas>
                  </div>
             </div>
         </div>
@@ -185,18 +185,18 @@ function renderRadarChart(canvasId, labels, prodData, spData, title) {
                 {
                     label: 'Prod',
                     data: prodData,
-                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(31, 119, 180, 0.1)',
+                    borderColor: '#1F77B4',
+                    pointBackgroundColor: '#1F77B4',
                     borderWidth: 2,
                     fill: true
                 },
                 {
                     label: 'S&P',
                     data: spData,
-                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    pointBackgroundColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 127, 14, 0.1)',
+                    borderColor: '#FF7F0E',
+                    pointBackgroundColor: '#FF7F0E',
                     borderWidth: 2,
                     fill: true
                 }
@@ -206,6 +206,9 @@ function renderRadarChart(canvasId, labels, prodData, spData, title) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
+                chartArea: {
+                    backgroundColor: '#FFFFFF'
+                },
                 legend: {
                     position: 'top',
                     labels: {
@@ -223,7 +226,7 @@ function renderRadarChart(canvasId, labels, prodData, spData, title) {
                     backgroundColor: '#fff',
                     titleColor: '#333',
                     bodyColor: '#666',
-                    borderColor: '#E5E5E5',
+                    borderColor: '#E34A33',
                     borderWidth: 1,
                     padding: 10,
                     cornerRadius: 4,

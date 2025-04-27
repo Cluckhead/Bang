@@ -72,11 +72,22 @@ export function createTimeSeriesChart(canvasId, chartData, metricName, fundCode,
             responsive: true,
             maintainAspectRatio: false, 
             plugins: {
-                title: { display: true, text: chartTitle, font: { size: 16 } },
-                legend: { position: 'top' },
+                chartArea: {
+                    backgroundColor: '#FFFFFF', // White background for chart area
+                },
+                title: { display: true, text: chartTitle, font: { size: 16 }, color: '#333333' }, // Match body color
+                legend: { position: 'top', labels: { color: '#333333' } }, // Match body color
                 tooltip: { 
                     mode: 'index', 
                     intersect: false, 
+                    backgroundColor: '#FFFFFF', // White background for tooltip
+                    titleColor: '#333333', // Match body color
+                    bodyColor: '#333333', // Match body color
+                    borderColor: '#E34A33', // Primary accent border
+                    borderWidth: 1,
+                    padding: 10, // Add padding
+                    cornerRadius: 4, // Rounded corners
+                    boxPadding: 3, // Padding inside the box
                 }
             },
             hover: { mode: 'nearest', intersect: true },
@@ -88,14 +99,34 @@ export function createTimeSeriesChart(canvasId, chartData, metricName, fundCode,
                         tooltipFormat: 'MMM dd, yyyy',
                         displayFormats: { day: 'MMM dd', week: 'MMM dd yyyy', month: 'MMM yyyy' }
                     },
-                    title: { display: true, text: 'Date' }
+                    title: { display: true, text: 'Date', color: '#666666', font: { size: 12 } }, // Style axis title
+                    ticks: { 
+                        color: '#666666', // Axis label color
+                        font: { size: 12 } // Axis label font size
+                    },
+                    grid: {
+                        color: '#E5E5E5' // Gridline color
+                    }
                 },
                 y: {
                     display: true,
-                    title: { display: true, text: metricName },
-                    // Dynamic scaling based on *all* datasets
+                    title: { display: true, text: metricName, color: '#666666', font: { size: 12 } }, // Style axis title
+                    ticks: { 
+                        color: '#666666', // Axis label color
+                        font: { size: 12 } // Axis label font size
+                    },
+                    grid: {
+                        color: '#E5E5E5' // Gridline color
+                    },
+                    // Dynamic scaling based on *all* datasets - Keep this logic
                     suggestedMin: Math.min(...datasets.flatMap(ds => ds.data.filter(d => d !== null && !isNaN(d)))),
                     suggestedMax: Math.max(...datasets.flatMap(ds => ds.data.filter(d => d !== null && !isNaN(d))))
+                }
+            },
+            // Default line width
+            elements: {
+                line: {
+                    borderWidth: 2 // Default line width
                 }
             }
         }

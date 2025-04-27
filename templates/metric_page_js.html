@@ -83,11 +83,18 @@
     {# Area for JS to render charts and tables (4.3.1, 4.3.2) #}
     {# JS needs to create grid layout and card structure here #}
     <div id="chartsArea" class="space-y-6">
-        <!-- Charts and tables will be rendered here by JavaScript inside styled cards -->
-        <!-- Example Placeholder (JS should replace this) -->
-        <div class="bg-gray-200 rounded-lg shadow animate-pulse p-4 min-h-[300px]">
-             <p class="text-center text-gray-500">Loading charts...</p>
+        <!-- Skeleton Loader Placeholder -->
+        <div id="loadingSkeleton" class="space-y-6">
+            <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4">
+                <div class="h-8 mb-4 skeleton w-1/2"></div> <!-- Skeleton title -->
+                <div class="skeleton skeleton-block"></div> <!-- Skeleton chart area -->
+            </div>
+            <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4">
+                <div class="h-8 mb-4 skeleton w-1/2"></div> <!-- Skeleton title -->
+                <div class="skeleton skeleton-block"></div> <!-- Skeleton chart area -->
+            </div>
         </div>
+        <!-- Charts and tables will be rendered here by JavaScript -->
     </div>
 
     <!-- Inspect Modal (hidden by default) -->

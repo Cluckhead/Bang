@@ -290,7 +290,7 @@ For each template:
 5.1.3 Details: Set white background, #E5E5E5 gridlines, 12px #666 axis labels, 2px line width, chart palette colors (ensure Blue/Orange for comparisons), styled tooltips (white card, accent border).
     **Note:** The actual rendering of charts within styled cards relies on the JavaScript in `static/js/modules/ui/chartRenderer.js` being updated to create the necessary card structure (e.g., `<div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">...</div>`) when it inserts the charts into the DOM.
 
-### 5.2 Micro-interactions & States
+### 5.2 Micro-interactions & States ✅ COMPLETE
 5.2.1 Action: Implement hover effects, loading states, empty states (Section 7).
 5.2.2 File(s): static/css/style.css, static/js/main.js, relevant templates.
 5.2.3 Details: Add CSS for card hover (raise/shadow). Replace spinners with CSS skeleton loaders. Add empty state messages/illustrations ({% if not data %}).
@@ -307,7 +307,7 @@ For each template:
 - [ ] If so, update the Z-Score table background classes in `templates/index.html` (currently `bg-red-100`/`bg-orange-100`).
 - [ ] Verify bottom navigation links on `templates/index.html` are styled correctly as cards.
 
-### 6.3 Offline Test
+### 6.3 Offline Test ✅ COMPLETE
 6.3.1 Action: Run flask run, disconnect network, access http://127.0.0.1:5000, verify rendering and functionality.
 
 **This more detailed plan should give the AI assistant precise instructions for refactoring each template according to the style guide.**

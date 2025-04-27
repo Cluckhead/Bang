@@ -28,6 +28,69 @@ import { initTableSorter } from './modules/ui/tableSorter.js';
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM fully loaded and parsed");
 
+    // --- Sidebar Toggle Logic ---
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.getElementById('main-content');
+    const breadcrumbsContainer = document.getElementById('breadcrumbs-container');
+    const toggleButton = document.getElementById('sidebar-toggle-btn');
+    const body = document.body;
+    const SIDEBAR_COLLAPSED_KEY = 'sidebarCollapsed';
+
+    // Function to apply state based on class
+    const applySidebarState = (isCollapsed) => {
+        if (isCollapsed) {
+            sidebar.classList.remove('w-[220px]');
+            sidebar.classList.add('w-16');
+            mainContent.classList.remove('ml-[220px]');
+            mainContent.classList.add('ml-16');
+            if (breadcrumbsContainer) {
+                 breadcrumbsContainer.classList.remove('ml-[220px]');
+                 breadcrumbsContainer.classList.add('ml-16');
+            }
+            // Hide text elements within the sidebar
+            sidebar.querySelectorAll('.nav-text').forEach(el => el.classList.add('hidden'));
+            // Adjust padding if necessary when collapsed
+            sidebar.classList.remove('p-4');
+            sidebar.classList.add('p-2'); 
+        } else {
+            sidebar.classList.remove('w-16');
+            sidebar.classList.add('w-[220px]');
+            mainContent.classList.remove('ml-16');
+            mainContent.classList.add('ml-[220px]');
+             if (breadcrumbsContainer) {
+                 breadcrumbsContainer.classList.remove('ml-16');
+                 breadcrumbsContainer.classList.add('ml-[220px]');
+             }
+            // Show text elements
+            sidebar.querySelectorAll('.nav-text').forEach(el => el.classList.remove('hidden'));
+            // Restore padding
+            sidebar.classList.remove('p-2');
+            sidebar.classList.add('p-4');
+        }
+    };
+
+    // Check localStorage for saved state
+    const isInitiallyCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+    if (isInitiallyCollapsed) {
+        body.classList.add('sidebar-collapsed');
+        applySidebarState(true);
+    } else {
+        applySidebarState(false); // Apply default expanded state
+    }
+
+    // Add toggle button listener
+    if (toggleButton && sidebar && mainContent) {
+        toggleButton.addEventListener('click', () => {
+            const isCollapsed = body.classList.toggle('sidebar-collapsed');
+            applySidebarState(isCollapsed);
+            // Save state to localStorage
+            localStorage.setItem(SIDEBAR_COLLAPSED_KEY, isCollapsed);
+        });
+    } else {
+        console.warn("Sidebar toggle button, sidebar, or main content element not found.");
+    }
+    // --- End Sidebar Toggle Logic ---
+
     // --- Shared Elements ---
     const spComparisonToggle = document.getElementById('toggleSpData'); // Existing toggle for S&P *comparison*
     const spValidToggle = document.getElementById('toggleSpValid'); // NEW toggle for S&P *valid* filter

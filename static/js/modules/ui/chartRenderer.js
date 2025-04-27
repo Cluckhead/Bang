@@ -35,8 +35,10 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
     console.log("[chartRenderer] Metadata:", metadata);
     console.log("[chartRenderer] Fund Data Keys:", Object.keys(fundsData || {}));
 
-    // Clear previous content and chart instances
-    container.innerHTML = '';
+    // Get skeleton element and clear previous content/chart instances
+    const skeleton = document.getElementById('loadingSkeleton');
+    container.innerHTML = ''; // Clear previous charts/tables/content but keep skeleton initially
+
     Object.keys(chartInstances).forEach(key => {
         try {
             chartInstances[key]?.destroy(); // Properly destroy old chart instances
@@ -46,9 +48,11 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
         delete chartInstances[key];
     });
 
+    // Hide skeleton and show message if no data
     if (!fundsData || Object.keys(fundsData).length === 0) {
         console.warn("[chartRenderer] No fund data available for metric:", metricName);
-        container.innerHTML = '<p>No fund data available for this metric.</p>';
+        if (skeleton) skeleton.style.display = 'none'; // Hide skeleton
+        container.innerHTML = '<div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 text-center text-gray-600">No fund data available for this metric.</div>'; // Styled message
         return;
     }
 
@@ -64,6 +68,12 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
         }
     } else {
         console.warn("[chartRenderer] Toggle switch container not found in the DOM.");
+    }
+
+    // Hide skeleton before starting to render actual charts
+    if (skeleton) {
+        skeleton.style.display = 'none';
+        console.log("[chartRenderer] Hid loading skeleton.");
     }
 
     // --- Render Charts and Tables for Each Fund --- 
@@ -168,9 +178,13 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
             console.log(`[chartRenderer] Creating elements for chart: ${chartId}`);
 
              // --- Create DOM Elements for Each Chart --- 
+            const chartCard = document.createElement('div');
+            chartCard.className = 'bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow mb-4'; // Card styles + margin
+            chartCard.id = `chart-card-${chartId}`;
+
             const chartWrapper = document.createElement('div');
-            // Use fixed height and full width for chart container
-            chartWrapper.className = `chart-container-wrapper chart-type-${chartType} col-lg-6 mb-3 h-80 w-full`;
+            // Use fixed height and full width for chart container inside the card
+            chartWrapper.className = `chart-container-wrapper chart-type-${chartType} h-80 w-full`; 
             chartWrapper.id = `chart-wrapper-${chartId}`;
             chartWrapper.style.position = 'relative';
 
@@ -229,7 +243,11 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
             );
             chartWrapper.appendChild(table);
             
-            chartsRow.appendChild(chartWrapper); 
+            // Append chart wrapper (canvas + table) to the card
+            chartCard.appendChild(chartWrapper);
+            
+            // Append the styled card (containing the chart wrapper) to the row
+            chartsRow.appendChild(chartCard); 
 
             // --- Render Chart (setTimeout remains) --- 
             setTimeout(() => {
@@ -263,8 +281,8 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
                     errorP.className = 'text-danger';
                     if (chartCanvas && chartCanvas.parentNode) {
                         chartCanvas.parentNode.replaceChild(errorP, chartCanvas);
-                    } else if (chartWrapper) {
-                        chartWrapper.appendChild(errorP);
+                    } else if (chartCard) {
+                        chartCard.appendChild(errorP);
                     }
                 }
             }, 0); 
@@ -275,6 +293,15 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
 
     } // End loop through funds
     console.log("[chartRenderer] Finished processing all funds.");
+
+    // Hide skeleton and show error in container if error occurred during rendering
+    // (Error handling within createTimeSeriesChart already adds message to chart card, 
+    // but this handles broader errors in chartRenderer itself if needed)
+    // Example: if container remains empty after loop despite having data
+    if (container.innerHTML.trim() === '' && skeleton && skeleton.style.display !== 'none') { 
+        skeleton.style.display = 'none';
+        container.innerHTML = '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative shadow-sm" role="alert">An error occurred while rendering charts.</div>';
+    }
 }
 
 /**

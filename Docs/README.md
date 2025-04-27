@@ -9,6 +9,7 @@ ISIN is used as the primary identifier for securities, and is stored in the `w_s
 # Simple Data Checker
 
 This application provides a web interface to load, process, and check financial data, primarily focusing on time-series metrics and security-level data. It helps identify potential data anomalies by calculating changes and Z-scores.
+The frontend has been recently refactored using **Tailwind CSS** for a modern look and feel, improved consistency, and offline-first capability.
 
 ## Features
 
@@ -146,6 +147,11 @@ graph TD
     B2 --> B2a
     B3 --> B3a
 ```
+
+The primary static assets are:
+- `static/css/style.css`: The main stylesheet generated from Tailwind CSS. The build process uses `tailwind.config.js` and `postcss.config.js`.
+- `static/js/`: Contains JavaScript modules for UI interactions (e.g., chart rendering, table sorting, filtering, toggle switches, sidebar behavior, filters drawer) and utility functions. Key files include `main.js` (entry point), `modules/ui/chartRenderer.js`, `modules/ui/tableSorter.js`, etc.
+- `static/images/`: Contains any necessary image assets.
 
 ### Config/Utils
 ```mermaid
@@ -303,9 +309,9 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 
 | Template | Purpose | Key Features |
 |----------|---------|-------------|
-| `base.html` | Main layout | Bootstrap, navbar, common structure |
+| `base.html` | Main layout | Tailwind CSS base, fixed top navigation bar (60px), fixed sidebar (220px), main content area, Feather icons. |
 | `index.html` | Dashboard | Metric links, Z-Score summary table |
-| `metric_page_js.html` | Time-series detail page | Toggle switch for SP data |
+| `metric_page_js.html` | Time-series detail page | Toggle switch for SP data, Chart.js charts, filters drawer |
 | `securities_page.html` | Security summary table | Filter/search form, pagination |
 | `security_details_page.html` | Security detail page | Multiple charts (Value, Price, Duration) |
 | `fund_duration_details.html` | Fund duration details | Security duration changes table |
@@ -327,8 +333,8 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 
 | File | Purpose | Key Features |
 |------|---------|-------------|
-| `main.js` | Main JS entry point | Initializes components |
-| `modules/ui/chartRenderer.js` | Render charts | Time-series, comparison charts |
+| `main.js` | Main JS entry point | Initializes components, handles sidebar collapse/expand, filters drawer toggle. |
+| `modules/ui/chartRenderer.js` | Render charts | Time-series, comparison charts using Chart.js, ensures consistent styling. |
 | `modules/ui/securityTableFilter.js` | Handle table filtering | Dynamic filter application |
 | `modules/ui/tableSorter.js` | Handle table sorting | Sort direction toggle |
 | `modules/ui/toggleSwitchHandler.js` | Handle toggle switches | Show/hide comparison data |
