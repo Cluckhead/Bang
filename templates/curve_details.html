@@ -1,105 +1,114 @@
-{# templates/curve_details.html #}
+{#
+    Purpose: Yield Curve Details Page.
+    Displays a line chart of the yield curve for a selected currency and date,
+    optionally showing previous days' curves for comparison.
+    Also shows a table with the curve data and daily changes/Z-scores.
+#}
 {% extends "base.html" %}
 
 {% block title %}Yield Curve Details - {{ currency }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1>Yield Curve Details: <strong>{{ currency }}</strong></h1>
-        <a href="{{ url_for('curve_bp.curve_summary') }}" class="btn btn-secondary">
-            <i class="fas fa-arrow-left me-1"></i> Back to Summary
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-4">
+        <h1 class="text-3xl font-bold font-merriweather">Yield Curve Details: <strong class="font-semibold">{{ currency }}</strong></h1>
+        <a href="{{ url_for('curve_bp.curve_summary') }}" class="inline-flex items-center bg-secondary text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
+             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back to Summary
         </a>
     </div>
 
-    {# Date and History Selection Row #}
-    <div class="row mb-3 align-items-end">
-        <div class="col-md-4">
-            <label for="dateSelector" class="form-label">Select Date:</label>
-            <select id="dateSelector" class="form-select">
-                {% if available_dates %}
-                    {% for date_str in available_dates %}
-                        <option value="{{ date_str }}" {% if date_str == selected_date %}selected{% endif %}>
-                            {{ date_str }}
-                        </option>
-                    {% endfor %}
-                {% else %}
-                    <option value="">No dates available</option>
-                {% endif %}
-            </select>
-        </div>
-        <div class="col-md-4">
-            <label for="prevDaysSelector" class="form-label">Show Previous Days:</label>
-            <select id="prevDaysSelector" class="form-select">
-                {# Options for how many previous curves to show #}
-                <option value="0" {% if num_prev_days == 0 %}selected{% endif %}>0 (None)</option>
-                <option value="1" {% if num_prev_days == 1 %}selected{% endif %}>1</option>
-                <option value="3" {% if num_prev_days == 3 %}selected{% endif %}>3</option>
-                <option value="5" {% if num_prev_days == 5 %}selected{% endif %}>5</option>
-            </select>
+    {# Date and History Selection Row - Card #}
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-6 hover:shadow-md transition-shadow">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+                <label for="dateSelector" class="block text-sm font-medium text-gray-700 mb-1">Select Date:</label>
+                <select id="dateSelector" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm">
+                    {% if available_dates %}
+                        {% for date_str in available_dates %}
+                            <option value="{{ date_str }}" {% if date_str == selected_date %}selected{% endif %}>
+                                {{ date_str }}
+                            </option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="">No dates available</option>
+                    {% endif %}
+                </select>
+            </div>
+            <div>
+                <label for="prevDaysSelector" class="block text-sm font-medium text-gray-700 mb-1">Show Previous Days:</label>
+                <select id="prevDaysSelector" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm">
+                    {# Options for how many previous curves to show #}
+                    <option value="0" {% if num_prev_days == 0 %}selected{% endif %}>0 (None)</option>
+                    <option value="1" {% if num_prev_days == 1 %}selected{% endif %}>1</option>
+                    <option value="3" {% if num_prev_days == 3 %}selected{% endif %}>3</option>
+                    <option value="5" {% if num_prev_days == 5 %}selected{% endif %}>5</option>
+                </select>
+            </div>
+            {# Optional: Add an Apply button if needed, or keep auto-reload #}
         </div>
     </div>
 
     {# Chart Card #}
-    <div class="card shadow-sm mb-4">
-        <div class="card-header">
-            Yield Curve for {{ selected_date }}{% if num_prev_days > 0 %} (with {{ num_prev_days }} previous day(s)){% endif %}
-        </div>
-        <div class="card-body">
-            {% if chart_data and chart_data.labels and chart_data.datasets %}
-                <canvas id="yieldCurveChart" style="height: 750px; width: 100%;"></canvas>
-            {% else %}
-                <div class="alert alert-warning" role="alert">
-                    No data available to display the chart for {{ currency }} on {{ selected_date }}.
-                </div>
-            {% endif %}
-        </div>
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-6 hover:shadow-md transition-shadow">
+         <h3 class="text-xl font-semibold font-merriweather mb-3">Yield Curve for {{ selected_date }}{% if num_prev_days > 0 %} (with {{ num_prev_days }} previous day(s)){% endif %}</h3>
+        {% if chart_data and chart_data.labels and chart_data.datasets %}
+            {# Set a fixed aspect ratio or explicit height #}
+            <div class="relative h-[400px] md:h-[500px]"> {# Adjust height as needed #}
+                 <canvas id="yieldCurveChart"></canvas>
+            </div>
+        {% else %}
+            <div class="bg-warning/10 border border-warning text-warning px-4 py-3 rounded relative" role="alert">
+                <strong class="font-bold">Warning!</strong>
+                <span class="block sm:inline ml-2">No data available to display the chart for {{ currency }} on {{ selected_date }}.</span>
+            </div>
+        {% endif %}
     </div>
 
     {# Data Table Card for Selected Date #}
     {% if table_data %}
-    <div class="card shadow-sm">
-        <div class="card-header">
-            Data for {{ selected_date }} (Compared to Previous Day)
-        </div>
-        <div class="card-body">
-             <div class="table-responsive">
-                <table class="table table-sm table-striped table-hover">
-                    <thead>
-                        <tr>
-                            <th>Term</th>
-                            <th>Term (Months, Approx)</th>
-                            <th>Value</th>
-                            <th>Daily Change</th>
-                            <th>Deviation from Avg Shift</th>
-                            <th>Deviation Z-Score</th>
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-6 hover:shadow-md transition-shadow">
+        <h3 class="text-xl font-semibold font-merriweather mb-3">Data for {{ selected_date }} (Compared to Previous Day)</h3>
+         <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Term</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Term (Months, Approx)</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Daily Change</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Deviation from Avg Shift</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Deviation Z-Score</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in table_data %}
+                        {# Apply conditional highlighting based on Z-score #}
+                        {% set z_score = row.DeviationZScore | default(0, true) %}
+                        {% set abs_z_score = z_score | abs %}
+                        {% set row_bg_class = '' %}
+                        {% if abs_z_score > 3 %}
+                            {% set row_bg_class = 'bg-danger/10' %}
+                        {% elif abs_z_score > 2 %}
+                            {% set row_bg_class = 'bg-warning/10' %}
+                        {% endif %}
+                        <tr class="hover:bg-gray-50 {{ row_bg_class }}">
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700">{{ row.Term }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700">{{ row.TermMonths }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-right text-gray-900">{{ row.Value_Display | round(4) }}</td>
+                            {# Format new columns, handle NaN with default filter #}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-right text-gray-900">{{ row.ValueChange | default('N/A', true) | round(4) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-right text-gray-900">{{ row.ChangeDeviation | default('N/A', true) | round(4) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-right font-medium {{ 'text-danger-dark' if abs_z_score > 3 else ('text-warning-dark' if abs_z_score > 2 else 'text-gray-900') }}">
+                                {{ z_score | default('N/A', true) | round(2) }}
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in table_data %}
-                            {# Apply conditional highlighting based on Z-score #}
-                            {% set z_score = row.DeviationZScore | default(0, true) %}
-                            {% set abs_z_score = z_score | abs %}
-                            {% set row_class = '' %}
-                            {% if abs_z_score > 3 %}
-                                {% set row_class = 'table-danger' %}
-                            {% elif abs_z_score > 2 %}
-                                {% set row_class = 'table-warning' %}
-                            {% endif %}
-                            <tr class="{{ row_class }}">
-                                <td>{{ row.Term }}</td>
-                                <td>{{ row.TermMonths }}</td>
-                                <td>{{ row.Value_Display | round(4) }}</td>
-                                {# Format new columns, handle NaN with default filter #}
-                                <td>{{ row.ValueChange | default('N/A', true) | round(4) }}</td>
-                                <td>{{ row.ChangeDeviation | default('N/A', true) | round(4) }}</td>
-                                <td>{{ z_score | default('N/A', true) | round(2) }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                <small class="text-muted">Highlighting: Yellow if |Z-Score| > 2, Red if |Z-Score| > 3. Z-Score measures how many standard deviations a term's daily change deviated from the average daily change of the whole curve.</small>
-            </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <small class="block mt-2 text-xs text-gray-600">Highlighting: <span class="bg-warning/20 px-1 rounded">Yellow</span> if |Z-Score| > 2, <span class="bg-danger/20 px-1 rounded">Red</span> if |Z-Score| > 3. Z-Score measures how many standard deviations a term's daily change deviated from the average daily change of the whole curve.</small>
         </div>
     </div>
     {% endif %}
@@ -110,12 +119,27 @@
 {% block scripts %}
 {{ super() }} {# Include scripts from base.html #}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> {# Include Chart.js #}
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script> {# Optional: if using time scale #}
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const chartData = {{ chart_data | tojson | safe }};
     const ctx = document.getElementById('yieldCurveChart');
     let yieldChart = null; // Reference to the chart instance
+
+    // Assign colors dynamically based on the palette if needed
+    const colorPalette = ['#E34A33', '#1F7A8C', '#FFC857', '#AADEA7', '#6C464F', '#8A817C']; // Example palette
+    if (chartData && chartData.datasets) {
+        chartData.datasets.forEach((dataset, index) => {
+            dataset.borderColor = colorPalette[index % colorPalette.length];
+            dataset.backgroundColor = dataset.borderColor + '1A'; // Example light fill
+            dataset.borderWidth = 2; // Style guide
+            dataset.pointBackgroundColor = dataset.borderColor;
+            dataset.pointRadius = 3;
+            dataset.pointHoverRadius = 5;
+            dataset.tension = 0.1; // Slight curve
+        });
+    }
 
     function renderChart() {
         if (yieldChart) {
@@ -125,41 +149,66 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("Rendering chart with data:", chartData);
             yieldChart = new Chart(ctx, {
                 type: 'line',
-                data: chartData, // Now contains multiple datasets
+                data: chartData,
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectRatio: false, // Important for resizing within container
                     scales: {
                         x: {
                             title: {
                                 display: true,
-                                text: 'Term (Months)' // Already updated
+                                text: 'Term (Months)',
+                                color: '#666', // Style guide axis label color
+                                font: { family: "'Inter', sans-serif", size: 12 }
                             },
                             type: 'linear',
-                            position: 'bottom'
+                            position: 'bottom',
+                            grid: { color: '#E5E5E5' }, // Style guide gridline color
+                            ticks: { color: '#666', font: { family: "'Inter', sans-serif", size: 11 } }
                         },
                         y: {
                             title: {
                                 display: true,
-                                text: 'Yield Value'
+                                text: 'Yield Value',
+                                color: '#666',
+                                font: { family: "'Inter', sans-serif", size: 12 }
                             },
-                            beginAtZero: false
+                            beginAtZero: false,
+                            grid: { color: '#E5E5E5' },
+                            ticks: { color: '#666', font: { family: "'Inter', sans-serif", size: 11 } }
                         }
                     },
                     plugins: {
-                        tooltip: {
+                        tooltip: { // Style guide tooltip
                             mode: 'index',
                             intersect: false,
+                            backgroundColor: '#fff',
+                            titleColor: '#333',
+                            bodyColor: '#666',
+                            borderColor: '#E5E5E5', // Neutral border
+                            borderWidth: 1,
+                            padding: 10,
+                            cornerRadius: 4,
+                            boxPadding: 3,
+                            titleFont: { family: "'Inter', sans-serif", weight: 'bold' },
+                            bodyFont: { family: "'Inter', sans-serif" }
                         },
                         title: {
                              display: true,
-                             // Base title on the first dataset (selected date)
                              text: chartData.datasets[0].label ?
                                    `Yield Curves - ${chartData.datasets[0].label.split('(')[0].trim()}` :
-                                   'Yield Curve'
+                                   'Yield Curve',
+                             color: '#333',
+                             font: { family: "'Merriweather Sans', sans-serif", size: 16, weight: 'bold'}
                         },
                         legend: {
                             position: 'top',
+                            labels: {
+                                color: '#333', // Legend text color
+                                font: { family: "'Inter', sans-serif", size: 13 },
+                                boxWidth: 12,
+                                padding: 15
+                            }
                         }
                     }
                 }

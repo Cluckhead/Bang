@@ -7,7 +7,7 @@
     <meta name="sp-valid-state" content="{{ sp_valid_state | lower }}">
     <meta name="secondary-data-available" content="{{ secondary_data_initially_available | lower }}">
     <title>{{ metric_name }} Check (JS)</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- Removed Bootstrap CSS link -->
     <!-- Include Chart.js and the date adapter -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -25,72 +25,68 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
-        <a class="navbar-brand" href="/">Data Verification</a>
+    <nav>
+        <a href="/">Data Verification</a>
         <!-- Navbar content -->
     </nav>
 
-    <main role="main" class="container-fluid">
+    <main>
         <h1>{{ metric_name }} Check</h1>
         <p>Latest Data Date: <strong>{{ latest_date }}</strong></p>
 
         <!-- Fund Group Filter UI: Dropdown (compact, reusable) -->
-        <form id="fund-group-form" method="get" class="mb-3" style="max-width: 350px;">
-            <label for="fund-group-select" class="form-label"><strong>Filter by Fund Group:</strong></label>
-            <select class="form-select" id="fund-group-select" name="fund_group" onchange="this.form.submit()">
+        <form id="fund-group-form" method="get" style="max-width: 350px;">
+            <label for="fund-group-select"><strong>Filter by Fund Group:</strong></label>
+            <select id="fund-group-select" name="fund_group" onchange="this.form.submit()">
                 <option value="" {% if not selected_fund_group %}selected{% endif %}>All</option>
                 {% for group, funds in fund_groups.items() %}
                     <option value="{{ group }}" {% if selected_fund_group == group %}selected{% endif %}>{{ group }} ({{ funds|length }})</option>
                 {% endfor %}
             </select>
-            <!-- Preserve other query params (sp_valid, etc) -->
             {% for key, value in request.args.items() %}
                 {% if key != 'fund_group' %}
                     <input type="hidden" name="{{ key }}" value="{{ value }}">
                 {% endif %}
             {% endfor %}
-            <small class="form-text text-muted">Select a fund group to filter the view. Only groups with funds in the current data are shown. This filter is server-side and persists in the URL.</small>
+            <small>Select a fund group to filter the view. Only groups with funds in the current data are shown. This filter is server-side and persists in the URL.</small>
         </form>
         <!-- End Fund Group Filter UI -->
 
         <p>Charts sorted by the maximum absolute <strong>Change Z-Score</strong> across all columns for the fund (most deviation first).</p>
 
         <!-- Toggle Controls Container -->
-        <div class="d-flex flex-column flex-sm-row mb-3"> <!-- Flex layout for toggles -->
-
+        <div>
             <!-- S&P Valid Filter Toggle -->
-            <div class="form-group mr-sm-3 toggle-container"> <!-- Added toggle-container class -->
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" role="switch" id="toggleSpValid" {% if sp_valid_state is not defined or sp_valid_state %}checked{% endif %}>
-                    <label class="form-check-label" for="toggleSpValid">S&P Valid Data Only</label>
+            <div class="toggle-container">
+                <div>
+                    <input type="checkbox" role="switch" id="toggleSpValid" {% if sp_valid_state is not defined or sp_valid_state %}checked{% endif %}>
+                    <label for="toggleSpValid">S&P Valid Data Only</label>
                 </div>
-                 <small class="form-text text-muted">Only include data where 'SS Project - In Scope' is TRUE.</small>
+                 <small>Only include data where 'SS Project - In Scope' is TRUE.</small>
             </div>
             <!-- End S&P Valid Filter Toggle -->
 
             <!-- Toggle Switch for S&P Data Comparison -->
-            <div id="sp-toggle-container" class="form-group toggle-container" style="display: none;"> <!-- Initially hidden, JS will show if comparison data exists -->
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" role="switch" id="toggleSpData">
-                    <label class="form-check-label" for="toggleSpData">Show S&P Comparison Data</label>
+            <div id="sp-toggle-container" class="toggle-container" style="display: none;">
+                <div>
+                    <input type="checkbox" role="switch" id="toggleSpData">
+                    <label for="toggleSpData">Show S&P Comparison Data</label>
                 </div>
-                 <small class="form-text text-muted">Overlay S&P data on charts (if available).</small>
+                 <small>Overlay S&P data on charts (if available).</small>
             </div>
             <!-- End Toggle Switch -->
-
         </div>
         <!-- End Toggle Controls Container -->
 
-
         {% if not missing_funds.empty %}
-            <div class="alert alert-warning" role="alert">
+            <div>
                  <strong>Warning:</strong> The following funds appear to be missing data for the latest date ({{ latest_date }}) {% if sp_valid_state %}with the 'S&P Valid' filter applied{% endif %}:
                 {{ missing_funds.index.tolist() | join(', ') }}
             </div>
         {% endif %}
 
         {% if error_message %}
-        <div class="alert alert-danger" role="alert">
+        <div>
           {{ error_message }}
         </div>
         {% endif %}
@@ -109,12 +105,8 @@
     </main>
 
     <!-- Link to the external JavaScript module -->
-    <!-- Assumes main.js reads the meta tags and initializes event listeners for toggles -->
     <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
 
-    <!-- Bootstrap JS (optional) -->
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <!-- Removed Bootstrap JS and jQuery links -->
 </body>
 </html> 

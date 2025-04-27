@@ -4,11 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Data Checker{% endblock %}</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather+Sans:wght@400;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.output.css') }}">
     <style>
         /* Basic styles - can be expanded */
-        body { padding-top: 6rem; } /* Increased top padding */
         .sticky-top {
             top: 56px; /* Adjust based on navbar height */
         }
@@ -39,79 +43,76 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('main.index') }}">
-                <img src="{{ url_for('static', filename='images/bang.jpg') }}" alt="Logo">
+    <!-- Top Bar (Fixed) -->
+    <div class="fixed top-0 left-0 right-0 h-[60px] bg-neutral-100 border-b border-neutral-300 z-20 flex items-center px-4 justify-between">
+        <!-- Left Side: Logo, Title -->
+        <div class="flex items-center">
+             <a href="{{ url_for('main.index') }}" class="flex items-center text-xl font-semibold text-gray-800">
+                <img src="{{ url_for('static', filename='images/bang.jpg') }}" alt="Logo" class="h-10 mr-2"> <!-- Adjusted height -->
                 Data Checker
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarCollapse">
-                <ul class="navbar-nav me-auto mb-2 mb-md-0">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.index') }}">Time Series Dashboard</a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownChecks" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            Checks & Comparisons
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="navbarDropdownChecks">
-                            <li><a class="dropdown-item" href="{{ url_for('security.securities_page') }}">Securities Check</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('weight.weight_check') }}">Weight Check</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('curve_bp.curve_summary') }}">Yield Curve Check</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('attribution_bp.attribution_summary') }}">Attribution Residuals</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('attribution_bp.attribution_security_page') }}">Attribution Security-Level</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('attribution_bp.attribution_radar') }}">Attribution Radar</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header">Comparisons</h6></li>
-                            <li><a class="dropdown-item" href="{{ url_for('generic_comparison_bp.summary', comparison_type='spread') }}">Spread Comparison</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('generic_comparison_bp.summary', comparison_type='duration') }}">Duration Comparison</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('generic_comparison_bp.summary', comparison_type='spread_duration') }}">Spread Duration Comparison</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('generic_comparison_bp.summary', comparison_type='ytm') }}">YTM Comparison</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('generic_comparison_bp.summary', comparison_type='ytw') }}">YTW Comparison</a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('staleness_bp.dashboard') }}">Stale Data Report</a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownMaxMin" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            Max/Min Checks
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="navbarDropdownMaxMin">
-                            <li><a class="dropdown-item" href="{{ url_for('maxmin_bp.dashboard') }}">All Files</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('maxmin_bp.dashboard', group_name='Yields') }}">Yields</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('maxmin_bp.dashboard', group_name='Spreads') }}">Spreads</a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('exclusion_bp.manage_exclusions') }}">Exclusions</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('watchlist_bp.manage_watchlist') }}">Watchlist</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('issue_bp.manage_issues') }}">Track Issues</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('api_bp.get_data_page') }}">Data Management</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('attribution_bp.attribution_charts') }}">Attribution Residuals Charts</a>
-                    </li>
-                </ul>
-                <!-- Status Bar: Small, right-aligned, 25% width -->
-                <div id="navbar-status-bar" class="d-flex align-items-center justify-content-end" style="width: 25%; min-width: 200px; max-width: 350px;">
-                    <!-- Status/progress will be injected here by JS -->
-                </div>
-            </div>
         </div>
-    </nav>
+        <!-- Right Side: Search, User (Placeholders) -->
+        <div class="flex items-center space-x-4">
+            <span><!-- Search Placeholder --></span>
+            <span><!-- User Avatar Placeholder --></span>
+        </div>
+    </div>
 
-    <main role="main" class="container-fluid">
+    <!-- Sidebar (Fixed) -->
+    <div class="fixed top-[60px] left-0 bottom-0 w-[220px] bg-neutral-50 border-r border-neutral-300 z-10 p-4 overflow-y-auto">
+        <!-- Navigation Links -->
+        <ul class="space-y-2">
+             <li>
+                <a href="{{ url_for('main.index') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Time Series Dashboard</a>
+            </li>
+             <li>
+                <span class="block px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Checks & Comparisons</span>
+                <ul class="mt-1 space-y-1 ml-3">
+                     <li><a href="{{ url_for('security.securities_page') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Securities Check</a></li>
+                     <li><a href="{{ url_for('weight.weight_check') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Weight Check</a></li>
+                     <li><a href="{{ url_for('curve_bp.curve_summary') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Yield Curve Check</a></li>
+                     <li><a href="{{ url_for('attribution_bp.attribution_summary') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Attribution Residuals</a></li>
+                     <li><a href="{{ url_for('attribution_bp.attribution_security_page') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Attribution Security-Level</a></li>
+                     <li><a href="{{ url_for('attribution_bp.attribution_radar') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Attribution Radar</a></li>
+                     <li><span class="block px-3 pt-2 text-xs font-semibold text-gray-500 uppercase">Comparisons</span></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='spread') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Spread Comparison</a></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='duration') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Duration Comparison</a></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='spread_duration') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Spread Duration Comparison</a></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='ytm') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">YTM Comparison</a></li>
+                     <li><a href="{{ url_for('generic_comparison_bp.summary', comparison_type='ytw') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">YTW Comparison</a></li>
+                 </ul>
+             </li>
+             <li>
+                <a href="{{ url_for('staleness_bp.dashboard') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Stale Data Report</a>
+            </li>
+             <li>
+                 <span class="block px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Max/Min Checks</span>
+                 <ul class="mt-1 space-y-1 ml-3">
+                    <li><a href="{{ url_for('maxmin_bp.dashboard') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">All Files</a></li>
+                    <li><a href="{{ url_for('maxmin_bp.dashboard', group_name='Yields') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Yields</a></li>
+                    <li><a href="{{ url_for('maxmin_bp.dashboard', group_name='Spreads') }}" class="block px-3 py-1 rounded hover:bg-neutral-200 text-sm">Spreads</a></li>
+                 </ul>
+            </li>
+             <li>
+                <a href="{{ url_for('exclusion_bp.manage_exclusions') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Exclusions</a>
+            </li>
+             <li>
+                <a href="{{ url_for('watchlist_bp.manage_watchlist') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Watchlist</a>
+            </li>
+             <li>
+                <a href="{{ url_for('issue_bp.manage_issues') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Track Issues</a>
+            </li>
+             <li>
+                <a href="{{ url_for('api_bp.get_data_page') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Data Management</a>
+            </li>
+             <li>
+                <a href="{{ url_for('attribution_bp.attribution_charts') }}" class="block px-3 py-2 rounded hover:bg-neutral-200 text-sm font-medium">Attribution Residuals Charts</a>
+            </li>
+         </ul>
+    </div>
+
+    <main class="ml-[220px] pt-[60px] p-4">
         {% block content %}
         {# Page specific content will go here #}
         {% endblock %}

@@ -7,20 +7,20 @@ Purpose: Renders the security details page, showing all static info (from refere
 {% block title %}Security Details: {{ security_id }} - {{ metric_name }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-  <div class="row">
+<div>
+  <div>
     <!-- Left Column: Static Info Tile -->
-    <div class="col-lg-3 col-md-4" style="border-right: 1px solid #eee; min-width: 300px; max-width: 400px;">
-      <div class="card mb-4">
-        <div class="card-body">
-          <h5 class="card-title">Security Details</h5>
+    <div style="border-right: 1px solid #eee; min-width: 300px; max-width: 400px;">
+      <div>
+        <div>
+          <h5>Security Details</h5>
           {% if reference_missing %}
-            <div class="alert alert-warning">No static reference data found for this security.</div>
+            <div>No static reference data found for this security.</div>
           {% else %}
             {% for group_name, group_fields in static_groups %}
               {% if group_fields %}
-                <h6 class="mt-3">{{ group_name }}</h6>
-                <ul class="list-unstyled mb-2">
+                <h6>{{ group_name }}</h6>
+                <ul>
                   {% for k, v in group_fields.items() %}
                     <li><strong>{{ k }}:</strong> {{ v }}</li>
                   {% endfor %}
@@ -29,108 +29,91 @@ Purpose: Renders the security details page, showing all static info (from refere
             {% endfor %}
           {% endif %}
 
-          {# Exclusion Status #}
           {% if is_excluded %}
-            <div class="fw-bold text-danger mt-3">This security is on the <u>exclusion list</u>{% if exclusion_comment %}: {{ exclusion_comment }}{% endif %}</div>
+            <div>This security is on the <u>exclusion list</u>{% if exclusion_comment %}: {{ exclusion_comment }}{% endif %}</div>
           {% endif %}
 
-          {# Issue Status #}
           {% if open_issues and open_issues|length > 0 %}
-            <div class="fw-bold text-danger mt-3">This security has open data issues:</div>
-            <ul class="mb-2">
+            <div>This security has open data issues:</div>
+            <ul>
               {% for issue in open_issues %}
                 <li>
-                  <span class="fw-bold">IssueID:</span> {{ issue.IssueID }}<br>
-                  <span class="fw-bold">Raised:</span> {{ issue.DateRaised }} by {{ issue.RaisedBy }}<br>
-                  <span class="fw-bold">Description:</span> {{ issue.Description }}<br>
-                  <span class="fw-bold">Status:</span> {{ issue.Status }}
-                  {% if issue.JiraLink %}<br><span class="fw-bold">Jira:</span> <a href="{{ issue.JiraLink }}" target="_blank">{{ issue.JiraLink }}</a>{% endif %}
+                  <span>IssueID:</span> {{ issue.IssueID }}<br>
+                  <span>Raised:</span> {{ issue.DateRaised }} by {{ issue.RaisedBy }}<br>
+                  <span>Description:</span> {{ issue.Description }}<br>
+                  <span>Status:</span> {{ issue.Status }}
+                  {% if issue.JiraLink %}<br><span>Jira:</span> <a href="{{ issue.JiraLink }}" target="_blank">{{ issue.JiraLink }}</a>{% endif %}
                 </li>
               {% endfor %}
             </ul>
           {% endif %}
 
-          {# Bloomberg YAS Link #}
           {% if bloomberg_yas_url %}
-            <div class="mt-3">
-              <a href="{{ bloomberg_yas_url }}" class="btn btn-primary btn-sm" target="_blank">Open in Bloomberg YAS</a>
+            <div>
+              <a href="{{ bloomberg_yas_url }}" target="_blank">Open in Bloomberg YAS</a>
             </div>
           {% endif %}
 
-          <!-- Add Issue/Exclusion Buttons -->
-          <div class="mt-3">
-            <!-- Button to open Raise Data Issue modal -->
-            <button type="button" class="btn btn-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#raiseIssueModal">
-              Raise Data Issue
-            </button>
-            <!-- Button to open Add Exclusion modal -->
-            <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#addExclusionModal">
-              Add Exclusion
-            </button>
+          <div>
+            <button type="button">Raise Data Issue</button>
+            <button type="button">Add Exclusion</button>
           </div>
 
           <!-- Raise Data Issue Modal -->
-          <div class="modal fade" id="raiseIssueModal" tabindex="-1" aria-labelledby="raiseIssueModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title" id="raiseIssueModalLabel">Raise Data Issue for {{ security_id }}</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <div>
+            <div>
+              <div>
+                <div>
+                  <h5>Raise Data Issue for {{ security_id }}</h5>
+                  <button type="button">&times;</button>
                 </div>
                 <form method="POST" action="{{ url_for('issue_bp.manage_issues') }}">
-                  <div class="modal-body">
-                    <!-- Raised By -->
-                    <div class="mb-3">
-                      <label for="modal-raised-by" class="form-label">Raised By:</label>
-                      <select class="form-select" id="modal-raised-by" name="raised_by" required>
+                  <div>
+                    <div>
+                      <label for="modal-raised-by">Raised By:</label>
+                      <select id="modal-raised-by" name="raised_by" required>
                         <option value="" disabled selected>Select User</option>
                         {% for user in users %}
                           <option value="{{ user }}">{{ user }}</option>
                         {% endfor %}
                       </select>
                     </div>
-                    <!-- Fund Impacted (pre-filled with ISIN) -->
-                    <div class="mb-3">
-                      <label for="modal-fund-impacted" class="form-label">Fund Impacted:</label>
-                      <input type="text" class="form-control" id="modal-fund-impacted" name="fund_impacted" value="{{ security_id }}" required readonly>
+                    <div>
+                      <label for="modal-fund-impacted">Fund Impacted:</label>
+                      <input type="text" id="modal-fund-impacted" name="fund_impacted" value="{{ security_id }}" required readonly>
                     </div>
-                    <!-- Data Source -->
-                    <div class="mb-3">
-                      <label for="modal-data-source" class="form-label">Data Source:</label>
-                      <select class="form-select" id="modal-data-source" name="data_source" required>
+                    <div>
+                      <label for="modal-data-source">Data Source:</label>
+                      <select id="modal-data-source" name="data_source" required>
                         <option value="" disabled selected>Select Data Source</option>
                         {% for ds in data_sources %}
                           <option value="{{ ds }}">{{ ds }}</option>
                         {% endfor %}
                       </select>
                     </div>
-                    <!-- Issue Date -->
-                    <div class="mb-3">
-                      <label for="modal-issue-date" class="form-label">Date of Issue:</label>
-                      <input type="date" class="form-control" id="modal-issue-date" name="issue_date" required>
+                    <div>
+                      <label for="modal-issue-date">Date of Issue:</label>
+                      <input type="date" id="modal-issue-date" name="issue_date" required>
                     </div>
-                    <!-- Description (pre-filled with ISIN and Security Name if available) -->
-                    <div class="mb-3">
-                      <label for="modal-description" class="form-label">Description:</label>
-                      <textarea class="form-control" id="modal-description" name="description" rows="3" required>{{ security_id }}{% if static_groups and static_groups["Reference"] and static_groups["Reference"]["Security Name"] %} - {{ static_groups["Reference"]["Security Name"] }}{% endif %}</textarea>
+                    <div>
+                      <label for="modal-description">Description:</label>
+                      <textarea id="modal-description" name="description" rows="3" required>{{ security_id }}{% if static_groups and static_groups["Reference"] and static_groups["Reference"]["Security Name"] %} - {{ static_groups["Reference"]["Security Name"] }}{% endif %}</textarea>
                     </div>
-                    <!-- Jira Link (optional) -->
-                    <div class="mb-3">
-                      <label for="modal-jira-link" class="form-label">Jira Link (optional):</label>
-                      <input type="url" class="form-control" id="modal-jira-link" name="jira_link">
+                    <div>
+                      <label for="modal-jira-link">Jira Link (optional):</label>
+                      <input type="url" id="modal-jira-link" name="jira_link">
                     </div>
-                    <!-- In Scope for Go-live -->
-                    <div class="mb-3">
-                      <label for="modal-in-scope" class="form-label">In Scope for Go-live:</label>
-                      <select class="form-select" id="modal-in-scope" name="in_scope_for_go_live">
+                    <div>
+                      <label for="modal-in-scope">In Scope for Go-live:</label>
+                      <select id="modal-in-scope" name="in_scope_for_go_live">
                         <option value="No" selected>No</option>
                         <option value="Yes">Yes</option>
                       </select>
                     </div>
                   </div>
-                  <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning">Submit Issue</button>
+                  <div>
+                    <button type="button">Cancel</button>
+                    <button type="submit">Submit Issue</button>
                   </div>
                 </form>
               </div>
@@ -138,41 +121,37 @@ Purpose: Renders the security details page, showing all static info (from refere
           </div>
 
           <!-- Add Exclusion Modal -->
-          <div class="modal fade" id="addExclusionModal" tabindex="-1" aria-labelledby="addExclusionModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title" id="addExclusionModalLabel">Add Exclusion for {{ security_id }}</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <div>
+            <div>
+              <div>
+                <div>
+                  <h5>Add Exclusion for {{ security_id }}</h5>
+                  <button type="button">&times;</button>
                 </div>
                 <form method="POST" action="{{ url_for('exclusion_bp.manage_exclusions') }}">
-                  <div class="modal-body">
-                    <!-- Security ID (hidden, pre-filled) -->
+                  <div>
                     <input type="hidden" name="security_id" value="{{ security_id }}">
-                    <!-- End Date (optional) -->
-                    <div class="mb-3">
-                      <label for="modal-end-date" class="form-label">End Date (Optional):</label>
-                      <input type="date" class="form-control" id="modal-end-date" name="end_date">
+                    <div>
+                      <label for="modal-end-date">End Date (Optional):</label>
+                      <input type="date" id="modal-end-date" name="end_date">
                     </div>
-                    <!-- User (dropdown) -->
-                    <div class="mb-3">
-                      <label for="modal-user" class="form-label">Added By (User):</label>
-                      <select class="form-select" id="modal-user" name="user" required>
+                    <div>
+                      <label for="modal-user">Added By (User):</label>
+                      <select id="modal-user" name="user" required>
                         <option value="" disabled selected>Select User</option>
                         {% for user in users %}
                           <option value="{{ user }}">{{ user }}</option>
                         {% endfor %}
                       </select>
                     </div>
-                    <!-- Comment (required, pre-fill with ISIN and Security Name if available) -->
-                    <div class="mb-3">
-                      <label for="modal-comment" class="form-label">Comment (Required):</label>
-                      <textarea class="form-control" id="modal-comment" name="comment" rows="3" required>{{ security_id }}{% if static_groups and static_groups["Reference"] and static_groups["Reference"]["Security Name"] %} - {{ static_groups["Reference"]["Security Name"] }}{% endif %}</textarea>
+                    <div>
+                      <label for="modal-comment">Comment (Required):</label>
+                      <textarea id="modal-comment" name="comment" rows="3" required>{{ security_id }}{% if static_groups and static_groups["Reference"] and static_groups["Reference"]["Security Name"] %} - {{ static_groups["Reference"]["Security Name"] }}{% endif %}</textarea>
                     </div>
                   </div>
-                  <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Add Exclusion</button>
+                  <div>
+                    <button type="button">Cancel</button>
+                    <button type="submit">Add Exclusion</button>
                   </div>
                 </form>
               </div>
@@ -182,52 +161,44 @@ Purpose: Renders the security details page, showing all static info (from refere
       </div>
     </div>
     <!-- Right Column: Charts -->
-    <div class="col-lg-9 col-md-8 ps-lg-5 ps-md-4">
+    <div>
       <h1>{{ security_id }} - {{ metric_name }}</h1>
       <p>Latest data as of: <strong>{{ latest_date }}</strong></p>
-      {# Primary Chart Area (Metric + Price Overlay) #}
       <h2>{{ metric_name }} and Price Time Series</h2>
-      <div id="primary-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      <div id="primary-chart-container" style="height: 450px; position: relative;">
         <canvas id="primarySecurityChart"></canvas>
       </div>
-      {# Duration Chart Area #}
       <h2>Duration Time Series</h2>
-      <div id="duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      <div id="duration-chart-container" style="height: 450px; position: relative;">
         <canvas id="durationSecurityChart"></canvas>
       </div>
-      {# Spread Duration Chart Area #}
       <h2>Spread Duration Time Series</h2>
-      <div id="spread-duration-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      <div id="spread-duration-chart-container" style="height: 450px; position: relative;">
         <canvas id="spreadDurationChart"></canvas>
       </div>
-      {# Spread Chart Area #}
       <h2>Spread Time Series</h2>
-      <div id="spread-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      <div id="spread-chart-container" style="height: 450px; position: relative;">
         <canvas id="spreadChart"></canvas>
       </div>
-      {# YTM Chart Area #}
       <h2>YTM Time Series</h2>
-      <div id="ytm-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      <div id="ytm-chart-container" style="height: 450px; position: relative;">
         <canvas id="ytmChart"></canvas>
       </div>
-      {# YTW Chart Area #}
       <h2>YTW Time Series</h2>
-      <div id="ytw-chart-container" class="mb-4" style="height: 450px; position: relative;">
+      <div id="ytw-chart-container" style="height: 450px; position: relative;">
         <canvas id="ytwChart"></canvas>
       </div>
-      {# --- Fund Holdings Over Time Table (if available) --- #}
       {% if holdings_data and chart_dates %}
-      <div class="mb-4"> {# Add margin below for spacing #}
-        <div class="card">
-          <div class="card-header">
+      <div>
+        <div>
+          <div>
             Fund Holdings Over Time (Based on Chart Dates)
           </div>
-          <div class="card-body" style="width: 100%; overflow-x: auto;">
-            <table class="table table-bordered table-sm text-center" style="table-layout: fixed; width: 100%;">
+          <div style="width: 100%; overflow-x: auto;">
+            <table style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
                   <th style="width: 100px; vertical-align: bottom;">Fund</th>
-                  {# Rotate date headers - show MM-DD #}
                   {% for date_str in chart_dates %}
                   <th style="width: 25px; height: 70px; vertical-align: bottom; text-align: center; padding: 0 1px;">
                     <span style="display: inline-block; transform: rotate(-75deg); transform-origin: center 5px; white-space: nowrap; font-size: 0.7em;">
@@ -238,10 +209,9 @@ Purpose: Renders the security details page, showing all static info (from refere
                 </tr>
               </thead>
               <tbody>
-                {# Iterate through funds and their holding status list #}
                 {% for fund, held_list in holdings_data.items() %}
                 <tr>
-                  <td class="fw-bold">{{ fund }}</td>
+                  <td>{{ fund }}</td>
                   {% for is_held in held_list %}
                     <td class="{{ 'bg-success' if is_held else 'bg-danger' }}"></td>
                   {% endfor %}
@@ -250,20 +220,18 @@ Purpose: Renders the security details page, showing all static info (from refere
               </tbody>
             </table>
             {% if not holdings_data %}
-            <p class="text-muted mt-2">No fund holdings information found for this security in w_secs.csv during the chart period.</p>
+            <p>No fund holdings information found for this security in w_secs.csv during the chart period.</p>
             {% endif %}
           </div>
         </div>
       </div>
       {% elif chart_data_json %}
-      <div class="mb-4">
-        <div class="alert alert-light" role="alert">
+      <div>
+        <div>
           Fund holdings information could not be loaded or is unavailable for the chart period.
         </div>
       </div>
       {% endif %}
-      {# --- End Fund Holdings Table --- #}
-      {# Hidden script tag for chart data #}
       <script id="chartJsonData" type="application/json">
         {{ chart_data_json|safe }}
       </script>

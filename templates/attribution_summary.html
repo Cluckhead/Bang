@@ -9,362 +9,348 @@
 {% block title %}Attribution Residuals Summary{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <h1>Attribution Residuals Summary</h1>
-    <p class="text-muted">Sum of residuals by fund and date. Residual = L0 Total - (L1 Rates + L1 Credit + L1 FX). Perfect attribution: residual = 0.</p>
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold font-merriweather mb-2">Attribution Residuals Summary</h1>
+    <p class="text-gray-600 mb-6">Sum of {{ selected_level }} attribution factors by fund and date. Use filters to explore.</p>
 
-    <!-- Level Toggle -->
-    <form method="get" class="mb-3" id="level-toggle-form">
-        <input type="hidden" name="fund" value="{{ selected_fund }}">
-        <input type="hidden" name="characteristic" value="{{ selected_characteristic }}">
-        <input type="hidden" name="start_date" value="{{ start_date.strftime('%Y-%m-%d') }}">
-        <input type="hidden" name="end_date" value="{{ end_date.strftime('%Y-%m-%d') }}">
-        <div class="btn-group" role="group" aria-label="Level toggle">
-            <input type="radio" class="btn-check" name="level" id="level-l0" value="L0" autocomplete="off" {% if selected_level == 'L0' %}checked{% endif %} onchange="this.form.submit()">
-            <label class="btn btn-outline-primary" for="level-l0">L0</label>
-            <input type="radio" class="btn-check" name="level" id="level-l1" value="L1" autocomplete="off" {% if selected_level == 'L1' %}checked{% endif %} onchange="this.form.submit()">
-            <label class="btn btn-outline-primary" for="level-l1">L1</label>
-            <input type="radio" class="btn-check" name="level" id="level-l2" value="L2" autocomplete="off" {% if selected_level == 'L2' %}checked{% endif %} onchange="this.form.submit()">
-            <label class="btn btn-outline-primary" for="level-l2">L2</label>
-        </div>
-    </form>
+    <!-- Filters Card -->
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-6 hover:shadow-md transition-shadow">
+        <!-- Level Toggle -->
+        <form method="get" class="mb-4" id="level-toggle-form">
+            <input type="hidden" name="fund" value="{{ selected_fund }}">
+            <input type="hidden" name="characteristic" value="{{ selected_characteristic }}">
+            <input type="hidden" name="characteristic_value" value="{{ selected_characteristic_value }}"> {# Pass through value #}
+            <input type="hidden" name="start_date" value="{{ start_date.strftime('%Y-%m-%d') }}">
+            <input type="hidden" name="end_date" value="{{ end_date.strftime('%Y-%m-%d') }}">
+            <div class="flex items-center mb-2">
+                <span class="text-sm font-medium text-gray-700 mr-3">Attribution Level:</span>
+                <div class="inline-flex rounded-md shadow-sm" role="group">
+                    <input type="radio" class="peer hidden" name="level" id="level-l0" value="L0" autocomplete="off" {% if selected_level == 'L0' %}checked{% endif %} onchange="this.form.submit()">
+                    <label for="level-l0" class="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-l-md cursor-pointer hover:bg-gray-50 peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary focus:z-10 focus:ring-2 focus:ring-primary">L0</label>
 
-    <!-- Filter Form -->
-    <form method="get" class="row g-3 align-items-end mb-4" id="filter-form">
-        <div class="col-md-3">
-            <label for="fund-select" class="form-label">Fund</label>
-            <select class="form-select" id="fund-select" name="fund" onchange="this.form.submit()">
-                <option value="" {% if not selected_fund %}selected{% endif %}>All Funds</option>
-                {% for fund in available_funds %}
-                    <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label for="characteristic-select" class="form-label">Group by Characteristic</label>
-            <select class="form-select" id="characteristic-select" name="characteristic" onchange="this.form.submit()">
-                {% for char in available_characteristics %}
-                    <option value="{{ char }}" {% if char == selected_characteristic %}selected{% endif %}>{{ char }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label for="characteristic-value-select" class="form-label">Filter by {{ selected_characteristic }}</label>
-            <select class="form-select" id="characteristic-value-select" name="characteristic_value" onchange="this.form.submit()">
-                <option value="" {% if not selected_characteristic_value %}selected{% endif %}>All</option>
-                {% for val in available_characteristic_values %}
-                    <option value="{{ val }}" {% if val == selected_characteristic_value %}selected{% endif %}>{{ val }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-6">
-            <label for="date-range-slider" class="form-label">Date Range</label>
+                    <input type="radio" class="peer hidden" name="level" id="level-l1" value="L1" autocomplete="off" {% if selected_level == 'L1' %}checked{% endif %} onchange="this.form.submit()">
+                    <label for="level-l1" class="px-3 py-1 text-sm font-medium text-gray-700 bg-white border-t border-b border-gray-300 cursor-pointer hover:bg-gray-50 peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary focus:z-10 focus:ring-2 focus:ring-primary">L1</label>
+
+                    <input type="radio" class="peer hidden" name="level" id="level-l2" value="L2" autocomplete="off" {% if selected_level == 'L2' %}checked{% endif %} onchange="this.form.submit()">
+                    <label for="level-l2" class="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-r-md cursor-pointer hover:bg-gray-50 peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary focus:z-10 focus:ring-2 focus:ring-primary">L2</label>
+                </div>
+            </div>
+        </form>
+
+        <!-- Filter Form -->
+        <form method="get" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end" id="filter-form">
             <div>
-                <input type="range" class="form-range" id="date-range-slider" min="0" max="{{ (max_date - min_date).days }}" value="0" step="1">
-                <input type="range" class="form-range" id="date-range-slider-end" min="0" max="{{ (max_date - min_date).days }}" value="{{ (end_date - min_date).days }}" step="1">
-                <div class="d-flex justify-content-between">
-                    <span id="start-date-label">{{ start_date.strftime('%Y-%m-%d') }}</span>
-                    <span id="end-date-label">{{ end_date.strftime('%Y-%m-%d') }}</span>
+                <label for="fund-select" class="block text-sm font-medium text-gray-700 mb-1">Fund</label>
+                <select class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm" id="fund-select" name="fund">
+                    <option value="" {% if not selected_fund %}selected{% endif %}>All Funds</option>
+                    {% for fund in available_funds %}
+                        <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="characteristic-select" class="block text-sm font-medium text-gray-700 mb-1">Group by Characteristic</label>
+                <select class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm" id="characteristic-select" name="characteristic">
+                    {% for char in available_characteristics %}
+                        <option value="{{ char }}" {% if char == selected_characteristic %}selected{% endif %}>{{ char }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="characteristic-value-select" class="block text-sm font-medium text-gray-700 mb-1">Filter by {{ selected_characteristic }}</label>
+                <select class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm" id="characteristic-value-select" name="characteristic_value">
+                    <option value="" {% if not selected_characteristic_value %}selected{% endif %}>All</option>
+                    {% for val in available_characteristic_values %}
+                        <option value="{{ val }}" {% if val == selected_characteristic_value %}selected{% endif %}>{{ val }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Date Range Slider -->
+            <div class="lg:col-span-2">
+                <label for="date-range-slider-container" class="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                <div id="date-range-slider-container" class="relative h-5">
+                    <input type="range" class="absolute w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb-secondary" id="date-range-slider" min="0" max="0" value="0" step="1">
+                    <input type="range" class="absolute w-full h-2 bg-transparent rounded-lg appearance-none cursor-pointer slider-thumb-secondary" id="date-range-slider-end" min="0" max="0" value="0" step="1">
+                </div>
+                <div class="flex justify-between text-xs text-gray-500 mt-1">
+                    <span id="start-date-label"></span>
+                    <span id="end-date-label"></span>
                 </div>
                 <input type="hidden" name="start_date" id="start-date-input" value="{{ start_date.strftime('%Y-%m-%d') }}">
                 <input type="hidden" name="end_date" id="end-date-input" value="{{ end_date.strftime('%Y-%m-%d') }}">
                 <input type="hidden" name="level" value="{{ selected_level }}">
             </div>
-        </div>
-        <div class="col-md-3">
-            <button type="submit" class="btn btn-primary">Apply Filters</button>
-        </div>
-    </form>
 
-    <div class="mb-3">
+            <div class="lg:col-start-4">
+                <button type="submit" class="w-full bg-primary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="mb-4 text-sm text-gray-700">
         <strong>Current Filters:</strong>
-        <span>Fund: {{ selected_fund if selected_fund else 'All' }}</span> |
-        <span>Date: {{ start_date.strftime('%Y-%m-%d') }} to {{ end_date.strftime('%Y-%m-%d') }}</span> |
-        <span>Characteristic: {{ selected_characteristic }}</span> |
-        <span>Level: {{ selected_level }}</span>
+        <span class="mx-1">Fund: <span class="font-semibold">{{ selected_fund if selected_fund else 'All' }}</span></span> |
+        <span class="mx-1">Date: <span class="font-semibold">{{ start_date.strftime('%Y-%m-%d') }} to {{ end_date.strftime('%Y-%m-%d') }}</span></span> |
+        {% if selected_characteristic %}
+        <span class="mx-1">Characteristic: <span class="font-semibold">{{ selected_characteristic }}</span></span> |
+        {% endif %}
+        {% if selected_characteristic_value %}
+        <span class="mx-1">Value: <span class="font-semibold">{{ selected_characteristic_value }}</span></span> |
+        {% endif %}
+        <span class="mx-1">Level: <span class="font-semibold">{{ selected_level }}</span></span>
     </div>
 
-    <div class="row">
-        <div class="col-md-12">
-            <h3>Benchmark</h3>
-            <div class="table-responsive">
-                <table class="table table-striped table-bordered table-sm">
-                    <thead>
-                        <tr>
-                            <th rowspan="2">Date</th>
-                            <th rowspan="2">Fund</th>
-                            {% if selected_characteristic %}<th rowspan="2">{{ selected_characteristic }}</th>{% endif %}
+    <!-- Benchmark Results Card -->
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-6 hover:shadow-md transition-shadow">
+        <h3 class="text-xl font-semibold font-merriweather mb-3">Benchmark {{ selected_level }} Attribution</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Date</th>
+                        <th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Fund</th>
+                        {% if selected_characteristic %}<th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">{{ selected_characteristic }}</th>{% endif %}
+                        {# Dynamic Headers based on Level #}
+                        {% set headers = [] %}
+                        {% if selected_level == 'L0' or selected_level == None %}
+                            {% set headers = headers + ['Residual', 'Abs Residual'] %}
+                        {% elif selected_level == 'L1' %}
+                            {% set headers = headers + ['L1 Rates', 'L1 Credit', 'L1 FX'] %}
+                        {% elif selected_level == 'L2' %}
+                            {% set headers = headers + benchmark_results[0].L2ProdKeys | map('replace', '_', ' ') | list if benchmark_results else [] %}
+                        {% endif %}
+                        {% for header in headers %}
+                            <th colspan="2" class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-l border-gray-200">{{ header }}</th>
+                        {% endfor %}
+                    </tr>
+                    <tr>
+                        {% for header in headers %}
+                            <th class="px-3 py-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-l border-gray-200 bg-gray-100">Prod</th>
+                            <th class="px-3 py-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 bg-gray-100">S&amp;P</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in benchmark_results %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200">{{ row.Date.strftime('%Y-%m-%d') if row.Date else '' }}</td>
+                        <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200">{{ row.Fund }}</td>
+                        {% if selected_characteristic %}<td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200">{{ row[selected_characteristic] }}</td>{% endif %}
+                        {# Dynamic Data based on Level #}
+                        {% if selected_level == 'L0' or selected_level == None %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Residual_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Residual_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.AbsResidual_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.AbsResidual_SP) }}</td>
+                        {% elif selected_level == 'L1' %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1Rates_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1Rates_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1Credit_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1Credit_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1FX_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1FX_SP) }}</td>
+                        {% elif selected_level == 'L2' %}
+                            {% for key in row.L2ProdKeys %}
+                                <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L2Prod[key]) }}</td>
+                                <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L2SP[key]) }}</td>
+                            {% endfor %}
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                     <tr><td colspan="{{ 2 + (1 if selected_characteristic else 0) + headers|length * 2 }}" class="text-center text-gray-500 py-4">No benchmark results found for the selected filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-gray-100">
+                     {% if benchmark_results %}
+                        <tr class="font-semibold text-gray-800">
+                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}" class="px-3 py-2 text-left border-r border-gray-300">Total</td>
+                             {# Dynamic Totals based on Level #}
                             {% if selected_level == 'L0' or selected_level == None %}
-                                <th colspan="2">Residual</th>
-                                <th colspan="2">Abs Residual</th>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='AbsResidual_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='AbsResidual_SP')) }}</td>
                             {% elif selected_level == 'L1' %}
-                                <th colspan="2">L1 Rates</th>
-                                <th colspan="2">L1 Credit</th>
-                                <th colspan="2">L1 FX</th>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1Rates_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1Rates_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1Credit_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1Credit_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1FX_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1FX_SP')) }}</td>
                             {% elif selected_level == 'L2' %}
-                                <th colspan="2">Credit Spread Change</th>
-                                <th colspan="2">Credit Convexity</th>
-                                <th colspan="2">Credit Carry</th>
-                                <th colspan="2">Credit Defaulted</th>
-                                <th colspan="2">Rates Carry</th>
-                                <th colspan="2">Rates Convexity</th>
-                                <th colspan="2">Rates Curve</th>
-                                <th colspan="2">Rates Duration</th>
-                                <th colspan="2">Rates Roll</th>
-                                <th colspan="2">FX Carry</th>
-                                <th colspan="2">FX Change</th>
-                            {% endif %}
-                        </tr>
-                        <tr>
-                            {% if selected_level == 'L0' or selected_level == None %}
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                            {% elif selected_level == 'L1' %}
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                            {% elif selected_level == 'L2' %}
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in benchmark_results %}
-                        <tr>
-                            <td>{{ row.Date.strftime('%Y-%m-%d') if row.Date else '' }}</td>
-                            <td>{{ row.Fund }}</td>
-                            {% if selected_characteristic %}<td>{{ row[selected_characteristic] }}</td>{% endif %}
-                            {% if selected_level == 'L0' or selected_level == None %}
-                                <td>{{ '%.6f'|format(row.Residual_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.Residual_SP) }}</td>
-                                <td>{{ '%.6f'|format(row.AbsResidual_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.AbsResidual_SP) }}</td>
-                            {% elif selected_level == 'L1' %}
-                                <td>{{ '%.6f'|format(row.L1Rates_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.L1Rates_SP) }}</td>
-                                <td>{{ '%.6f'|format(row.L1Credit_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.L1Credit_SP) }}</td>
-                                <td>{{ '%.6f'|format(row.L1FX_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.L1FX_SP) }}</td>
-                            {% elif selected_level == 'L2' %}
-                                {% for key in row.L2ProdKeys %}
-                                    <td>{{ '%.6f'|format(row.L2Prod[key]) }}</td>
-                                    <td>{{ '%.6f'|format(row.L2SP[key]) }}</td>
+                                {% for key in benchmark_results[0].L2ProdKeys %}
+                                    <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|map(attribute='L2Prod')|map(attribute=key)|sum) }}</td>
+                                    <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|map(attribute='L2SP')|map(attribute=key)|sum) }}</td>
                                 {% endfor %}
                             {% endif %}
                         </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot>
-                        {% if (selected_level == 'L0' or selected_level == None) and benchmark_results %}
-                        <tr class="table-secondary fw-bold">
-                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_SP')) }}</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='AbsResidual_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='AbsResidual_SP')) }}</td>
-                        </tr>
-                        {% elif selected_level == 'L1' and benchmark_results %}
-                        <tr class="table-secondary fw-bold">
-                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1Rates_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1Rates_SP')) }}</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1Credit_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1Credit_SP')) }}</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1FX_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(benchmark_results|sum(attribute='L1FX_SP')) }}</td>
-                        </tr>
-                        {% elif selected_level == 'L2' and benchmark_results %}
-                        <tr class="table-secondary fw-bold">
-                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
-                            {% for key in benchmark_results[0].L2ProdKeys %}
-                                <td>{{ '%.6f'|format(benchmark_results|map(attribute='L2Prod')|map(attribute=key)|sum) }}</td>
-                                <td>{{ '%.6f'|format(benchmark_results|map(attribute='L2SP')|map(attribute=key)|sum) }}</td>
-                            {% endfor %}
-                        </tr>
-                        {% endif %}
-                    </tfoot>
-                </table>
-            </div>
+                    {% endif %}
+                </tfoot>
+            </table>
         </div>
     </div>
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <h3>Portfolio</h3>
-            <div class="table-responsive">
-                <table class="table table-striped table-bordered table-sm">
-                    <thead>
-                        <tr>
-                            <th rowspan="2">Date</th>
-                            <th rowspan="2">Fund</th>
-                            {% if selected_characteristic %}<th rowspan="2">{{ selected_characteristic }}</th>{% endif %}
+
+    <!-- Portfolio Results Card -->
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+         <h3 class="text-xl font-semibold font-merriweather mb-3">Portfolio {{ selected_level }} Attribution</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Date</th>
+                        <th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Fund</th>
+                        {% if selected_characteristic %}<th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">{{ selected_characteristic }}</th>{% endif %}
+                         {# Dynamic Headers based on Level #}
+                        {% set headers = [] %}
+                        {% if selected_level == 'L0' or selected_level == None %}
+                            {% set headers = headers + ['Residual', 'Abs Residual'] %}
+                        {% elif selected_level == 'L1' %}
+                            {% set headers = headers + ['L1 Rates', 'L1 Credit', 'L1 FX'] %}
+                        {% elif selected_level == 'L2' %}
+                             {% set headers = headers + portfolio_results[0].L2ProdKeys | map('replace', '_', ' ') | list if portfolio_results else [] %}
+                        {% endif %}
+                        {% for header in headers %}
+                            <th colspan="2" class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-l border-gray-200">{{ header }}</th>
+                        {% endfor %}
+                    </tr>
+                    <tr>
+                        {% for header in headers %}
+                            <th class="px-3 py-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-l border-gray-200 bg-gray-100">Prod</th>
+                            <th class="px-3 py-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 bg-gray-100">S&amp;P</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in portfolio_results %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200">{{ row.Date.strftime('%Y-%m-%d') if row.Date else '' }}</td>
+                        <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200">{{ row.Fund }}</td>
+                         {% if selected_characteristic %}<td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200">{{ row[selected_characteristic] }}</td>{% endif %}
+                         {# Dynamic Data based on Level #}
+                        {% if selected_level == 'L0' or selected_level == None %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Residual_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Residual_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.AbsResidual_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.AbsResidual_SP) }}</td>
+                        {% elif selected_level == 'L1' %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1Rates_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1Rates_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1Credit_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1Credit_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1FX_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1FX_SP) }}</td>
+                        {% elif selected_level == 'L2' %}
+                            {% for key in row.L2ProdKeys %}
+                                <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L2Prod[key]) }}</td>
+                                <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L2SP[key]) }}</td>
+                            {% endfor %}
+                        {% endif %}
+                    </tr>
+                     {% else %}
+                     <tr><td colspan="{{ 2 + (1 if selected_characteristic else 0) + headers|length * 2 }}" class="text-center text-gray-500 py-4">No portfolio results found for the selected filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-gray-100">
+                    {% if portfolio_results %}
+                        <tr class="font-semibold text-gray-800">
+                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}" class="px-3 py-2 text-left border-r border-gray-300">Total</td>
+                            {# Dynamic Totals based on Level #}
                             {% if selected_level == 'L0' or selected_level == None %}
-                                <th colspan="2">Residual</th>
-                                <th colspan="2">Abs Residual</th>
-                            {% elif selected_level == 'L1' %}
-                                <th colspan="2">L1 Rates</th>
-                                <th colspan="2">L1 Credit</th>
-                                <th colspan="2">L1 FX</th>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='AbsResidual_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='AbsResidual_SP')) }}</td>
+                             {% elif selected_level == 'L1' %}
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1Rates_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1Rates_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1Credit_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1Credit_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1FX_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1FX_SP')) }}</td>
                             {% elif selected_level == 'L2' %}
-                                <th colspan="2">Credit Spread Change</th>
-                                <th colspan="2">Credit Convexity</th>
-                                <th colspan="2">Credit Carry</th>
-                                <th colspan="2">Credit Defaulted</th>
-                                <th colspan="2">Rates Carry</th>
-                                <th colspan="2">Rates Convexity</th>
-                                <th colspan="2">Rates Curve</th>
-                                <th colspan="2">Rates Duration</th>
-                                <th colspan="2">Rates Roll</th>
-                                <th colspan="2">FX Carry</th>
-                                <th colspan="2">FX Change</th>
-                            {% endif %}
-                        </tr>
-                        <tr>
-                            {% if selected_level == 'L0' or selected_level == None %}
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                            {% elif selected_level == 'L1' %}
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                            {% elif selected_level == 'L2' %}
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                                <th>Prod</th><th>S&amp;P</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in portfolio_results %}
-                        <tr>
-                            <td>{{ row.Date.strftime('%Y-%m-%d') if row.Date else '' }}</td>
-                            <td>{{ row.Fund }}</td>
-                            {% if selected_characteristic %}<td>{{ row[selected_characteristic] }}</td>{% endif %}
-                            {% if selected_level == 'L0' or selected_level == None %}
-                                <td>{{ '%.6f'|format(row.Residual_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.Residual_SP) }}</td>
-                                <td>{{ '%.6f'|format(row.AbsResidual_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.AbsResidual_SP) }}</td>
-                            {% elif selected_level == 'L1' %}
-                                <td>{{ '%.6f'|format(row.L1Rates_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.L1Rates_SP) }}</td>
-                                <td>{{ '%.6f'|format(row.L1Credit_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.L1Credit_SP) }}</td>
-                                <td>{{ '%.6f'|format(row.L1FX_Prod) }}</td>
-                                <td>{{ '%.6f'|format(row.L1FX_SP) }}</td>
-                            {% elif selected_level == 'L2' %}
-                                {% for key in row.L2ProdKeys %}
-                                    <td>{{ '%.6f'|format(row.L2Prod[key]) }}</td>
-                                    <td>{{ '%.6f'|format(row.L2SP[key]) }}</td>
+                                {% for key in portfolio_results[0].L2ProdKeys %}
+                                    <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|map(attribute='L2Prod')|map(attribute=key)|sum) }}</td>
+                                    <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|map(attribute='L2SP')|map(attribute=key)|sum) }}</td>
                                 {% endfor %}
                             {% endif %}
                         </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot>
-                        {% if (selected_level == 'L0' or selected_level == None) and portfolio_results %}
-                        <tr class="table-secondary fw-bold">
-                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_SP')) }}</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='AbsResidual_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='AbsResidual_SP')) }}</td>
-                        </tr>
-                        {% elif selected_level == 'L1' and portfolio_results %}
-                        <tr class="table-secondary fw-bold">
-                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1Rates_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1Rates_SP')) }}</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1Credit_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1Credit_SP')) }}</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1FX_Prod')) }}</td>
-                            <td>{{ '%.6f'|format(portfolio_results|sum(attribute='L1FX_SP')) }}</td>
-                        </tr>
-                        {% elif selected_level == 'L2' and portfolio_results %}
-                        <tr class="table-secondary fw-bold">
-                            <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}">Total</td>
-                            {% for key in portfolio_results[0].L2ProdKeys %}
-                                <td>{{ '%.6f'|format(portfolio_results|map(attribute='L2Prod')|map(attribute=key)|sum) }}</td>
-                                <td>{{ '%.6f'|format(portfolio_results|map(attribute='L2SP')|map(attribute=key)|sum) }}</td>
-                            {% endfor %}
-                        </tr>
-                        {% endif %}
-                    </tfoot>
-                </table>
-            </div>
+                    {% endif %}
+                </tfoot>
+            </table>
         </div>
     </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
-// Date slider logic
-(function() {
-    const minDate = new Date("{{ min_date.strftime('%Y-%m-%d') }}");
-    const maxDate = new Date("{{ max_date.strftime('%Y-%m-%d') }}");
-    const startDateInput = document.getElementById('start-date-input');
-    const endDateInput = document.getElementById('end-date-input');
-    const startDateLabel = document.getElementById('start-date-label');
-    const endDateLabel = document.getElementById('end-date-label');
-    const sliderStart = document.getElementById('date-range-slider');
-    const sliderEnd = document.getElementById('date-range-slider-end');
+// Date slider logic (using allDates array similar to attribution_radar)
+const minDate = new Date("{{ min_date.strftime('%Y-%m-%d') }}");
+const maxDate = new Date("{{ max_date.strftime('%Y-%m-%d') }}");
+const startDate = new Date("{{ start_date.strftime('%Y-%m-%d') }}");
+const endDate = new Date("{{ end_date.strftime('%Y-%m-%d') }}");
 
-    function daysBetween(d1, d2) {
-        return Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+// Generate all dates in range
+function getDateArray(start, end) {
+    const arr = [];
+    let dt = new Date(start);
+    while (dt <= end) {
+        arr.push(new Date(dt));
+        dt.setDate(dt.getDate() + 1);
     }
-    function addDays(date, days) {
-        const d = new Date(date);
-        d.setDate(d.getDate() + days);
-        return d;
-    }
-    function formatDate(date) {
-        return date.toISOString().slice(0, 10);
-    }
+    return arr;
+}
+const allDates = getDateArray(minDate, maxDate);
 
-    function updateLabelsAndInputs() {
-        let startDays = parseInt(sliderStart.value, 10);
-        let endDays = parseInt(sliderEnd.value, 10);
-        if (endDays < startDays) {
-            // Swap if needed
-            [startDays, endDays] = [endDays, startDays];
-            sliderStart.value = startDays;
-            sliderEnd.value = endDays;
-        }
-        const start = addDays(minDate, startDays);
-        const end = addDays(minDate, endDays);
-        startDateLabel.textContent = formatDate(start);
-        endDateLabel.textContent = formatDate(end);
-        startDateInput.value = formatDate(start);
-        endDateInput.value = formatDate(end);
-    }
+const sliderStartEl = document.getElementById('date-range-slider');
+const sliderEndEl = document.getElementById('date-range-slider-end');
+const startDateLabel = document.getElementById('start-date-label');
+const endDateLabel = document.getElementById('end-date-label');
+const startDateInput = document.getElementById('start-date-input');
+const endDateInput = document.getElementById('end-date-input');
 
-    sliderStart.addEventListener('input', updateLabelsAndInputs);
-    sliderEnd.addEventListener('input', updateLabelsAndInputs);
+sliderStartEl.max = allDates.length - 1;
+sliderEndEl.max = allDates.length - 1;
 
-    // Set initial slider positions based on current filter
-    sliderStart.value = daysBetween(minDate, new Date("{{ start_date.strftime('%Y-%m-%d') }}"));
-    sliderEnd.value = daysBetween(minDate, new Date("{{ end_date.strftime('%Y-%m-%d') }}"));
-    updateLabelsAndInputs();
-})();
+// Find initial slider positions
+let sliderStart = allDates.findIndex(d => d.getTime() === startDate.getTime());
+let sliderEnd = allDates.findIndex(d => d.getTime() === endDate.getTime());
+if (sliderStart === -1) sliderStart = 0;
+if (sliderEnd === -1) sliderEnd = allDates.length - 1;
+sliderStartEl.value = sliderStart;
+sliderEndEl.value = sliderEnd;
+
+function updateSliderLabelsAndInput() {
+    const startIdx = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+    const endIdx = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+
+    startDateLabel.textContent = allDates[startIdx].toISOString().slice(0, 10);
+    endDateLabel.textContent = allDates[endIdx].toISOString().slice(0, 10);
+    startDateInput.value = allDates[startIdx].toISOString().slice(0, 10);
+    endDateInput.value = allDates[endIdx].toISOString().slice(0, 10);
+}
+
+updateSliderLabelsAndInput();
+
+// Update labels immediately on input, but don't submit automatically
+sliderStartEl.addEventListener('input', updateSliderLabelsAndInput);
+sliderEndEl.addEventListener('input', updateSliderLabelsAndInput);
+
+// Submit main filter form when dropdowns change
+document.getElementById('fund-select').addEventListener('change', () => { document.getElementById('filter-form').submit(); });
+document.getElementById('characteristic-select').addEventListener('change', () => { document.getElementById('filter-form').submit(); });
+document.getElementById('characteristic-value-select').addEventListener('change', () => { document.getElementById('filter-form').submit(); });
+
+// Add CSS for slider thumb styling in base.html or style.css if needed
+// Example (might need adjustments in style.css or <style> block):
+/*
+/* Style slider thumbs */
+/* Assumes existence of slider-thumb-secondary class */
+/*.slider-thumb-secondary::-webkit-slider-thumb { ... }
+.slider-thumb-secondary::-moz-range-thumb { ... }
+*/
 </script>
 {% endblock %} 

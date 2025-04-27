@@ -12,304 +12,394 @@
 {% block title %}Attribution Residuals Charts{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <h1>Attribution Residuals Charts</h1>
-    <p class="text-muted">Visualize residuals over time for Benchmark and Portfolio. Use the filters and controls to explore the data.</p>
+<div class="p-4"> {# Replaced container-fluid mt-4 #}
+    <h1 class="text-2xl font-bold font-heading mb-1">Attribution Residuals Charts</h1>
+    <p class="text-gray-600 text-sm mb-4">Visualize residuals over time for Benchmark and Portfolio. Use the filters and controls to explore the data.</p>
 
-    <!-- Filters -->
-    <form method="get" class="row g-3 align-items-end mb-4" id="filter-form">
-        <div class="col-md-3">
-            <label for="fund-select" class="form-label">Fund</label>
-            <select class="form-select" id="fund-select" name="fund" onchange="this.form.submit()">
-                <option value="" {% if not selected_fund %}selected{% endif %}>All Funds</option>
-                {% for fund in available_funds %}
-                    <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label for="characteristic-select" class="form-label">Group by Characteristic</label>
-            <select class="form-select" id="characteristic-select" name="characteristic" onchange="this.form.submit()">
-                {% for char in available_characteristics %}
-                    <option value="{{ char }}" {% if char == selected_characteristic %}selected{% endif %}>{{ char }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label for="characteristic-value-select" class="form-label">Filter by {{ selected_characteristic }}</label>
-            <select class="form-select" id="characteristic-value-select" name="characteristic_value" onchange="this.form.submit()">
-                <option value="" {% if not selected_characteristic_value %}selected{% endif %}>All</option>
-                {% for val in available_characteristic_values %}
-                    <option value="{{ val }}" {% if val == selected_characteristic_value %}selected{% endif %}>{{ val }}</option>
-                {% endfor %}
-            </select>
-        </div>
-    </form>
-
-    <!-- Net/Absolute Toggle -->
-    <div class="mb-3">
-        <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="absToggle" {% if abs_toggle_default %}checked{% endif %}>
-            <label class="form-check-label" for="absToggle">Show Absolute Residuals</label>
-        </div>
+    {# --- Filters Card --- #}
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-4 hover:shadow-md transition-shadow">
+        <form method="get" id="filter-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+                <label for="fund-select" class="block text-sm font-medium text-gray-700">Fund</label>
+                {# Styled Select #}
+                <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="fund-select" name="fund" onchange="this.form.submit()">
+                    <option value="" {% if not selected_fund %}selected{% endif %}>All Funds</option>
+                    {% for fund in available_funds %}
+                        <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="characteristic-select" class="block text-sm font-medium text-gray-700">Group by Characteristic</label>
+                {# Styled Select #}
+                <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="characteristic-select" name="characteristic" onchange="this.form.submit()">
+                    {% for char in available_characteristics %}
+                        <option value="{{ char }}" {% if char == selected_characteristic %}selected{% endif %}>{{ char }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="characteristic-value-select" class="block text-sm font-medium text-gray-700">Filter by {{ selected_characteristic }}</label>
+                {# Styled Select #}
+                <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="characteristic-value-select" name="characteristic_value" onchange="this.form.submit()">
+                    <option value="" {% if not selected_characteristic_value %}selected{% endif %}>All</option>
+                    {% for val in available_characteristic_values %}
+                        <option value="{{ val }}" {% if val == selected_characteristic_value %}selected{% endif %}>{{ val }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
     </div>
 
-    <!-- Date Range Slider -->
-    <div class="mb-4">
-        <label for="date-range-slider" class="form-label">Date Range</label>
-        <div>
-            <input type="range" class="form-range" id="date-range-slider" min="0" max="0" value="0" step="1">
-            <input type="range" class="form-range" id="date-range-slider-end" min="0" max="0" value="0" step="1">
-            <div class="d-flex justify-content-between">
-                <span id="start-date-label"></span>
-                <span id="end-date-label"></span>
+     {# --- Controls Card (Toggle & Slider) --- #}
+     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {# --- Net/Absolute Toggle --- #}
+            <div>
+                <label for="absToggle" class="flex items-center cursor-pointer">
+                    <div class="relative">
+                        {# Styled Toggle #}
+                        <input type="checkbox" id="absToggle" class="sr-only peer" {% if abs_toggle_default %}checked{% endif %}>
+                        <div class="block bg-gray-200 peer-checked:bg-primary w-10 h-5 rounded-full"></div>
+                        <div class="dot absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition peer-checked:translate-x-full"></div>
+                    </div>
+                    <div class="ml-2 text-sm font-medium text-gray-700">Show Absolute Residuals</div>
+                </label>
+            </div>
+
+            {# --- Date Range Slider --- #}
+             {# Note: Styling range inputs precisely is complex. Using basic styling + labels. #}
+             {# Consider a dedicated JS library (e.g., noUiSlider) for better dual-handle slider UI if needed. #}
+             <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                <div class="relative h-8"> {# Container for sliders #}
+                    <input type="range" class="absolute w-full h-2 bg-transparent appearance-none pointer-events-none top-1/2 -translate-y-1/2" id="date-range-track" min="0" max="100" disabled> {# Visual track #}
+                    <input type="range" class="absolute w-full h-2 bg-transparent appearance-none pointer-events-auto top-1/2 -translate-y-1/2 range-slider-thumb" id="date-range-slider" min="0" max="0" value="0" step="1"> {# Start Thumb #}
+                    <input type="range" class="absolute w-full h-2 bg-transparent appearance-none pointer-events-auto top-1/2 -translate-y-1/2 range-slider-thumb" id="date-range-slider-end" min="0" max="0" value="0" step="1"> {# End Thumb #}
+                </div>
+                <div class="flex justify-between text-xs text-gray-500 mt-1">
+                    <span id="start-date-label">Start Date</span>
+                    <span id="end-date-label">End Date</span>
+                </div>
+            </div>
+         </div>
+    </div>
+
+    {# --- Charts Grid --- #}
+    {# Using grid layout for charts #}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {# --- Portfolio Chart Card --- #}
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+            <div class="px-4 py-3 border-b border-gray-200">
+                <h3 class="text-base font-semibold text-gray-800">Portfolio Residuals</h3>
+            </div>
+            <div class="p-4">
+                 {# Set a fixed height for chart container #}
+                <div class="relative h-80"> 
+                    <canvas id="portChart"></canvas>
+                     {# Placeholder/Skeleton Loader Example (Could be shown via JS before chart renders) #}
+                     {# <div class="absolute inset-0 bg-gray-100 animate-pulse"></div> #}
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Charts -->
-    <div class="row">
-        <div class="col-md-2"></div>
-        <div class="col-md-8 mb-5">
-            <h3>Portfolio Residuals</h3>
-            <canvas id="portChart" height="120"></canvas>
+         {# --- Benchmark Chart Card --- #}
+         <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+            <div class="px-4 py-3 border-b border-gray-200">
+                 <h3 class="text-base font-semibold text-gray-800">Benchmark Residuals</h3>
+            </div>
+            <div class="p-4">
+                 {# Set a fixed height for chart container #}
+                 <div class="relative h-80">
+                    <canvas id="benchChart"></canvas>
+                     {# Placeholder/Skeleton Loader Example #}
+                     {# <div class="absolute inset-0 bg-gray-100 animate-pulse"></div> #}
+                 </div>
+            </div>
         </div>
-        <div class="col-md-2"></div>
-    </div>
-    <div class="row">
-        <div class="col-md-2"></div>
-        <div class="col-md-8 mb-5">
-            <h3>Benchmark Residuals</h3>
-            <canvas id="benchChart" height="120"></canvas>
-        </div>
-        <div class="col-md-2"></div>
     </div>
 </div>
 {% endblock %}
 
+{% block styles %}
+{{ super() }}
+{# Basic styling for range slider thumbs - browser support varies #}
+<style>
+.range-slider-thumb::-webkit-slider-thumb {
+  @apply appearance-none w-4 h-4 bg-secondary rounded-full cursor-pointer;
+}
+.range-slider-thumb::-moz-range-thumb {
+   @apply appearance-none w-4 h-4 bg-secondary rounded-full cursor-pointer border-none;
+}
+/* Visual track styling (optional) */
+#date-range-track::-webkit-slider-runnable-track {
+    @apply h-1 bg-gray-200 rounded-full;
+}
+#date-range-track::-moz-range-track {
+     @apply h-1 bg-gray-200 rounded-full;
+}
+</style>
+{% endblock %}
+
 {% block scripts %}
 {{ super() }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{# Chart.js should be loaded from base.html #}
+{# Keep existing JS logic, update Chart.js options for styling #}
 <script>
-// Parse chart data from backend
-const chartDataBench = JSON.parse({{ chart_data_bench_json|tojson|safe }});
-const chartDataPort = JSON.parse({{ chart_data_port_json|tojson|safe }});
+document.addEventListener('DOMContentLoaded', function() {
+    // Parse chart data from backend
+    const chartDataBench = JSON.parse({{ chart_data_bench_json|tojson|safe }});
+    const chartDataPort = JSON.parse({{ chart_data_port_json|tojson|safe }});
+    
+    // Initial state
+    let showAbs = document.getElementById('absToggle') ? document.getElementById('absToggle').checked : {{ 'true' if abs_toggle_default else 'false' }};
+    let benchData = chartDataBench;
+    let portData = chartDataPort;
+    let dateLabels = getDateLabels(benchData);
+    let sliderMin = 0;
+    let sliderMax = dateLabels.length > 0 ? dateLabels.length - 1 : 0;
+    let sliderStart = 0;
+    let sliderEnd = sliderMax;
+    
+    // DOM elements
+    const absToggle = document.getElementById('absToggle');
+    const sliderStartEl = document.getElementById('date-range-slider');
+    const sliderEndEl = document.getElementById('date-range-slider-end');
+    const startDateLabel = document.getElementById('start-date-label');
+    const endDateLabel = document.getElementById('end-date-label');
+    const benchCanvas = document.getElementById('benchChart');
+    const portCanvas = document.getElementById('portChart');
 
-// Helper: get date labels
-function getDateLabels(data) {
-    return data.map(d => d.date);
-}
+    // Chart.js chart instances
+    let benchChart, portChart;
 
-// Helper: get values for a key
-function getValues(data, key) {
-    return data.map(d => d[key]);
-}
-
-// Chart state
-let showAbs = {{ 'true' if abs_toggle_default else 'false' }};
-let benchData = chartDataBench;
-let portData = chartDataPort;
-let dateLabels = getDateLabels(benchData);
-let sliderMin = 0;
-let sliderMax = dateLabels.length - 1;
-let sliderStart = 0;
-let sliderEnd = dateLabels.length - 1;
-
-// DOM elements
-const absToggle = document.getElementById('absToggle');
-const sliderStartEl = document.getElementById('date-range-slider');
-const sliderEndEl = document.getElementById('date-range-slider-end');
-const startDateLabel = document.getElementById('start-date-label');
-const endDateLabel = document.getElementById('end-date-label');
-
-// Chart.js chart instances
-let benchChart, portChart;
-
-function renderCharts() {
-    // Slice data for selected date range
-    const dataSlice = (data) => data.slice(sliderStart, sliderEnd + 1);
-    const benchSlice = dataSlice(benchData);
-    const portSlice = dataSlice(portData);
-    const labels = getDateLabels(benchSlice);
-    // Datasets
-    let benchBarProd, benchBarSP, benchLineProd, benchLineSP;
-    let portBarProd, portBarSP, portLineProd, portLineSP;
-    if (showAbs) {
-        benchBarProd = getValues(benchSlice, 'abs_residual_prod');
-        benchBarSP = getValues(benchSlice, 'abs_residual_sp');
-        portBarProd = getValues(portSlice, 'abs_residual_prod');
-        portBarSP = getValues(portSlice, 'abs_residual_sp');
-        // Cumulative not shown for abs
-        benchLineProd = benchLineSP = portLineProd = portLineSP = null;
-    } else {
-        benchBarProd = getValues(benchSlice, 'residual_prod');
-        benchBarSP = getValues(benchSlice, 'residual_sp');
-        portBarProd = getValues(portSlice, 'residual_prod');
-        portBarSP = getValues(portSlice, 'residual_sp');
-        benchLineProd = getValues(benchSlice, 'cum_residual_prod');
-        benchLineSP = getValues(benchSlice, 'cum_residual_sp');
-        portLineProd = getValues(portSlice, 'cum_residual_prod');
-        portLineSP = getValues(portSlice, 'cum_residual_sp');
+    // Helper: get date labels
+    function getDateLabels(data) {
+        return data && data.length > 0 ? data.map(d => d.date) : [];
     }
-    // Destroy old charts
-    if (benchChart) benchChart.destroy();
-    if (portChart) portChart.destroy();
-    // Benchmark chart
-    benchChart = new Chart(document.getElementById('benchChart').getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Residual (Prod)',
-                    data: benchBarProd,
-                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                },
-                {
-                    label: 'Residual (S&P)',
-                    data: benchBarSP,
-                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    borderWidth: 1
-                },
-                // Cumulative lines (only for net)
-                ...(showAbs ? [] : [
-                    {
-                        label: 'Cumulative Residual (Prod)',
-                        data: benchLineProd,
-                        type: 'line',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                        fill: false,
-                        yAxisID: 'y',
-                        tension: 0.2
-                    },
-                    {
-                        label: 'Cumulative Residual (S&P)',
-                        data: benchLineSP,
-                        type: 'line',
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                        fill: false,
-                        yAxisID: 'y',
-                        tension: 0.2
-                    }
-                ])
-            ]
-        },
-        options: {
+
+    // Helper: get values for a key
+    function getValues(data, key) {
+        return data && data.length > 0 ? data.map(d => d[key]) : [];
+    }
+
+    function renderCharts() {
+        if (!benchCanvas || !portCanvas || !benchData || !portData) return;
+        
+        // Slice data for selected date range
+        const dataSlice = (data) => data.slice(sliderStart, sliderEnd + 1);
+        const benchSlice = dataSlice(benchData);
+        const portSlice = dataSlice(portData);
+        const labels = getDateLabels(benchSlice);
+        
+        // Datasets
+        let benchBarProd, benchBarSP, benchLineProd, benchLineSP;
+        let portBarProd, portBarSP, portLineProd, portLineSP;
+        if (showAbs) {
+            benchBarProd = getValues(benchSlice, 'abs_residual_prod');
+            benchBarSP = getValues(benchSlice, 'abs_residual_sp');
+            portBarProd = getValues(portSlice, 'abs_residual_prod');
+            portBarSP = getValues(portSlice, 'abs_residual_sp');
+            benchLineProd = benchLineSP = portLineProd = portLineSP = []; // Clear lines for abs
+        } else {
+            benchBarProd = getValues(benchSlice, 'residual_prod');
+            benchBarSP = getValues(benchSlice, 'residual_sp');
+            portBarProd = getValues(portSlice, 'residual_prod');
+            portBarSP = getValues(portSlice, 'residual_sp');
+            benchLineProd = getValues(benchSlice, 'cum_residual_prod');
+            benchLineSP = getValues(benchSlice, 'cum_residual_sp');
+            portLineProd = getValues(portSlice, 'cum_residual_prod');
+            portLineSP = getValues(portSlice, 'cum_residual_sp');
+        }
+        
+        // Common Chart.js options based on style guide
+        const commonOptions = {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'top' },
-                title: { display: false }
+                legend: {
+                    position: 'top',
+                    labels: { boxWidth: 12, font: { size: 11 }, color: '#333' }
+                },
+                title: { display: false }, // Use card header for title
+                tooltip: {
+                    backgroundColor: '#FFFFFF', titleColor: '#333333', bodyColor: '#333333',
+                    borderColor: '#DDDDDD', borderWidth: 1
+                }
             },
             scales: {
-                x: { stacked: false },
-                y: { stacked: false, beginAtZero: true }
+                x: {
+                    stacked: false,
+                    grid: { color: '#E5E5E5' },
+                    ticks: { font: { size: 10 }, color: '#666666' }
+                },
+                y: {
+                    stacked: false,
+                    beginAtZero: true,
+                    grid: { color: '#E5E5E5' },
+                    ticks: { font: { size: 10 }, color: '#666666' }
+                }
+            },
+            elements: {
+                 line: { borderWidth: 2, tension: 0.2 },
+                 bar: { borderWidth: 1 },
+                 point: { radius: 1 }
             }
-        }
-    });
-    // Portfolio chart
-    portChart = new Chart(document.getElementById('portChart').getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Residual (Prod)',
-                    data: portBarProd,
-                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                },
-                {
-                    label: 'Residual (S&P)',
-                    data: portBarSP,
-                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    borderWidth: 1
-                },
-                ...(showAbs ? [] : [
+        };
+        
+        // Colors (Align with Section 2/6 if possible, using defaults here)
+        const prodColor = '#1F77B4'; // Blue
+        const spColor = '#FF7F0E'; // Orange
+
+        // Destroy old charts
+        if (benchChart) benchChart.destroy();
+        if (portChart) portChart.destroy();
+
+        // Benchmark chart
+        benchChart = new Chart(benchCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
                     {
-                        label: 'Cumulative Residual (Prod)',
-                        data: portLineProd,
-                        type: 'line',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                        fill: false,
-                        yAxisID: 'y',
-                        tension: 0.2
+                        label: 'Residual (Prod)',
+                        data: benchBarProd,
+                        backgroundColor: prodColor + '80', // Blue with alpha
+                        borderColor: prodColor,
+                        order: 2 // Ensure bars are behind lines
                     },
                     {
-                        label: 'Cumulative Residual (S&P)',
-                        data: portLineSP,
-                        type: 'line',
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                        fill: false,
-                        yAxisID: 'y',
-                        tension: 0.2
-                    }
-                ])
-            ]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'top' },
-                title: { display: false }
+                        label: 'Residual (S&P)',
+                        data: benchBarSP,
+                        backgroundColor: spColor + '80', // Orange with alpha
+                        borderColor: spColor,
+                        order: 2
+                    },
+                    ...(showAbs ? [] : [
+                        {
+                            label: 'Cum Residual (Prod)',
+                            data: benchLineProd, type: 'line', yAxisID: 'y',
+                            borderColor: prodColor, backgroundColor: prodColor + '1A',
+                            fill: false, order: 1
+                        },
+                        {
+                            label: 'Cum Residual (S&P)',
+                            data: benchLineSP, type: 'line', yAxisID: 'y',
+                            borderColor: spColor, backgroundColor: spColor + '1A',
+                            fill: false, order: 1
+                        }
+                    ])
+                ]
             },
-            scales: {
-                x: { stacked: false },
-                y: { stacked: false, beginAtZero: true }
-            }
+            options: commonOptions
+        });
+
+        // Portfolio chart
+        portChart = new Chart(portCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Residual (Prod)',
+                        data: portBarProd,
+                        backgroundColor: prodColor + '80',
+                        borderColor: prodColor,
+                        order: 2
+                    },
+                    {
+                        label: 'Residual (S&P)',
+                        data: portBarSP,
+                        backgroundColor: spColor + '80',
+                        borderColor: spColor,
+                        order: 2
+                    },
+                    ...(showAbs ? [] : [
+                        {
+                            label: 'Cum Residual (Prod)',
+                            data: portLineProd, type: 'line', yAxisID: 'y',
+                            borderColor: prodColor, backgroundColor: prodColor + '1A',
+                            fill: false, order: 1
+                        },
+                        {
+                            label: 'Cum Residual (S&P)',
+                            data: portLineSP, type: 'line', yAxisID: 'y',
+                            borderColor: spColor, backgroundColor: spColor + '1A',
+                            fill: false, order: 1
+                        }
+                    ])
+                ]
+            },
+            options: commonOptions
+        });
+    }
+
+    // Slider update logic
+    function updateSliderLabels() {
+        if (dateLabels.length > 0) {
+             startDateLabel.textContent = dateLabels[sliderStart] || dateLabels[0];
+             endDateLabel.textContent = dateLabels[sliderEnd] || dateLabels[sliderMax];
+        } else {
+            startDateLabel.textContent = 'N/A';
+            endDateLabel.textContent = 'N/A';
         }
-    });
-}
+    }
 
-// Slider logic
-function updateSliderLimits() {
-    dateLabels = getDateLabels(benchData);
-    sliderMin = 0;
-    sliderMax = dateLabels.length - 1;
-    sliderStartEl.min = sliderMin;
-    sliderStartEl.max = sliderMax;
-    sliderEndEl.min = sliderMin;
-    sliderEndEl.max = sliderMax;
-    sliderStartEl.value = sliderStart;
-    sliderEndEl.value = sliderEnd;
-    startDateLabel.textContent = dateLabels[sliderStart] || '';
-    endDateLabel.textContent = dateLabels[sliderEnd] || '';
-}
+    function setupSliders() {
+        if (!sliderStartEl || !sliderEndEl) return;
+        sliderStartEl.min = sliderMin;
+        sliderStartEl.max = sliderMax;
+        sliderEndEl.min = sliderMin;
+        sliderEndEl.max = sliderMax;
+        sliderStartEl.value = sliderStart;
+        sliderEndEl.value = sliderEnd;
+        updateSliderLabels();
+        
+        sliderStartEl.addEventListener('input', function() {
+            sliderStart = parseInt(sliderStartEl.value);
+            if (sliderStart > sliderEnd) { // Prevent crossing thumbs
+                sliderEnd = sliderStart;
+                sliderEndEl.value = sliderEnd;
+            }
+            updateSliderLabels();
+            renderCharts(); 
+        });
+        sliderEndEl.addEventListener('input', function() {
+            sliderEnd = parseInt(sliderEndEl.value);
+             if (sliderEnd < sliderStart) { // Prevent crossing thumbs
+                sliderStart = sliderEnd;
+                sliderStartEl.value = sliderStart;
+            }
+            updateSliderLabels();
+            renderCharts();
+        });
+    }
 
-sliderStartEl.addEventListener('input', function() {
-    sliderStart = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
-    sliderEnd = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
-    updateSliderLimits();
-    renderCharts();
+    // Toggle logic
+    if (absToggle) {
+        absToggle.addEventListener('change', function() {
+            showAbs = absToggle.checked;
+            renderCharts();
+        });
+    }
+
+    // Initialize
+    function init() {
+        if (dateLabels.length === 0) {
+             console.warn("No date labels found, chart rendering skipped.");
+             // Optionally disable controls
+             if(absToggle) absToggle.disabled = true;
+             if(sliderStartEl) sliderStartEl.disabled = true;
+             if(sliderEndEl) sliderEndEl.disabled = true;
+             updateSliderLabels(); // Show N/A
+             return;
+        }
+        if(absToggle) absToggle.checked = showAbs;
+        setupSliders();
+        renderCharts();
+    }
+    
+    init();
 });
-sliderEndEl.addEventListener('input', function() {
-    sliderStart = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
-    sliderEnd = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
-    updateSliderLimits();
-    renderCharts();
-});
-
-absToggle.addEventListener('change', function() {
-    showAbs = absToggle.checked;
-    renderCharts();
-});
-
-// Initialize
-function init() {
-    absToggle.checked = showAbs;
-    sliderStart = 0;
-    sliderEnd = dateLabels.length - 1;
-    updateSliderLimits();
-    renderCharts();
-}
-window.addEventListener('DOMContentLoaded', init);
 </script>
 {% endblock %} 

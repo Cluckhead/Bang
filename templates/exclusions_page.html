@@ -3,91 +3,93 @@
 {% block title %}Manage Security Exclusions{% endblock %}
 
 {% block content %}
-<div class="container" style="width: 90%; max-width: 90vw; min-width: 900px;">
-    <h2>Manage Security Exclusions</h2>
-    <hr>
+<div class="p-4">
+    <h1 class="text-2xl font-bold font-heading mb-3">Manage Security Exclusions</h1>
 
-    {# Display messages if any #}
     {% if message %}
-        <div class="alert alert-{{ message_type }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        {% set alert_colors = {
+            'success': 'border-green-300 bg-green-50 text-green-700',
+            'warning': 'border-yellow-300 bg-yellow-50 text-yellow-700',
+            'danger': 'border-red-300 bg-red-50 text-red-700',
+            'info': 'border-blue-300 bg-blue-50 text-blue-700'
+        } %}
+        {% set colors = alert_colors.get(message_type, alert_colors['info']) %}
+        <div class="mb-4 p-3 border {{ colors }} rounded-md text-sm flex justify-between items-center" role="alert">
+            <span>{{ message }}</span>
         </div>
     {% endif %}
 
-    <div class="row">
-        {# Left Column: Display Current Exclusions #}
-        <div class="col-md-7">
-            <h4>Current Exclusions</h4>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+            <h4 class="text-lg font-semibold text-gray-800 mb-3">Current Exclusions</h4>
             {% if exclusions %}
-                <table class="table table-striped table-sm">
-                    <thead>
-                        <tr>
-                            <th>Security ID</th>
-                            <th>Is Distressed</th>
-                            <th>Date Added</th>
-                            <th>End Date</th>
-                            <th>Comment</th>
-                            <th>Added By</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for exclusion in exclusions %}
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50">
                             <tr>
-                                <td>{{ exclusion.SecurityID }}</td>
-                                <td>{{ exclusion['Is Distressed'] if 'Is Distressed' in exclusion else '' }}</td>
-                                <td>{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else 'N/A' }}</td>
-                                <td>{{ exclusion.EndDate.strftime('%Y-%m-%d') if exclusion.EndDate else '' }}</td>
-                                <td style="max-width: 350px; word-break: break-word;">{{ exclusion.Comment }}</td>
-                                <td>{{ exclusion.User if exclusion.User is defined else '' }}</td>
-                                <td>
-                                    <form method="POST" action="{{ url_for('exclusion_bp.remove_exclusion_route') }}" style="display: inline;">
-                                        <input type="hidden" name="security_id" value="{{ exclusion.SecurityID }}">
-                                        <input type="hidden" name="add_date" value="{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else '' }}">
-                                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this exclusion?');">Remove</button>
-                                    </form>
-                                </td>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Security ID</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Distressed</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Added</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Date</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comment</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Added By</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for exclusion in exclusions %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-2 whitespace-nowrap font-medium text-gray-900">{{ exclusion.SecurityID }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ exclusion['Is Distressed'] if 'Is Distressed' in exclusion else '' }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else 'N/A' }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ exclusion.EndDate.strftime('%Y-%m-%d') if exclusion.EndDate else '' }}</td>
+                                    <td class="px-4 py-2 text-gray-700 max-w-xs break-words">{{ exclusion.Comment }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ exclusion.User if exclusion.User is defined else '' }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap">
+                                        <form method="POST" action="{{ url_for('exclusion_bp.remove_exclusion_route') }}" style="display: inline;">
+                                            <input type="hidden" name="security_id" value="{{ exclusion.SecurityID }}">
+                                            <input type="hidden" name="add_date" value="{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else '' }}">
+                                            <button type="submit" class="px-2 py-1 bg-red-600 text-white text-xs font-medium rounded shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 ease-in-out" 
+                                                    onclick="return confirm('Are you sure you want to remove this exclusion?');">Remove</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             {% else %}
-                <p>No securities are currently excluded.</p>
+                <p class="text-sm text-gray-500 italic">No securities are currently excluded.</p>
             {% endif %}
         </div>
 
-        {# Right Column: Add New Exclusion Form #}
-        <div class="col-md-5">
-            <h4>Add New Exclusion</h4>
-            <form method="POST" action="{{ url_for('exclusion_bp.manage_exclusions') }}">
-                {# --- Filter dropdowns for CCY, Security Sub Type, Country Of Risk --- #}
-                <div class="mb-3">
-                    <div class="row g-2">
-                        <div class="col">
-                            <label for="filter-ccy" class="form-label">CCY</label>
-                            <select id="filter-ccy" class="form-select form-select-sm">
-                                <option value="">All</option>
+        <div class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 p-4 h-fit">
+            <h4 class="text-lg font-semibold text-gray-800 mb-4">Add New Exclusion</h4>
+            <form method="POST" action="{{ url_for('exclusion_bp.manage_exclusions') }}" class="space-y-4">
+                <div>
+                     <label class="block text-xs font-medium text-gray-500 mb-1">Filter Securities By:</label>
+                     <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <select id="filter-ccy" class="block w-full pl-2 pr-8 py-1 text-xs border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                                <option value="">CCY: All</option>
                                 {% set ccy_options = available_securities | map(attribute='CCY') | unique | list | sort %}
                                 {% for ccy in ccy_options %}
                                     <option value="{{ ccy }}">{{ ccy }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col">
-                            <label for="filter-subtype" class="form-label">Security Sub Type</label>
-                            <select id="filter-subtype" class="form-select form-select-sm">
-                                <option value="">All</option>
+                        <div>
+                            <select id="filter-subtype" class="block w-full pl-2 pr-8 py-1 text-xs border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                                <option value="">Type: All</option>
                                 {% set subtype_options = available_securities | map(attribute='Security Sub Type') | unique | list | sort %}
                                 {% for subtype in subtype_options %}
                                     <option value="{{ subtype }}">{{ subtype }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col">
-                            <label for="filter-country" class="form-label">Country Of Risk</label>
-                            <select id="filter-country" class="form-select form-select-sm">
-                                <option value="">All</option>
+                        <div>
+                            <select id="filter-country" class="block w-full pl-2 pr-8 py-1 text-xs border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                                <option value="">Country: All</option>
                                 {% set country_options = available_securities | map(attribute='Country Of Risk') | unique | list | sort %}
                                 {% for country in country_options %}
                                     <option value="{{ country }}">{{ country }}</option>
@@ -96,14 +98,12 @@
                         </div>
                     </div>
                 </div>
-                {# --- End filter dropdowns --- #}
 
-                <div class="mb-3">
-                    <label for="security-search-input" class="form-label">Search & Select Security:</label>
-                    <input type="text" id="security-search-input" class="form-control mb-2" placeholder="Type to filter securities...">
-                    <select class="form-select" id="security-select" name="security_id" required>
+                <div>
+                    <label for="security-search-input" class="block text-sm font-medium text-gray-700">Search & Select Security:</label>
+                    <input type="text" id="security-search-input" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-secondary focus:border-secondary mb-2" placeholder="Type ISIN or Name to filter...">
+                    <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="security-select" name="security_id" required>
                         <option value="" disabled selected>Select a Security</option>
-                        {# Show ISIN - Security Name in the dropdown, and add Is Distressed as a data attribute #}
                         {% for sec in available_securities %}
                             <option value="{{ sec.ISIN }}" data-ccy="{{ sec.CCY }}" data-subtype="{{ sec['Security Sub Type'] }}" data-country="{{ sec['Country Of Risk'] }}" data-distressed="{{ sec['Is Distressed'] if 'Is Distressed' in sec else '' }}">
                                 {{ sec.ISIN }} - {{ sec['Security Name'] }}{% if sec['Is Distressed'] == 'TRUE' %} (Distressed){% endif %}
@@ -111,24 +111,28 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label for="end_date" class="form-label">End Date (Optional):</label>
-                    <input type="date" class="form-control" id="end_date" name="end_date">
+                
+                <div>
+                    <label for="end_date" class="block text-sm font-medium text-gray-700">End Date (Optional):</label>
+                    <input type="date" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="end_date" name="end_date">
                 </div>
-                <div class="mb-3">
-                    <label for="user-select" class="form-label">Added By (User):</label>
-                    <select class="form-select" id="user-select" name="user" required>
+                <div>
+                    <label for="user-select" class="block text-sm font-medium text-gray-700">Added By (User):</label>
+                    <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="user-select" name="user" required>
                         <option value="" disabled selected>Select User</option>
                         {% for user in users %}
                             <option value="{{ user }}">{{ user }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label for="comment" class="form-label">Comment (Required):</label>
-                    <textarea class="form-control" id="comment" name="comment" rows="4" style="width: 98%; min-width: 400px; max-width: 99%;"></textarea>
+                <div>
+                    <label for="comment" class="block text-sm font-medium text-gray-700">Comment (Required):</label>
+                    <textarea class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="comment" name="comment" rows="4" required></textarea>
                 </div>
-                <button type="submit" class="btn btn-primary">Add Exclusion</button>
+                
+                <div>
+                    <button type="submit" class="w-full px-4 py-2 bg-primary text-white text-sm font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">Add Exclusion</button>
+                </div>
             </form>
         </div>
     </div>
@@ -139,10 +143,6 @@
 {% block scripts %}
 {{ super() }}
 <script>
-// --- Client-side filtering for the security dropdown ---
-// This script filters the main security dropdown based on the three filter dropdowns and the search box.
-// It is designed to be fast and work for up to 10,000 options.
-
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('security-search-input');
     const select = document.getElementById('security-select');
@@ -150,52 +150,46 @@ document.addEventListener('DOMContentLoaded', function() {
     const filterSubtype = document.getElementById('filter-subtype');
     const filterCountry = document.getElementById('filter-country');
 
-    // Store all options in memory for fast filtering
-    const allOptions = Array.from(select.options).filter(opt => opt.value !== ""); // Exclude placeholder
+    const allOptions = Array.from(select.options).filter(opt => opt.value !== "");
 
-    // Helper: Apply all filters and search
     function applyFilters() {
         const search = searchInput.value.trim().toLowerCase();
         const ccy = filterCCY.value;
         const subtype = filterSubtype.value;
         const country = filterCountry.value;
-        let firstVisible = null;
+        let visibleCount = 0;
+        let firstVisibleValue = null;
 
-        // Hide all options initially
         allOptions.forEach(opt => {
             let show = true;
-            // Filter by CCY
             if (ccy && opt.getAttribute('data-ccy') !== ccy) show = false;
-            // Filter by Subtype
-            if (subtype && opt.getAttribute('data-subtype') !== subtype) show = false;
-            // Filter by Country
-            if (country && opt.getAttribute('data-country') !== country) show = false;
-            // Filter by search (ISIN or Name)
+            if (show && subtype && opt.getAttribute('data-subtype') !== subtype) show = false;
+            if (show && country && opt.getAttribute('data-country') !== country) show = false;
             if (show && search) {
                 const text = opt.textContent.toLowerCase();
                 if (!text.includes(search)) show = false;
             }
+            
             opt.style.display = show ? '' : 'none';
-            if (show && !firstVisible) firstVisible = opt;
+            if (show) {
+                visibleCount++;
+                if (firstVisibleValue === null) {
+                    firstVisibleValue = opt.value;
+                }
+            }
         });
-        // Optionally, select the first visible option if none is selected
-        // (Do not auto-select to avoid accidental submissions)
+
+        const selectedOption = select.options[select.selectedIndex];
+        if (visibleCount === 0 || (selectedOption && selectedOption.style.display === 'none')) {
+            select.value = "";
+        }
     }
 
-    // Event listeners for all filters
     searchInput.addEventListener('input', applyFilters);
     filterCCY.addEventListener('change', applyFilters);
     filterSubtype.addEventListener('change', applyFilters);
     filterCountry.addEventListener('change', applyFilters);
 
-    // Optional: Reset search/filter when dropdown is focused
-    select.addEventListener('focus', function() {
-        // Uncomment to clear search on focus:
-        // searchInput.value = '';
-        // applyFilters();
-    });
-
-    // Initial filter (in case filters are pre-selected)
     applyFilters();
 });
 </script>

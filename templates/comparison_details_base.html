@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 
+{#
+    Purpose: Base template for comparison detail pages (e.g., spread, duration).
+    Displays a comparison chart, key statistics, and fund holdings over time for a specific security.
+#}
+
 {# Base template for comparison detail pages #}
 {# Expects context variables:
     - comparison_type (str): e.g., 'spread', 'duration' (used for URLs)
@@ -18,106 +23,125 @@
 {% block title %}{{ display_name }} Comparison Details: {{ security_name }}{% endblock %}
 
 {% block content %}
-{# Use container-fluid for wider content area, px-4 for padding #}
-<div class="container-fluid px-4 mt-4">
+<div class="p-4"> {# Replaced container-fluid px-4 mt-4 #}
     
     {# --- Header --- #}
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="flex justify-between items-center mb-4"> {# Replaced d-flex #}
         <div>
-            <h3>{{ display_name }} Comparison Details</h3>
-            {# Display security ID and Name (if different) #}
-            <h5 class="text-muted">
-                {{ id_column_name }}: {{ security_id }}
+            <h1 class="text-2xl font-bold font-heading">{{ display_name }} Comparison Details</h1>
+            {# Styled sub-heading #}
+            <h2 class="text-lg text-gray-600 font-medium mt-1">
+                {{ id_column_name }}: <span class="font-mono bg-gray-100 px-1 rounded">{{ security_id }}</span>
                 {% if security_name and security_name != security_id %} | Name: {{ security_name }} {% endif %}
-            </h5>
+            </h2>
         </div>
-        {# Link back to the summary page for this comparison type #}
-        <a href="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="btn btn-outline-secondary btn-sm">&laquo; Back to {{ display_name }} Summary</a>
+         {# Styled Back Button (Secondary Outline) #}
+        <a href="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+             Back to {{ display_name }} Summary
+        </a>
     </div>
 
-    {# Show error/info message if present #}
+    {# --- Message Display --- #}
     {% if message %}
-    <div class="alert alert-warning alert-dismissible fade show" role="alert">
-        {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
+        {# Styled Warning Alert #}
+        <div class="mb-4 p-3 border border-yellow-300 rounded-md bg-yellow-50 text-yellow-700 text-sm flex justify-between items-center" role="alert">
+            <span>{{ message }}</span>
+            <button type="button" class="ml-2 text-yellow-700 hover:text-yellow-900" data-bs-dismiss="alert" aria-label="Close">
+                <span class="sr-only">Close</span>
+                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
     {% endif %}
 
     {# --- Main Content: Chart and Stats --- #}
     {% if chart_data and stats %}
-        <div class="row">
-            {# Chart Column - Make wider #}
-            <div class="col-lg-9 mb-4">
-                <div class="card h-100"> {# Use h-100 to help align heights if needed #}
-                    <div class="card-header">
-                        {{ value_label }} Time Series Comparison
+        {# --- Grid Layout --- #}
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            
+            {# --- Chart Column (Card Styled) --- #}
+            <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                 <div class="px-4 py-3 border-b border-gray-200">
+                    <h3 class="text-base font-semibold text-gray-800">{{ value_label }} Time Series Comparison</h3>
+                 </div>
+                 <div class="p-4">
+                    {# Set a reasonable height for the chart container #}
+                    <div class="relative h-96"> 
+                        <canvas id="comparisonChart"></canvas> 
                     </div>
-                    <div class="card-body">
-                        <canvas id="comparisonChart"></canvas> {# Removed fixed height #}
-                    </div>
-                </div>
+                 </div>
             </div>
 
-            {# Stats Column - Keep narrower #}
-            <div class="col-lg-3 mb-4">
-                <div class="card h-100"> {# Use h-100 #}
-                    <div class="card-header">
-                        Comparison Statistics
+            {# --- Stats Column (Cards Styled) --- #}
+            <div class="lg:col-span-1 space-y-4"> {# Add space between cards in this column #}
+                {# --- Comparison Stats Card --- #}
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div class="px-4 py-3 border-b border-gray-200">
+                         <h3 class="text-base font-semibold text-gray-800">Comparison Statistics</h3>
                     </div>
-                    <div class="card-body">
-                        <ul class="list-group list-group-flush">
-                            {# Display key comparison stats #}
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Level Correlation:
-                                <span class="badge bg-primary rounded-pill">{{ "%.4f"|format(stats.Level_Correlation|float) if stats.Level_Correlation is not none else 'N/A' }}</span>
+                    <div class="p-4">
+                        {# Styled List #}
+                        <ul class="space-y-2 text-sm">
+                             <li class="flex justify-between items-center">
+                                <span class="text-gray-600">Level Correlation:</span>
+                                {# Styled Badge (Primary) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-primary-100 text-primary-800">{{ "%.4f"|format(stats.Level_Correlation|float) if stats.Level_Correlation is not none else 'N/A' }}</span>
                             </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Change Correlation:
-                                <span class="badge bg-primary rounded-pill">{{ "%.4f"|format(stats.Change_Correlation|float) if stats.Change_Correlation is not none else 'N/A' }}</span>
+                            <li class="flex justify-between items-center">
+                                <span class="text-gray-600">Change Correlation:</span>
+                                {# Styled Badge (Primary) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-primary-100 text-primary-800">{{ "%.4f"|format(stats.Change_Correlation|float) if stats.Change_Correlation is not none else 'N/A' }}</span>
                             </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Mean Absolute Difference:
-                                <span class="badge bg-secondary rounded-pill">{{ "%.3f"|format(stats.Mean_Abs_Diff|float) if stats.Mean_Abs_Diff is not none else 'N/A' }}</span>
+                            <li class="flex justify-between items-center">
+                                <span class="text-gray-600">Mean Abs Diff:</span>
+                                 {# Styled Badge (Secondary) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-secondary-100 text-secondary-800">{{ "%.3f"|format(stats.Mean_Abs_Diff|float) if stats.Mean_Abs_Diff is not none else 'N/A' }}</span>
                             </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Max Absolute Difference:
-                                <span class="badge bg-secondary rounded-pill">{{ "%.3f"|format(stats.Max_Abs_Diff|float) if stats.Max_Abs_Diff is not none else 'N/A' }}</span>
+                             <li class="flex justify-between items-center">
+                                <span class="text-gray-600">Max Abs Diff:</span>
+                                 {# Styled Badge (Secondary) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-secondary-100 text-secondary-800">{{ "%.3f"|format(stats.Max_Abs_Diff|float) if stats.Max_Abs_Diff is not none else 'N/A' }}</span>
                             </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Same Date Range:
-                                <span class="badge {{ 'bg-success' if stats.Same_Date_Range else 'bg-warning text-dark' }}">{{ 'Yes' if stats.Same_Date_Range else 'No' }}</span>
+                            <li class="flex justify-between items-center">
+                                <span class="text-gray-600">Same Date Range:</span>
+                                 {# Styled Badge (Success/Warning) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ 'bg-green-100 text-green-800' if stats.Same_Date_Range else 'bg-yellow-100 text-yellow-800' }}">{{ 'Yes' if stats.Same_Date_Range else 'No' }}</span>
                             </li>
-                            {# Optional: Display more stats if needed #}
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Original Start Date:
-                                <span class="badge bg-light text-dark">{{ stats.Start_Date_Orig.strftime('%Y-%m-%d') if stats.Start_Date_Orig else 'N/A' }}</span>
+                            <li class="flex justify-between items-center">
+                                <span class="text-gray-600">Orig Start:</span>
+                                 {# Styled Badge (Gray) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ stats.Start_Date_Orig.strftime('%Y-%m-%d') if stats.Start_Date_Orig else 'N/A' }}</span>
                             </li>
-                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Original End Date:
-                                <span class="badge bg-light text-dark">{{ stats.End_Date_Orig.strftime('%Y-%m-%d') if stats.End_Date_Orig else 'N/A' }}</span>
+                             <li class="flex justify-between items-center">
+                                 <span class="text-gray-600">Orig End:</span>
+                                 {# Styled Badge (Gray) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ stats.End_Date_Orig.strftime('%Y-%m-%d') if stats.End_Date_Orig else 'N/A' }}</span>
                             </li>
-                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                New Start Date:
-                                <span class="badge bg-light text-dark">{{ stats.Start_Date_New.strftime('%Y-%m-%d') if stats.Start_Date_New else 'N/A' }}</span>
+                             <li class="flex justify-between items-center">
+                                 <span class="text-gray-600">New Start:</span>
+                                  {# Styled Badge (Gray) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ stats.Start_Date_New.strftime('%Y-%m-%d') if stats.Start_Date_New else 'N/A' }}</span>
                             </li>
-                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                New End Date:
-                                <span class="badge bg-light text-dark">{{ stats.End_Date_New.strftime('%Y-%m-%d') if stats.End_Date_New else 'N/A' }}</span>
+                             <li class="flex justify-between items-center">
+                                 <span class="text-gray-600">New End:</span>
+                                  {# Styled Badge (Gray) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ stats.End_Date_New.strftime('%Y-%m-%d') if stats.End_Date_New else 'N/A' }}</span>
                             </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Original NaN Count:
-                                <span class="badge bg-light text-dark">{{ stats.NaN_Count_Orig if stats.NaN_Count_Orig is not none else 'N/A' }} / {{ stats.Total_Points }}</span>
+                             <li class="flex justify-between items-center">
+                                <span class="text-gray-600">Orig NaN Count:</span>
+                                 {# Styled Badge (Gray) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ stats.NaN_Count_Orig if stats.NaN_Count_Orig is not none else 'N/A' }} / {{ stats.Total_Points }}</span>
                             </li>
-                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                New NaN Count:
-                                <span class="badge bg-light text-dark">{{ stats.NaN_Count_New if stats.NaN_Count_New is not none else 'N/A' }} / {{ stats.Total_Points }}</span>
+                             <li class="flex justify-between items-center">
+                                <span class="text-gray-600">New NaN Count:</span>
+                                 {# Styled Badge (Gray) #}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ stats.NaN_Count_New if stats.NaN_Count_New is not none else 'N/A' }} / {{ stats.Total_Points }}</span>
                             </li>
                         </ul>
                     </div>
                 </div>
                 
-                {# Display other static attributes if available #}
-                {# Define the list of keys already displayed in the stats section #}
+                {# --- Other Attributes Card (Conditional) --- #}
                 {% set displayed_keys = [
                     'Level_Correlation', 'Change_Correlation', 'Mean_Abs_Diff', 'Max_Abs_Diff', 
                     'Same_Date_Range', 'Start_Date_Orig', 'End_Date_Orig', 'Start_Date_New', 
@@ -127,28 +151,27 @@
                     'Security Name', 
                     'is_held'
                 ] %}
-                {# Check if there are any other attributes to show BEFORE rendering the card #}
                 {% set show_other_attrs_card = false %}
                 {% for key, value in stats.items() %}
                     {% if key not in displayed_keys and value is not none %}
                         {% set show_other_attrs_card = true %}
+                        {% break %}
                     {% endif %}
                 {% endfor %}
 
-                {# Only render the card if there are attributes to show #}
                 {% if show_other_attrs_card %}
-                <div class="card mt-3">
-                    <div class="card-header">
-                        Other Security Attributes
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                     <div class="px-4 py-3 border-b border-gray-200">
+                         <h3 class="text-base font-semibold text-gray-800">Other Security Attributes</h3>
                     </div>
-                     <div class="card-body">
-                        <ul class="list-group list-group-flush">
-                             {# Loop again to display the attributes #}
+                     <div class="p-4">
+                         {# Styled List #}
+                        <ul class="space-y-2 text-sm">
                              {% for key, value in stats.items() %}
                                  {% if key not in displayed_keys and value is not none %}
-                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                         {{ key.replace('_', ' ') | title }}:
-                                         <span class="text-end">{{ value }}</span>
+                                     <li class="flex justify-between items-center">
+                                         <span class="text-gray-600">{{ key.replace('_', ' ') | title }}:</span>
+                                         <span class="text-gray-800 text-right">{{ value }}</span> {# Ensure right alignment if needed #}
                                      </li>
                                  {% endif %}
                              {% endfor %}
@@ -157,67 +180,58 @@
                 </div>
                 {% endif %}
             </div> 
-        </div>
+        </div> {# End Grid #}
 
-        {# --- Fund Holdings Over Time Table --- #}
+        {# --- Fund Holdings Over Time Table (Card Styled) --- #}
         {% if holdings_data and chart_dates %}
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        Fund Holdings Over Time (Based on Chart Dates)
-                    </div>
-                    <div class="card-body" style="width: 100%; overflow-x: auto;"> {# Added horizontal scroll #}
-                        <table class="table table-bordered table-sm text-center" style="table-layout: fixed; width: 100%;">
-                            <thead>
-                                <tr>
-                                    <th style="width: 100px; vertical-align: bottom;">Fund</th> {# Fixed width for fund column #}
-                                    {# Rotate date headers - make narrower - Simplified Styling - Adjusted for overlap #}
-                                    {% for date_str in chart_dates %}
-                                    <th style="width: 25px; height: 70px; vertical-align: bottom; text-align: center; padding: 0 1px;">
-                                        <span style="display: inline-block; transform: rotate(-75deg); transform-origin: center 5px; white-space: nowrap; font-size: 0.7em;">
-                                            {{ date_str[5:] }} {# Show only MM-DD #}
-                                        </span>
-                                    </th>
-                                    {% endfor %}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {# Iterate through funds and their holding status list #}
-                                {% for fund, held_list in holdings_data.items() %}
-                                <tr>
-                                    <td class="fw-bold">{{ fund }}</td> {# Fund code in bold #}
-                                    {# Iterate through the boolean list for this fund #}
-                                    {% for is_held in held_list %}
-                                        {# Apply green if held, red if not held #}
-                                        <td class="{{ 'bg-success' if is_held else 'bg-danger' }}"></td>
-                                    {% endfor %}
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                         {# Optional: Add a message if holdings_data is empty but chart_dates exist #}
-                         {% if not holdings_data %}
-                         <p class="text-muted mt-2">No fund holdings information found for this security in w_secs.csv during the chart period.</p>
-                         {% endif %}
-                    </div>
-                </div>
+        <div class="mt-6 bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden"> {# Use same card style #}
+             <div class="px-4 py-3 border-b border-gray-200">
+                <h3 class="text-base font-semibold text-gray-800">Fund Holdings Over Time <span class="text-xs text-gray-500">(Based on Chart Dates)</span></h3>
+            </div>
+            <div class="p-4 overflow-x-auto"> {# Horizontal scroll on the padded div #}
+                 {# Styled Table #}
+                <table class="min-w-max border-collapse text-center text-xs"> {# min-w-max prevents excessive shrinking #}
+                    <thead>
+                        <tr class="border-b border-gray-300">
+                            <th class="sticky left-0 bg-[#F7F7F7] p-2 font-medium text-gray-600 uppercase tracking-wider w-24">Fund</th> {# Sticky fund column #}
+                            {# Rotated date headers with Tailwind styling #}
+                            {% for date_str in chart_dates %}
+                            <th class="p-0 h-20 w-6 font-medium text-gray-500 align-bottom">
+                                <span class="inline-block transform -rotate-90 origin-bottom-left whitespace-nowrap pb-1 pl-1">{{ date_str[5:] }}</span> {# Show MM-DD #}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fund, held_list in holdings_data.items() %}
+                        <tr class="border-b border-gray-200 last:border-b-0 hover:bg-gray-50">
+                            <td class="sticky left-0 bg-white p-2 font-semibold text-gray-800">{{ fund }}</td> {# Sticky fund column body #}
+                            {% for is_held in held_list %}
+                                {# Styled cells: green if held, red-ish if not #}
+                                <td class="{{ 'bg-green-200' if is_held else 'bg-red-100' }}"></td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if not holdings_data %}
+                 <p class="text-xs text-gray-500 italic mt-2">No fund holdings information found for this security in w_secs.csv during the chart period.</p>
+                {% endif %}
             </div>
         </div>
-        {% elif chart_data %} {# Show message only if chart exists but holdings don't #}
-        <div class="row mt-4">
-            <div class="col-12">
-                 <div class="alert alert-light" role="alert">
-                     Fund holdings information could not be loaded or is unavailable for the chart period.
-                 </div>
-            </div>
+        {% elif chart_data %} 
+         {# Styled Light Alert #}
+        <div class="mt-6 mb-4 p-3 border border-gray-200 rounded-md bg-gray-50 text-gray-600 text-sm" role="alert">
+            Fund holdings information could not be loaded or is unavailable for the chart period.
         </div>
         {% endif %}
         {# --- End Fund Holdings Table --- #}
 
     {% elif not message %}
-         {# Show default message if no specific error message and no data #}
-         <div class="alert alert-info">No data available to display for this security.</div>
+         {# Styled Info Alert for No Data #}
+         <div class="mb-4 p-3 border border-blue-300 rounded-md bg-blue-50 text-blue-700 text-sm" role="alert">
+            No data available to display for this security.
+        </div>
     {% endif %}
 
 </div>
@@ -225,47 +239,79 @@
 
 {% block scripts %}
 {{ super() }}
-{# Check if chart_data is available before attempting to render #}
+{# Chart.js Rendering - Ensure it's loaded in base.html or load here if needed #}
+{# Keep existing JS logic, Chart.js config should align with Section 6 aesthetics #}
 {% if chart_data %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{# Removed CDN link assuming Chart.js is loaded globally via base.html #}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('comparisonChart').getContext('2d');
-        // Get chart data passed from Flask view
         const chartData = {{ chart_data | tojson }};
         
         const comparisonChart = new Chart(ctx, {
             type: 'line',
-            data: chartData, // Use the data passed from the view
+            data: chartData, 
             options: {
                 responsive: true,
-                maintainAspectRatio: false,
+                maintainAspectRatio: false, // Allows chart to fill container height
                 plugins: {
                     legend: {
                         position: 'top',
+                        labels: { 
+                            boxWidth: 12,
+                            font: { size: 12 }
+                        }
                     },
                     title: {
-                        display: true,
-                        text: '{{ value_label }} Comparison: Original vs New' // Use value_label
+                        display: false, // Title is now in the card header
+                        // text: '{{ value_label }} Comparison: Original vs New' 
+                    },
+                    tooltip: { // Basic tooltip styling (can be customized further)
+                         backgroundColor: '#FFFFFF',
+                         titleColor: '#333333',
+                         bodyColor: '#333333',
+                         borderColor: '#DDDDDD',
+                         borderWidth: 1
                     }
                 },
                 scales: {
                     x: {
                         title: {
                             display: true,
-                            text: 'Date'
-                        }
+                            text: 'Date',
+                            font: { size: 12 },
+                            color: '#666666'
+                        },
+                        grid: {
+                            color: '#E5E5E5' // Grid line color
+                        },
+                         ticks: { 
+                             font: { size: 11 },
+                             color: '#666666'
+                         }
                     },
                     y: {
                         title: {
                             display: true,
-                            text: '{{ value_label }}' // Use value_label
-                        }
+                            text: '{{ value_label }}',
+                            font: { size: 12 },
+                            color: '#666666'
+                        },
+                         grid: {
+                            color: '#E5E5E5' // Grid line color
+                        },
+                         ticks: { 
+                             font: { size: 11 },
+                             color: '#666666'
+                         }
                     }
                 },
                 elements: {
+                     line: { 
+                         borderWidth: 2 // Line width
+                     },
                     point: {
-                        radius: 1 // Smaller points for potentially dense data
+                        radius: 1 // Smaller points
                     }
                 }
             }

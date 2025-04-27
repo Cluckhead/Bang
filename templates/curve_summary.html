@@ -1,55 +1,81 @@
-{# templates/curve_summary.html #}
+{#
+    Purpose: Displays a summary of yield curve checks for different currencies.
+    Highlights currencies with potential issues like stale or missing data.
+    Provides links to view detailed curve data for each currency.
+#}
 {% extends "base.html" %}
 
 {% block title %}Yield Curve Check Summary{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1 class="mb-4">Yield Curve Check Summary</h1>
-    <p class="lead">Summary of potential inconsistencies found in the yield curve data for the latest available date: <strong>{{ latest_date }}</strong>.</p>
-    <p>Checks focus on stale and missing data as the most important issues for yield curve quality.</p>
+<div class="p-4"> {# Replaced container mt-4 #}
+    <h1 class="text-2xl font-bold font-heading mb-2">Yield Curve Check Summary</h1>
+    <p class="text-lg text-gray-700 mb-1">Summary of potential inconsistencies found in the yield curve data for the latest available date: <strong class="font-semibold">{{ latest_date }}</strong>.</p>
+    <p class="text-sm text-gray-600 mb-4">Checks focus on stale and missing data as the most important issues for yield curve quality.</p>
 
-    {% if summary %}
-        <table class="table table-striped table-hover">
-            <thead>
-                <tr>
-                    <th>Currency</th>
-                    <th>Status / Issues Found</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for currency, issues in summary.items()|sort %}
-                    <tr>
-                        <td><strong>{{ currency }}</strong></td>
-                        <td>
-                            {% if issues == ["OK"] %}
-                                <span class="badge bg-success">OK</span>
-                            {% elif issues == ["Missing data for comparison"] %}
-                                 <span class="badge bg-warning text-dark">Missing Data</span>
-                                 <small class="text-muted ms-2">{{ issues[0] }}</small>
-                            {% else %}
-                                <span class="badge bg-danger">Check Required</span>
-                                <ul class="list-unstyled mb-0 mt-1">
-                                    {% for issue in issues %}
-                                        <li><small><i class="fas fa-exclamation-triangle text-danger me-1"></i>{{ issue }}</small></li>
-                                    {% endfor %}
-                                </ul>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{{ url_for('curve_bp.curve_details', currency=currency) }}" class="btn btn-sm btn-outline-primary">
-                                View Details <i class="fas fa-chart-line ms-1"></i>
-                            </a>
-                        </td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <div class="alert alert-warning" role="alert">
-            No curve data loaded or no summary could be generated. Please check the data file (`Data/curves.csv`) and application logs.
-        </div>
-    {% endif %}
+    {# --- Summary Table Card --- #}
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden">
+        {% if summary %}
+            <div class="overflow-x-auto"> {# Responsive table container #}
+                {# Styled Table #}
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            {# Styled Headers #}
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Currency</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status / Issues Found</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for currency, issues in summary.items()|sort %}
+                            <tr class="hover:bg-gray-50">
+                                {# Styled Data Cells #}
+                                <td class="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{{ currency }}</td>
+                                <td class="px-6 py-4">
+                                    {% if issues == ["OK"] %}
+                                        {# Success Badge #}
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">OK</span>
+                                    {% elif issues == ["Missing data for comparison"] %}
+                                        {# Warning Badge #}
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Missing Data</span>
+                                         <span class="text-xs text-gray-500 ml-2">{{ issues[0] }}</span>
+                                    {% else %}
+                                        {# Danger Badge #}
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Check Required</span>
+                                        <ul class="list-none p-0 mt-1 space-y-0.5"> {# Tailwind list styling #}
+                                            {% for issue in issues %}
+                                                <li class="text-xs flex items-center">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                                    <span class="text-gray-700">{{ issue }}</span>
+                                                    </li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {# Styled Button (Secondary Accent) #}
+                                    <a href="{{ url_for('curve_bp.curve_details', currency=currency) }}" 
+                                       class="inline-flex items-center px-3 py-1 bg-secondary text-white text-xs font-medium rounded-md shadow-sm hover:bg-secondary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-150 ease-in-out">
+                                        View Details 
+                                        {# Heroicon chart-line #}
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            {# Styled Empty State / Warning #}
+            <div class="p-4 text-center">
+                <p class="text-yellow-700 bg-yellow-50 border border-yellow-200 p-3 rounded-md text-sm inline-flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    No curve data loaded or no summary could be generated. Please check the data file (`Data/curves.csv`) and application logs.
+                </p>
+            </div>
+        {% endif %}
+    </div> {# End Table Card #}
 </div>
 {% endblock %} 

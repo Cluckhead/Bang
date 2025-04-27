@@ -2,9 +2,8 @@
 
 {#
     Purpose: Base template for comparison summary pages (e.g., spread, duration).
-    Now includes a fund group filter dropdown for filtering by predefined fund groups (from FundGroups.csv).
-    The dropdown only shows groups with funds present in the current data.
-    Selecting a group reloads the page with the fund_group query parameter.
+    Displays a filterable, sortable, and paginated table comparing metrics between two datasets.
+    Includes fund group filtering if configured.
 #}
 
 {# Base template for comparison summary pages #}
@@ -28,169 +27,190 @@
 {% block title %}{{ display_name }} Comparison Summary{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4"> 
-    <h1>{{ display_name }} Comparison: Original vs. New</h1>
-    <p class="text-muted">Comparing {{ display_name.lower() }} between the two datasets. Click on a Security ID/Name to see details. Use filters or click column headers to sort. Pagination applied.</p>
+<div class="p-4"> {# Replaced container-fluid mt-4 #}
+    <h1 class="text-2xl font-bold font-heading mb-1">{{ display_name }} Comparison: Original vs. New</h1>
+    <p class="text-gray-600 text-sm mb-4">Comparing {{ display_name.lower() }} between the two datasets. Click on a Security ID/Name to see details. Use filters or click column headers to sort. Pagination applied.</p>
 
-    {# --- Fund Group Filter Dropdown (if available) --- #}
+    {# --- Fund Group Filter Dropdown (Card Styled) --- #}
     {% if fund_groups %}
-    <form id="fund-group-form" method="get" class="mb-3" style="max-width: 350px;">
-        <label for="fund-group-select" class="form-label"><strong>Filter by Fund Group:</strong></label>
-        <select class="form-select" id="fund-group-select" name="fund_group" onchange="this.form.submit()">
-            <option value="" {% if not selected_fund_group %}selected{% endif %}>All</option>
-            {% for group, funds in fund_groups.items() %}
-                <option value="{{ group }}" {% if selected_fund_group == group %}selected{% endif %}>{{ group }} ({{ funds|length }})</option>
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4 max-w-md">
+        <form id="fund-group-form" method="get">
+            <label for="fund-group-select" class="block text-sm font-medium text-gray-700 mb-1">Filter by Fund Group:</label>
+            {# Styled Select #}
+            <select class="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm rounded-md" id="fund-group-select" name="fund_group" onchange="this.form.submit()">
+                <option value="" {% if not selected_fund_group %}selected{% endif %}>All</option>
+                {% for group, funds in fund_groups.items() %}
+                    <option value="{{ group }}" {% if selected_fund_group == group %}selected{% endif %}>{{ group }} ({{ funds|length }})</option>
+                {% endfor %}
+            </select>
+            {# Preserve other query params (except fund_group) #}
+            {% for key, value in request.args.items() %}
+                {% if key != 'fund_group' %}
+                    <input type="hidden" name="{{ key }}" value="{{ value }}">
+                {% endif %}
             {% endfor %}
-        </select>
-        {# Preserve other query params (except fund_group) #}
-        {% for key, value in request.args.items() %}
-            {% if key != 'fund_group' %}
-                <input type="hidden" name="{{ key }}" value="{{ value }}">
-            {% endif %}
-        {% endfor %}
-        <small class="form-text text-muted">Select a fund group to filter the view. Only groups with funds in the current data are shown. This filter is server-side and persists in the URL.</small>
-    </form>
-    {% endif %}
-
-    {# Display message if any #}
-    {% if message %}
-    <div class="alert alert-warning alert-dismissible fade show" role="alert">
-        {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <p class="mt-2 text-xs text-gray-500">Select a fund group to filter the view. Only groups with funds in the current data are shown.</p>
+        </form>
     </div>
     {% endif %}
 
-    {# --- Filter Form --- #}
+    {# --- Message Alert --- #}
+    {# Styled Alert #}
+    {% if message %}
+    <div class="mb-4 p-3 border border-yellow-300 rounded-md bg-yellow-50 text-yellow-700 text-sm flex items-center" role="alert">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+        <span>{{ message }}</span>
+        {# Simple close button, doesn't need JS if not essential #}
+        {# <button type="button" class="ml-auto -mx-1.5 -my-1.5 bg-yellow-50 text-yellow-500 rounded-lg focus:ring-2 focus:ring-yellow-400 p-1.5 hover:bg-yellow-100 inline-flex h-8 w-8" data-dismiss-target="#alert-{{ loop.index }}" aria-label="Close"> ... </button> #}
+    </div>
+    {% endif %}
+
+    {# --- Filter Form (Card Styled) --- #}
     {% if filter_options %}
-    {# Use generic_comparison_bp.summary and pass comparison_type #}
-    <form method="GET" action="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="mb-3 p-3 border rounded bg-light" id="filter-form">
-        <h5>Filters</h5>
-        <div class="row g-2 align-items-end">
-            {% for column, options in filter_options.items() %}
-            <div class="col-md-2 mb-2">
-                <label for="filter-{{ column }}" class="form-label">{{ column.replace('_', ' ') | title }}</label>
-                <select id="filter-{{ column }}" name="filter_{{ column }}" class="form-select form-select-sm">
-                    <option value="">All</option>
-                    {% for option in options %}
-                    {# Ensure comparison works correctly even if types differ (e.g., int filter value vs string option) #}
-                    <option value="{{ option }}" {% if active_filters.get(column) == option|string %}selected{% endif %}>{{ option }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endfor %}
-            <div class="col-md-3 d-flex align-items-end">
-                <div class="form-check form-switch mb-1">
-                    <input class="form-check-input" type="checkbox" role="switch" id="showSoldToggle" name="show_sold" value="true" {% if show_sold %}checked{% endif %}>
-                    <label class="form-check-label" for="showSoldToggle"><small>Show Sold Securities</small></label>
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-4 hover:shadow-md transition-shadow">
+        <form method="GET" action="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" id="filter-form">
+            <h5 class="text-base font-semibold text-gray-700 mb-3">Filters</h5>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end">
+                {% for column, options in filter_options.items() %}
+                <div class="mb-2">
+                    <label for="filter-{{ column }}" class="block text-xs font-medium text-gray-700 mb-1">{{ column.replace('_', ' ') | title }}</label>
+                    {# Styled Select #}
+                    <select id="filter-{{ column }}" name="filter_{{ column }}" class="mt-1 block w-full pl-2 pr-8 py-1 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                        <option value="">All</option>
+                        {% for option in options %}
+                        <option value="{{ option }}" {% if active_filters.get(column) == option|string %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+                <div class="flex items-center mb-2 pt-4"> {# Adjust alignment #}
+                    {# Styled Toggle Switch #}
+                    <label for="showSoldToggle" class="flex items-center cursor-pointer">
+                        <div class="relative">
+                            <input type="checkbox" id="showSoldToggle" name="show_sold" value="true" class="sr-only peer" {% if show_sold %}checked{% endif %} onchange="document.getElementById('filter-form').submit();"> {# Submit form on change #}
+                            <div class="block bg-gray-200 peer-checked:bg-primary w-10 h-5 rounded-full"></div>
+                            <div class="dot absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition peer-checked:translate-x-full"></div>
+                        </div>
+                        <div class="ml-2 text-xs font-medium text-gray-700">Show Sold</div>
+                      </label>
+                </div>
+                <div class="mb-2 flex items-center space-x-2 pt-4"> {# Adjust alignment and spacing #}
+                    {# Styled Buttons #}
+                    <button type="submit" class="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">Apply</button>
+                    {% if active_filters or show_sold %}
+                     <a href="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="px-3 py-1.5 border border-secondary text-secondary text-xs font-medium rounded-md hover:bg-secondary hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-150 ease-in-out">Clear</a>
+                    {% endif %}
                 </div>
             </div>
-            <div class="col-md-auto">
-                <button type="submit" class="btn btn-primary btn-sm">Apply Filters</button>
-                {# Add a clear button only if filters or show_sold are active #}
-                {% if active_filters or not show_sold %}
-                 <a href="{{ url_for('generic_comparison_bp.summary', comparison_type=comparison_type) }}" class="btn btn-secondary btn-sm">Clear Filters</a>
-                {% endif %}
-            </div>
-        </div>
-        {# Hidden fields to preserve current sort order when applying filters - page is implicitly reset #}
-        <input type="hidden" name="sort_by" value="{{ current_sort_by }}" id="currentSortBy">
-        <input type="hidden" name="sort_order" value="{{ current_sort_order }}" id="currentSortOrder">
-    </form>
+            {# Hidden fields to preserve sort state #}
+            <input type="hidden" name="sort_by" value="{{ current_sort_by }}">
+            <input type="hidden" name="sort_order" value="{{ current_sort_order }}">
+            {# Hidden field to preserve fund group state #}
+            {% if selected_fund_group %}
+            <input type="hidden" name="fund_group" value="{{ selected_fund_group }}">
+            {% endif %}
+        </form>
+    </div>
     {% endif %}
 
-    {# --- Data Table --- #}
-    <div class="table-responsive">
-        {# Use a generic table ID #}
-        <table class="table table-striped table-hover table-sm caption-top" id="generic-comparison-table">
-             {# Add table caption for summary #}
-             {% if pagination and pagination.total_items is defined %}
-             <caption class="pb-1">
-                 Displaying {{ table_data|length }} of {{ pagination.total_items }} total securities.
-                 (Page {{ pagination.page }} of {{ pagination.total_pages }})
-             </caption>
-             {% elif table_data %}
-             <caption class="pb-1">
-                 Displaying {{ table_data|length }} securities.
-             </caption>
-             {% endif %}
-            <thead class="table-light">
-                <tr>
-                    {# Loop through the columns passed from the view #}
-                    {% for col_name in columns_to_display %}
-                        {% set is_sort_col = (col_name == current_sort_by) %}
-                        {% set next_sort_order = 'asc' if is_sort_col and current_sort_order == 'desc' else 'desc' %}
-                        
-                        {# Base arguments, including current filters AND show_sold status #}
-                        {% set sort_args = request.args.to_dict() %}
-                        {# Remove page, add sort params #}
-                        {% set _ = sort_args.pop('page', None) %}
-                        {% set _ = sort_args.update({'sort_by': col_name, 'sort_order': next_sort_order}) %}
-                        
-                        {# Generate URL for this header using the generic route #}
-                        {% set sort_url = url_for('generic_comparison_bp.summary', comparison_type=comparison_type, **sort_args) %}
-                        
-                        {# Add classes for styling and JS (use generic class if needed) #}
-                        <th class="sortable {{ 'sorted-' + current_sort_order if is_sort_col else '' }}" 
-                            data-column-name="{{ col_name }}">
-                            <a href="{{ sort_url }}" class="text-decoration-none text-dark">
-                                {{ col_name.replace('_', ' ') | title }} 
-                                {% if is_sort_col %}
-                                    <span class="sort-indicator ms-1">{{ '▲' if current_sort_order == 'asc' else '▼' }}</span>
+    {# --- Data Table (Card Styled) --- #}
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden"> 
+        {# Optional: Add table caption inside the card, above the overflow container if preferred #}
+        {% if pagination and pagination.total_items is defined %}
+        <div class="px-4 py-2 text-xs text-gray-500 border-b border-gray-200">
+            Displaying {{ table_data|length }} of {{ pagination.total_items }} total securities.
+            (Page {{ pagination.page }} of {{ pagination.total_pages }})
+        </div>
+        {% elif table_data %}
+        <div class="px-4 py-2 text-xs text-gray-500 border-b border-gray-200">
+            Displaying {{ table_data|length }} securities.
+        </div>
+        {% endif %}
+        
+        <div class="overflow-x-auto"> {# Make table horizontally scrollable on small screens #}
+            <table class="min-w-full divide-y divide-gray-200 text-sm" id="generic-comparison-table">
+                <thead class="bg-gray-50">
+                    <tr>
+                        {% for col_name in columns_to_display %}
+                            {% set is_sort_col = (col_name == current_sort_by) %}
+                            {% set next_sort_order = 'asc' if is_sort_col and current_sort_order == 'desc' else 'desc' %}
+                            {% set sort_args = request.args.to_dict() %}
+                            {% set _ = sort_args.pop('page', None) %}
+                            {% set _ = sort_args.update({'sort_by': col_name, 'sort_order': next_sort_order}) %}
+                            {% set sort_url = url_for('generic_comparison_bp.summary', comparison_type=comparison_type, **sort_args) %}
+                            
+                            {# Styled Header Cell #}
+                            <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                <a href="{{ sort_url }}" class="flex items-center hover:text-gray-900">
+                                    {{ col_name.replace('_', ' ') | title }}
+                                    {% if is_sort_col %}
+                                        <span class="ml-1">{{ '▲' if current_sort_order == 'asc' else '▼' }}</span>
+                                    {% else %}
+                                         <span class="ml-1 text-gray-300 group-hover:text-gray-400">↕</span> {# Placeholder for unsorted #}
+                                    {% endif %}
+                                </a>
+                            </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% set id_col = id_column_name %}
+                    {% for row in table_data %}
+                    <tr class="hover:bg-gray-50"> {# Simple row hover #}
+                        {% for col_name in columns_to_display %}
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                {% if col_name == id_col %}
+                                    {# Styled Link #}
+                                    <a href="{{ url_for('generic_comparison_bp.details', comparison_type=comparison_type, security_id=row[id_col]|urlencode) }}" class="text-primary hover:text-primary-dark font-medium">{{ row[id_col] }}</a>
+                                {% elif col_name in ['Level_Correlation', 'Change_Correlation'] and row[col_name] is not none and row[col_name]|string != 'nan' %}
+                                    {% set val = row[col_name] | float(default=none) %}
+                                    <span class="text-gray-800">{{ "%.4f"|format(val) if val is not none else 'N/A' }}</span>
+                                {% elif col_name in ['Mean_Abs_Diff', 'Max_Abs_Diff'] and row[col_name] is not none and row[col_name]|string != 'nan' %}
+                                    {% set val = row[col_name] | float(default=none) %}
+                                    <span class="text-gray-800">{{ "%.3f"|format(val) if val is not none else 'N/A' }}</span>
+                                {% elif col_name == 'Same_Date_Range' %}
+                                    {# Styled Badge #}
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ 'bg-green-100 text-green-800' if row[col_name] else 'bg-yellow-100 text-yellow-800' }}">
+                                        {{ 'Yes' if row[col_name] else 'No' }}
+                                    </span>
+                                {% elif col_name == 'is_held' %}
+                                     {# Styled Badge #}
+                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ 'bg-blue-100 text-blue-800' if row[col_name] else 'bg-gray-100 text-gray-800' }}">
+                                         {{ 'Held' if row[col_name] else 'Sold' }}
+                                     </span>
+                                {% elif col_name.endswith('_Date') and row[col_name] %}
+                                     {# Date Formatting - keep existing logic #}
+                                     <span class="text-gray-700">{{ row[col_name].strftime('%Y-%m-%d') if row[col_name] is iterable and hasattr(row[col_name], 'strftime') else row[col_name] }}</span>
+                                {% elif row[col_name] is number %}
+                                    {# General numeric formatting #}
+                                    <span class="text-gray-800">{{ row[col_name]|round(3) }}</span>
+                                {% else %}
+                                    {# Default string display #}
+                                    <span class="text-gray-700">{{ row[col_name] if row[col_name] is not none else '' }}</span>
                                 {% endif %}
-                            </a>
-                        </th>
+                            </td>
+                        {% endfor %}
+                    </tr>
+                    {% else %}
+                     {# Empty state handled by message above or table caption #}
+                     {# Optionally add a row here if you want an explicit message within the table body #}
+                     <tr><td colspan="{{ columns_to_display|length }}" class="text-center py-4 text-gray-500 italic">No comparison data available for the current filters.</td></tr>
                     {% endfor %}
-                </tr>
-            </thead>
-            <tbody id="generic-comparison-table-body">
-                {% set id_col = id_column_name %}
-                {% for row in table_data %}
-                <tr>
-                    {# Loop through the same columns to ensure order matches header #}
-                    {% for col_name in columns_to_display %}
-                        <td>
-                            {% if col_name == id_col %}
-                                {# Link to generic details page, ensuring security_id is urlencoded #}
-                                <a href="{{ url_for('generic_comparison_bp.details', comparison_type=comparison_type, security_id=row[id_col]|urlencode) }}">{{ row[id_col] }}</a>
-                            {% elif col_name in ['Level_Correlation', 'Change_Correlation'] and row[col_name] is not none and row[col_name]|string != 'nan' %}
-                                {# Format numeric correlations, handle potential non-numeric values gracefully #}
-                                {% set val = row[col_name] | float(default=none) %}
-                                {{ "%.4f"|format(val) if val is not none else 'N/A' }}
-                            {% elif col_name in ['Mean_Abs_Diff', 'Max_Abs_Diff'] and row[col_name] is not none and row[col_name]|string != 'nan' %}
-                                {% set val = row[col_name] | float(default=none) %}
-                                {{ "%.3f"|format(val) if val is not none else 'N/A' }} 
-                            {% elif col_name == 'Same_Date_Range' %}
-                                <span class="badge {{ 'bg-success' if row[col_name] else 'bg-warning' }}">{{ 'Yes' if row[col_name] else 'No' }}</span>
-                            {% elif col_name == 'is_held' %} {# Style the held status indicator #}
-                                 <span class="badge {{ 'bg-info' if row[col_name] else 'bg-secondary' }}">{{ 'Held' if row[col_name] else 'Sold' }}</span>
-                            {% elif col_name.endswith('_Date') and row[col_name] %}
-                                 {# Assume dates are datetime objects or strings - format if possible #}
-                                 {{ row[col_name].strftime('%Y-%m-%d') if row[col_name] is iterable and hasattr(row[col_name], 'strftime') else row[col_name] }} 
-                            {% elif row[col_name] is number %}
-                                {{ row[col_name]|round(3) }} {# General numeric formatting #}
-                            {% else %}
-                                {{ row[col_name] if row[col_name] is not none else '' }} {# Display strings or empty #}
-                            {% endif %}
-                        </td>
-                    {% endfor %}
-                </tr>
-                {% else %}
-                 {# Message is now shown above if table_data is empty #}
-                 {# Optional: Keep a row here if preferred #}
-                 {# <tr><td colspan="{{ columns_to_display|length }}" class="text-center">No comparison data available.</td></tr> #}
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                </tbody>
+            </table>
+        </div>
+    </div> {# End Table Card #}
 
-    {# --- Pagination Controls --- #}
-    {# Use the pagination object passed from the view, which contains url_for_page #}
+    {# --- Pagination Controls (Styled) --- #}
     {% if pagination and pagination.total_pages > 1 %}
-        <nav aria-label="{{ display_name }} comparison data navigation">
-            <ul class="pagination pagination-sm justify-content-center">
+        <nav aria-label="{{ display_name }} comparison data navigation" class="mt-4 flex justify-center">
+            <ul class="inline-flex items-center -space-x-px">
                 {# Previous Page Link #}
-                <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                    <a class="page-link pagination-link" href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" aria-label="Previous">&laquo;</a>
+                <li>
+                    <a href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" 
+                       class="{{ 'opacity-50 cursor-not-allowed' if not pagination.has_prev else 'hover:bg-gray-100 hover:text-gray-700' }} py-1.5 px-2 ml-0 leading-tight text-gray-500 bg-white rounded-l-lg border border-gray-300">
+                        &laquo;
+                    </a>
                 </li>
 
                 {# Page Number Links #}
@@ -198,28 +218,34 @@
                  {% set end_page = pagination.end_page_display %}
                  
                  {% if start_page > 1 %}
-                     <li class="page-item"><a class="page-link pagination-link" href="{{ pagination.url_for_page(1) }}">1</a></li>
+                     <li><a href="{{ pagination.url_for_page(1) }}" class="py-1.5 px-2 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">1</a></li>
                      {% if start_page > 2 %}
-                         <li class="page-item disabled"><span class="page-link">...</span></li>
+                         <li><span class="py-1.5 px-2 leading-tight text-gray-500 bg-white border border-gray-300">...</span></li>
                      {% endif %}
                  {% endif %}
 
                  {% for p in range(start_page, end_page + 1) %}
-                    <li class="page-item {{ 'active' if p == pagination.page }}">
-                        <a class="page-link pagination-link" href="{{ pagination.url_for_page(p) }}">{{ p }}</a>
+                    <li>
+                        <a href="{{ pagination.url_for_page(p) }}" 
+                           class="{{ 'z-10 text-primary bg-primary-50 border-primary' if p == pagination.page else 'text-gray-500 bg-white hover:bg-gray-100 hover:text-gray-700' }} py-1.5 px-2 leading-tight border border-gray-300">
+                            {{ p }}
+                        </a>
                     </li>
                 {% endfor %}
 
                  {% if end_page < pagination.total_pages %}
                      {% if end_page < pagination.total_pages - 1 %}
-                         <li class="page-item disabled"><span class="page-link">...</span></li>
+                         <li><span class="py-1.5 px-2 leading-tight text-gray-500 bg-white border border-gray-300">...</span></li>
                      {% endif %}
-                     <li class="page-item"><a class="page-link pagination-link" href="{{ pagination.url_for_page(pagination.total_pages) }}">{{ pagination.total_pages }}</a></li>
+                     <li><a href="{{ pagination.url_for_page(pagination.total_pages) }}" class="py-1.5 px-2 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">{{ pagination.total_pages }}</a></li>
                  {% endif %}
 
                 {# Next Page Link #}
-                <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                    <a class="page-link pagination-link" href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" aria-label="Next">&raquo;</a>
+                <li>
+                    <a href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" 
+                       class="{{ 'opacity-50 cursor-not-allowed' if not pagination.has_next else 'hover:bg-gray-100 hover:text-gray-700' }} py-1.5 px-2 leading-tight text-gray-500 bg-white rounded-r-lg border border-gray-300">
+                        &raquo;
+                    </a>
                 </li>
             </ul>
         </nav>
@@ -229,23 +255,10 @@
 
 {% block scripts %}
 {{ super() }}
-{# Removed the complex client-side JS for filters/sorting/pagination #}
-{# Relying purely on server-side generation of links with current state #}
-{# Add back simple JS if needed for things like toggle switch confirmation etc. #}
-{# Example: JS to handle the Show Sold toggle submitting the form #}
+{# Relying on server-side generation and simple form submission for filters/sorting/pagination #}
+{# Kept the toggle switch JS for immediate feedback #}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const showSoldToggle = document.getElementById('showSoldToggle');
-        const filterForm = document.getElementById('filter-form');
-        
-        if (showSoldToggle && filterForm) {
-            showSoldToggle.addEventListener('change', function() {
-                // When toggle changes, submit the form.
-                // The form already includes hidden fields for sort order.
-                // Page number is implicitly reset by form submission without 'page' arg.
-                filterForm.submit();
-            });
-        }
-    });
+    // No additional complex JS needed for basic functionality based on this template structure.
+    // The show_sold toggle already submits the form via its onchange attribute.
 </script>
 {% endblock %} 

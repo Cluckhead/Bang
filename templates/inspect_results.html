@@ -34,13 +34,12 @@
     <h2>{{ metric_name }} for Fund: {{ fund_code }}</h2>
     <p><strong>Date Range:</strong> {{ start_date }} to {{ end_date }}</p>
     <!-- Bootstrap-styled Back Button -->
-    <a href="{{ url_for('metric.metric_page', metric_name=metric_name) }}" class="btn btn-secondary back-btn">&larr; Back to {{ metric_name }} Metric Page</a>
+    <a href="{{ url_for('metric.metric_page', metric_name=metric_name) }}" class="back-btn">&larr; Back to {{ metric_name }} Metric Page</a>
 
     <!-- Main container for tables and chart -->
-    <div class="row">
-        <!-- Column for the two tables -->
-        <div class="col-lg-5">
-            <div class="results-container d-flex flex-column gap-3">
+    <div>
+        <div>
+            <div class="results-container">
                 <!-- Top Contributors List -->
                 <div class="contribution-list table-container">
                     <h3>Top Contributors</h3>
@@ -99,8 +98,7 @@
             </div>
         </div>
 
-        <!-- Column for the chart -->
-        <div class="col-lg-7">
+        <div>
             <div class="contribution-list chart-container">
                 <h3>Contribution Visualization</h3>
                 {# Canvas element for the Chart.js chart #}

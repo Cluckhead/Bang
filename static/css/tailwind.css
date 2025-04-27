@@ -1,0 +1,9 @@
+/*
+.SYNOPSIS
+    Main Tailwind CSS input file for the Simple Data Checker frontend.
+.DESCRIPTION
+    This file imports Tailwind's base, components, and utilities. It will be processed by the Tailwind CLI to generate the final CSS used in the application, including custom theme extensions as defined in tailwind.config.js.
+*/
+@tailwind base;
+@tailwind components;
+@tailwind utilities; 

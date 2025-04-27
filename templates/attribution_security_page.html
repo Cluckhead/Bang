@@ -8,152 +8,194 @@
 {% block title %}Attribution Security-Level Check{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>Attribution Security-Level Check</h2>
-    </div>
-    <p class="text-muted">Attribution data for each security. Filters and sorting are applied server-side. Returns = L0 Total.</p>
+{# Apply page padding #}
+<div class="p-4">
+    {# H2 Heading with margin #}
+    <h2 class="text-2xl font-semibold mb-3 text-gray-800">Attribution Security-Level Check</h2>
+    {# Styled paragraph text #}
+    <p class="text-sm text-gray-600 mb-4">Attribution data for each security. Filters and sorting are applied server-side. Returns = L0 Total.</p>
 
-    {# --- Filter Form --- #}
-    <form method="GET" action="{{ url_for('attribution_bp.attribution_security_page') }}" class="mb-3 p-3 border rounded bg-light" id="filter-form">
-        <div class="row g-2 align-items-end">
-            <div class="col-md-2">
-                <label for="date" class="form-label">Date</label>
-                <input type="date" name="date" id="date" class="form-control form-control-sm" value="{{ selected_date }}">
+    {# --- Filter Form Card --- #}
+    <div class="bg-white shadow rounded-lg p-4 mb-4 hover:shadow-md transition-shadow">
+        <form method="GET" action="{{ url_for('attribution_bp.attribution_security_page') }}" id="filter-form">
+            {# Use Flexbox for responsive row layout #}
+            <div class="flex flex-wrap gap-4 items-end">
+                {# Date Input #}
+                <div class="flex-grow sm:flex-grow-0 sm:basis-1/6">
+                    <label for="date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input type="date" name="date" id="date" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-secondary focus:ring-secondary sm:text-sm text-sm py-1.5 px-2" value="{{ selected_date }}">
+                </div>
+                {# Fund Select #}
+                <div class="flex-grow sm:flex-grow-0 sm:basis-1/6">
+                    <label for="fund" class="block text-sm font-medium text-gray-700 mb-1">Fund</label>
+                    <select name="fund" id="fund" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-secondary focus:ring-secondary sm:text-sm text-sm py-1.5 px-2">
+                        {% for fund in available_funds %}
+                            <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {# Type Select #}
+                <div class="flex-grow sm:flex-grow-0 sm:basis-1/6">
+                    <label for="type" class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <select name="type" id="type" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-secondary focus:ring-secondary sm:text-sm text-sm py-1.5 px-2">
+                        <option value="">All</option>
+                        {% for t in available_types %}
+                            <option value="{{ t }}" {% if t == selected_type %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {# Benchmark/Portfolio Toggle #}
+                <div class="flex-grow sm:flex-grow-0 sm:basis-auto">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Benchmark/Portfolio</label>
+                    <div class="flex items-center h-8"> {# Align with inputs #}
+                        <input type="checkbox" id="bench_or_port" name="bench_or_port" value="port" {% if bench_or_port == 'port' %}checked{% endif %} onchange="this.value = this.checked ? 'port' : 'bench'; this.form.submit();" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2">
+                        <label for="bench_or_port" class="text-sm text-gray-900">Portfolio</label>
+                    </div>
+                </div>
+                {# MTD Toggle #}
+                <div class="flex-grow sm:flex-grow-0 sm:basis-auto">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Month-to-Date</label>
+                    <div class="flex items-center h-8"> {# Align with inputs #}
+                        <input type="checkbox" id="mtd" name="mtd" value="on" {% if mtd %}checked{% endif %} class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2">
+                        <label for="mtd" class="text-sm text-gray-900">MTD</label>
+                    </div>
+                </div>
+                 {# Normalize Toggle #}
+                <div class="flex-grow sm:flex-grow-0 sm:basis-auto">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Normalize</label>
+                    <div class="flex items-center h-8"> {# Align with inputs #}
+                        <input type="checkbox" id="normalize" name="normalize" value="on" {% if normalize %}checked{% endif %} class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2">
+                        <label for="normalize" class="text-sm text-gray-900">Normalize</label>
+                    </div>
+                </div>
+                 {# Submit Button (Primary) #}
+                <div class="flex-grow sm:flex-grow-0">
+                     <button class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out" type="submit">Apply Filters</button>
+                </div>
             </div>
-            <div class="col-md-2">
-                <label for="fund" class="form-label">Fund</label>
-                <select name="fund" id="fund" class="form-select form-select-sm">
-                    {% for fund in available_funds %}
-                        <option value="{{ fund }}" {% if fund == selected_fund %}selected{% endif %}>{{ fund }}</option>
+        </form>
+    </div>
+
+    {# --- Data Table Card --- #}
+    <div class="bg-white shadow rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+        {% if rows %}
+        <div class="overflow-x-auto"> {# Make table scrollable on small screens #}
+            <table class="min-w-full divide-y divide-gray-200 text-sm" id="attribution-table">
+                 {# Table Caption #}
+                {% if pagination %}
+                <caption class="p-3 text-xs text-gray-500 text-left">
+                    Displaying {{ rows|length }} of {{ pagination.total_items }} total securities. (Page {{ pagination.page }} of {{ pagination.total_pages }})
+                </caption>
+                {% endif %}
+                 {# Table Header (Sticky) #}
+                <thead class="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Security Name</th>
+                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ISIN</th>
+                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Returns (L0 Total)</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Original Residual</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">S&amp;P Residual</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Residual Diff</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 Rates (Orig)</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 Rates (S&amp;P)</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 Credit (Orig)</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 Credit (S&amp;P)</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 FX (Orig)</th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 FX (S&amp;P)</th>
+                    </tr>
+                </thead>
+                 {# Table Body #}
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in rows %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-2 whitespace-nowrap text-gray-900 font-medium">
+                             {# Styled Link #}
+                            <a href="{{ url_for('security.security_details', metric_name='Attribution', security_id=row['ISIN']|urlencode) }}" class="text-primary hover:text-primary-dark hover:underline">
+                                {{ row['Security Name'] }}
+                            </a>
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-gray-500">{{ row['ISIN'] }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-gray-500">{{ row['Type'] }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['Returns']|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['Original Residual']|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row["S&P Residual"]|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['Residual Diff']|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['L1 Values']['Rates'][0]|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['L1 Values']['Rates'][1]|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['L1 Values']['Credit'][0]|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['L1 Values']['Credit'][1]|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['L1 Values']['FX'][0]|round(3) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['L1 Values']['FX'][1]|round(3) }}</td>
+                    </tr>
                     {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="type" class="form-label">Type</label>
-                <select name="type" id="type" class="form-select form-select-sm">
-                    <option value="">All</option>
-                    {% for t in available_types %}
-                        <option value="{{ t }}" {% if t == selected_type %}selected{% endif %}>{{ t }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Benchmark/Portfolio</label>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="bench_or_port" name="bench_or_port" value="port" {% if bench_or_port == 'port' %}checked{% endif %} onchange="this.value = this.checked ? 'port' : 'bench'; this.form.submit();">
-                    <label class="form-check-label" for="bench_or_port">Portfolio</label>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Month-to-Date</label>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="mtd" name="mtd" value="on" {% if mtd %}checked{% endif %}>
-                    <label class="form-check-label" for="mtd">MTD</label>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Normalize</label>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="normalize" name="normalize" value="on" {% if normalize %}checked{% endif %}>
-                    <label class="form-check-label" for="normalize">Normalize</label>
-                </div>
-            </div>
-            <div class="col-md-auto">
-                <button class="btn btn-primary btn-sm" type="submit">Apply Filters</button>
-            </div>
+                </tbody>
+            </table>
         </div>
-    </form>
-
-    {# --- Data Table Section --- #}
-    {% if rows %}
-    <div class="table-responsive">
-        <table class="table table-striped table-hover table-sm small caption-top" id="attribution-table">
-            {% if pagination %}
-            <caption class="pb-1">
-                Displaying {{ rows|length }} of {{ pagination.total_items }} total securities. (Page {{ pagination.page }} of {{ pagination.total_pages }})
-            </caption>
-            {% endif %}
-            <thead class="table-light sticky-top">
-                <tr>
-                    <th>Security Name</th>
-                    <th>ISIN</th>
-                    <th>Type</th>
-                    <th>Returns (L0 Total)</th>
-                    <th>Original Residual</th>
-                    <th>S&amp;P Residual</th>
-                    <th>Residual Diff</th>
-                    <th>L1 Rates (Orig)</th>
-                    <th>L1 Rates (S&amp;P)</th>
-                    <th>L1 Credit (Orig)</th>
-                    <th>L1 Credit (S&amp;P)</th>
-                    <th>L1 FX (Orig)</th>
-                    <th>L1 FX (S&amp;P)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in rows %}
-                <tr>
-                    <td>
-                        <a href="{{ url_for('security.security_details', metric_name='Attribution', security_id=row['ISIN']|urlencode) }}">
-                            {{ row['Security Name'] }}
-                        </a>
-                    </td>
-                    <td>{{ row['ISIN'] }}</td>
-                    <td>{{ row['Type'] }}</td>
-                    <td>{{ row['Returns']|round(3) }}</td>
-                    <td>{{ row['Original Residual']|round(3) }}</td>
-                    <td>{{ row["S&P Residual"]|round(3) }}</td>
-                    <td>{{ row['Residual Diff']|round(3) }}</td>
-                    <td>{{ row['L1 Values']['Rates'][0]|round(3) }}</td>
-                    <td>{{ row['L1 Values']['Rates'][1]|round(3) }}</td>
-                    <td>{{ row['L1 Values']['Credit'][0]|round(3) }}</td>
-                    <td>{{ row['L1 Values']['Credit'][1]|round(3) }}</td>
-                    <td>{{ row['L1 Values']['FX'][0]|round(3) }}</td>
-                    <td>{{ row['L1 Values']['FX'][1]|round(3) }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% if pagination and pagination.total_pages > 1 %}
-        <nav aria-label="Attribution security data navigation">
-            <ul class="pagination pagination-sm justify-content-center">
-                <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                    <a class="page-link" href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" aria-label="Previous">
-                        <span aria-hidden="true">&laquo;</span>
-                    </a>
-                </li>
-                {% set start_page = pagination.start_page_display %}
-                {% set end_page = pagination.end_page_display %}
-                {% if start_page > 1 %}
-                    <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(1) }}">1</a></li>
-                    {% if start_page > 2 %}
-                        <li class="page-item disabled"><span class="page-link">...</span></li>
-                    {% endif %}
-                {% endif %}
-                {% for p in range(start_page, end_page + 1) %}
-                    <li class="page-item {{ 'active' if p == pagination.page }}">
-                        <a class="page-link" href="{{ pagination.url_for_page(p) }}">{{ p }}</a>
-                    </li>
-                {% endfor %}
-                {% if end_page < pagination.total_pages %}
-                    {% if end_page < pagination.total_pages - 1 %}
-                        <li class="page-item disabled"><span class="page-link">...</span></li>
-                    {% endif %}
-                    <li class="page-item"><a class="page-link" href="{{ pagination.url_for_page(pagination.total_pages) }}">{{ pagination.total_pages }}</a></li>
-                {% endif %}
-                <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                    <a class="page-link" href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" aria-label="Next">
-                        <span aria-hidden="true">&raquo;</span>
-                    </a>
-                </li>
-            </ul>
-        </nav>
-    {% endif %}
+        {# --- Pagination --- #}
+        {% if pagination and pagination.total_pages > 1 %}
+            <nav aria-label="Attribution security data navigation" class="bg-white px-4 py-3 flex items-center justify-center border-t border-gray-200 sm:px-6">
+                <div class="flex-1 flex justify-between sm:hidden">
+                    {# Mobile Pagination Buttons (Simplified) #}
+                    <a href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 {{ 'opacity-50 cursor-not-allowed' if not pagination.has_prev }}"> Previous </a>
+                    <a href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 {{ 'opacity-50 cursor-not-allowed' if not pagination.has_next }}"> Next </a>
+                </div>
+                <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-center">
+                    <div>
+                         {# Desktop Pagination #}
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                             {# Previous Button #}
+                            <a href="{{ pagination.url_for_page(pagination.prev_num) if pagination.has_prev else '#' }}" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 {{ 'opacity-50 cursor-not-allowed' if not pagination.has_prev }}" aria-label="Previous">
+                                <span class="sr-only">Previous</span>
+                                <!-- Heroicon name: solid/chevron-left -->
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                            </a>
+                             {# Page Numbers #}
+                            {% set start_page = pagination.start_page_display %}
+                            {% set end_page = pagination.end_page_display %}
+                            {% if start_page > 1 %}
+                                <a href="{{ pagination.url_for_page(1) }}" class="bg-white border-gray-300 text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium"> 1 </a>
+                                {% if start_page > 2 %}
+                                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700"> ... </span>
+                                {% endif %}
+                            {% endif %}
+                            {% for p in range(start_page, end_page + 1) %}
+                                <a href="{{ pagination.url_for_page(p) }}" aria-current="{{ 'page' if p == pagination.page }}" class="{% if p == pagination.page %}z-10 bg-primary-light border-primary text-primary {% else %}bg-white border-gray-300 text-gray-500 hover:bg-gray-50 {% endif %}relative inline-flex items-center px-4 py-2 border text-sm font-medium"> {{ p }} </a>
+                            {% endfor %}
+                            {% if end_page < pagination.total_pages %}
+                                {% if end_page < pagination.total_pages - 1 %}
+                                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700"> ... </span>
+                                {% endif %}
+                                <a href="{{ pagination.url_for_page(pagination.total_pages) }}" class="bg-white border-gray-300 text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium"> {{ pagination.total_pages }} </a>
+                            {% endif %}
+                             {# Next Button #}
+                            <a href="{{ pagination.url_for_page(pagination.next_num) if pagination.has_next else '#' }}" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 {{ 'opacity-50 cursor-not-allowed' if not pagination.has_next }}" aria-label="Next">
+                                <span class="sr-only">Next</span>
+                                <!-- Heroicon name: solid/chevron-right -->
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                            </a>
+                        </nav>
+                    </div>
+                </div>
+            </nav>
+        {% endif %}
+    </div> {# End Data Table Card #}
+    {# --- Empty State Message --- #}
     {% elif not rows %}
-        <div class="alert alert-info mt-3" role="alert">
-            No attribution data is currently available or matches the selected criteria.
+        <div class="mt-4 bg-blue-50 border-l-4 border-blue-400 p-4 rounded-md shadow" role="alert">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <!-- Heroicon name: solid/information-circle -->
+                    <svg class="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-blue-700">
+                        No attribution data is currently available or matches the selected criteria.
+                    </p>
+                </div>
+            </div>
         </div>
     {% endif %}
 </div>

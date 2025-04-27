@@ -15,15 +15,46 @@
 ## Phase 2: Foundational Setup & Global Styles
 
 ### 2.1 CSS Framework & Reset
-2.1.1 Action: Implement styling using Tailwind CSS (recommended) or a custom utility-class system.
-2.1.2 File(s): static/css/style.css (if custom), or integrate Tailwind build process/CDN link into templates/base.html.
+2.1.1 Action: All styling will be implemented using Tailwind CSS with a custom configuration and local build process for offline support.
+2.1.2 File(s): tailwind.config.js, static/css/style.css (for any additional overrides), integrate Tailwind build output into templates/base.html.
 2.1.3 Details:
-- If Tailwind: Add CDN link (<script src="https://cdn.tailwindcss.com"></script>) or set up build process. Configure tailwind.config.js with the specified palette (Section 2), fonts (Section 3), and spacing (e.g., rounded-lg for 8px radius, shadow shadow-[0_0_4px_rgba(0,0,0,0.06)]).
-- If Custom: Define base styles (reset/normalize), CSS variables for colors (Section 2), font styles (Section 3), and utility classes (.card, .btn-primary, etc.) in style.css.
-- Remove existing Bootstrap CSS links from templates/base.html.
+- Tailwind will be set up with a local build process. The configuration (tailwind.config.js) will define the specified palette (Section 2), fonts (Section 3), and spacing (e.g., rounded-lg for 8px radius, shadow shadow-[0_0_4px_rgba(0,0,0,0.06)]).
+- Remove all existing Bootstrap CSS links and classes from templates/base.html and other templates.
+2.1.4 Templates to Update for Tailwind Migration:
+- base.html: ✅ COMPLETE - Bootstrap classes/dependencies removed, layout/navigation ready for Tailwind, tested.
+- index.html: ✅ COMPLETE - Bootstrap classes removed, ready for Tailwind refactor, tested.
+- metric_page_js.html: ✅ COMPLETE - Bootstrap classes and dependencies removed, ready for Tailwind refactor, tested.
+- securities_page.html: ✅ COMPLETE - Bootstrap classes and dependencies removed, ready for Tailwind refactor, tested.
+- security_details_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor two-column layout/cards/tables/buttons/charts with Tailwind, test.
+- watchlist_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor table/cards/buttons/forms with Tailwind, test.
+- get_data.html: 🟡 INCOMPLETE - Bootstrap removal requires manual review due to file size/complexity.
+- inspect_results.html: ✅ COMPLETE - Bootstrap classes removed, ready for Tailwind refactor, tested.
+- maxmin_dashboard.html: ✅ COMPLETE  Remove Bootstrap classes, refactor dashboard/cards/buttons with Tailwind, test.
+- maxmin_details.html: ✅ COMPLETE Remove Bootstrap classes, refactor details table/cards/buttons with Tailwind, test.
+- comparison_summary_base.html: ✅ COMPLETE Remove Bootstrap classes, refactor summary table/cards/buttons/forms with Tailwind, test.
+- exclusions_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor exclusions table/cards/forms/buttons with Tailwind, test.
+- curve_summary.html: ✅ COMPLETE Remove Bootstrap classes, refactor summary table/cards/buttons with Tailwind, test.
+- fund_detail_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor grid/cards/charts/forms with Tailwind, test.
+- issues_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor forms/tables/cards/buttons with Tailwind, test.
+- comparison_details_base.html: ✅ COMPLETE Remove Bootstrap classes, refactor detail layout/cards/tables/charts with Tailwind, test.
+- attribution_charts.html: ✅ COMPLETE Remove Bootstrap classes, refactor grid/cards/charts/forms with Tailwind, test.
+- staleness_details.html: ✅ COMPLETE Remove Bootstrap classes, refactor details layout/cards/tables with Tailwind, test.
+- staleness_dashboard.html: ✅ COMPLETE Remove Bootstrap classes, refactor dashboard layout/cards/tables with Tailwind, test.
+- error.html: ✅ COMPLETE Remove Bootstrap classes, refactor error card/button/layout with Tailwind, test.
+- attribution_security_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor table/cards/forms/buttons with Tailwind, test.
+- attribution_radar.html: ✅ COMPLETE Remove Bootstrap classes, refactor grid/cards/charts/forms with Tailwind, test.
+- attribution_summary.html: ✅ COMPLETE Remove Bootstrap classes, refactor tables/cards/forms/buttons with Tailwind, test.
+- weight_check_page.html: ✅ COMPLETE Remove Bootstrap classes, refactor tables/cards/layout with Tailwind, test.
+- fund_duration_details.html: ✅ COMPLETE Remove Bootstrap classes, refactor details layout/cards/tables with Tailwind, test.
+- curve_details.html: ✅ COMPLETE Remove Bootstrap classes, refactor chart/data table/cards/forms with Tailwind, test.
+
+For each template:
+1. Remove all Bootstrap classes and dependencies.
+2. Refactor layout and components using Tailwind utility classes as per the style guide.
+3. Test for correct layout and functionality.
 
 ### 2.2 Typography Setup
-2.2.1 Action: Integrate Merriweather Sans (or Libre Franklin) and Inter (or Roboto), plus Roboto Mono web fonts.
+2.2.1 Action: Integrate Merriweather Sans and Inter , plus Roboto Mono web fonts.
 2.2.2 File(s): templates/base.html, static/css/style.css (or Tailwind config).
 2.2.3 Details:
 - Add Google Fonts <link> tags in templates/base.html.
@@ -133,6 +164,7 @@
 4.9.5 Tables: Restyle issues tables (Section 5.2). Use status badges (e.g., bg-danger for Open).
 4.9.6 Forms: Restyle form inputs/selects/textarea/radio buttons per Section 7.
 4.9.7 Interactions: Button/card hover (Section 7).
+4.9.8 Modal Dependency: Note that the "Close Issue" modal currently relies on Bootstrap's structure and JavaScript for functionality. The modal's *content* has been styled with Tailwind, but the underlying modal mechanism is still Bootstrap. We should make a note to revisit and fully replace the modal implementation later if a complete Bootstrap removal is desired.
 
 ### 4.10 templates/curve_summary.html
 4.10.1 Layout: Main content area.
@@ -252,8 +284,9 @@
 
 ### 5.1 Chart Styling (static/js/modules/charts/timeSeriesChart.js, other chart JS)
 5.1.1 Action: Update Chart.js configurations to match the visual style (Section 6).
-5.1.2 File(s): JavaScript files creating charts (static/js/modules/charts/timeSeriesChart.js, etc.).
+5.1.2 File(s): JavaScript files creating charts (static/js/modules/charts/timeSeriesChart.js, static/js/modules/ui/chartRenderer.js, etc.).
 5.1.3 Details: Set white background, #E5E5E5 gridlines, 12px #666 axis labels, 2px line width, chart palette colors (ensure Blue/Orange for comparisons), styled tooltips (white card, accent border).
+    **Note:** The actual rendering of charts within styled cards relies on the JavaScript in `static/js/modules/ui/chartRenderer.js` being updated to create the necessary card structure (e.g., `<div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">...</div>`) when it inserts the charts into the DOM.
 
 ### 5.2 Micro-interactions & States
 5.2.1 Action: Implement hover effects, loading states, empty states (Section 7).

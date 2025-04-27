@@ -1,16 +1,27 @@
+{#
+    Purpose: Generic error page displayed when an unhandled exception occurs.
+    Shows a user-friendly message and the error details.
+#}
 {% extends 'base.html' %}
 
 {% block title %}Error{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="alert alert-danger" role="alert">
-        <h4 class="alert-heading">An Error Occurred</h4>
-        <p>Sorry, the application encountered an error processing your request.</p>
-        <hr>
-        <p class="mb-0">Error details: <strong>{{ message|safe }}</strong></p>
+<div class="p-4"> {# Replaced container mt-4 #}
+    {# --- Error Card (Danger Styled) --- #}
+    <div class="border-l-4 border-red-500 bg-red-50 p-4 rounded-md shadow-md" role="alert"> {# Danger status card #}
+         {# Styled Heading #}
+        <h4 class="text-lg font-semibold text-red-800 mb-2">An Error Occurred</h4>
+         {# Styled Paragraph #}
+        <p class="text-sm text-red-700 mb-3">Sorry, the application encountered an error processing your request.</p>
+        {# Removed hr, using spacing and border #}
+         {# Styled Error Details #}
+        <p class="text-sm text-red-700 mb-0">Error details: <strong class="font-medium">{{ message|safe }}</strong></p>
         {# Optionally add more debugging info here if needed in development #}
     </div>
-    <a href="{{ url_for('main.index') }}" class="btn btn-primary">Go to Dashboard</a>
+    {# --- Go to Dashboard Button (Primary Styled) --- #}
+    <a href="{{ url_for('main.index') }}" class="mt-4 inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">
+        Go to Dashboard
+    </a>
 </div>
 {% endblock %} 

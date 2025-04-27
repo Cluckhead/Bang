@@ -1,3 +1,10 @@
+/*
+.SYNOPSIS
+    Custom CSS for the Simple Data Checker frontend.
+.DESCRIPTION
+    This file contains custom styles and utility classes for the Data Checker web application. It is used to override or supplement framework styles, provide utility classes, and implement UI features such as sortable tables, sticky headers, and layout adjustments. This file will be refactored as part of the frontend redesign to align with the new style guide and may eventually replace Bootstrap with Tailwind CSS or a custom utility system.
+*/
+
 /* Basic styling for sortable table headers */
 th.sortable {
     cursor: pointer;

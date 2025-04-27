@@ -1,57 +1,92 @@
+{#
+    Purpose: Displays detailed charts for a specific fund.
+    Includes toggles to filter data (e.g., S&P valid) and overlay comparison data.
+    Charts are dynamically rendered via JavaScript.
+#}
 {% extends "base.html" %}
 
 {% block title %}Fund Details: {{ fund_code }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1 class="mb-4">Fund Details: {{ fund_code }}</h1>
+<div class="p-4"> {# Replaced container mt-4 #}
+    <h1 class="text-2xl font-bold font-heading mb-4">Fund Details: {{ fund_code }}</h1>
 
-    <!-- Toggle Controls Container -->
-    <div class="d-flex flex-column flex-sm-row mb-3"> <!-- Flex layout for toggles -->
-        <!-- S&P Valid Filter Toggle -->
-        <div class="form-group mr-sm-3 toggle-container"> <!-- Added toggle-container class -->
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="toggleSpValid" {% if sp_valid_state %}checked{% endif %}>
-                <label class="form-check-label" for="toggleSpValid">S&P Valid Data Only</label>
-            </div>
-            <small class="form-text text-muted">Only include data where 'SS Project - In Scope' is TRUE.</small>
+    {# --- Toggle Controls Container --- #}
+    <div class="flex flex-col sm:flex-row sm:items-start gap-x-6 gap-y-3 mb-4"> 
+        {# --- S&P Valid Filter Toggle --- #}
+        <div class="toggle-container"> 
+            {# Styled Toggle Switch #}
+            <label for="toggleSpValid" class="flex items-center cursor-pointer">
+                <div class="relative">
+                    <input type="checkbox" id="toggleSpValid" class="sr-only peer" {% if sp_valid_state %}checked{% endif %}>
+                    <div class="block bg-gray-200 peer-checked:bg-primary w-10 h-5 rounded-full"></div>
+                    <div class="dot absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition peer-checked:translate-x-full"></div>
+                </div>
+                <div class="ml-2 text-sm font-medium text-gray-700">S&P Valid Data Only</div>
+            </label>
+            <p class="mt-1 text-xs text-gray-500">Only include data where 'SS Project - In Scope' is TRUE.</p>
         </div>
-        <!-- End S&P Valid Filter Toggle -->
-        <!-- Toggle Switch for SP Data Comparison -->
-        <div id="sp-toggle-container" class="form-group toggle-container" style="display: none;"> <!-- Initially hidden, JS will show if comparison data exists -->
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="toggleSpData" checked>
-                <label class="form-check-label" for="toggleSpData">Show SP Comparison Data</label>
-            </div>
-            <small class="form-text text-muted">Overlay S&P data on charts (if available).</small>
+        {# --- End S&P Valid Filter Toggle --- #}
+        
+        {# --- Toggle Switch for SP Data Comparison --- #}
+        <div id="sp-toggle-container" class="toggle-container" style="display: none;"> {# JS shows/hides this #}
+             {# Styled Toggle Switch #}
+            <label for="toggleSpData" class="flex items-center cursor-pointer">
+                <div class="relative">
+                    {# JS enables/disables and checks this based on data availability #}
+                    <input type="checkbox" id="toggleSpData" class="sr-only peer" checked>
+                    <div class="block bg-gray-200 peer-checked:bg-secondary w-10 h-5 rounded-full"></div>
+                    <div class="dot absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition peer-checked:translate-x-full"></div>
+                </div>
+                <div class="ml-2 text-sm font-medium text-gray-700">Show SP Comparison Data</div> {# JS updates label text #}
+            </label>
+            <p class="mt-1 text-xs text-gray-500">Overlay S&P data on charts (if available).</p>
         </div>
+         {# --- End SP Data Comparison Toggle --- #}
     </div>
-    <!-- End Toggle Controls Container -->
+    {# --- End Toggle Controls Container --- #}
 
+    {# --- Message Display --- #}
     {% if message %}
-        <div class="alert alert-info" role="alert">
+        {# Styled Info Alert #}
+        <div class="mb-4 p-3 border border-blue-300 rounded-md bg-blue-50 text-blue-700 text-sm" role="alert">
             {{ message }}
         </div>
     {% endif %}
 
     {% if chart_data_json and chart_data_json != '[]' %}
-        <!-- Embed JSON data for JavaScript -->
+        {# Embed JSON data for JavaScript #}
         <script id="fundChartData" type="application/json">
             {{ chart_data_json | safe }}
         </script>
 
-        <!-- Area where charts will be rendered by JavaScript -->
-        <div id="fundChartsArea" class="row row-cols-1 row-cols-lg-2 g-4">
-            <!-- Charts will be dynamically inserted here -->
+        {# --- Charts Area Grid --- #}
+        {# Replaced Bootstrap row with Tailwind grid #}
+        {# Charts will be dynamically inserted here into card structures by JS #}
+        <div id="fundChartsArea" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {# Example Card Structure (JS should create these) #}
+            {# 
+            <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+                <h3 class="text-base font-semibold text-gray-700 mb-2">Chart Title</h3>
+                <div class="chart-container relative h-64">
+                    <canvas id="chart-canvas-id"></canvas> 
+                </div>
+            </div> 
+            #}
         </div>
     {% elif not message %}
-         <div class="alert alert-warning" role="alert">
+         {# Styled Warning Alert for No Data #}
+         <div class="mb-4 p-3 border border-yellow-300 rounded-md bg-yellow-50 text-yellow-700 text-sm" role="alert">
             No chart data available to display for this fund.
         </div>
     {% endif %}
 
-     <div class="mt-4">
-        <a href="{{ url_for('main.index') }}" class="btn btn-secondary">Back to Dashboard</a>
+    {# --- Back Button --- #}
+     <div class="mt-6"> {# Increased margin-top #}
+        {# Styled Secondary Button #}
+        <a href="{{ url_for('main.index') }}" class="inline-flex items-center px-4 py-2 border border-secondary text-secondary text-sm font-medium rounded-md hover:bg-secondary hover:text-white transition duration-150 ease-in-out">
+            Back to Dashboard
+        </a>
     </div>
 
 </div>
@@ -59,60 +94,87 @@
 
 {% block scripts %}
 {{ super() }}
-<!-- Chart.js is already included in base.html -->
-<!-- Make this a module to allow imports -->
+{# Chart.js is included in base.html #}
+{# The existing JS logic remains, ensure chartRenderer.js creates cards with Tailwind classes #}
 <script type="module">
-    // Import necessary functions from the chart renderer module
     import { renderFundCharts, toggleSecondaryDataVisibility } from '{{ url_for('static', filename='js/modules/ui/chartRenderer.js') }}';
 
     document.addEventListener('DOMContentLoaded', function () {
         const chartDataElement = document.getElementById('fundChartData');
         const chartsArea = document.getElementById('fundChartsArea');
-        const toggleSwitch = document.getElementById('toggleSpData');
+        const toggleSpDataSwitch = document.getElementById('toggleSpData');
+        const toggleSpValidSwitch = document.getElementById('toggleSpValid'); // Added S&P Valid toggle
+        const spToggleContainer = document.getElementById('sp-toggle-container');
 
-        if (!chartDataElement || !chartsArea || !toggleSwitch) {
-            console.error('[Fund Detail Page] Required elements for chart rendering or toggle not found.');
-            return;
+        if (!chartsArea) {
+            console.warn('[Fund Detail Page] chartsArea not found. Skipping chart rendering.');
+            return; // Don't proceed if the main chart area is missing
         }
-
-        try {
-            const allChartData = JSON.parse(chartDataElement.textContent);
-            
-            // Check if any SP data exists across all metrics
-            const anySpDataAvailable = allChartData.some(chartInfo => 
-                chartInfo.datasets && chartInfo.datasets.some(ds => ds.isSpData === true)
-            );
-
-            // Initial setup of the toggle switch based on data availability
-            if (anySpDataAvailable) {
-                toggleSwitch.disabled = false;
-                toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data';
-            } else {
-                toggleSwitch.disabled = true;
-                toggleSwitch.checked = false; // Ensure it's off if disabled
-                toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data (N/A)';
-            }
-
-            // Render the charts using the imported function
-            // This function will now manage the chart instances internally
-            renderFundCharts(chartsArea, allChartData);
-            console.log("[Fund Detail Page] Called renderFundCharts.");
-
-            // Add event listener for the toggle switch
-            // This now calls the centralized toggle function from the module
-            toggleSwitch.addEventListener('change', function() {
-                const showSp = this.checked;
-                console.log(`[Fund Detail Page] Toggle changed: Show SP Data = ${showSp}. Calling toggleSecondaryDataVisibility.`); 
-                toggleSecondaryDataVisibility(showSp); // Call the imported function
+        
+        // S&P Valid Filter Toggle Logic
+        if (toggleSpValidSwitch) {
+            toggleSpValidSwitch.addEventListener('change', function() {
+                const currentUrl = new URL(window.location.href);
+                if (this.checked) {
+                    currentUrl.searchParams.set('sp_valid', 'true');
+                } else {
+                    currentUrl.searchParams.delete('sp_valid');
+                }
+                window.location.href = currentUrl.toString(); // Reload page with new query param
             });
-
-        } catch (error) {
-            console.error('[Fund Detail Page] Error parsing chart data or setting up charts:', error);
-            chartsArea.innerHTML = '<div class="alert alert-danger">Failed to load chart data.</div>';
-            if (toggleSwitch) {
-                toggleSwitch.disabled = true; // Disable toggle on error
-                 toggleSwitch.parentElement.querySelector('label').textContent = 'Show SP Comparison Data (Error)';
+        }
+        
+        // Chart Rendering and SP Data Toggle Logic
+        if (chartDataElement && toggleSpDataSwitch && spToggleContainer) {
+             try {
+                const allChartData = JSON.parse(chartDataElement.textContent);
+                
+                const anySpDataAvailable = allChartData.some(chartInfo => 
+                    chartInfo.datasets && chartInfo.datasets.some(ds => ds.isSpData === true)
+                );
+                
+                // Show/Hide and Enable/Disable SP Data Toggle based on availability
+                if (anySpDataAvailable) {
+                    spToggleContainer.style.display = 'block'; // Show the container
+                    toggleSpDataSwitch.disabled = false;
+                    toggleSpDataSwitch.parentElement.querySelector('.ml-2').textContent = 'Show SP Comparison Data';
+                } else {
+                    spToggleContainer.style.display = 'none'; // Hide if no SP data
+                    toggleSpDataSwitch.disabled = true;
+                    toggleSpDataSwitch.checked = false; 
+                    // Optionally update label text when hidden/disabled
+                    // toggleSpDataSwitch.parentElement.querySelector('.ml-2').textContent = 'Show SP Comparison Data (N/A)';
+                }
+    
+                // Render charts - IMPORTANT: chartRenderer.js needs to create card structure with Tailwind classes
+                renderFundCharts(chartsArea, allChartData);
+                console.log("[Fund Detail Page] Called renderFundCharts.");
+    
+                // Event listener for the SP Data toggle switch
+                toggleSpDataSwitch.addEventListener('change', function() {
+                    const showSp = this.checked;
+                    console.log(`[Fund Detail Page] Toggle changed: Show SP Data = ${showSp}. Calling toggleSecondaryDataVisibility.`); 
+                    toggleSecondaryDataVisibility(showSp); 
+                });
+    
+            } catch (error) {
+                console.error('[Fund Detail Page] Error processing chart data or setting up:', error);
+                chartsArea.innerHTML = '<div class="col-span-1 lg:col-span-2 mb-4 p-3 border border-red-300 rounded-md bg-red-50 text-red-700 text-sm" role="alert">Failed to load chart data.</div>';
+                if (toggleSpDataSwitch) {
+                    toggleSpDataSwitch.disabled = true; 
+                     if (spToggleContainer) spToggleContainer.style.display = 'block'; // Show toggle even on error, but disabled
+                     toggleSpDataSwitch.parentElement.querySelector('.ml-2').textContent = 'Show SP Comparison Data (Error)';
+                }
             }
+        } else {
+            // If no chart data JSON element, log it but don't necessarily show an error unless expected
+             if (!chartDataElement && document.querySelector('#fundChartsArea')) { // Only log if charts area exists but data doesn't
+                console.log('[Fund Detail Page] No chart data element found (chart_data_json likely empty).');
+             }
+             // Ensure SP toggle container is hidden if its control elements aren't found
+             if (spToggleContainer && (!toggleSpDataSwitch || !chartDataElement)) {
+                 spToggleContainer.style.display = 'none';
+             }
         }
     });
 </script>

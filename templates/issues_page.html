@@ -1,45 +1,66 @@
+{#
+    Purpose: Page for tracking data issues.
+    Allows users to raise new issues via a form and view/close open issues.
+    Also displays a table of closed issues.
+#}
 {% extends 'base.html' %}
 
 {% block title %}Track Data Issues{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>Track Data Issues</h2>
-    <hr>
+<div class="p-4"> {# Replaced container mt-4 #}
+    <h1 class="text-2xl font-bold font-heading mb-4">Track Data Issues</h1> {# Adjusted heading style/margin #}
+    {# Removed hr #}
 
-    {# Display messages if any (using Flask flashing) #}
+    {# --- Flashed Messages --- #}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            {# Determine Tailwind colors based on Flask flash category #}
+            {% set alert_colors = {
+                'success': 'border-green-300 bg-green-50 text-green-700',
+                'warning': 'border-yellow-300 bg-yellow-50 text-yellow-700',
+                'danger': 'border-red-300 bg-red-50 text-red-700',
+                'info': 'border-blue-300 bg-blue-50 text-blue-700'
+            } %}
+            {% set colors = alert_colors.get(category, alert_colors['info']) %}
+          <div class="mb-4 p-3 border {{ colors }} rounded-md text-sm flex justify-between items-center" role="alert">
+            <span>{{ message }}</span>
+            {# Using Bootstrap's JS for dismissal via data-bs-dismiss #}
+            <button type="button" class="ml-2 text-{{ category if category in ['success', 'warning', 'danger', 'info'] else 'info' }}-700 hover:text-{{ category if category in ['success', 'warning', 'danger', 'info'] else 'info' }}-900" data-bs-dismiss="alert" aria-label="Close">
+                <span class="sr-only">Close</span>
+                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
           </div>
         {% endfor %}
       {% endif %}
     {% endwith %}
 
-    <div class="row">
-        {# Left Column: Add New Issue Form #}
-        <div class="col-md-5">
-            <h4>Raise New Issue</h4>
-            <form method="POST" action="{{ url_for('issue_bp.manage_issues') }}">
-                <div class="mb-3">
-                    <label for="raised_by" class="form-label">Raised By:</label>
-                    <select class="form-select" id="raised_by" name="raised_by" required>
+    {# --- Main Layout Grid --- #}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {# --- Left Column: Add New Issue Form (Card Styled) --- #}
+        <div class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 p-4 h-fit">
+            <h4 class="text-lg font-semibold text-gray-800 mb-4">Raise New Issue</h4>
+            <form method="POST" action="{{ url_for('issue_bp.manage_issues') }}" class="space-y-4"> {# Use space-y for spacing #}
+                <div>
+                    <label for="raised_by" class="block text-sm font-medium text-gray-700">Raised By:</label>
+                    {# Styled Select #}
+                    <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="raised_by" name="raised_by" required>
                         <option value="" disabled selected>Select User</option>
                         {% for user in users %}
                             <option value="{{ user }}">{{ user }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label for="issue_date" class="form-label">Date of Issue:</label>
-                    <input type="date" class="form-control" id="issue_date" name="issue_date" required>
+                <div>
+                    <label for="issue_date" class="block text-sm font-medium text-gray-700">Date of Issue:</label>
+                    {# Styled Date Input #}
+                    <input type="date" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="issue_date" name="issue_date" required>
                 </div>
-                 <div class="mb-3">
-                    <label for="fund_impacted" class="form-label">Fund Impacted:</label>
-                    <select class="form-select" id="fund_impacted" name="fund_impacted" required>
+                 <div>
+                    <label for="fund_impacted" class="block text-sm font-medium text-gray-700">Fund Impacted:</label>
+                     {# Styled Select #}
+                    <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="fund_impacted" name="fund_impacted" required>
                         <option value="" disabled selected>Select a Fund</option>
                         <option value="All Funds">All Funds</option>
                         <option value="No Funds">No Funds</option>
@@ -48,186 +69,212 @@
                         {% endfor %}
                     </select>
                 </div>
-                 <div class="mb-3">
-                    <label class="form-label">Data Source:</label><br>
-                    {% for source in data_sources %}
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="data_source" id="source_{{ source|lower|replace(' ', '_') }}" value="{{ source }}" required>
-                            <label class="form-check-label" for="source_{{ source|lower|replace(' ', '_') }}">{{ source }}</label>
-                        </div>
-                    {% endfor %}
-                    {% if 'Rimes' not in data_sources %}
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="data_source" id="source_rimes" value="Rimes" required>
-                            <label class="form-check-label" for="source_rimes">Rimes</label>
-                        </div>
-                    {% endif %}
+                 <div>
+                    <label class="block text-sm font-medium text-gray-700">Data Source:</label>
+                     {# Styled Radio Buttons #}
+                    <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                        {% for source in data_sources %}
+                            <div class="flex items-center">
+                                <input class="h-4 w-4 text-primary border-gray-300 focus:ring-primary" type="radio" name="data_source" id="source_{{ source|lower|replace(' ', '_') }}" value="{{ source }}" required>
+                                <label class="ml-2 block text-sm text-gray-700" for="source_{{ source|lower|replace(' ', '_') }}">{{ source }}</label>
+                            </div>
+                        {% endfor %}
+                        {# Ensure Rimes is always an option #}
+                        {% if 'Rimes' not in data_sources %}
+                             <div class="flex items-center">
+                                <input class="h-4 w-4 text-primary border-gray-300 focus:ring-primary" type="radio" name="data_source" id="source_rimes" value="Rimes" required>
+                                <label class="ml-2 block text-sm text-gray-700" for="source_rimes">Rimes</label>
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label for="description" class="form-label">Description of Issue:</label>
-                    <textarea class="form-control" id="description" name="description" rows="4" required></textarea>
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700">Description of Issue:</label>
+                    {# Styled Textarea #}
+                    <textarea class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="description" name="description" rows="4" required></textarea>
                 </div>
-                <div class="mb-3">
-                    <label for="jira_link" class="form-label">Jira Link (Optional):</label>
-                    <input type="text" class="form-control" id="jira_link" name="jira_link" placeholder="e.g., www.your-jira.com/browse/ISSUE-KEY or ISSUE-KEY">
+                <div>
+                    <label for="jira_link" class="block text-sm font-medium text-gray-700">Jira Link (Optional):</label>
+                     {# Styled Text Input #}
+                    <input type="text" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-secondary focus:border-secondary" id="jira_link" name="jira_link" placeholder="e.g., ISSUE-KEY or full URL">
                 </div>
-                <div class="mb-3">
-                    <label for="in_scope_for_go_live" class="form-label">In Scope for Go-live:</label>
-                    <select class="form-select" id="in_scope_for_go_live" name="in_scope_for_go_live" required>
+                <div>
+                    <label for="in_scope_for_go_live" class="block text-sm font-medium text-gray-700">In Scope for Go-live:</label>
+                    {# Styled Select #}
+                    <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="in_scope_for_go_live" name="in_scope_for_go_live" required>
                         <option value="No" selected>No</option>
                         <option value="Yes">Yes</option>
                     </select>
                 </div>
-                <button type="submit" class="btn btn-primary">Raise Issue</button>
+                 {# Styled Button (Primary) #}
+                <button type="submit" class="w-full px-4 py-2 bg-primary text-white text-sm font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">Raise Issue</button>
             </form>
         </div>
 
-        {# Right Column: Display Open Issues #}
-        <div class="col-md-7">
-            <h4>Open Issues</h4>
+        {# --- Right Column: Open Issues Table (Card Styled) --- #}
+        <div class="lg:col-span-2 bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+            <h4 class="text-lg font-semibold text-gray-800 mb-3">Open Issues</h4>
             {% if open_issues %}
-                <div class="table-responsive">
-                <table class="table table-striped table-sm table-bordered">
-                    <thead class="table-light">
-                        <tr>
-                            <th>ID</th>
-                            <th>Raised</th>
-                            <th>By</th>
-                            <th>Issue Date</th>
-                            <th>Fund</th>
-                            <th>Source</th>
-                            <th>Description</th>
-                            <th>Jira</th>
-                            <th>In Scope for Go-live</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for issue in open_issues %}
+                <div class="overflow-x-auto"> {# Responsive wrapper #}
+                    {# Styled Table #}
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50">
                             <tr>
-                                <td>{{ issue.IssueID }}</td>
-                                <td>{{ issue.DateRaised.strftime('%Y-%m-%d') if issue.DateRaised else 'N/A' }}</td>
-                                <td>{{ issue.RaisedBy }}</td>
-                                <td>{{ issue.IssueDate.strftime('%Y-%m-%d') if issue.IssueDate else 'N/A' }}</td>
-                                <td>{{ issue.FundImpacted }}</td>
-                                <td>{{ issue.DataSource }}</td>
-                                <td style="white-space: pre-wrap; word-wrap: break-word;">{{ issue.Description }}</td>
-                                <td>
-                                    {% if issue.JiraLink %}
-                                        <a href="{{ issue.JiraLink }}" target="_blank" rel="noopener noreferrer">Link</a>
-                                    {% else %}
-                                        N/A
-                                    {% endif %}
-                                </td>
-                                <td>{{ issue.InScopeForGoLive or 'No' }}</td>
-                                <td>
-                                    {# Button to trigger modal for closing #}
-                                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#closeIssueModal-{{ issue.IssueID }}">
-                                        Close
-                                    </button>
+                                {# Styled Headers #}
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raised</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">By</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issue Date</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fund</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jira</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Go-live</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for issue in open_issues %}
+                                <tr class="hover:bg-gray-50">
+                                    {# Styled Data Cells #}
+                                    <td class="px-4 py-2 whitespace-nowrap font-medium text-gray-900">{{ issue.IssueID }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.DateRaised.strftime('%Y-%m-%d') if issue.DateRaised else 'N/A' }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.RaisedBy }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.IssueDate.strftime('%Y-%m-%d') if issue.IssueDate else 'N/A' }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.FundImpacted }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.DataSource }}</td>
+                                    <td class="px-4 py-2 text-gray-700 whitespace-pre-wrap break-words">{{ issue.Description }}</td> {# Allow wrapping #}
+                                    <td class="px-4 py-2 whitespace-nowrap">
+                                        {% if issue.JiraLink %}
+                                            {# Basic link styling #}
+                                            <a href="{{ issue.JiraLink }}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline">Link</a>
+                                        {% else %}
+                                            <span class="text-gray-500">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.InScopeForGoLive or 'No' }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap">
+                                        {# Styled Button (Success) to trigger Bootstrap Modal #}
+                                        <button type="button" class="px-2 py-1 bg-green-600 text-white text-xs font-medium rounded shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out" 
+                                                data-bs-toggle="modal" data-bs-target="#closeIssueModal-{{ issue.IssueID }}">
+                                            Close
+                                        </button>
 
-                                    {# Modal for Closing Issue #}
-                                    <div class="modal fade" id="closeIssueModal-{{ issue.IssueID }}" tabindex="-1" aria-labelledby="closeIssueModalLabel-{{ issue.IssueID }}" aria-hidden="true">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title" id="closeIssueModalLabel-{{ issue.IssueID }}">Close Issue: {{ issue.IssueID }}</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        {# --- Bootstrap Modal Structure (Content Styled with Tailwind) --- #}
+                                        <div class="modal fade" id="closeIssueModal-{{ issue.IssueID }}" tabindex="-1" aria-labelledby="closeIssueModalLabel-{{ issue.IssueID }}" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered"> {# Added modal-dialog-centered #}
+                                                <div class="modal-content">
+                                                    <div class="modal-header bg-gray-50 border-b border-gray-200 px-4 py-3">
+                                                        <h5 class="modal-title text-lg font-medium text-gray-800" id="closeIssueModalLabel-{{ issue.IssueID }}">Close Issue: {{ issue.IssueID }}</h5>
+                                                        {# Styled Close Button (using Bootstrap JS) #}
+                                                        <button type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center" data-bs-dismiss="modal" aria-label="Close">
+                                                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                                                        </button>
+                                                    </div>
+                                                    <form method="POST" action="{{ url_for('issue_bp.close_issue_route') }}">
+                                                        <div class="modal-body p-4 space-y-4"> {# Added padding & spacing #}
+                                                            <input type="hidden" name="issue_id" value="{{ issue.IssueID }}">
+                                                            <div>
+                                                                <label for="closed_by-{{ issue.IssueID }}" class="block text-sm font-medium text-gray-700">Closed By:</label>
+                                                                {# Styled Select #}
+                                                                <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="closed_by-{{ issue.IssueID }}" name="closed_by" required>
+                                                                    <option value="" disabled selected>Select User</option>
+                                                                    {% for user in users %}
+                                                                        <option value="{{ user }}">{{ user }}</option>
+                                                                    {% endfor %}
+                                                                </select>
+                                                            </div>
+                                                            <div>
+                                                                <label for="resolution_comment-{{ issue.IssueID }}" class="block text-sm font-medium text-gray-700">Resolution Comment:</label>
+                                                                {# Styled Textarea #}
+                                                                <textarea class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="resolution_comment-{{ issue.IssueID }}" name="resolution_comment" rows="3" required></textarea>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer bg-gray-50 border-t border-gray-200 px-4 py-3 flex justify-end space-x-2">
+                                                            {# Styled Cancel Button (Secondary Outline) #}
+                                                            <button type="button" class="px-3 py-1.5 border border-gray-300 text-gray-700 bg-white text-xs font-medium rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-150 ease-in-out" data-bs-dismiss="modal">Cancel</button>
+                                                            {# Styled Close Button (Success) #}
+                                                            <button type="submit" class="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out">Mark as Closed</button>
+                                                        </div>
+                                                    </form>
                                                 </div>
-                                                <form method="POST" action="{{ url_for('issue_bp.close_issue_route') }}">
-                                                    <div class="modal-body">
-                                                        <input type="hidden" name="issue_id" value="{{ issue.IssueID }}">
-                                                        <div class="mb-3">
-                                                            <label for="closed_by-{{ issue.IssueID }}" class="form-label">Closed By:</label>
-                                                            <select class="form-select" id="closed_by-{{ issue.IssueID }}" name="closed_by" required>
-                                                                <option value="" disabled selected>Select User</option>
-                                                                {% for user in users %}
-                                                                    <option value="{{ user }}">{{ user }}</option>
-                                                                {% endfor %}
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label for="resolution_comment-{{ issue.IssueID }}" class="form-label">Resolution Comment:</label>
-                                                            <textarea class="form-control" id="resolution_comment-{{ issue.IssueID }}" name="resolution_comment" rows="3" required></textarea>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-success">Mark as Closed</button>
-                                                    </div>
-                                                </form>
                                             </div>
                                         </div>
-                                    </div>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                                        {# --- End Bootstrap Modal --- #}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             {% else %}
-                <p>No open issues found.</p>
+                 {# Styled Empty State #}
+                <p class="text-sm text-gray-500 italic">No open issues found.</p>
             {% endif %}
         </div>
     </div>
 
-    <hr class="my-4">
+    {# Removed hr #}
 
-    {# Section for Closed Issues #}
-    <h4>Closed Issues</h4>
-     {% if closed_issues %}
-        <div class="table-responsive">
-        <table class="table table-striped table-sm table-bordered table-secondary">
-            <thead class="table-light">
-                <tr>
-                     <th>ID</th>
-                     <th>Raised</th>
-                     <th>By</th>
-                     <th>Issue Date</th>
-                     <th>Fund</th>
-                     <th>Source</th>
-                     <th>Description</th>
-                     <th>Jira</th>
-                     <th>In Scope for Go-live</th>
-                     <th>Closed</th>
-                     <th>By</th>
-                     <th>Resolution</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for issue in closed_issues %}
-                    <tr>
-                        <td>{{ issue.IssueID }}</td>
-                        <td>{{ issue.DateRaised.strftime('%Y-%m-%d') if issue.DateRaised else 'N/A' }}</td>
-                        <td>{{ issue.RaisedBy }}</td>
-                        <td>{{ issue.IssueDate.strftime('%Y-%m-%d') if issue.IssueDate else 'N/A' }}</td>
-                        <td>{{ issue.FundImpacted }}</td>
-                        <td>{{ issue.DataSource }}</td>
-                        <td style="white-space: pre-wrap; word-wrap: break-word;">{{ issue.Description }}</td>
-                        <td>
-                            {% if issue.JiraLink %}
-                                <a href="{{ issue.JiraLink }}" target="_blank" rel="noopener noreferrer">Link</a>
-                            {% else %}
-                                N/A
-                            {% endif %}
-                        </td>
-                        <td>{{ issue.InScopeForGoLive or 'No' }}</td>
-                        <td>{{ issue.DateClosed.strftime('%Y-%m-%d') if issue.DateClosed else 'N/A' }}</td>
-                        <td>{{ issue.ClosedBy }}</td>
-                        <td style="white-space: pre-wrap; word-wrap: break-word;">{{ issue.ResolutionComment }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-    {% else %}
-        <p>No closed issues found.</p>
-    {% endif %}
+    {# --- Section for Closed Issues (Card Styled) --- #}
+    <div class="mt-6 bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+        <h4 class="text-lg font-semibold text-gray-800 mb-3">Closed Issues</h4>
+        {% if closed_issues %}
+            <div class="overflow-x-auto"> {# Responsive wrapper #}
+                {# Styled Table (Subtly different bg maybe?) #}
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-100"> {# Slightly different header bg #}
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raised</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">By</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issue Date</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fund</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jira</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Go-live</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Closed</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">By</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resolution</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for issue in closed_issues %}
+                            <tr class="hover:bg-gray-50 opacity-80"> {# Slightly faded rows #}
+                                <td class="px-4 py-2 whitespace-nowrap font-medium text-gray-700">{{ issue.IssueID }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ issue.DateRaised.strftime('%Y-%m-%d') if issue.DateRaised else 'N/A' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ issue.RaisedBy }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ issue.IssueDate.strftime('%Y-%m-%d') if issue.IssueDate else 'N/A' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ issue.FundImpacted }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ issue.DataSource }}</td>
+                                <td class="px-4 py-2 text-gray-600 whitespace-pre-wrap break-words">{{ issue.Description }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                     {% if issue.JiraLink %}
+                                        <a href="{{ issue.JiraLink }}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-700 hover:underline">Link</a>
+                                    {% else %}
+                                        <span class="text-gray-400">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ issue.InScopeForGoLive or 'No' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ issue.DateClosed.strftime('%Y-%m-%d') if issue.DateClosed else 'N/A' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ issue.ClosedBy }}</td>
+                                <td class="px-4 py-2 text-gray-600 whitespace-pre-wrap break-words">{{ issue.ResolutionComment }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            {# Styled Empty State #}
+            <p class="text-sm text-gray-500 italic">No closed issues found.</p>
+        {% endif %}
+    </div>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
-{{ super() }} {# Include scripts from base.html #}
-{# No specific JS needed for this page currently, modals are handled by Bootstrap #}
+{{ super() }} {# Include scripts from base.html (Needed for Bootstrap Modals) #}
+{# No specific page JS needed currently, modals are handled by Bootstrap JS #}
 {% endblock %} 

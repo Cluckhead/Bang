@@ -7,28 +7,35 @@
 {% block title %}Max/Min Details: {{ display_name or filename }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    {# Use the dashboard_url passed from the view for the back button #}
-    <a href="{{ dashboard_url or url_for('maxmin_bp.dashboard') }}" class="btn btn-outline-secondary btn-sm mb-3">
-        <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+<div class="p-4">
+    {# Styled Back Button #}
+    <a href="{{ dashboard_url or url_for('maxmin_bp.dashboard') }}" class="inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+        Back to Dashboard
     </a>
     
-    <h1>Max/Min Breach Details: {{ display_name or filename }}</h1>
+    {# Styled Heading #}
+    <h1 class="text-2xl font-bold font-heading mb-2">Max/Min Breach Details: {{ display_name or filename }}</h1>
     
-    <p class="lead">
-        Showing securities in <code>{{ filename }}</code> where values are 
+    {# Styled Lead Paragraph #}
+    <p class="text-lg text-gray-700 mb-1">
+        Showing securities in <code class="px-1 py-0.5 bg-gray-100 text-gray-800 rounded text-sm">{{ filename }}</code> where values are 
         {% if breach_type == 'max' %}
-            <span class="text-danger">greater than Max threshold ({{ max_threshold }})</span>.
+            <span class="text-red-600 font-semibold">greater than Max threshold ({{ max_threshold }})</span>.
         {% elif breach_type == 'min' %}
-            <span class="text-warning">less than Min threshold ({{ min_threshold }})</span>.
+            <span class="text-yellow-600 font-semibold">less than Min threshold ({{ min_threshold }})</span>.
         {% else %}
             outside configured thresholds (Max={{ max_threshold }}, Min={{ min_threshold }}).
         {% endif %}
     </p>
     
-    <p class="text-muted small">Total securities analyzed in this file: {{ total_count }}</p>
+    {# Styled Meta Info #}
+    <p class="text-sm text-gray-500 mb-4">Total securities analyzed in this file: {{ total_count }}</p>
 
-    <form method="GET" action="" class="row gx-2 gy-2 align-items-center mb-3" id="details-filter-form">
+    {# Styled Filter Form #}
+    <form method="GET" action="" class="flex items-center mb-4" id="details-filter-form">
         {# Preserve max/min and other query params as hidden fields #}
         {% if max_threshold is not none %}
             <input type="hidden" name="max" value="{{ max_threshold }}">
@@ -36,56 +43,63 @@
         {% if min_threshold is not none %}
             <input type="hidden" name="min" value="{{ min_threshold }}">
         {% endif %}
-        <div class="col-auto">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="includeDistressed" name="include_distressed" value="1" {% if include_distressed %}checked{% endif %} onchange="this.form.submit()">
-                <label class="form-check-label" for="includeDistressed">Include Distressed</label>
-            </div>
+        <div class="flex items-center">
+            {# Styled checkbox #}
+            <input class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-1" type="checkbox" id="includeDistressed" name="include_distressed" value="1" {% if include_distressed %}checked{% endif %} onchange="this.form.submit()">
+            <label class="text-sm font-medium text-gray-700" for="includeDistressed">Include Distressed</label>
         </div>
     </form>
 
-    {% if breaches %}
-    <div class="table-responsive">
-        <table class="table table-sm table-striped table-hover small">
-            <thead class="table-light">
-                <tr>
-                    <th>{{ id_column }}</th>
-                    {# Static info columns #}
-                    {% for col_name in static_columns %}
-                        <th>{{ col_name }}</th>
+    {# --- Card Wrapper for Table --- #}
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden"> 
+        {% if breaches %}
+        {# Overflow container for responsive table #}
+        <div class="overflow-x-auto">
+            {# Styled Table #}
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        {# Styled Header Cells #}
+                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ id_column }}</th>
+                        {% for col_name in static_columns %}
+                            <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ col_name }}</th>
+                        {% endfor %}
+                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days Breaching</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for sec in breaches %}
+                    {# Highlight row based on breach type with Tailwind background colors #}
+                    <tr class="hover:bg-gray-100 {% if sec.breach_type == 'max' %}bg-red-50{% else %}bg-yellow-50{% endif %}">
+                        {# Styled Data Cells #}
+                        <td class="px-4 py-2 whitespace-nowrap">
+                            {# Styled Link #}
+                            {% if sec.details_url %}
+                                <a href="{{ sec.details_url }}" target="_blank" title="View full details for {{ sec.id }}" class="text-primary hover:text-primary-dark font-medium">{{ sec.id }}</a>
+                            {% else %}
+                                {{ sec.id }}
+                            {% endif %}
+                        </td>
+                        {% for col_name in static_columns %}
+                            <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ sec.static_info.get(col_name, '') }}</td>
+                        {% endfor %}
+                        <td class="px-4 py-2 whitespace-nowrap font-semibold {% if sec.breach_type == 'max' %}text-red-700{% else %}text-yellow-700{% endif %}">{{ sec.count }}</td>
+                    </tr>
                     {% endfor %}
-                    <th>Days Breaching</th>
-                    {# Threshold column might be redundant given the page description #}
-                    {# <th>Threshold ({{ breach_type|capitalize }})</th> #}
-                </tr>
-            </thead>
-            <tbody>
-                {% for sec in breaches %}
-                {# Highlight row based on breach type #}
-                <tr class="{% if sec.breach_type == 'max' %}table-danger{% else %}table-warning{% endif %}">
-                    <td>
-                        {# Link to security details page #}
-                        {% if sec.details_url %}
-                            <a href="{{ sec.details_url }}" target="_blank" title="View full details for {{ sec.id }}">{{ sec.id }}</a>
-                        {% else %}
-                            {{ sec.id }}
-                        {% endif %}
-                    </td>
-                    {# Static info values #}
-                    {% for col_name in static_columns %}
-                        <td>{{ sec.static_info.get(col_name, '') }}</td>
-                    {% endfor %}
-                    <td class="fw-bold">{{ sec.count }}</td>
-                    {# <td>{{ sec.threshold }}</td> #}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-        <div class="alert alert-success mt-3">
-            <i class="fas fa-check-circle me-1"></i> No securities found breaching the {{ breach_type }} threshold ({{ max_threshold if breach_type == 'max' else min_threshold }}) in this file.
+                </tbody>
+            </table>
         </div>
-    {% endif %}
+        {% else %}
+            {# Styled Empty State Message #}
+            <div class="p-4 text-center">
+                <p class="text-green-700 bg-green-50 border border-green-200 p-3 rounded-md text-sm inline-flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-green-600" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                      </svg>
+                    No securities found breaching the {{ breach_type }} threshold ({{ max_threshold if breach_type == 'max' else min_threshold }}) in this file.
+                </p>
+            </div>
+        {% endif %}
+    </div>
 </div>
 {% endblock %} 

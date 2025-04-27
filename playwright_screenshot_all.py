@@ -122,7 +122,7 @@ def open_modal(page, modal_type):
         btn.click()
         page.wait_for_selector(".modal.show, .modal[aria-modal='true']", timeout=5000)
         time.sleep(0.5)
-        page.screenshot(path=SCREENSHOT_DIR / f"modal_{modal_type}.png")
+        page.screenshot(path=SCREENSHOT_DIR / f"modal_{modal_type}.png", full_page=True)
         log(f"    {modal_type} opened and screenshot saved.")
         time.sleep(0.2) # Short pause before trying to close
         close_btn = page.query_selector(".modal.show button.btn-secondary, .modal[aria-modal='true'] button.btn-secondary, .modal.show button[data-bs-dismiss='modal'], .modal[aria-modal='true'] button[data-bs-dismiss='modal']")
@@ -148,7 +148,7 @@ def perform_ui_interaction(page, interaction_type):
                 log(f"    Clicked S&P toggle.")
                 time.sleep(1) # Wait for UI update
                 screenshot_path = SCREENSHOT_DIR / f"metric_detail_sp_toggled.png"
-                page.screenshot(path=screenshot_path)
+                page.screenshot(path=screenshot_path, full_page=True)
                 log(f"    Saved screenshot after toggle: {screenshot_path}")
             except Exception as e:
                 log(f"    [WARN] Failed to click S&P toggle or take screenshot: {e}")
@@ -206,7 +206,7 @@ def main():
                                 log(f"  [WARN] Could not read banner text: {e}")
 
                 screenshot_path = SCREENSHOT_DIR / f"{name}.png"
-                page.screenshot(path=screenshot_path)
+                page.screenshot(path=screenshot_path, full_page=True)
                 log(f"  Saved screenshot: {screenshot_path}")
 
                 # Perform UI interactions only if page loaded without errors/banners
