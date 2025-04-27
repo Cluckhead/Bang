@@ -61,9 +61,19 @@ Purpose: Renders the security details page, showing all static info (from refere
   <!-- Right Column: Charts and Tables -->
   <div class="lg:col-span-7 space-y-6">
     <div class="bg-neutral-100 rounded-lg shadow p-4 mb-4">
-      <h1 class="text-xl font-bold text-gray-800 mb-1">{{ security_id }} - {{ metric_name }}</h1>
+      {# Prominent Security Name (show only if present, no ISIN fallback) #}
+      {% set found_name = false %}
+      {% for group_name, group_fields in static_groups %}
+        {% if not found_name and group_fields and 'Security Name' in group_fields and group_fields['Security Name'] %}
+          <h1 class="text-3xl font-extrabold text-primary mb-2">
+            {{ group_fields['Security Name'] }}
+          </h1>
+          {% set found_name = true %}
+        {% endif %}
+      {% endfor %}
+      <h2 class="text-xl font-bold text-gray-800 mb-1">{{ security_id }} - {{ metric_name }}</h2>
       <p class="text-sm text-gray-600 mb-2">Latest data as of: <strong>{{ latest_date }}</strong></p>
-      <h2 class="text-lg font-semibold text-gray-700 mb-2">{{ metric_name }} and Price Time Series</h2>
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">{{ metric_name }} and Price Time Series</h3>
       <div id="primary-chart-container" class="h-80 relative bg-white rounded shadow-inner flex items-center justify-center">
         <canvas id="primarySecurityChart" class="w-full h-full"></canvas>
       </div>

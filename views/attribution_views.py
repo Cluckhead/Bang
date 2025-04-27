@@ -730,23 +730,41 @@ def attribution_security_page() -> Response:
         l1_sum = sum([row.get(f'{l1_prefix}{f}', 0) for f in l1_factors])
         return row.get(l0, 0) - l1_sum
     # Normalization
-    def norm(row, col, weight_col):
-        w = row.get(weight_col, 0)
-        v = row.get(col, 0)
-        if normalize and w:
-            return v / w
-        return v
+    def norm(row, value_or_col_name, weight_col):
+        w_val = row.get(weight_col) # Get the raw weight value
+
+        # Determine the value 'v' to normalize
+        if isinstance(value_or_col_name, str): # If it's a column name
+            v = row.get(value_or_col_name, 0)
+        else: # Assume it's the direct value
+            v = value_or_col_name if value_or_col_name is not None else 0
+
+        # Check normalize flag from outer scope
+        if current_app.config.get('ATTRIBUTION_NORMALIZE', False) and w_val is not None:
+            try:
+                # Attempt to convert weight to float
+                w = float(w_val)
+                # Perform division only if weight is non-zero
+                if w != 0:
+                    return v / w
+            except (ValueError, TypeError):
+                # Handle cases where weight is not a valid number
+                pass # Keep original value v if weight is invalid
+
+        return v # Return original or calculated value
     # Prepare table rows
     table_rows = []
     for _, row in df.iterrows():
         returns = norm(row, l0_col, weight_col)
         orig_resid = calc_residual(row, l0_col, l1_prefix)
         sp_resid = calc_residual(row, l0_col, l1_sp_prefix)
-        orig_resid = norm(row, None, weight_col) if normalize and weight_col else orig_resid
-        sp_resid = norm(row, None, weight_col) if normalize and weight_col else sp_resid
-        resid_diff = orig_resid - sp_resid
+        # Normalize the actual residual values if requested
+        normalized_orig_resid = norm(row, orig_resid, weight_col) if normalize and weight_col else orig_resid
+        normalized_sp_resid = norm(row, sp_resid, weight_col) if normalize and weight_col else sp_resid
+        resid_diff = normalized_orig_resid - normalized_sp_resid # Use normalized residuals for diff
         l1_vals = {}
         for l1_name, l2_list in l1_groups.items():
+            # Apply normalization within the sum for L1 values
             orig_sum = sum([norm(row, f'{l1_prefix}{l2}', weight_col) for l2 in l2_list])
             sp_sum = sum([norm(row, f'{l1_sp_prefix}{l2}', weight_col) for l2 in l2_list])
             l1_vals[l1_name] = (orig_sum, sp_sum)
@@ -755,8 +773,8 @@ def attribution_security_page() -> Response:
             'ISIN': row['ISIN'],
             'Type': row.get('Type', ''),
             'Returns': returns,
-            'Original Residual': orig_resid,
-            'S&P Residual': sp_resid,
+            'Original Residual': normalized_orig_resid, # Use normalized value
+            'S&P Residual': normalized_sp_resid,     # Use normalized value
             'Residual Diff': resid_diff,
             'L1 Values': l1_vals
         })

@@ -434,3 +434,43 @@ The Inspect (Contribution Analysis) feature enables root-cause analysis of chang
 **Purpose:**
 - Quickly identify which securities are driving changes in portfolio analytics over any period.
 - Integrated, user-friendly workflow for root-cause analysis.
+
+## UI/UX Pattern: Compact, Consistent, and Dynamic Filter Forms (Tailwind CSS)
+
+To ensure a modern, space-efficient, and consistent filter/search form experience across all pages, the following Tailwind CSS pattern is used for all filter forms (especially those with dropdowns, search boxes, and checkboxes):
+
+### Key Principles
+- **Consistent Height:** All `<select>` and `<input>` elements use `h-7` for visual alignment.
+- **Dynamic Width:** Controls use `w-auto` and a minimum width (`min-w-[6rem]` for selects, `min-w-[8rem]` for text inputs) so they size to their content but never become too small.
+- **Compact Sizing:** Use `text-xs`, `px-1 py-0.5`, and `rounded-sm` for a tight, modern look.
+- **Uniform Appearance:** Add `appearance-none` to `<select>` for cross-browser consistency.
+- **Automatic Wrapping:** The form uses `flex flex-wrap gap-1 items-end` so controls flow horizontally and wrap as needed, rather than being locked to a grid.
+- **Consistent Checkbox Sizing:** Checkboxes use `h-4 w-4` (or `h-3 w-3` for ultra-compact) for alignment with text.
+- **Label Styling:** Labels use `text-xs font-medium text-gray-700 mb-0.5` for clarity and compactness.
+- **Container:** Each control is wrapped in a `flex-shrink-0` div to prevent shrinking when wrapping.
+
+### Example Implementation
+```html
+<form class="flex flex-wrap gap-1 items-end">
+  <div class="flex-shrink-0">
+    <label class="block text-xs font-medium text-gray-700 mb-0.5">Fund Group</label>
+    <select class="h-7 appearance-none rounded-sm shadow-none px-1 py-0.5 text-xs border border-gray-300 min-w-[6rem] w-auto focus:outline-none focus:ring-secondary focus:border-secondary">
+      <!-- options -->
+    </select>
+  </div>
+  <div class="flex-shrink-0">
+    <label class="block text-xs font-medium text-gray-700 mb-0.5">Search</label>
+    <input class="h-7 rounded-sm shadow-none px-1 py-0.5 text-xs border border-gray-300 min-w-[8rem] w-auto focus:outline-none focus:ring-secondary focus:border-secondary">
+  </div>
+  <!-- Repeat for other controls -->
+  <div class="flex items-center space-x-2 flex-shrink-0">
+    <input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-secondary focus:ring-secondary">
+    <label class="text-xs text-gray-700 select-none">Exclude ...</label>
+  </div>
+</form>
+```
+
+### Rationale
+- This approach ensures all filter/search forms are visually compact, aligned, and responsive to available space.
+- The pattern is compatible with the `@tailwindcss/forms` plugin, which is used to reset browser defaults and provide a neutral base for form controls.
+- For consistency, always use these classes for filter/search forms in new templates or when refactoring existing ones.
