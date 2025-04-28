@@ -14,59 +14,56 @@
                 <input type="number" class="mt-1 px-2 py-1 w-20 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-secondary focus:border-secondary" id="thresholdInput" name="threshold" value="{{ current_threshold }}" min="0">
             </div>
             <button type="submit" class="self-end px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">Update View</button>
-            <div class="self-end pb-1">
-                 <small class="text-xs text-gray-500">(Default is {{ config.DEFAULT_STALENESS_THRESHOLD_DAYS }} days)</small>
-            </div>
         </form>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for item in summary_data %}
-         {% set border_color = 'border-green-500' %}
+         {% set border_color = 'border-success-500' %}
          {% if item.has_error %}
-             {% set border_color = 'border-red-500' %}
+             {% set border_color = 'border-danger-500' %}
          {% elif item.stale_count > 0 %}
-             {% set border_color = 'border-yellow-500' %}
+             {% set border_color = 'border-secondary-500' %}
          {% endif %}
 
         <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] border-t-4 {{ border_color }} flex flex-col hover:shadow-md transition-shadow">
             <div class="p-4 flex-grow flex flex-col">
-                 <h5 class="text-base font-semibold text-gray-800 mb-2">{{ item.filename }}</h5>
+                 <h5 class="text-base font-semibold text-gray-800 mb-2">{{ item.display_name }}</h5>
                 {% if item.has_error %}
-                    <p class="text-sm text-red-600 mb-3 flex-grow"><i class="fas fa-exclamation-triangle mr-1"></i>Error processing this file.</p>
+                    <p class="text-sm text-danger-600 mb-3 flex-grow"><i class="fas fa-exclamation-triangle mr-1"></i>Error processing this file.</p>
                     <a href="#" class="mt-auto inline-block px-3 py-1 bg-gray-300 text-gray-500 text-xs font-medium rounded-md cursor-not-allowed">View Details</a>
                 {% else %}
                     <div class="text-sm text-gray-700 space-y-1 mb-3 flex-grow">
                         <p>Latest Date: <strong class="font-medium">{{ item.latest_date }}</strong></p>
                         <p>Analyzed: <strong class="font-medium">{{ item.total_count }}</strong></p>
-                        <p class="font-semibold {% if item.stale_count > 0 %}text-yellow-600{% else %}text-green-600{% endif %}">
-                            Potentially Stale: <strong class="font-medium">{{ item.stale_count }}</strong>
+                        <p class="font-semibold {% if item.stale_count > 0 %}text-secondary-700{% else %}text-success-700{% endif %}">
+                            Stale: <strong class="font-medium">{{ item.stale_count }}</strong>
                         </p>
                     </div>
                     <a href="{{ item.details_url }}" class="mt-auto inline-block px-3 py-1 bg-primary text-white text-xs font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">View Details</a>
                 {% endif %}
             </div>
-            {% set footer_bg_text = 'bg-green-100 text-green-800' %}
+            {% set footer_bg_text = 'bg-success-100 text-success-800' %}
             {% if item.has_error %}
-                 {% set footer_bg_text = 'bg-red-100 text-red-800' %}
+                 {% set footer_bg_text = 'bg-danger-100 text-danger-800' %}
              {% elif item.stale_count > 0 %}
-                 {% set footer_bg_text = 'bg-yellow-100 text-yellow-800' %}
+                 {% set footer_bg_text = 'bg-secondary-100 text-secondary-800' %}
              {% endif %}
             <div class="px-4 py-2 text-center rounded-b-lg {{ footer_bg_text }}">
                 <small class="text-xs font-medium">
                     {% if item.has_error %}
                         Processing Error
                     {% elif item.stale_count > 0 %}
-                        {{ item.stale_count }} stale item(s) found (threshold: {{ current_threshold }} days)
+                        {{ item.stale_count }} stale item(s) found
                     {% else %}
-                        No stale items found (threshold: {{ current_threshold }} days)
+                        No stale items found
                     {% endif %}
                 </small>
             </div>
         </div>
         {% else %}
         <div class="col-span-1 md:col-span-2 lg:col-span-3">
-             <p class="text-blue-600 bg-blue-50 border border-blue-200 p-3 rounded-md text-sm">No relevant data files (sec_*.csv, sp_sec_*.csv) found in the data directory.</p>
+             <p class="text-secondary-600 bg-secondary-50 border border-secondary-200 p-3 rounded-md text-sm">No relevant data files (sec_*.csv, sp_sec_*.csv) found in the data directory.</p>
         </div>
         {% endfor %}
     </div>

@@ -7,12 +7,33 @@ import logging
 import urllib.parse
 from staleness_processing import get_staleness_summary, get_stale_securities_details, DEFAULT_STALENESS_THRESHOLD_DAYS
 from utils import load_exclusions
-from config import DATA_FOLDER, EXCLUSIONS_FILE, ID_COLUMN
+from config import DATA_FOLDER, EXCLUSIONS_FILE, ID_COLUMN, COMPARISON_CONFIG, MAXMIN_THRESHOLDS
 
 # Create blueprint
 staleness_bp = Blueprint('staleness_bp', __name__, template_folder='../templates')
 
 # --- Routes ---
+
+def get_display_name_for_staleness_file(filename):
+    """
+    Returns a user-friendly display name for a staleness file, using COMPARISON_CONFIG and MAXMIN_THRESHOLDS.
+    Falls back to a cleaned-up version of the filename if not found.
+    """
+    # Check COMPARISON_CONFIG (file1 and file2)
+    for comp in COMPARISON_CONFIG.values():
+        if filename == comp.get('file1'):
+            return comp['display_name']
+        if filename == comp.get('file2'):
+            # S&P overlay naming
+            return f"S&P {comp['display_name']}"
+    # Check MAXMIN_THRESHOLDS
+    if filename in MAXMIN_THRESHOLDS:
+        return MAXMIN_THRESHOLDS[filename].get('display_name', filename)
+    # Fallback: remove extension, underscores, and common prefixes
+    name = filename.replace('.csv', '')
+    name = name.replace('sec_', '').replace('sp_', '').replace('_', ' ')
+    name = name.replace('SP', 'S&P')
+    return name.title()
 
 @staleness_bp.route('/staleness/dashboard')
 def dashboard():
@@ -45,9 +66,8 @@ def dashboard():
         summary_view_data = []
         for filename, data in summary_data.items():
             data['filename'] = filename
-            # Pass the current threshold to the details URL
+            data['display_name'] = get_display_name_for_staleness_file(filename)
             data['details_url'] = url_for('.details', filename=filename, threshold=threshold) 
-            # Basic check for error state
             data['has_error'] = isinstance(data.get('stale_count'), str) 
             summary_view_data.append(data)
         

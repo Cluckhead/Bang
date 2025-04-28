@@ -17,6 +17,12 @@
 
 ### Features v2.1
 - attribution files generator
+- Debug: Attribution Charts, a little buggy
+- Check teh numbers 
+- Missing Get_data from navigation
+- navigation slide in out not working nicely
+- Improve layout of dashboard
+- add isin search to securities page
 - S&P vs Prod Summary page
 - S&P bad securities email 
 
