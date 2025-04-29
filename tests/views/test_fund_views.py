@@ -4,14 +4,15 @@ import pytest
 import pandas as pd
 import re
 import json
-from flask import url_for # Import url_for
-from unittest.mock import patch # Import patch
-from pathlib import Path # Import Path
+from flask import url_for  # Import url_for
+from unittest.mock import patch  # Import patch
+from pathlib import Path  # Import Path
 import os
 
-SAMPLE_FUND_CODE = 'FUND123'
-SAMPLE_METRIC_FILENAMES = ['ts_metric1.csv', 'ts_metric2.csv']
-SAMPLE_METRIC_NAMES = ['Metric1', 'Metric2']
+SAMPLE_FUND_CODE = "FUND123"
+SAMPLE_METRIC_FILENAMES = ["ts_metric1.csv", "ts_metric2.csv"]
+SAMPLE_METRIC_NAMES = ["Metric1", "Metric2"]
+
 
 # Add fixture to manage data folder per test using tmp_path
 @pytest.fixture(autouse=True)
@@ -19,9 +20,10 @@ def setup_data_folder(client, tmp_path, monkeypatch):
     """Set the DATA_FOLDER config to tmp_path for each test."""
     data_folder = tmp_path / "data"
     data_folder.mkdir()
-    monkeypatch.setitem(client.application.config, 'DATA_FOLDER', str(data_folder))
+    monkeypatch.setitem(client.application.config, "DATA_FOLDER", str(data_folder))
     # Patch os.path.exists (needed by the view logic)
     original_exists = os.path.exists
+
     def mock_exists(path):
         try:
             path_obj = Path(path).resolve()
@@ -35,19 +37,22 @@ def setup_data_folder(client, tmp_path, monkeypatch):
     # Patch glob.glob to search within the temp data folder
     def mock_glob(pattern):
         # We expect pattern like /tmp/pytest-of-user/pytest-xx/data/ts_*.csv
-        search_path = Path(client.application.config['DATA_FOLDER'])
+        search_path = Path(client.application.config["DATA_FOLDER"])
         # Check if the pattern seems correct relative to our temp folder
         if pattern.endswith("ts_*.csv") and str(search_path) in pattern:
-             # Perform actual glob within the temp data folder
+            # Perform actual glob within the temp data folder
             return [str(p) for p in search_path.glob("ts_*.csv")]
         else:
             # Fallback for other patterns (shouldn't happen in this view)
             import glob as original_glob
+
             return original_glob.glob(pattern)
 
-    with patch('views.fund_views.os.path.exists', side_effect=mock_exists), \
-         patch('views.fund_views.glob.glob', side_effect=mock_glob):
+    with patch("views.fund_views.os.path.exists", side_effect=mock_exists), patch(
+        "views.fund_views.glob.glob", side_effect=mock_glob
+    ):
         yield data_folder
+
 
 # Update mock fixture to use setup_data_folder
 @pytest.fixture
@@ -58,11 +63,13 @@ def mock_fund_detail_logic(mocker, setup_data_folder):
     for filename in SAMPLE_METRIC_FILENAMES:
         file_path = data_folder / filename
         # Simple CSV structure for the mock
-        df = pd.DataFrame({
-            'Date': pd.to_datetime(['2023-01-01', '2023-01-02']),
-            'Code': [SAMPLE_FUND_CODE]*2,
-            'Value': [1, 2]
-        })
+        df = pd.DataFrame(
+            {
+                "Date": pd.to_datetime(["2023-01-01", "2023-01-02"]),
+                "Code": [SAMPLE_FUND_CODE] * 2,
+                "Value": [1, 2],
+            }
+        )
         df.to_csv(file_path, index=False)
         sample_metric_paths.append(str(file_path))
 
@@ -76,26 +83,44 @@ def mock_fund_detail_logic(mocker, setup_data_folder):
         # Check if the file exists (it should, we just created it)
         assert Path(primary_filename_path).exists()
         # Return consistent mock data, assuming fund code is present
-        df = pd.DataFrame({'Value': [1, 2]},
-                          index=pd.MultiIndex.from_tuples(
-                              [(pd.Timestamp('2023-01-01'), SAMPLE_FUND_CODE), (pd.Timestamp('2023-01-02'), SAMPLE_FUND_CODE)],
-                              names=['Date', 'Code'] # Match expected index names
-                          ))
+        df = pd.DataFrame(
+            {"Value": [1, 2]},
+            index=pd.MultiIndex.from_tuples(
+                [
+                    (pd.Timestamp("2023-01-01"), SAMPLE_FUND_CODE),
+                    (pd.Timestamp("2023-01-02"), SAMPLE_FUND_CODE),
+                ],
+                names=["Date", "Code"],  # Match expected index names
+            ),
+        )
         # Return structure expected by the view: (data_df, value_columns, benchmark_column)
-        return (df, ['Value'], None)
+        return (df, ["Value"], None)
 
-    mocker.patch('views.fund_views.load_and_process_data', side_effect=fake_load_and_process_data)
+    mocker.patch(
+        "views.fund_views.load_and_process_data", side_effect=fake_load_and_process_data
+    )
+
 
 # Update test function to use url_for and client
-def test_fund_detail_page_success(client, mock_fund_detail_logic): # client from conftest
-    response = client.get(url_for('fund_bp.fund_detail', fund_code=SAMPLE_FUND_CODE)) # Use url_for and blueprint
+def test_fund_detail_page_success(
+    client, mock_fund_detail_logic
+):  # client from conftest
+    response = client.get(
+        url_for("fund_bp.fund_detail", fund_code=SAMPLE_FUND_CODE)
+    )  # Use url_for and blueprint
     assert response.status_code == 200
     assert f"Fund Details: {SAMPLE_FUND_CODE}".encode() in response.data
     # Extract chart data JSON from the script tag
-    match = re.search(rb'<script id="fundChartData" type="application/json">\s*(.*?)\s*</script>', response.data, re.DOTALL)
+    match = re.search(
+        rb'<script id="fundChartData" type="application/json">\s*(.*?)\s*</script>',
+        response.data,
+        re.DOTALL,
+    )
     assert match, "Chart data JSON script tag not found in response."
     chart_data_json = match.group(1)
     chart_data = json.loads(chart_data_json)
-    metric_names_in_chart = [c['metricName'] for c in chart_data]
+    metric_names_in_chart = [c["metricName"] for c in chart_data]
     for metric in SAMPLE_METRIC_NAMES:
-        assert metric in metric_names_in_chart, f"Metric '{metric}' not found in chart data {metric_names_in_chart}" 
+        assert (
+            metric in metric_names_in_chart
+        ), f"Metric '{metric}' not found in chart data {metric_names_in_chart}"

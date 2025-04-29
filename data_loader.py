@@ -12,13 +12,13 @@ import pandas as pd
 import os
 import logging
 from typing import List, Tuple, Optional, Dict, Any
-import re # Import regex for pattern matching
-from flask import current_app # Import current_app to access config
+import re  # Import regex for pattern matching
+from flask import current_app  # Import current_app to access config
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
 
-# --- Removed logging setup block --- 
+# --- Removed logging setup block ---
 # Logging is now handled centrally by the Flask app factory in app.py
 
 
@@ -26,15 +26,16 @@ logger = logging.getLogger(__name__)
 # Removed DATA_FOLDER constant - path is now dynamically determined
 
 # Standard internal column names after renaming
-STD_DATE_COL = 'Date'
-STD_CODE_COL = 'Code'
-STD_BENCHMARK_COL = 'Benchmark'
-STD_SCOPE_COL = 'SS Project - In Scope' # Standardized name for the scope column
+STD_DATE_COL = "Date"
+STD_CODE_COL = "Code"
+STD_BENCHMARK_COL = "Benchmark"
+STD_SCOPE_COL = "SS Project - In Scope"  # Standardized name for the scope column
 
-# --- NEW HELPER FUNCTION --- 
+
+# --- NEW HELPER FUNCTION ---
 def load_simple_csv(filepath: str, filename_for_logging: str) -> Optional[pd.DataFrame]:
     """Loads a CSV file into a DataFrame with basic error handling.
-    
+
     Args:
         filepath (str): The full path to the CSV file.
         filename_for_logging (str): The filename used for logging messages.
@@ -47,78 +48,113 @@ def load_simple_csv(filepath: str, filename_for_logging: str) -> Optional[pd.Dat
         return None
     try:
         df = pd.read_csv(
-            filepath,
-            encoding='utf-8',
-            encoding_errors='replace',
-            on_bad_lines='skip'
+            filepath, encoding="utf-8", encoding_errors="replace", on_bad_lines="skip"
         )
-        df.columns = df.columns.str.strip() # Clean column names
-        logger.info(f"Successfully loaded simple CSV: '{filename_for_logging}' ({len(df)} rows)")
+        df.columns = df.columns.str.strip()  # Clean column names
+        logger.info(
+            f"Successfully loaded simple CSV: '{filename_for_logging}' ({len(df)} rows)"
+        )
         return df
     except pd.errors.EmptyDataError:
         logger.warning(f"File is empty: {filepath}")
-        return pd.DataFrame() # Return empty DataFrame for consistency
+        return pd.DataFrame()  # Return empty DataFrame for consistency
     except Exception as e:
-        logger.error(f"Error reading simple CSV '{filename_for_logging}': {e}", exc_info=True)
+        logger.error(
+            f"Error reading simple CSV '{filename_for_logging}': {e}", exc_info=True
+        )
         return None
-# --- END NEW HELPER FUNCTION --- 
 
-def _find_column(pattern: str, columns: List[str], filename_for_logging: str, col_type: str) -> str:
+
+# --- END NEW HELPER FUNCTION ---
+
+
+def _find_column(
+    pattern: str, columns: List[str], filename_for_logging: str, col_type: str
+) -> str:
     """Helper function to find a single column matching a pattern (case-insensitive)."""
     matches = [col for col in columns if re.search(pattern, col, re.IGNORECASE)]
     if len(matches) == 1:
-        logger.info(f"Found {col_type} column in '{filename_for_logging}': '{matches[0]}'")
+        logger.info(
+            f"Found {col_type} column in '{filename_for_logging}': '{matches[0]}'"
+        )
         return matches[0]
     elif len(matches) > 1:
         # Log error before raising
-        logger.error(f"Multiple possible {col_type} columns found in '{filename_for_logging}' matching pattern '{pattern}': {matches}. Please ensure unique column names.")
-        raise ValueError(f"Multiple possible {col_type} columns found in '{filename_for_logging}' matching pattern '{pattern}': {matches}. Please ensure unique column names.")
+        logger.error(
+            f"Multiple possible {col_type} columns found in '{filename_for_logging}' matching pattern '{pattern}': {matches}. Please ensure unique column names."
+        )
+        raise ValueError(
+            f"Multiple possible {col_type} columns found in '{filename_for_logging}' matching pattern '{pattern}': {matches}. Please ensure unique column names."
+        )
     else:
-         # Log error before raising
-        logger.error(f"No {col_type} column found in '{filename_for_logging}' matching pattern '{pattern}'. Found columns: {columns}")
-        raise ValueError(f"No {col_type} column found in '{filename_for_logging}' matching pattern '{pattern}'. Found columns: {columns}")
+        # Log error before raising
+        logger.error(
+            f"No {col_type} column found in '{filename_for_logging}' matching pattern '{pattern}'. Found columns: {columns}"
+        )
+        raise ValueError(
+            f"No {col_type} column found in '{filename_for_logging}' matching pattern '{pattern}'. Found columns: {columns}"
+        )
 
-def _create_empty_dataframe(original_fund_val_col_names: List[str], benchmark_col_present: bool) -> pd.DataFrame:
+
+def _create_empty_dataframe(
+    original_fund_val_col_names: List[str], benchmark_col_present: bool
+) -> pd.DataFrame:
     """Creates an empty DataFrame with the expected structure."""
     final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present else None
     expected_cols = [STD_DATE_COL, STD_CODE_COL] + original_fund_val_col_names
     if final_benchmark_col_name:
         expected_cols.append(final_benchmark_col_name)
     # Create an empty df with the right index and columns
-    empty_index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=[STD_DATE_COL, STD_CODE_COL])
-    value_cols = [col for col in expected_cols if col not in [STD_DATE_COL, STD_CODE_COL]]
+    empty_index = pd.MultiIndex(
+        levels=[[], []], codes=[[], []], names=[STD_DATE_COL, STD_CODE_COL]
+    )
+    value_cols = [
+        col for col in expected_cols if col not in [STD_DATE_COL, STD_CODE_COL]
+    ]
     return pd.DataFrame(index=empty_index, columns=value_cols)
 
+
 def _find_columns_for_file(
-    original_cols: List[str],
-    filename_for_logging: str
+    original_cols: List[str], filename_for_logging: str
 ) -> Tuple[str, str, bool, Optional[str], List[str], Optional[str]]:
     """
     Identifies the actual date, code, (optionally) benchmark columns, fund value columns, and scope column.
     Returns:
         actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names, actual_scope_col
     """
-    date_pattern = r'\b(Position\s*)?Date\b'
-    actual_date_col = _find_column(date_pattern, original_cols, filename_for_logging, 'Date')
-    code_pattern = r'\b(Fund\s*)?Code\b'
-    actual_code_col = _find_column(code_pattern, original_cols, filename_for_logging, 'Code')
+    date_pattern = r"\b(Position\s*)?Date\b"
+    actual_date_col = _find_column(
+        date_pattern, original_cols, filename_for_logging, "Date"
+    )
+    code_pattern = r"\b(Fund\s*)?Code\b"
+    actual_code_col = _find_column(
+        code_pattern, original_cols, filename_for_logging, "Code"
+    )
 
     benchmark_col_present = False
     actual_benchmark_col = None
     try:
-        benchmark_pattern = r'\b(Benchmark|Bench)\b'
-        actual_benchmark_col = _find_column(benchmark_pattern, original_cols, filename_for_logging, 'Benchmark')
+        benchmark_pattern = r"\b(Benchmark|Bench)\b"
+        actual_benchmark_col = _find_column(
+            benchmark_pattern, original_cols, filename_for_logging, "Benchmark"
+        )
         benchmark_col_present = True
     except ValueError:
-        logger.info(f"No Benchmark column found in '{filename_for_logging}' matching pattern. Proceeding without benchmark.")
+        logger.info(
+            f"No Benchmark column found in '{filename_for_logging}' matching pattern. Proceeding without benchmark."
+        )
 
     actual_scope_col = None
     try:
         # Pattern to match 'SS Project - In Scope' allowing for slight variations or extra spaces
-        scope_pattern = r'\bSS\s+Project\s*-\s*In\s+Scope\b'
-        actual_scope_col = _find_column(scope_pattern, original_cols, filename_for_logging, 'Scope')
+        scope_pattern = r"\bSS\s+Project\s*-\s*In\s+Scope\b"
+        actual_scope_col = _find_column(
+            scope_pattern, original_cols, filename_for_logging, "Scope"
+        )
     except ValueError:
-        logger.info(f"No '{STD_SCOPE_COL}' column found in '{filename_for_logging}' matching pattern. Proceeding without scope filtering for this file.")
+        logger.info(
+            f"No '{STD_SCOPE_COL}' column found in '{filename_for_logging}' matching pattern. Proceeding without scope filtering for this file."
+        )
 
     # Exclude date, code, benchmark, and scope columns when identifying value columns
     excluded_cols_for_funds = {actual_date_col, actual_code_col}
@@ -127,41 +163,60 @@ def _find_columns_for_file(
     if actual_scope_col:
         excluded_cols_for_funds.add(actual_scope_col)
 
-    original_fund_val_col_names = [col for col in original_cols if col not in excluded_cols_for_funds]
+    original_fund_val_col_names = [
+        col for col in original_cols if col not in excluded_cols_for_funds
+    ]
 
     if not original_fund_val_col_names and not benchmark_col_present:
-         logger.warning(f"No fund value columns identified in '{filename_for_logging}' after excluding standard columns.") # Warning, not error, might still have benchmark
+        logger.warning(
+            f"No fund value columns identified in '{filename_for_logging}' after excluding standard columns."
+        )  # Warning, not error, might still have benchmark
 
-    return actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names, actual_scope_col
+    return (
+        actual_date_col,
+        actual_code_col,
+        benchmark_col_present,
+        actual_benchmark_col,
+        original_fund_val_col_names,
+        actual_scope_col,
+    )
+
 
 def _parse_date_column(
-    df: pd.DataFrame,
-    date_col: str,
-    filename_for_logging: str
+    df: pd.DataFrame, date_col: str, filename_for_logging: str
 ) -> pd.Series:
     """
     Parses the date column robustly, trying default, then dayfirst=True if needed.
     Returns the parsed date series.
     """
     date_series = df[date_col]
-    parsed_dates = pd.to_datetime(date_series, errors='coerce', dayfirst=None, yearfirst=None)
+    parsed_dates = pd.to_datetime(
+        date_series, errors="coerce", dayfirst=None, yearfirst=None
+    )
     if parsed_dates.isnull().all() and len(date_series) > 0:
-        logger.warning(f"Initial date parsing failed for {filename_for_logging}. Trying with dayfirst=True.")
-        parsed_dates = pd.to_datetime(date_series, errors='coerce', dayfirst=True)
+        logger.warning(
+            f"Initial date parsing failed for {filename_for_logging}. Trying with dayfirst=True."
+        )
+        parsed_dates = pd.to_datetime(date_series, errors="coerce", dayfirst=True)
         if parsed_dates.isnull().all() and len(date_series) > 0:
-            logger.error(f"Could not parse any dates in column '{date_col}' in file {filename_for_logging} even with dayfirst=True.")
+            logger.error(
+                f"Could not parse any dates in column '{date_col}' in file {filename_for_logging} even with dayfirst=True."
+            )
     nat_count = parsed_dates.isnull().sum()
     total_count = len(parsed_dates)
     success_count = total_count - nat_count
-    logger.info(f"Parsed {success_count}/{total_count} dates in {filename_for_logging}. ({nat_count} resulted in NaT).")
+    logger.info(
+        f"Parsed {success_count}/{total_count} dates in {filename_for_logging}. ({nat_count} resulted in NaT)."
+    )
     if nat_count > 0:
-        logger.warning(f"{nat_count} date values in '{date_col}' from {filename_for_logging} became NaT.")
+        logger.warning(
+            f"{nat_count} date values in '{date_col}' from {filename_for_logging} became NaT."
+        )
     return parsed_dates
 
+
 def _convert_value_columns(
-    df: pd.DataFrame,
-    value_cols: List[str],
-    benchmark_col_present: bool
+    df: pd.DataFrame, value_cols: List[str], benchmark_col_present: bool
 ) -> List[str]:
     """
     Converts value columns (fund and benchmark) to numeric, returns the list of columns converted.
@@ -169,20 +224,29 @@ def _convert_value_columns(
     value_cols_to_convert = value_cols[:]
     if benchmark_col_present:
         value_cols_to_convert.append(STD_BENCHMARK_COL)
-    valid_cols_for_conversion = [col for col in value_cols_to_convert if col in df.columns]
+    valid_cols_for_conversion = [
+        col for col in value_cols_to_convert if col in df.columns
+    ]
     if not valid_cols_for_conversion:
-        logger.error(f"No valid fund or benchmark value columns found to convert after processing.")
+        logger.error(
+            f"No valid fund or benchmark value columns found to convert after processing."
+        )
         return []
-    df[valid_cols_for_conversion] = df[valid_cols_for_conversion].apply(pd.to_numeric, errors='coerce')
+    df[valid_cols_for_conversion] = df[valid_cols_for_conversion].apply(
+        pd.to_numeric, errors="coerce"
+    )
     nan_check_cols = [col for col in valid_cols_for_conversion if col in df.columns]
     if nan_check_cols and df[nan_check_cols].isnull().all().all():
-        logger.warning(f"All values in value columns {nan_check_cols} became NaN after conversion. Check data types.")
+        logger.warning(
+            f"All values in value columns {nan_check_cols} became NaN after conversion. Check data types."
+        )
     return valid_cols_for_conversion
+
 
 def _process_single_file(
     filepath: str,
     filename_for_logging: str,
-    filter_sp_valid: bool = False # Add parameter with default False
+    filter_sp_valid: bool = False,  # Add parameter with default False
 ) -> Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
     """
     Internal helper to load and process a single CSV file.
@@ -199,13 +263,26 @@ def _process_single_file(
         logger.warning(f"File not found, skipping: {filepath}")
         return None
     try:
-        header_df = pd.read_csv(filepath, nrows=0, encoding='utf-8', encoding_errors='replace', on_bad_lines='skip')
-        original_cols = [col.strip() for col in header_df.columns.tolist()]
-        logger.info(f"Processing file: '{filename_for_logging}'. Original columns: {original_cols}")
-
-        actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names, actual_scope_col = _find_columns_for_file(
-            original_cols, filename_for_logging
+        header_df = pd.read_csv(
+            filepath,
+            nrows=0,
+            encoding="utf-8",
+            encoding_errors="replace",
+            on_bad_lines="skip",
         )
+        original_cols = [col.strip() for col in header_df.columns.tolist()]
+        logger.info(
+            f"Processing file: '{filename_for_logging}'. Original columns: {original_cols}"
+        )
+
+        (
+            actual_date_col,
+            actual_code_col,
+            benchmark_col_present,
+            actual_benchmark_col,
+            original_fund_val_col_names,
+            actual_scope_col,
+        ) = _find_columns_for_file(original_cols, filename_for_logging)
 
         # Determine columns to read, potentially including the scope column
         cols_to_read = {actual_date_col, actual_code_col}
@@ -218,17 +295,17 @@ def _process_single_file(
         # Define dtypes, read scope col as string initially
         dtype_map = {actual_date_col: str}
         if actual_scope_col:
-            dtype_map[actual_scope_col] = str # Read scope as string
+            dtype_map[actual_scope_col] = str  # Read scope as string
 
         try:
             # Read only necessary columns
             df = pd.read_csv(
                 filepath,
                 usecols=list(cols_to_read),
-                encoding='utf-8',
-                encoding_errors='replace',
-                on_bad_lines='skip',
-                dtype=dtype_map
+                encoding="utf-8",
+                encoding_errors="replace",
+                on_bad_lines="skip",
+                dtype=dtype_map,
             )
         except Exception as e:
             logger.error(f"Error reading file '{filename_for_logging}': {e}")
@@ -238,7 +315,7 @@ def _process_single_file(
         if not filter_sp_valid:
             before = len(df)
             group_cols = [actual_date_col, actual_code_col]
-            numeric_cols = df.select_dtypes(include='number').columns.tolist()
+            numeric_cols = df.select_dtypes(include="number").columns.tolist()
             # If numeric columns are empty (e.g., all are object due to initial read), try to coerce fund/benchmark columns
             if not numeric_cols:
                 possible_value_cols = list(original_fund_val_col_names)
@@ -246,42 +323,53 @@ def _process_single_file(
                     possible_value_cols.append(actual_benchmark_col)
                 for col in possible_value_cols:
                     if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
-                numeric_cols = df.select_dtypes(include='number').columns.tolist()
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+                numeric_cols = df.select_dtypes(include="number").columns.tolist()
             # Group and aggregate
-            agg_dict = {col: 'mean' for col in numeric_cols}
+            agg_dict = {col: "mean" for col in numeric_cols}
             # For non-numeric columns, keep the first
             for col in df.columns:
                 if col not in group_cols and col not in numeric_cols:
-                    agg_dict[col] = 'first'
+                    agg_dict[col] = "first"
             df = df.groupby(group_cols, as_index=False).agg(agg_dict)
             after = len(df)
             if before != after:
-                logger.info(f"Aggregated {before} rows to {after} unique (Date, Code) pairs in '{filename_for_logging}' when S&P Valid filter is OFF.")
+                logger.info(
+                    f"Aggregated {before} rows to {after} unique (Date, Code) pairs in '{filename_for_logging}' when S&P Valid filter is OFF."
+                )
 
-        df.columns = df.columns.str.strip() # Strip whitespace from loaded columns
+        df.columns = df.columns.str.strip()  # Strip whitespace from loaded columns
 
         # --- Filtering Step ---
         if filter_sp_valid and actual_scope_col and actual_scope_col in df.columns:
             original_count = len(df)
             # Ensure case-insensitive comparison and handle potential NAs
-            df[actual_scope_col] = df[actual_scope_col].astype(str).str.upper().fillna('FALSE')
-            df = df[df[actual_scope_col] == 'TRUE']
+            df[actual_scope_col] = (
+                df[actual_scope_col].astype(str).str.upper().fillna("FALSE")
+            )
+            df = df[df[actual_scope_col] == "TRUE"]
             filtered_count = len(df)
-            logger.info(f"Filtered '{filename_for_logging}' based on '{actual_scope_col}'. Kept {filtered_count}/{original_count} rows where value is 'TRUE'.")
+            logger.info(
+                f"Filtered '{filename_for_logging}' based on '{actual_scope_col}'. Kept {filtered_count}/{original_count} rows where value is 'TRUE'."
+            )
             if df.empty:
-                 logger.warning(f"DataFrame became empty after filtering on '{actual_scope_col}' for {filename_for_logging}")
-                 # Return an empty structure consistent with success but no data
-                 empty_df = _create_empty_dataframe(original_fund_val_col_names, benchmark_col_present)
-                 final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
-                 return empty_df, original_fund_val_col_names, final_bm_col
+                logger.warning(
+                    f"DataFrame became empty after filtering on '{actual_scope_col}' for {filename_for_logging}"
+                )
+                # Return an empty structure consistent with success but no data
+                empty_df = _create_empty_dataframe(
+                    original_fund_val_col_names, benchmark_col_present
+                )
+                final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
+                return empty_df, original_fund_val_col_names, final_bm_col
 
         # Rename columns *after* potential filtering
-        rename_map = {
-            actual_date_col: STD_DATE_COL,
-            actual_code_col: STD_CODE_COL
-        }
-        if benchmark_col_present and actual_benchmark_col and actual_benchmark_col in df.columns:
+        rename_map = {actual_date_col: STD_DATE_COL, actual_code_col: STD_CODE_COL}
+        if (
+            benchmark_col_present
+            and actual_benchmark_col
+            and actual_benchmark_col in df.columns
+        ):
             rename_map[actual_benchmark_col] = STD_BENCHMARK_COL
         # Do NOT rename the scope column here if it existed, we only needed it for filtering
 
@@ -289,25 +377,33 @@ def _process_single_file(
         df.rename(columns=rename_map, inplace=True)
         logger.info(f"Renamed standard columns in '{filename_for_logging}'.")
 
-
         # Now that filtering is done, drop the original scope column if it exists and we don't need it further
         if actual_scope_col and actual_scope_col in df.columns:
             df.drop(columns=[actual_scope_col], inplace=True)
-            logger.debug(f"Dropped original scope column '{actual_scope_col}' after filtering.")
-
+            logger.debug(
+                f"Dropped original scope column '{actual_scope_col}' after filtering."
+            )
 
         # Continue processing (date parsing, indexing, type conversion)
         df[STD_DATE_COL] = _parse_date_column(df, STD_DATE_COL, filename_for_logging)
 
         original_row_count = len(df)
-        df.dropna(subset=[STD_DATE_COL], inplace=True) # Drop rows where date parsing failed
+        df.dropna(
+            subset=[STD_DATE_COL], inplace=True
+        )  # Drop rows where date parsing failed
         rows_dropped = original_row_count - len(df)
         if rows_dropped > 0:
-            logger.warning(f"Dropped {rows_dropped} rows from {filename_for_logging} due to failed date parsing (after potential filtering).")
+            logger.warning(
+                f"Dropped {rows_dropped} rows from {filename_for_logging} due to failed date parsing (after potential filtering)."
+            )
 
         if df.empty:
-            logger.warning(f"DataFrame became empty after dropping rows with unparseable dates in {filename_for_logging} (after potential filtering).")
-            empty_df = _create_empty_dataframe(original_fund_val_col_names, benchmark_col_present)
+            logger.warning(
+                f"DataFrame became empty after dropping rows with unparseable dates in {filename_for_logging} (after potential filtering)."
+            )
+            empty_df = _create_empty_dataframe(
+                original_fund_val_col_names, benchmark_col_present
+            )
             final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
             return empty_df, original_fund_val_col_names, final_bm_col
 
@@ -316,9 +412,15 @@ def _process_single_file(
         # Convert value columns *after* setting the index
         _convert_value_columns(df, original_fund_val_col_names, benchmark_col_present)
 
-        final_benchmark_col_name = STD_BENCHMARK_COL if benchmark_col_present and STD_BENCHMARK_COL in df.columns else None
+        final_benchmark_col_name = (
+            STD_BENCHMARK_COL
+            if benchmark_col_present and STD_BENCHMARK_COL in df.columns
+            else None
+        )
 
-        logger.info(f"Successfully processed file: '{filename_for_logging}'. Index: {df.index.names}. Columns: {df.columns.tolist()}")
+        logger.info(
+            f"Successfully processed file: '{filename_for_logging}'. Index: {df.index.names}. Columns: {df.columns.tolist()}"
+        )
         return df, original_fund_val_col_names, final_benchmark_col_name
 
     except FileNotFoundError:
@@ -336,28 +438,32 @@ def _process_single_file(
     except OSError as e:
         logger.error(f"OS error when accessing {filepath}: {e}", exc_info=True)
         return None
-    except ValueError as e: # Catch ValueErrors from _find_columns or other steps
-        logger.error(f"Value error processing {filename_for_logging}: {e}") # Removed exc_info=True as it might be verbose for config errors
+    except ValueError as e:  # Catch ValueErrors from _find_columns or other steps
+        logger.error(
+            f"Value error processing {filename_for_logging}: {e}"
+        )  # Removed exc_info=True as it might be verbose for config errors
         return None
     except Exception as e:
         logger.exception(f"Unexpected error processing {filename_for_logging}: {e}")
         return None
 
+
 # Simplified return type: focus on the dataframes and metadata needed downstream
 LoadResult = Tuple[
-    Optional[pd.DataFrame],      # Primary DataFrame
-    Optional[List[str]],         # Primary original value columns
-    Optional[str],               # Primary benchmark column name (standardized)
-    Optional[pd.DataFrame],      # Secondary DataFrame
-    Optional[List[str]],         # Secondary original value columns
-    Optional[str]                # Secondary benchmark column name (standardized)
+    Optional[pd.DataFrame],  # Primary DataFrame
+    Optional[List[str]],  # Primary original value columns
+    Optional[str],  # Primary benchmark column name (standardized)
+    Optional[pd.DataFrame],  # Secondary DataFrame
+    Optional[List[str]],  # Secondary original value columns
+    Optional[str],  # Secondary benchmark column name (standardized)
 ]
+
 
 def load_and_process_data(
     primary_filename: str,
     secondary_filename: Optional[str] = None,
-    data_folder_path: Optional[str] = None, # Renamed and made optional
-    filter_sp_valid: bool = False # Add parameter here
+    data_folder_path: Optional[str] = None,  # Renamed and made optional
+    filter_sp_valid: bool = False,  # Add parameter here
 ) -> LoadResult:
     """Loads and processes a primary CSV file and optionally a secondary CSV file.
 
@@ -384,37 +490,84 @@ def load_and_process_data(
     """
     if data_folder_path is None:
         try:
-            data_folder_path = current_app.config['DATA_FOLDER']
-            logger.debug(f"Retrieved DATA_FOLDER from Flask app config: {data_folder_path}")
+            data_folder_path = current_app.config["DATA_FOLDER"]
+            logger.debug(
+                f"Retrieved DATA_FOLDER from Flask app config: {data_folder_path}"
+            )
         except RuntimeError:
-            logger.error("Attempted to load data outside of Flask application context and no data_folder_path provided.")
-            return None, None, None, None, None, None # Return tuple of Nones matching LoadResult
+            logger.error(
+                "Attempted to load data outside of Flask application context and no data_folder_path provided."
+            )
+            return (
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )  # Return tuple of Nones matching LoadResult
 
     primary_filepath = os.path.join(data_folder_path, primary_filename)
-    logger.info(f"Attempting to load primary file: {primary_filepath}, filter_sp_valid={filter_sp_valid}")
-    primary_result = _process_single_file(primary_filepath, primary_filename, filter_sp_valid) # Pass filter flag
+    logger.info(
+        f"Attempting to load primary file: {primary_filepath}, filter_sp_valid={filter_sp_valid}"
+    )
+    primary_result = _process_single_file(
+        primary_filepath, primary_filename, filter_sp_valid
+    )  # Pass filter flag
 
-    df_primary, primary_val_cols, primary_bm_col = (None, None, None) if primary_result is None else primary_result
+    df_primary, primary_val_cols, primary_bm_col = (
+        (None, None, None) if primary_result is None else primary_result
+    )
 
     df_secondary, secondary_val_cols, secondary_bm_col = None, None, None
     if secondary_filename:
         secondary_filepath = os.path.join(data_folder_path, secondary_filename)
-        logger.info(f"Attempting to load secondary file: {secondary_filepath}, filter_sp_valid={filter_sp_valid}")
-        secondary_result = _process_single_file(secondary_filepath, secondary_filename, filter_sp_valid) # Pass filter flag
+        logger.info(
+            f"Attempting to load secondary file: {secondary_filepath}, filter_sp_valid={filter_sp_valid}"
+        )
+        secondary_result = _process_single_file(
+            secondary_filepath, secondary_filename, filter_sp_valid
+        )  # Pass filter flag
         if secondary_result is not None:
             df_secondary, secondary_val_cols, secondary_bm_col = secondary_result
 
     # Log summary of what was loaded (or not loaded)
-    primary_status = "loaded successfully" if df_primary is not None and not df_primary.empty else ("empty or processing failed" if df_primary is None else "loaded but empty (possibly due to filtering)")
+    primary_status = (
+        "loaded successfully"
+        if df_primary is not None and not df_primary.empty
+        else (
+            "empty or processing failed"
+            if df_primary is None
+            else "loaded but empty (possibly due to filtering)"
+        )
+    )
     secondary_status = "not requested"
     if secondary_filename:
-         secondary_status = "loaded successfully" if df_secondary is not None and not df_secondary.empty else ("empty or processing failed" if df_secondary is None else "loaded but empty (possibly due to filtering)")
+        secondary_status = (
+            "loaded successfully"
+            if df_secondary is not None and not df_secondary.empty
+            else (
+                "empty or processing failed"
+                if df_secondary is None
+                else "loaded but empty (possibly due to filtering)"
+            )
+        )
 
-    logger.info(f"Load complete. Primary file ({primary_filename}): {primary_status}. Secondary file ({secondary_filename or 'N/A'}): {secondary_status}.")
+    logger.info(
+        f"Load complete. Primary file ({primary_filename}): {primary_status}. Secondary file ({secondary_filename or 'N/A'}): {secondary_status}."
+    )
 
-    return df_primary, primary_val_cols, primary_bm_col, df_secondary, secondary_val_cols, secondary_bm_col
+    return (
+        df_primary,
+        primary_val_cols,
+        primary_bm_col,
+        df_secondary,
+        secondary_val_cols,
+        secondary_bm_col,
+    )
 
-# --- Standalone Execution / Testing --- 
+
+# --- Standalone Execution / Testing ---
 # Note: If run directly, this block cannot use current_app.config.
 # It needs to determine the data folder path independently, potentially using get_data_folder_path from utils.
 
@@ -457,4 +610,4 @@ def load_and_process_data(
 #     except ImportError:
 #         print("Error: Could not import utils.get_data_folder_path. Ensure utils.py and config.py exist and are accessible.")
 #     except Exception as e:
-#         print(f"An error occurred during standalone execution: {e}") 
+#         print(f"An error occurred during standalone execution: {e}")

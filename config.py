@@ -15,20 +15,32 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # Data folder configuration
 # Use environment variable if set, otherwise default to 'Data' subdirectory
-DATA_FOLDER_NAME = os.environ.get('DATA_CHECKER_DATA_FOLDER', 'Data')
-DATA_FOLDER = os.path.join(BASE_DIR, DATA_FOLDER_NAME) # Absolute path
+DATA_FOLDER_NAME = os.environ.get("DATA_CHECKER_DATA_FOLDER", "Data")
+DATA_FOLDER = os.path.join(BASE_DIR, DATA_FOLDER_NAME)  # Absolute path
 
 # Define the standard column name used for security identifiers (e.g., ISIN)
-ID_COLUMN = 'ISIN'
+ID_COLUMN = "ISIN"
 
 # Define the filename for the exclusions list
-EXCLUSIONS_FILE = 'exclusions.csv'
+EXCLUSIONS_FILE = "exclusions.csv"
 
 # Define a list of distinct colors for chart lines
 # Add more colors if you expect more fund columns
 COLOR_PALETTE = [
-    'blue', 'red', 'green', 'purple', '#FF7F50', '#6495ED', '#DC143C', '#00FFFF',
-    '#FFA500', '#8A2BE2', '#228B22', '#FF1493', '#A52A2A', '#20B2AA'
+    "blue",
+    "red",
+    "green",
+    "purple",
+    "#FF7F50",
+    "#6495ED",
+    "#DC143C",
+    "#00FFFF",
+    "#FFA500",
+    "#8A2BE2",
+    "#228B22",
+    "#FF1493",
+    "#A52A2A",
+    "#20B2AA",
 ]
 
 # Bloomberg YAS URL syntax (format string, use {ticker} for the BBG Ticker Yellow)
@@ -42,36 +54,36 @@ BLOOMBERG_YAS_URL_FORMAT = "http://Bloomberg:{ticker} YAS"
 #   - file1: The filename for the 'original' dataset.
 #   - file2: The filename for the 'new' or 'comparison' dataset.
 COMPARISON_CONFIG = {
-    'spread': {
-        'display_name': 'Spread',
-        'file1': 'sec_spread.csv',
-        'file2': 'sec_spreadSP.csv',
-        'value_label': 'Spread' # Label for the 'Value' column in charts/stats
+    "spread": {
+        "display_name": "Spread",
+        "file1": "sec_spread.csv",
+        "file2": "sec_spreadSP.csv",
+        "value_label": "Spread",  # Label for the 'Value' column in charts/stats
     },
-    'duration': {
-        'display_name': 'Duration',
-        'file1': 'sec_duration.csv',
-        'file2': 'sec_durationSP.csv',
-        'value_label': 'Duration'
+    "duration": {
+        "display_name": "Duration",
+        "file1": "sec_duration.csv",
+        "file2": "sec_durationSP.csv",
+        "value_label": "Duration",
     },
-    'spread_duration': {
-        'display_name': 'Spread Duration',
-        'file1': 'sec_Spread duration.csv', # Note the space in filename
-        'file2': 'sec_Spread durationSP.csv', # Note the space in filename
-        'value_label': 'Spread Duration'
+    "spread_duration": {
+        "display_name": "Spread Duration",
+        "file1": "sec_Spread duration.csv",  # Note the space in filename
+        "file2": "sec_Spread durationSP.csv",  # Note the space in filename
+        "value_label": "Spread Duration",
     },
-    'ytm': {
-        'display_name': 'YTM',
-        'file1': 'sec_YTM.csv',
-        'file2': 'sec_YTMSP.csv',
-        'value_label': 'YTM'
+    "ytm": {
+        "display_name": "YTM",
+        "file1": "sec_YTM.csv",
+        "file2": "sec_YTMSP.csv",
+        "value_label": "YTM",
     },
-    'ytw': {
-        'display_name': 'YTW',
-        'file1': 'sec_YTW.csv',
-        'file2': 'sec_YTWSP.csv',
-        'value_label': 'YTW'
-    }
+    "ytw": {
+        "display_name": "YTW",
+        "file1": "sec_YTW.csv",
+        "file2": "sec_YTWSP.csv",
+        "value_label": "YTW",
+    },
     # Add new comparison types here in the future
     # 'yield': {
     #     'display_name': 'Yield',
@@ -90,87 +102,85 @@ COMPARISON_CONFIG = {
 #   - 'display_name': A user-friendly name for the dashboard card.
 #   - 'group': The name of the dashboard group this file belongs to (e.g., 'Yields', 'Spreads').
 MAXMIN_THRESHOLDS = {
-    'sec_Spread.csv': {
-        'min': -50,  # Example: Minimum spread allowed
-        'max': 1000, # Example: Maximum spread allowed
-        'display_name': 'Spread',
-        'group': 'Spreads'
+    "sec_Spread.csv": {
+        "min": -50,  # Example: Minimum spread allowed
+        "max": 1000,  # Example: Maximum spread allowed
+        "display_name": "Spread",
+        "group": "Spreads",
     },
-    'sec_SpreadSP.csv': {
-        'min': -50,
-        'max': 1000,
-        'display_name': 'Spread (S&P)',
-        'group': 'Spreads'
+    "sec_SpreadSP.csv": {
+        "min": -50,
+        "max": 1000,
+        "display_name": "Spread (S&P)",
+        "group": "Spreads",
     },
-    'sec_YTM.csv': {
-        'min': 0,    # 0%
-        'max': 100,  # 100%
-        'display_name': 'YTM',
-        'group': 'Yields'
+    "sec_YTM.csv": {
+        "min": 0,  # 0%
+        "max": 100,  # 100%
+        "display_name": "YTM",
+        "group": "Yields",
     },
-    'sec_YTMSP.csv': {
-        'min': 0,    # 0%
-        'max': 100,  # 100%
-        'display_name': 'YTM (S&P)',
-        'group': 'Yields'
+    "sec_YTMSP.csv": {
+        "min": 0,  # 0%
+        "max": 100,  # 100%
+        "display_name": "YTM (S&P)",
+        "group": "Yields",
     },
-    'sec_YTW.csv': {
-        'min': 0,    # 0%
-        'max': 100,  # 100%
-        'display_name': 'YTW',
-        'group': 'Yields'
+    "sec_YTW.csv": {
+        "min": 0,  # 0%
+        "max": 100,  # 100%
+        "display_name": "YTW",
+        "group": "Yields",
     },
-    'sec_YTWSP.csv': {
-        'min': 0,    # 0%
-        'max': 100,  # 100%
-        'display_name': 'YTW (S&P)',
-        'group': 'Yields'
-    }
+    "sec_YTWSP.csv": {
+        "min": 0,  # 0%
+        "max": 100,  # 100%
+        "display_name": "YTW (S&P)",
+        "group": "Yields",
+    },
     # Add other files to check here, e.g.:
     # 'sec_Price.csv': {'min': 0.01, 'max': 200, 'display_name': 'Price', 'group': 'Other'},
 }
 
 # Logging configuration (optional, Flask's default logging can be used)
 LOGGING_CONFIG = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'standard': {
-            'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {"format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"},
+    },
+    "handlers": {
+        "console": {
+            "level": "INFO",
+            "formatter": "standard",
+            "class": "logging.StreamHandler",
+        },
+        "file": {
+            "level": "DEBUG",
+            "formatter": "standard",
+            "class": "logging.FileHandler",
+            "filename": os.path.join(BASE_DIR, "instance", "app.log"),  # Log file path
+            "mode": "a",  # Append mode
         },
     },
-    'handlers': {
-        'console': {
-            'level': 'INFO',
-            'formatter': 'standard',
-            'class': 'logging.StreamHandler',
+    "loggers": {
+        "": {  # root logger
+            "handlers": ["console", "file"],
+            "level": "DEBUG",  # Set root level to DEBUG to capture everything
+            "propagate": True,
         },
-        'file': {
-            'level': 'DEBUG',
-            'formatter': 'standard',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'instance', 'app.log'), # Log file path
-            'mode': 'a', # Append mode
+        "werkzeug": {  # Quieter logging for Werkzeug (Flask's development server)
+            "handlers": ["console", "file"],
+            "level": "INFO",  # Or WARNING
+            "propagate": False,
         },
+        # You can add specific loggers for your modules if needed
+        #'app': {
+        #    'handlers': ['console', 'file'],
+        #    'level': 'DEBUG',
+        #    'propagate': False
+        # },
     },
-    'loggers': {
-        '': {  # root logger
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG', # Set root level to DEBUG to capture everything
-            'propagate': True
-        },
-        'werkzeug': { # Quieter logging for Werkzeug (Flask's development server)
-             'handlers': ['console', 'file'],
-             'level': 'INFO', # Or WARNING
-             'propagate': False
-         },
-         # You can add specific loggers for your modules if needed
-         #'app': {
-         #    'handlers': ['console', 'file'],
-         #    'level': 'DEBUG',
-         #    'propagate': False
-         #},
-    }
 }
 
 # To enable more verbose debugging, set the 'level' value to 'DEBUG' in the LOGGING_CONFIG['loggers'][''] section below.
@@ -186,14 +196,24 @@ LOGGING_CONFIG = {
 # Define a list of distinct colors for chart lines
 # Add more colors if you expect more fund columns
 COLOR_PALETTE = [
-    'blue', 'red', 'green', 'purple', '#FF7F50', '#6495ED', '#DC143C', '#00FFFF',
-    '#FFA500', '#8A2BE2', '#228B22', '#FF1493', '#A52A2A', '#20B2AA'
+    "blue",
+    "red",
+    "green",
+    "purple",
+    "#FF7F50",
+    "#6495ED",
+    "#DC143C",
+    "#00FFFF",
+    "#FFA500",
+    "#8A2BE2",
+    "#228B22",
+    "#FF1493",
+    "#A52A2A",
+    "#20B2AA",
 ]
 
 # Define allowed data sources for issue tracking and related features
-DATA_SOURCES = [
-    "S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug", "Rimes"
-]
+DATA_SOURCES = ["S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug", "Rimes"]
 
 # --- Yield Curve Processing Thresholds ---
 # Threshold for detecting large non-monotonic drops in curve values (e.g., -0.5 means a drop > 0.5 is flagged)
@@ -201,4 +221,4 @@ CURVE_MONOTONICITY_DROP_THRESHOLD = -0.5
 # Multiplier for standard deviation in anomaly detection (e.g., 3 means mean + 3*std)
 CURVE_ANOMALY_STD_MULTIPLIER = 3
 # Minimum absolute threshold for anomaly detection in curve change profile
-CURVE_ANOMALY_ABS_THRESHOLD = 0.2 
+CURVE_ANOMALY_ABS_THRESHOLD = 0.2

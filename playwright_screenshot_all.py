@@ -27,15 +27,17 @@ SCREENSHOT_DIR.mkdir(exist_ok=True)
 LOG_FILE = SCREENSHOT_DIR / "Playwright.log"
 
 # Example data for dynamic routes
-EXAMPLE_METRIC = "Metric1" # Used for /metric/ - might fail if ts_Metric1.csv doesn't exist
-EXAMPLE_SECURITY_METRIC = "spread" # Use a likely valid metric for security details
+EXAMPLE_METRIC = (
+    "Metric1"  # Used for /metric/ - might fail if ts_Metric1.csv doesn't exist
+)
+EXAMPLE_SECURITY_METRIC = "spread"  # Use a likely valid metric for security details
 EXAMPLE_SECURITY_ID = "XS4363421503"
 EXAMPLE_FUND_CODE = "IG01"
 EXAMPLE_COMPARISON = "spread"
 EXAMPLE_CURRENCY = "USD"
 EXAMPLE_MAXMIN_FILE = "sec_Spread.csv"
 EXAMPLE_BREACH_TYPE = "max"
-EXAMPLE_FUND_GROUP = "IG01" # Example fund group for filtering
+EXAMPLE_FUND_GROUP = "IG01"  # Example fund group for filtering
 
 EXAMPLE_INPUTS = {
     "metric": EXAMPLE_METRIC,
@@ -49,26 +51,48 @@ EXAMPLE_INPUTS = {
     "fund_group": EXAMPLE_FUND_GROUP,
 }
 
+
 def log(msg):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {msg}\n")
     print(msg)
 
+
 # List of (name, url, [modal_actions], [ui_interactions])
 # Removed routes that returned 404 in previous runs
 PAGES = [
     ("dashboard", "/", [], []),
-    ("metric_detail", f"/metric/{EXAMPLE_METRIC}", ["inspect_modal"], ["toggle_sp_comparison"]),
+    (
+        "metric_detail",
+        f"/metric/{EXAMPLE_METRIC}",
+        ["inspect_modal"],
+        ["toggle_sp_comparison"],
+    ),
     ("securities_summary", "/security/summary", [], []),
-    ("securities_summary_filtered", f"/security/summary?fund_group={EXAMPLE_FUND_GROUP}", [], []),
+    (
+        "securities_summary_filtered",
+        f"/security/summary?fund_group={EXAMPLE_FUND_GROUP}",
+        [],
+        [],
+    ),
     # ("security_details", f"/security/details/{EXAMPLE_SECURITY_METRIC}/{EXAMPLE_SECURITY_ID}", ["raise_issue_modal", "add_exclusion_modal"], []), # Removed 404
     ("fund_overview", f"/fund/{EXAMPLE_FUND_CODE}", [], []),
     ("fund_duration_details", f"/fund/duration_details/{EXAMPLE_FUND_CODE}", [], []),
     ("exclusions", "/exclusions", [], []),
     ("comparison_summary", f"/compare/{EXAMPLE_COMPARISON}/summary", [], []),
-    ("comparison_summary_filtered", f"/compare/{EXAMPLE_COMPARISON}/summary?fund_group={EXAMPLE_FUND_GROUP}", [], []),
-    ("comparison_details", f"/compare/{EXAMPLE_COMPARISON}/details/{EXAMPLE_SECURITY_ID}", [], []),
+    (
+        "comparison_summary_filtered",
+        f"/compare/{EXAMPLE_COMPARISON}/summary?fund_group={EXAMPLE_FUND_GROUP}",
+        [],
+        [],
+    ),
+    (
+        "comparison_details",
+        f"/compare/{EXAMPLE_COMPARISON}/details/{EXAMPLE_SECURITY_ID}",
+        [],
+        [],
+    ),
     ("weights_check", "/weights/check", [], []),
     ("curve_summary", "/curve/summary", [], []),
     ("curve_details", f"/curve/details/{EXAMPLE_CURRENCY}", [], []),
@@ -80,33 +104,51 @@ PAGES = [
     ("maxmin_dashboard_all", "/maxmin/dashboard", [], []),
     ("maxmin_dashboard_yields", "/maxmin/dashboard/Yields", [], []),
     ("maxmin_dashboard_spreads", "/maxmin/dashboard/Spreads", [], []),
-    ("maxmin_details", f"/maxmin/details/{EXAMPLE_MAXMIN_FILE}/{EXAMPLE_BREACH_TYPE}", [], []),
+    (
+        "maxmin_details",
+        f"/maxmin/details/{EXAMPLE_MAXMIN_FILE}/{EXAMPLE_BREACH_TYPE}",
+        [],
+        [],
+    ),
     ("watchlist", "/watchlist", ["add_watchlist_modal", "clear_watchlist_modal"], []),
     ("get_data", "/get_data", [], []),
     ("staleness_dashboard", "/staleness/dashboard", [], []),
 ]
+
 
 # --- Modal interaction helpers ---
 def open_modal(page, modal_type):
     selector = None
     if modal_type == "inspect_modal":
         selector = "button:has-text('Inspect')"
-        log(f"    Example inputs for Inspect modal: metric={EXAMPLE_METRIC}, fund_code={EXAMPLE_FUND_CODE}, date_range=2023-01-01 to 2023-01-31, data_source=Original")
+        log(
+            f"    Example inputs for Inspect modal: metric={EXAMPLE_METRIC}, fund_code={EXAMPLE_FUND_CODE}, date_range=2023-01-01 to 2023-01-31, data_source=Original"
+        )
     elif modal_type == "raise_issue_modal":
         selector = "button.btn-warning:has-text('Raise Data Issue')"
-        log(f"    Example inputs for Raise Issue modal: security_id={EXAMPLE_SECURITY_ID}, user=TestUser, data_source=Production, date=2023-01-15, description=Test issue, jira_link=, in_scope=No")
+        log(
+            f"    Example inputs for Raise Issue modal: security_id={EXAMPLE_SECURITY_ID}, user=TestUser, data_source=Production, date=2023-01-15, description=Test issue, jira_link=, in_scope=No"
+        )
     elif modal_type == "add_exclusion_modal":
         selector = "button.btn-danger:has-text('Add Exclusion')"
-        log(f"    Example inputs for Add Exclusion modal: security_id={EXAMPLE_SECURITY_ID}, reason=Test exclusion, user=TestUser")
+        log(
+            f"    Example inputs for Add Exclusion modal: security_id={EXAMPLE_SECURITY_ID}, reason=Test exclusion, user=TestUser"
+        )
     elif modal_type == "add_watchlist_modal":
         selector = "button.btn-success:has-text('Add to Watchlist')"
-        log(f"    Example inputs for Add to Watchlist modal: security_id={EXAMPLE_SECURITY_ID}, reason=Test watchlist, user=TestUser")
+        log(
+            f"    Example inputs for Add to Watchlist modal: security_id={EXAMPLE_SECURITY_ID}, reason=Test watchlist, user=TestUser"
+        )
     elif modal_type == "clear_watchlist_modal":
         selector = "button.btn-danger:has-text('Clear')"
-        log(f"    Example inputs for Clear Watchlist modal: security_id={EXAMPLE_SECURITY_ID}, user=TestUser, reason=Test clear")
+        log(
+            f"    Example inputs for Clear Watchlist modal: security_id={EXAMPLE_SECURITY_ID}, user=TestUser, reason=Test clear"
+        )
     elif modal_type == "close_issue_modal":
         selector = "button.btn-success:has-text('Close')"
-        log(f"    Example inputs for Close Issue modal: issue_id=1, user=TestUser, resolution=Test resolution")
+        log(
+            f"    Example inputs for Close Issue modal: issue_id=1, user=TestUser, resolution=Test resolution"
+        )
     else:
         log(f"[WARN] Unknown modal type: {modal_type}")
         return
@@ -124,29 +166,34 @@ def open_modal(page, modal_type):
         time.sleep(0.5)
         page.screenshot(path=SCREENSHOT_DIR / f"modal_{modal_type}.png", full_page=True)
         log(f"    {modal_type} opened and screenshot saved.")
-        time.sleep(0.2) # Short pause before trying to close
-        close_btn = page.query_selector(".modal.show button.btn-secondary, .modal[aria-modal='true'] button.btn-secondary, .modal.show button[data-bs-dismiss='modal'], .modal[aria-modal='true'] button[data-bs-dismiss='modal']")
+        time.sleep(0.2)  # Short pause before trying to close
+        close_btn = page.query_selector(
+            ".modal.show button.btn-secondary, .modal[aria-modal='true'] button.btn-secondary, .modal.show button[data-bs-dismiss='modal'], .modal[aria-modal='true'] button[data-bs-dismiss='modal']"
+        )
         if close_btn:
             close_btn.click()
-            time.sleep(0.2) # Wait for modal to close
+            time.sleep(0.2)  # Wait for modal to close
             log(f"    {modal_type} closed.")
         else:
             log(f"    [WARN] Close button not found for modal: {modal_type}")
     except Exception as e:
         log(f"[WARN] Could not open or interact with {modal_type}: {e}")
 
+
 # --- UI Interaction Helpers ---
 def perform_ui_interaction(page, interaction_type):
     log(f"  Performing UI interaction: {interaction_type}")
     if interaction_type == "toggle_sp_comparison":
         sp_toggle_selector = "input[type='checkbox'][id*='toggleSpData'], label:has-text('S&P Comparison') input[type='checkbox']"
-        log(f"    Attempting to toggle S&P comparison using selector: {sp_toggle_selector}")
+        log(
+            f"    Attempting to toggle S&P comparison using selector: {sp_toggle_selector}"
+        )
         toggle = page.query_selector(sp_toggle_selector)
         if toggle:
             try:
                 toggle.click()
                 log(f"    Clicked S&P toggle.")
-                time.sleep(1) # Wait for UI update
+                time.sleep(1)  # Wait for UI update
                 screenshot_path = SCREENSHOT_DIR / f"metric_detail_sp_toggled.png"
                 page.screenshot(path=screenshot_path, full_page=True)
                 log(f"    Saved screenshot after toggle: {screenshot_path}")
@@ -156,6 +203,7 @@ def perform_ui_interaction(page, interaction_type):
             log(f"    [SKIP] S&P comparison toggle not found.")
     else:
         log(f"[WARN] Unknown UI interaction type: {interaction_type}")
+
 
 # --- Main script ---
 def main():
@@ -170,7 +218,7 @@ def main():
         for name, url, modals, interactions in PAGES:
             log(f"Visiting {url} ...")
             log(f"  Example inputs for this page: {EXAMPLE_INPUTS}")
-            page_had_errors = False # Flag to track page errors
+            page_had_errors = False  # Flag to track page errors
             try:
                 response = page.goto(BASE_URL + url, timeout=10000)
                 page.wait_for_load_state("networkidle", timeout=5000)
@@ -181,7 +229,9 @@ def main():
                 log(f"  HTTP Status: {status}")
                 if status == 404:
                     log("  [STATUS] Received 404 Not Found from server.")
-                    page_had_errors = True # Treat 404 as an error for skipping interactions
+                    page_had_errors = (
+                        True  # Treat 404 as an error for skipping interactions
+                    )
 
                 # Log page title (even for 404s)
                 try:
@@ -193,14 +243,16 @@ def main():
                 # Log error banners/messages if present
                 error_banners = []
                 if status != 404:
-                    error_banners = page.query_selector_all(".alert-danger, .alert-warning, .alert-info")
+                    error_banners = page.query_selector_all(
+                        ".alert-danger, .alert-warning, .alert-info"
+                    )
                     if not error_banners:
                         log("  No warning/error banners detected on page.")
                     else:
-                        page_had_errors = True # Banners indicate potential issues
+                        page_had_errors = True  # Banners indicate potential issues
                         for idx, banner in enumerate(error_banners):
                             try:
-                                text = banner.inner_text().strip().replace('\n', ' ')
+                                text = banner.inner_text().strip().replace("\n", " ")
                                 log(f"  Banner {idx+1}: {text}")
                             except Exception as e:
                                 log(f"  [WARN] Could not read banner text: {e}")
@@ -214,7 +266,9 @@ def main():
                     for interaction in interactions:
                         perform_ui_interaction(page, interaction)
                 elif interactions:
-                    log("  [SKIP] Skipping UI interactions due to detected page errors/banners or 404 status.")
+                    log(
+                        "  [SKIP] Skipping UI interactions due to detected page errors/banners or 404 status."
+                    )
 
                 # Attempt to open modals (even on pages with errors, button might still exist)
                 for modal in modals:
@@ -225,5 +279,6 @@ def main():
         browser.close()
     log("=== Playwright Screenshot Run Finished ===")
 
+
 if __name__ == "__main__":
-    main() 
+    main()

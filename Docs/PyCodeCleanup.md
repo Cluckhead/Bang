@@ -2,11 +2,11 @@
 
 ## 1.1 Dependency Management
 
-**1.1.1**  Activate your project's virtual environment.
+**1.1.1**  Activate your project's virtual environment. [Complete]
 
 **1.1.2**  Run the command `pip freeze > requirements.txt` in your terminal at the project root to generate a list of all installed Python packages and their exact versions.
 
-**1.1.3**  Create a `requirements-dev.txt` file.
+**1.1.3**  Create a `requirements-dev.txt` file. [Complete]
 
 **1.1.4**  Move testing-specific dependencies (like `pytest`, `pytest-cov`, `pytest-mock`) from `requirements.txt` to `requirements-dev.txt`.
 
@@ -14,9 +14,9 @@
 
 ## 1.2 Code Style & Linting
 
-**1.2.1**  Add `black` and `flake8` to your `requirements-dev.txt`.
+**1.2.1**  Add `black` and `flake8` to your `requirements-dev.txt`. [complete]
 
-**1.2.2**  Install the development requirements: `pip install -r requirements-dev.txt`.
+**1.2.2**  Install the development requirements: `pip install -r requirements-dev.txt`. [Complete]
 
 **1.2.3**  Create a `pyproject.toml` file in the project root (if it doesn't exist).
 
