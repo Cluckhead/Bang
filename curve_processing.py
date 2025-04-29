@@ -28,7 +28,7 @@ TERM_MULTIPLIERS = {"D": 1, "W": 7, "M": 30, "Y": 365}  # Approximate  # Approxi
 
 
 def _term_to_days(term_str: str) -> Optional[int]:
-    """Converts a term string (e.g., '7D', '1M', '2Y') to an approximate number of days."""
+    """Converts a term string (e.g., '7D', '1M', '2Y') to an approximate number of days. Returns None for zero values."""
     if not isinstance(term_str, str):
         return None  # Handle non-string inputs
     term_str = term_str.upper()
@@ -38,7 +38,10 @@ def _term_to_days(term_str: str) -> Optional[int]:
         multiplier = TERM_MULTIPLIERS.get(unit)
         if multiplier:
             try:
-                return int(num) * multiplier
+                value = int(num) * multiplier
+                if value == 0:
+                    return None
+                return value
             except ValueError:
                 logger.warning(
                     f"Could not convert number part '{num}' in term '{term_str}' to integer."
@@ -46,7 +49,10 @@ def _term_to_days(term_str: str) -> Optional[int]:
                 return None
     try:
         # Handle simple integer strings representing days (fallback)
-        return int(term_str)
+        value = int(term_str)
+        if value == 0:
+            return None
+        return value
     except ValueError:
         logger.warning(f"Could not parse term '{term_str}' to days.")
         return None  # Indicate failure to parse

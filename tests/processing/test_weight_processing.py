@@ -81,36 +81,42 @@ def test_process_weight_file_w_secs(tmp_path):
     assert out_df.shape == (2, 5)
 
 
-def test_process_weight_file_more_dates_than_columns(tmp_path):
+def test_process_weight_file_more_dates_than_columns(tmp_path, caplog):
     # More dates than data columns
     dates = pd.DataFrame({"Date": ["2024-01-01", "2024-01-02", "2024-01-03"]})
     dates_path = create_temp_csv(tmp_path, "Dates.csv", dates)
     df = pd.DataFrame({"ID": ["A"], "Col1": [1], "Col2": [2]})
     input_path = create_temp_csv(tmp_path, "w_Funds.csv", df)
     output_path = tmp_path / "out_w_Funds.csv"
-    weight_processing.process_weight_file(
-        str(input_path), str(output_path), str(dates_path)
-    )
+    with caplog.at_level("WARNING"):
+        weight_processing.process_weight_file(
+            str(input_path), str(output_path), str(dates_path)
+        )
     out_df = read_csv(output_path)
     # Only as many dates as columns should be used
     assert len(out_df.columns) == 3
     assert out_df.columns[2] == "2024-01-02"
+    # Check for warning in logs
+    assert any("More dates" in record.message for record in caplog.records)
 
 
-def test_process_weight_file_more_columns_than_dates(tmp_path):
+def test_process_weight_file_more_columns_than_dates(tmp_path, caplog):
     # More data columns than dates
     dates = pd.DataFrame({"Date": ["2024-01-01"]})
     dates_path = create_temp_csv(tmp_path, "Dates.csv", dates)
     df = pd.DataFrame({"ID": ["A"], "Col1": [1], "Col2": [2]})
     input_path = create_temp_csv(tmp_path, "w_Funds.csv", df)
     output_path = tmp_path / "out_w_Funds.csv"
-    weight_processing.process_weight_file(
-        str(input_path), str(output_path), str(dates_path)
-    )
+    with caplog.at_level("WARNING"):
+        weight_processing.process_weight_file(
+            str(input_path), str(output_path), str(dates_path)
+        )
     out_df = read_csv(output_path)
     # Only as many columns as dates should be used
     assert len(out_df.columns) == 2
     assert out_df.columns[1] == "2024-01-01"
+    # Check for warning in logs
+    assert any("Not enough dates" in record.message for record in caplog.records)
 
 
 def test_process_weight_file_empty_file(tmp_path):

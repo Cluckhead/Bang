@@ -2,21 +2,18 @@
 
 import pytest
 import os
-from app import (
-    app as flask_app,
-)  # Assuming your Flask app instance is named 'app' in 'app.py'
+from app import create_app  # Import the application factory
 
 
 @pytest.fixture(scope="module")
 def test_app():
     """Provides a Flask application context for the test session."""
-    # Configure the app for testing here if needed
-    # Example: flask_app.config.update({'TESTING': True, 'SECRET_KEY': 'test'})
+    app = create_app()  # Use the factory to create a new app instance
     # Ensure the template folder path is correct relative to the app root
-    template_dir = os.path.abspath(os.path.join(flask_app.root_path, "templates"))
-    flask_app.template_folder = template_dir
+    template_dir = os.path.abspath(os.path.join(app.root_path, "templates"))
+    app.template_folder = template_dir
     # Update other necessary testing configurations
-    flask_app.config.update(
+    app.config.update(
         {
             "TESTING": True,
             "WTF_CSRF_ENABLED": False,  # Often disabled for testing forms
@@ -25,8 +22,8 @@ def test_app():
         }
     )
 
-    with flask_app.app_context():
-        yield flask_app
+    with app.app_context():
+        yield app
 
 
 @pytest.fixture(scope="function")  # Changed scope to function for isolation

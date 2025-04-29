@@ -19,6 +19,13 @@ def test_term_to_days_basic():
     assert curve_processing._term_to_days("") is None
 
 
+def test_term_to_days_invalid_cases():
+    # Explicitly test a variety of invalid terms
+    invalid_terms = ["BAD", "", None, "foo", "123abc", "-1Y", "0M", " ", "1Q", "2024-01-01"]
+    for term in invalid_terms:
+        assert curve_processing._term_to_days(term) is None
+
+
 # --- load_curve_data ---
 def test_load_curve_data_valid(mocker, tmp_path):
     # Create a mock curves.csv file

@@ -26,7 +26,8 @@ class DummyLogger:
 
 
 # --- replace_headers_with_dates ---
-def test_replace_headers_with_dates():
+@pytest.mark.usefixtures("tmp_path")
+def test_replace_headers_with_dates(tmp_path):
     df = pd.DataFrame(
         {
             "Funds": ["A", "B"],
@@ -39,18 +40,21 @@ def test_replace_headers_with_dates():
     candidate_start_index = 2
     candidate_cols = ["Col", "Col.1"]
     date_columns = ["2024-01-01", "2024-01-02"]
-    dates_file_path = "dummy_dates.csv"
+    # Create a temporary dummy_dates.csv file
+    dates_df = pd.DataFrame({"Date": date_columns})
+    dates_file_path = tmp_path / "dummy_dates.csv"
+    dates_df.to_csv(dates_file_path, index=False)
     logger = DummyLogger()
-    input_path = "dummy_input.csv"
+    input_path = tmp_path / "dummy_input.csv"
     result = process_data.replace_headers_with_dates(
         df.copy(),
         required_cols,
         candidate_start_index,
         candidate_cols,
         date_columns,
-        dates_file_path,
+        str(dates_file_path),
         logger,
-        input_path,
+        str(input_path),
     )
     assert all(date in result.columns for date in date_columns)
 

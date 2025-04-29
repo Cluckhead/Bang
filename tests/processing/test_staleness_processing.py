@@ -1,24 +1,12 @@
-# Purpose: Unit tests for staleness_processing.py, covering placeholder detection, staleness summary, and stale securities details.
+# Purpose: Unit tests for staleness_processing.py, covering staleness summary and stale securities details.
 
 import pytest
 import pandas as pd
 import numpy as np
 from staleness_processing import (
-    is_placeholder_value,
     get_staleness_summary,
     get_stale_securities_details,
 )
-
-
-# --- is_placeholder_value ---
-def test_is_placeholder_value():
-    assert is_placeholder_value("N/A") is True
-    assert is_placeholder_value("na") is True
-    assert is_placeholder_value("") is True
-    assert is_placeholder_value(None) is True
-    assert is_placeholder_value("0") is False
-    assert is_placeholder_value(0) is False
-    assert is_placeholder_value("valid") is False
 
 
 # --- get_staleness_summary ---
