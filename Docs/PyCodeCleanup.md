@@ -249,39 +249,36 @@ ignore = E203, W503 # Example ignores (Whitespace before ':', line break before 
 
 **3.1.8** Refactor `process_data.py` and `weight_processing.py` to use `data_utils.read_csv_robustly`.
 
-**3.1.9** Define a function `parse_dates_robustly(series: pd.Series, formats: List[str] = None) -> pd.Series` in `data_utils.py`. It should try standard formats (YYYY-MM-DD, DD/MM/YYYY, ISO8601) and `pd.to_datetime` inference, log warnings on failures, and return the series with NaT for unparseable values.
+**3.1.9** Define a function `parse_dates_robustly(series: pd.Series, formats: List[str] = None) -> pd.Series` in `data_utils.py`. It should try standard formats (YYYY-MM-DD, DD/MM/YYYY, ISO8601) and `pd.to_datetime` inference, log warnings on failures, and return the series with NaT for unparseable values.[Complete]
 
-**3.1.10** Refactor `data_loader._parse_date_column` to use `data_utils.parse_dates_robustly`.
+**3.1.10** Refactor `data_loader._parse_date_column` to use `data_utils.parse_dates_robustly`.[Complete]
 
-**3.1.11** Refactor date parsing logic in `security_processing.load_and_process_security_data` to use `data_utils.parse_dates_robustly`.
+**3.1.11** Refactor date parsing logic in `security_processing.load_and_process_security_data` to use `data_utils.parse_dates_robustly`.[Complete]
 
-**3.1.12** Refactor date parsing logic in `curve_processing.load_curve_data` to use `data_utils.parse_dates_robustly`.
+**3.1.12** Refactor date parsing logic in `curve_processing.load_curve_data` to use `data_utils.parse_dates_robustly`.[Complete]
 
-**3.1.13** Define a function `identify_columns(columns: List[str], patterns: Dict[str, List[str]], required: List[str]) -> Dict[str, Optional[str]]` in `data_utils.py`. `patterns` maps a category (e.g., 'date', 'id') to regex patterns. It finds the first match for each category. Checks if `required` categories are found.
+**3.1.13** Define a function `identify_columns(columns: List[str], patterns: Dict[str, List[str]], required: List[str]) -> Dict[str, Optional[str]]` in `data_utils.py`. `patterns` maps a category (e.g., 'date', 'id') to regex patterns. It finds the first match for each category. Checks if `required` categories are found.[Complete]
 
-**3.1.14** Refactor `data_loader._find_column` and `_find_columns_for_file` to use `data_utils.identify_columns`. Load patterns from `config.py`.
+**3.1.14** Refactor `data_loader._find_column` and `_find_columns_for_file` to use `data_utils.identify_columns`. Load patterns from `config.py`.[Complete]
 
-**3.1.15** Refactor column identification in `security_processing.load_and_process_security_data` to use `data_utils.identify_columns`.
+**3.1.15** Refactor column identification in `security_processing. load_and_process_security_data` to use `data_utils.identify_columns`. [Complete]
 
-**3.1.16** Define a function `convert_to_numeric_robustly(series: pd.Series) -> pd.Series` in `data_utils.py` using `pd.to_numeric(errors='coerce')`.
+**3.1.16** Define a function `convert_to_numeric_robustly(series: pd.Series) -> pd.Series` in `data_utils.py` using `pd.to_numeric(errors='coerce')`.[Complete]
 
-**3.1.17** Refactor `data_loader._convert_value_columns` to use `data_utils.convert_to_numeric_robustly` on each specified column.
+**3.1.17** Refactor `data_loader._convert_value_columns` to use `data_utils.convert_to_numeric_robustly` on each specified column.[Complete]
 
-**3.1.18** Refactor numeric conversion in `security_processing.load_and_process_security_data` to use `data_utils.convert_to_numeric_robustly`.
+**3.1.18** Refactor numeric conversion in `security_processing.load_and_process_security_data` to use `data_utils.convert_to_numeric_robustly`.[Complete]
 
-**3.1.19** Define a function `melt_wide_data(df: pd.DataFrame, id_vars: List[str], date_like_check_func: Callable = utils._is_date_like) -> Optional[pd.DataFrame]` in `data_utils.py`. It should identify date columns using the check function, perform the melt, parse dates, and return the long DataFrame or None on error.
+**3.1.19** Define a function `melt_wide_data(df: pd.DataFrame, id_vars: List[str], date_like_check_func: Callable = utils._is_date_like) -> Optional[pd.DataFrame]` in `data_utils.py`. It should identify date columns using the check function, perform the melt, parse dates, and return the long DataFrame or None on error. [Complete]
 
-**3.1.20** Refactor melting logic in `security_processing.load_and_process_security_data` to use `data_utils.melt_wide_data`.
+**3.1.20** Refactor melting logic in `security_processing.load_and_process_security_data` to use `data_utils.melt_wide_data`. [Complete]
 
-**3.1.21** Refactor melting logic in `utils.load_weights_and_held_status` (for wide format) to use `data_utils.melt_wide_data`.
+**3.1.21** Refactor melting logic in `utils.load_weights_and_held_status` (for wide format) to use `data_utils.melt_wide_data`. [Complete]
 
-**3.1.22** Review `data_loader._process_single_file`. Ensure it now primarily orchestrates calls to the new `data_utils` functions (read, identify columns, parse dates, convert numeric, melt if needed).
+**3.1.22** Review `data_loader._process_single_file`. Ensure it now primarily orchestrates calls to the new `data_utils` functions (read, identify columns, parse dates, convert numeric, melt if needed). [Complete]
 
-**3.1.23** Review `security_processing.load_and_process_security_data`. Ensure it uses the new `data_utils` functions appropriately.
+**3.1.23** Review `security_processing.load_and_process_security_data`. Ensure it uses the new `data_utils` functions appropriately. [Complete]
 
-**3.1.24** Create unit tests in `tests/utils/test_data_utils.py` for the new functions: `read_csv_robustly`, `parse_dates_robustly`, `identify_columns`, `convert_to_numeric_robustly`, `melt_wide_data`.
-
-**3.1.25** Rerun all tests (`pytest`) to ensure refactoring hasn't broken existing functionality.
 
 ## 3.2 Improve Configuration Management
 

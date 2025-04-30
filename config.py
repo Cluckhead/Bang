@@ -251,6 +251,11 @@ DATE_COLUMN_PATTERNS: list = [
     r"\d{2}/\d{2}/\d{4}",  # DD/MM/YYYY
     r"\d{2}-\d{2}-\d{4}",  # DD-MM-YYYY
     r"\d{4}/\d{2}/\d{2}",  # YYYY/MM/DD
+    r"^Date$",             # Exact 'Date'
+    r"^Position Date$",    # Exact 'Position Date'
+    r"^Trade Date$",       # Exact 'Trade Date'
+    r"^AsOfDate$",         # Exact 'AsOfDate'
+    r"^Effective Date$",   # Exact 'Effective Date'
 ]
 
 # Pattern for ISIN suffixing when duplicate Security Names are found (used in process_data.py)
@@ -338,4 +343,42 @@ STATIC_INFO_GROUPS = [
     ]),
     ("Call/Redemption", ["Call Indicator", "Make Whole Call"]),
     ("Financials", ["Coupon Rate", "Maturity Date"]),
+]
+
+# List of regex patterns for identifying ID columns (ISIN, Security Name, Code, etc.)
+ID_COLUMN_PATTERNS = [
+    r"^ISIN$",
+    r"^Security Name$",
+    r"^Code$",
+    r"^SecurityID$",
+    r"^Fund Code$",
+]
+
+# List of regex patterns for identifying static columns (Type, Currency, etc.)
+STATIC_COLUMN_PATTERNS = [
+    r"^Type$",
+    r"^Currency$",
+    r"^CCY$",
+    r"^Security Sub Type$",
+    r"^Country Of Risk$",
+    r"^Rating$",
+]
+
+# List of regex patterns for identifying code columns (Code, Fund Code, etc.)
+CODE_COLUMN_PATTERNS = [
+    r"^Code$",
+    r"^Fund Code$",
+    r"^SecurityID$",
+]
+
+# List of regex patterns for identifying benchmark columns
+BENCHMARK_COLUMN_PATTERNS = [
+    r"^Benchmark$",
+    r"^Bench$",
+]
+
+# List of regex patterns for identifying scope columns (SS Project - In Scope, etc.)
+SCOPE_COLUMN_PATTERNS = [
+    r"SS\s*Project\s*-\s*In\s*Scope",
+    r"In\s*Scope",
 ]

@@ -15,6 +15,7 @@ import numpy as np
 import csv
 from typing import Any, Optional, List, Dict
 import config
+from data_utils import read_csv_robustly, melt_wide_data
 
 # Configure logging
 # Removed basicConfig - logging is now configured centrally in app.py
@@ -210,253 +211,22 @@ def load_weights_and_held_status(
     id_col_override: str = "ISIN",
 ) -> pd.Series:
     """
-    Loads the weights file (e.g., w_secs.csv), identifies the latest date,
-    and returns a boolean Series indicating which securities (indexed by the ID column)
-    have a non-zero weight on that date (i.e., are currently held).
-
-    Args:
-        data_folder: The absolute path to the data directory.
-        weights_filename: The name of the weights file.
-        id_col_override: The specific column name in the weights file expected to contain the IDs for joining.
-                         Defaults to 'ISIN'.
-
-    Returns:
-        A pandas Series where the index is the Security ID (e.g., ISIN) and the value
-        is True if the security is held on the latest date, False otherwise.
-        Returns an empty Series if the file cannot be loaded or processed.
-
-    Requires:
-        - pandas
-        - pathlib
-        - flask (for current_app.logger)
-        - The _is_date_like utility function from this module.
+    Loads security weights from a wide-format weights file and returns a Series indicating held status (is_held) for each security.
+    Uses melt_wide_data for robust wide-to-long conversion.
     """
-    # Use current_app.logger for logging within the Flask context
-    logger = current_app.logger
-    logger.info(
-        f"--- Entering load_weights_and_held_status utility for {weights_filename} ---"
-    )
-    weights_filepath = Path(data_folder) / weights_filename
-    if not weights_filepath.exists():
-        logger.warning(f"Weights file not found: {weights_filepath}")
+    weights_path = os.path.join(data_folder, weights_filename)
+    df = read_csv_robustly(weights_path)
+    if df is None or df.empty:
         return pd.Series(dtype=bool)
-
-    try:
-        logger.info(f"Loading weights data from: {weights_filepath}")
-        weights_df = pd.read_csv(weights_filepath, low_memory=False)
-        weights_df.columns = weights_df.columns.str.strip()
-
-        # --- Identify Date and ID columns ---
-        date_col = next(
-            (col for col in weights_df.columns if "date" in col.lower()), None
-        )
-        # Prioritize the explicitly provided id_col_override, then look for ISIN/SecurityID
-        id_col_in_file = (
-            id_col_override
-            if id_col_override in weights_df.columns
-            else next(
-                (
-                    col
-                    for col in weights_df.columns
-                    if col.lower() in ["isin", "securityid"]
-                ),
-                None,
-            )
-        )
-
-        if not id_col_in_file:
-            logger.error(
-                f"Could not automatically identify ID column ('{id_col_override}' or fallback) in {weights_filepath}. Columns found: {weights_df.columns.tolist()}"
-            )
-            return pd.Series(dtype=bool)
-        logger.info(
-            f"Weights file ID column identified: '{id_col_in_file}' (target override: '{id_col_override}')"
-        )
-
-        # --- Identify and Melt Date Columns --- Use _is_date_like from this module
-        date_columns = [col for col in weights_df.columns if _is_date_like(col)]
-
-        if not date_columns:
-            if not date_col:
-                logger.error(
-                    f"No date column or date-like columns found in {weights_filepath}"
-                )
-                return pd.Series(dtype=bool)
-
-            logger.info(
-                f"No date-like columns found. Attempting to use explicit date column: '{date_col}'"
-            )
-            try:
-                weights_df[date_col] = pd.to_datetime(
-                    weights_df[date_col], errors="coerce"
-                )
-                if weights_df[date_col].isnull().all():
-                    raise ValueError("Date column parsing failed.")
-
-                value_col = next(
-                    (col for col in weights_df.columns if col.lower() == "value"), None
-                )
-                if not value_col:
-                    # Try common weight/percentage column names if 'Value' isn't present
-                    potential_value_cols = [
-                        c
-                        for c in weights_df.columns
-                        if c.lower() in ["weight", "wgt", "pct", "percentage"]
-                    ]
-                    if potential_value_cols:
-                        value_col = potential_value_cols[0]
-                        logger.info(f"Found potential value column: '{value_col}'")
-                    else:
-                        # Fallback: Assume last numeric column if no clear candidate
-                        numeric_cols = weights_df.select_dtypes(
-                            include="number"
-                        ).columns
-                        if len(numeric_cols) > 0:
-                            value_col = numeric_cols[-1]
-                            logger.warning(
-                                f"No 'Value' or common weight column found in long-format weights file, assuming last numeric column '{value_col}' holds weights."
-                            )
-                        else:
-                            logger.error(
-                                f"Could not identify a value/weight column in long-format weights file: {weights_filepath}"
-                            )
-                            return pd.Series(dtype=bool)
-
-                # Rename for consistency (using the override ID name)
-                weights_df = weights_df.rename(
-                    columns={
-                        date_col: "Date",
-                        id_col_in_file: id_col_override,
-                        value_col: "Value",
-                    }
-                )
-                weights_df["Value"] = pd.to_numeric(
-                    weights_df["Value"], errors="coerce"
-                )
-                logger.info(
-                    f"Processed weights as long format. Columns: {weights_df.columns.tolist()}"
-                )
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to process weights file {weights_filepath} as long format: {e}",
-                    exc_info=True,
-                )
-                return pd.Series(dtype=bool)
-        else:
-            logger.info(
-                f"Found {len(date_columns)} date-like columns in {weights_filename}: {date_columns[:5]}{'...' if len(date_columns) > 5 else ''}"
-            )
-            # Wide format: Melt the DataFrame
-            id_vars = [col for col in weights_df.columns if col not in date_columns]
-            # Ensure the identified ID column is included in id_vars
-            if id_col_in_file not in id_vars:
-                # This case might happen if the ID column itself looks like a date - highly unlikely but possible
-                logger.warning(
-                    f"Identified ID column '{id_col_in_file}' was potentially misinterpreted as a date column. Forcing it as an ID variable."
-                )
-                if id_col_in_file in date_columns:
-                    date_columns.remove(id_col_in_file)
-                id_vars.append(id_col_in_file)  # Ensure it's treated as ID
-
-            # Check if id_vars is empty (would happen if only ID and date columns exist)
-            if not id_vars:
-                logger.error(
-                    f"Error melting weights: No non-date ID variables found. Columns: {weights_df.columns.tolist()}"
-                )
-                return pd.Series(dtype=bool)
-
-            melted_weights = weights_df.melt(
-                id_vars=id_vars,
-                value_vars=date_columns,
-                var_name="Date",
-                value_name="Value",
-            )
-
-            melted_weights["Date"] = pd.to_datetime(
-                melted_weights["Date"], errors="coerce"
-            )
-            melted_weights["Value"] = pd.to_numeric(
-                melted_weights["Value"], errors="coerce"
-            )
-
-            # Rename the identified ID column TO the standard override name (e.g., 'ISIN')
-            melted_weights = melted_weights.rename(
-                columns={id_col_in_file: id_col_override}
-            )
-            weights_df = melted_weights  # Use the melted df going forward
-            logger.info(
-                f"Processed weights as wide format (melted). Columns: {weights_df.columns.tolist()}"
-            )
-
-        # --- Filter by Latest Date and Value ---
-        # Check if the required columns exist after processing
-        required_cols = [id_col_override, "Date", "Value"]
-        if not all(col in weights_df.columns for col in required_cols):
-            logger.error(
-                f"Required columns ({required_cols}) not present in processed weights DataFrame. Columns found: {weights_df.columns.tolist()}"
-            )
-            return pd.Series(dtype=bool)
-
-        latest_date = weights_df["Date"].max()
-        if pd.isna(latest_date):
-            logger.warning(
-                f"Could not determine the latest date in {weights_filepath}."
-            )
-            return pd.Series(dtype=bool)
-        logger.info(f"Latest date in weights file '{weights_filepath}': {latest_date}")
-
-        latest_weights = weights_df[
-            (weights_df["Date"] == latest_date)
-            & (weights_df["Value"].notna())
-            & (weights_df["Value"] > 0)
-        ].copy()
-
-        if latest_weights.empty:
-            logger.warning(
-                f"No securities found with positive weight on the latest date ({latest_date}) in {weights_filepath}. Returning empty held status."
-            )
-            return pd.Series(dtype=bool)
-
-        # --- Determine Held Status --- Use the OVERRIDE ID column name (e.g., 'ISIN')
-        held_status_col = id_col_override
-        logger.info(
-            f"Using '{held_status_col}' column from processed {weights_filename} for held_status index."
-        )
-
-        # Create the boolean Series: index is the Security ID, value is True
-        held_ids = latest_weights.drop_duplicates(subset=[held_status_col])[
-            held_status_col
-        ]
-        held_status = pd.Series(True, index=held_ids)
-        held_status.index.name = (
-            held_status_col  # Ensure index name matches the ID column
-        )
-
-        logger.debug(
-            f"Held status index preview (first 5 values): {held_status.index[:5].tolist()}"
-        )
-        logger.debug(
-            f"Held status values preview (first 5): {held_status.head().to_dict()}"
-        )
-        logger.info(
-            f"Determined held status for {len(held_status)} unique IDs based on weights on {latest_date}."
-        )
-
-        return held_status
-
-    except FileNotFoundError:
-        logger.error(f"Weights file not found at path: {weights_filepath}")
+    # Identify id columns and use melt_wide_data
+    id_vars = [id_col_override] if id_col_override in df.columns else [df.columns[0]]
+    df_long = melt_wide_data(df, id_vars=id_vars)
+    if df_long is None or df_long.empty:
         return pd.Series(dtype=bool)
-    except pd.errors.EmptyDataError:
-        logger.warning(f"Weights file is empty: {weights_filepath}")
-        return pd.Series(dtype=bool)
-    except Exception as e:
-        logger.error(
-            f"Error loading or processing weights file {weights_filepath}: {e}",
-            exc_info=True,
-        )
-        return pd.Series(dtype=bool)
+    # Determine held status: is_held if Value is numeric and > 0
+    df_long["is_held"] = pd.to_numeric(df_long["Value"], errors="coerce") > 0
+    held_status = df_long.groupby(id_vars[0])["is_held"].any()
+    return held_status
 
 
 def replace_nan_with_none(obj: Any) -> Any:

@@ -27,6 +27,7 @@ import logging
 import traceback
 from utils import _is_date_like
 import config
+from data_utils import read_csv_robustly, parse_dates_robustly, identify_columns, convert_to_numeric_robustly, melt_wide_data
 
 # Note: Does not import current_app, relies on caller to pass the path.
 
@@ -38,6 +39,14 @@ _dataframe_cache = {}
 
 # Removed DATA_FOLDER constant - path is now passed to functions
 
+def find_all_date_columns(columns, date_patterns):
+    date_cols = []
+    for col in columns:
+        for pattern in date_patterns:
+            if re.search(pattern, col):
+                date_cols.append(col)
+                break
+    return date_cols
 
 def load_and_process_security_data(filename: str, data_folder_path: str) -> Tuple[pd.DataFrame, List[str]]:
     """Loads security data, identifies static/date columns, and melts to long format. Uses in-memory cache to avoid redundant loads."""
@@ -57,30 +66,15 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
     try:
         # --- Read Header ---
         logger.debug(f"{log_prefix}Reading header...")
-        try:
-            header_df = pd.read_csv(
-                filepath,
-                nrows=0,
-                on_bad_lines="skip",
-                encoding="utf-8",
-                encoding_errors="replace",
-            )
-        except FileNotFoundError:
-            logger.error(f"{log_prefix}File not found: {filepath}")
-            return pd.DataFrame(), []
-        except pd.errors.EmptyDataError:
-            logger.warning(f"{log_prefix}File is empty: {filepath}")
-            return pd.DataFrame(), []
-        except pd.errors.ParserError as e:
-            logger.error(
-                f"{log_prefix}Parser error in header of {filepath}: {e}", exc_info=True
-            )
-            return pd.DataFrame(), []
-        except Exception as e:
-            logger.error(
-                f"{log_prefix}Unexpected error reading header of {filepath}: {e}",
-                exc_info=True,
-            )
+        header_df = read_csv_robustly(
+            filepath,
+            nrows=0,
+            on_bad_lines="skip",
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+        if header_df is None:
+            logger.error(f"{log_prefix}Failed to read header for {filepath}")
             return pd.DataFrame(), []
         all_cols = [str(col).strip() for col in header_df.columns.tolist()]
         logger.debug(f"{log_prefix}Read header columns: {all_cols}")
@@ -91,153 +85,58 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
             raise ValueError(
                 f"CSV file '{filename}' appears to be empty or header is missing."
             )
-        # --- Identify Essential ID Columns ---
-        essential_id_cols = []
-        if config.ISIN_COL in all_cols:
-            essential_id_cols.append(config.ISIN_COL)
-        if config.SEC_NAME_COL in all_cols:
-            essential_id_cols.append(config.SEC_NAME_COL)
+        # --- Identify Essential Columns Using identify_columns ---
+        patterns = {
+            "id": config.ID_COLUMN_PATTERNS,
+            "static": config.STATIC_COLUMN_PATTERNS,
+        }
+        required = ["id"]
+        found = identify_columns(all_cols, patterns, required)
+        essential_id_cols = [found["id"]] if found["id"] else []
+        static_cols = [found["static"]] if found["static"] else []
+        # Find all date columns for wide format
+        date_cols = find_all_date_columns(all_cols, config.DATE_COLUMN_PATTERNS)
         if not essential_id_cols:
             logger.warning(
-                f"{log_prefix}Neither '{config.ISIN_COL}' nor '{config.SEC_NAME_COL}' found. Using first column '{all_cols[0]}' as potential ID."
+                f"{log_prefix}No ID column found using patterns. Columns: {all_cols}"
             )
-            essential_id_cols.append(all_cols[0])
-        logger.info(f"{log_prefix}Essential ID Columns identified: {essential_id_cols}")
-        # --- Identify Static and Date Columns ---
-        static_cols = []
-        date_cols = []
-        for col in all_cols:
-            if col in essential_id_cols:
-                continue
-            if _is_date_like(col):
-                date_cols.append(col)
-            else:
-                static_cols.append(col)
-
         if not date_cols:
             logger.error(
-                f"{log_prefix}No date-like columns found using flexible patterns. Cannot process."
+                f"{log_prefix}No date-like columns found using patterns. Cannot process."
             )
-            raise ValueError("No date-like columns found using flexible patterns.")
-
+            raise ValueError("No date-like columns found using patterns.")
+        logger.info(f"{log_prefix}Essential ID Columns identified: {essential_id_cols}")
         logger.info(f"{log_prefix}Identified Static Cols: {static_cols}")
-        logger.debug(
-            f"{log_prefix}Identified {len(date_cols)} Date Cols (e.g., {date_cols[:3]}...)"
-        )
-
+        logger.debug(f"{log_prefix}Identified Date Cols: {date_cols}")
         # --- Read Full Data ---
         logger.debug(f"{log_prefix}Reading full data...")
-        df_wide = pd.read_csv(
+        df_wide = read_csv_robustly(
             filepath, encoding="utf-8", on_bad_lines="skip", encoding_errors="replace"
         )
+        if df_wide is None:
+            logger.error(f"{log_prefix}Failed to read full data for {filepath}")
+            return pd.DataFrame(), []
         df_wide.columns = df_wide.columns.map(lambda x: str(x).strip())
         logger.info(f"{log_prefix}Read full data. Shape: {df_wide.shape}")
 
         # --- Melt Data ---
-        id_vars_melt = [col for col in essential_id_cols if col in df_wide.columns] + [
-            col for col in static_cols if col in df_wide.columns
-        ]
-        value_vars = [col for col in date_cols if col in df_wide.columns]
-
-        if not value_vars:
-            logger.error(
-                f"{log_prefix}Date columns identified in header not found in data frame after loading. Columns available: {df_wide.columns.tolist()}"
-            )
-            raise ValueError(
-                "Date columns identified in header not found in data frame after loading."
-            )
-        if not id_vars_melt:
-            logger.error(
-                f"{log_prefix}No ID or static columns found to use as id_vars. Columns available: {df_wide.columns.tolist()}"
-            )
-            raise ValueError("No ID or static columns found for melting.")
-
-        logger.debug(
-            f"{log_prefix}Melting data. ID vars: {id_vars_melt}, Value vars count: {len(value_vars)}"
-        )
-        df_long = pd.melt(
-            df_wide,
-            id_vars=id_vars_melt,
-            value_vars=value_vars,
-            var_name="Date_Str",
-            value_name="Value",
-        )
-        logger.info(f"{log_prefix}Melted data shape: {df_long.shape}")
-
-        # --- Process Date and Value ---
-        date_col_str = "Date_Str"
-        date_col_dt = "Date"
-        logger.debug(f"{log_prefix}Parsing dates and converting values...")
-
-        # 1. Try DD/MM/YYYY first
-        df_long[date_col_dt] = pd.to_datetime(
-            df_long[date_col_str], format="%d/%m/%Y", errors="coerce"
-        )
-
-        # 2. Try YYYY-MM-DD for any remaining NaTs
-        nat_mask = df_long[date_col_dt].isna()
-        if nat_mask.any():
-            logger.info(
-                f"{log_prefix}Attempting fallback date parsing (YYYY-MM-DD) for {nat_mask.sum()} entries."
-            )
-            df_long.loc[nat_mask, date_col_dt] = pd.to_datetime(
-                df_long.loc[nat_mask, date_col_str], format="%Y-%m-%d", errors="coerce"
-            )
-
-        # 3. Try ISO 8601 (YYYY-MM-DDTHH:MM:SS) for any remaining NaTs
-        nat_mask = df_long[date_col_dt].isna()
-        if nat_mask.any():
-            logger.info(
-                f"{log_prefix}Attempting fallback date parsing (ISO 8601) for {nat_mask.sum()} entries."
-            )
-            df_long.loc[nat_mask, date_col_dt] = pd.to_datetime(
-                df_long.loc[nat_mask, date_col_str],
-                format="%Y-%m-%dT%H:%M:%S",
-                errors="coerce",
-            )
-
-        # 4. Final fallback: let pandas try to infer any remaining
-        nat_mask = df_long[date_col_dt].isna()
-        if nat_mask.any():
-            logger.info(
-                f"{log_prefix}Attempting final fallback flexible date parsing for {nat_mask.sum()} entries."
-            )
-            df_long.loc[nat_mask, date_col_dt] = pd.to_datetime(
-                df_long.loc[nat_mask, date_col_str], errors="coerce"
-            )
-
-        # Check again for NaTs after all attempts
-        final_nat_count = df_long[date_col_dt].isna().sum()
-        if final_nat_count > 0:
-            logger.warning(
-                f"{log_prefix}Could not parse {final_nat_count} date strings using all attempted formats (DD/MM/YYYY, YYYY-MM-DD, ISO 8601, flexible)."
-            )
-            unparsed_examples = df_long.loc[
-                df_long[date_col_dt].isna(), date_col_str
-            ].unique()[:5]
-            logger.warning(f"{log_prefix}Unparsed examples: {unparsed_examples}")
-
+        id_vars_melt = [col for col in essential_id_cols if col in df_wide.columns] + [col for col in static_cols if col in df_wide.columns]
+        df_long = melt_wide_data(df_wide, id_vars=id_vars_melt)
+        if df_long is None:
+            logger.error(f"{log_prefix}Failed to melt wide-format data using melt_wide_data.")
+            return pd.DataFrame(), static_cols
         # Convert Value column
-        df_long["Value"] = pd.to_numeric(df_long["Value"], errors="coerce")
-
+        df_long["Value"] = convert_to_numeric_robustly(df_long["Value"])
         # Drop rows where essential data is missing
         initial_rows = len(df_long)
-        required_cols_for_dropna = ["Date", "Value"] + [
-            col for col in essential_id_cols if col in df_long.columns
-        ]
+        required_cols_for_dropna = ["Date", "Value"] + [col for col in essential_id_cols if col in df_long.columns]
         df_long.dropna(subset=required_cols_for_dropna, inplace=True)
         rows_dropped = initial_rows - len(df_long)
         if rows_dropped > 0:
-            logger.warning(
-                f"{log_prefix}Dropped {rows_dropped} rows due to missing required values (Date, Value, or Essential IDs)."
-            )
-
+            logger.warning(f"{log_prefix}Dropped {rows_dropped} rows due to missing required values (Date, Value, or Essential IDs).")
         if df_long.empty:
-            logger.warning(
-                f"{log_prefix}DataFrame is empty after melting, conversion, and NaN drop."
-            )
+            logger.warning(f"{log_prefix}DataFrame is empty after melting, conversion, and NaN drop.")
             return pd.DataFrame(), static_cols
-
         # Determine ID column name for index
         id_col_name = None
         if config.ISIN_COL in df_long.columns:
@@ -246,46 +145,25 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
             id_col_name = config.SEC_NAME_COL
         elif essential_id_cols and essential_id_cols[0] in df_long.columns:
             id_col_name = essential_id_cols[0]
-            logger.warning(
-                f"{log_prefix}Using fallback ID '{id_col_name}' for index setting."
-            )
+            logger.warning(f"{log_prefix}Using fallback ID '{id_col_name}' for index setting.")
         else:
-            logger.error(
-                f"{log_prefix}Cannot determine a valid ID column ({essential_id_cols}) to set index. Columns: {df_long.columns.tolist()}"
-            )
+            logger.error(f"{log_prefix}Cannot determine a valid ID column ({essential_id_cols}) to set index. Columns: {df_long.columns.tolist()}")
             return pd.DataFrame(), []
-
         logger.info(f"{log_prefix}Determined ID column for index: '{id_col_name}'")
-
-        # Drop Date_Str column BEFORE setting index
-        if "Date_Str" in df_long.columns:
-            df_long.drop(columns=["Date_Str"], inplace=True)
-            logger.debug(f"{log_prefix}Dropped 'Date_Str' column.")
-
         # Sort before setting index
         logger.debug(f"{log_prefix}Sorting by '{id_col_name}' and 'Date'...")
         df_long = df_long.sort_values(by=[id_col_name, "Date"])
-
         # --- SET THE MULTIINDEX ---
         try:
             logger.debug(f"{log_prefix}Setting index to ['Date', '{id_col_name}']...")
             df_long.set_index(["Date", id_col_name], inplace=True)
-            logger.info(
-                f"{log_prefix}Set MultiIndex ('Date', '{id_col_name}'). Final shape: {df_long.shape}"
-            )
+            logger.info(f"{log_prefix}Set MultiIndex ('Date', '{id_col_name}'). Final shape: {df_long.shape}")
         except KeyError as e:
-            logger.error(
-                f"{log_prefix}Failed to set index using ['Date', '{id_col_name}']. Error: {e}. Columns: {df_long.columns.tolist()}"
-            )
+            logger.error(f"{log_prefix}Failed to set index using ['Date', '{id_col_name}']. Error: {e}. Columns: {df_long.columns.tolist()}")
             return pd.DataFrame(), []
-
         # Identify static columns *excluding* essential ID cols to return
-        # We return the list of non-ID static attributes
         final_static_cols = [col for col in static_cols if col in df_long.columns]
-
-        logger.info(
-            f"{log_prefix}--- Exiting load_and_process_security_data. Returning DataFrame and static cols: {final_static_cols} ---"
-        )
+        logger.info(f"{log_prefix}--- Exiting load_and_process_security_data. Returning DataFrame and static cols: {final_static_cols} ---")
         _dataframe_cache[cache_key] = (df_long, final_static_cols)
         return df_long, final_static_cols  # Return only non-ID static cols
 

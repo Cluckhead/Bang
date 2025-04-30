@@ -8,6 +8,10 @@
 #
 # Refactored: _process_single_file is now split into smaller helpers for clarity and maintainability.
 
+# Purpose: Loads and preprocesses time-series and security-level data from CSV files for the Simple Data Checker application.
+# Handles dynamic column identification, robust date parsing, numeric conversion, and optional filtering/aggregation for downstream analysis.
+# Uses data_utils for robust I/O, parsing, and transformation. Logging is handled centrally by the Flask app.
+
 import pandas as pd
 import os
 import logging
@@ -15,6 +19,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import re  # Import regex for pattern matching
 from flask import current_app  # Import current_app to access config
 import config
+from data_utils import read_csv_robustly, parse_dates_robustly, identify_columns, convert_to_numeric_robustly
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
@@ -47,23 +52,22 @@ def load_simple_csv(filepath: str, filename_for_logging: str) -> Optional[pd.Dat
     if not os.path.exists(filepath):
         logger.warning(f"File not found, skipping: {filepath}")
         return None
-    try:
-        df = pd.read_csv(
-            filepath, encoding="utf-8", encoding_errors="replace", on_bad_lines="skip"
-        )
-        df.columns = df.columns.str.strip()  # Clean column names
-        logger.info(
-            f"Successfully loaded simple CSV: '{filename_for_logging}' ({len(df)} rows)"
-        )
-        return df
-    except pd.errors.EmptyDataError:
-        logger.warning(f"File is empty: {filepath}")
-        return pd.DataFrame()  # Return empty DataFrame for consistency
-    except Exception as e:
+    df = read_csv_robustly(
+        filepath, encoding="utf-8", encoding_errors="replace", on_bad_lines="skip"
+    )
+    if df is None:
         logger.error(
-            f"Error reading simple CSV '{filename_for_logging}': {e}", exc_info=True
+            f"Error reading simple CSV '{filename_for_logging}': see previous log for details."
         )
         return None
+    if df.empty:
+        logger.warning(f"File is empty: {filepath}")
+        return pd.DataFrame()  # Return empty DataFrame for consistency
+    df.columns = df.columns.str.strip()  # Clean column names
+    logger.info(
+        f"Successfully loaded simple CSV: '{filename_for_logging}' ({len(df)} rows)"
+    )
+    return df
 
 
 # --- END NEW HELPER FUNCTION ---
@@ -123,64 +127,33 @@ def _find_columns_for_file(
     Returns:
         actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names, actual_scope_col
     """
-    # Use patterns from config for date and code columns
-    date_pattern = None
-    for pattern in config.DATE_COLUMN_PATTERNS:
-        for col in original_cols:
-            if re.search(pattern, col):
-                date_pattern = pattern
-                break
-        if date_pattern:
-            break
-    if date_pattern:
-        actual_date_col = _find_column(date_pattern, original_cols, filename_for_logging, "Date")
-    else:
-        # Fallback to previous logic
-        actual_date_col = _find_column(r"\b(Position\s*)?Date\b", original_cols, filename_for_logging, "Date")
-    code_pattern = r"\b(Fund\s*)?Code\b"
-    actual_code_col = _find_column(code_pattern, original_cols, filename_for_logging, "Code")
-
-    benchmark_col_present = False
-    actual_benchmark_col = None
-    try:
-        benchmark_pattern = r"\b(Benchmark|Bench)\b"
-        actual_benchmark_col = _find_column(
-            benchmark_pattern, original_cols, filename_for_logging, "Benchmark"
-        )
-        benchmark_col_present = True
-    except ValueError:
-        logger.info(
-            f"No Benchmark column found in '{filename_for_logging}' matching pattern. Proceeding without benchmark."
-        )
-
-    actual_scope_col = None
-    try:
-        # Pattern to match 'SS Project - In Scope' allowing for slight variations or extra spaces
-        scope_pattern = r"\bSS\s+Project\s*-\s*In\s+Scope\b"
-        actual_scope_col = _find_column(
-            scope_pattern, original_cols, filename_for_logging, "Scope"
-        )
-    except ValueError:
-        logger.info(
-            f"No '{STD_SCOPE_COL}' column found in '{filename_for_logging}' matching pattern. Proceeding without scope filtering for this file."
-        )
-
+    # Use patterns from config for date, code, benchmark, and scope columns
+    patterns = {
+        "date": config.DATE_COLUMN_PATTERNS,
+        "code": config.CODE_COLUMN_PATTERNS,
+        "benchmark": config.BENCHMARK_COLUMN_PATTERNS,
+        "scope": config.SCOPE_COLUMN_PATTERNS,
+    }
+    required = ["date", "code"]
+    found = identify_columns(original_cols, patterns, required)
+    actual_date_col = found["date"]
+    actual_code_col = found["code"]
+    actual_benchmark_col = found.get("benchmark")
+    actual_scope_col = found.get("scope")
+    benchmark_col_present = actual_benchmark_col is not None
     # Exclude date, code, benchmark, and scope columns when identifying value columns
     excluded_cols_for_funds = {actual_date_col, actual_code_col}
     if benchmark_col_present and actual_benchmark_col:
         excluded_cols_for_funds.add(actual_benchmark_col)
     if actual_scope_col:
         excluded_cols_for_funds.add(actual_scope_col)
-
     original_fund_val_col_names = [
         col for col in original_cols if col not in excluded_cols_for_funds
     ]
-
     if not original_fund_val_col_names and not benchmark_col_present:
         logger.warning(
             f"No fund value columns identified in '{filename_for_logging}' after excluding standard columns."
-        )  # Warning, not error, might still have benchmark
-
+        )
     return (
         actual_date_col,
         actual_code_col,
@@ -195,22 +168,11 @@ def _parse_date_column(
     df: pd.DataFrame, date_col: str, filename_for_logging: str
 ) -> pd.Series:
     """
-    Parses the date column robustly, trying default, then dayfirst=True if needed.
+    Parses the date column robustly using data_utils.parse_dates_robustly.
     Returns the parsed date series.
     """
     date_series = df[date_col]
-    parsed_dates = pd.to_datetime(
-        date_series, errors="coerce", dayfirst=None, yearfirst=None
-    )
-    if parsed_dates.isnull().all() and len(date_series) > 0:
-        logger.warning(
-            f"Initial date parsing failed for {filename_for_logging}. Trying with dayfirst=True."
-        )
-        parsed_dates = pd.to_datetime(date_series, errors="coerce", dayfirst=True)
-        if parsed_dates.isnull().all() and len(date_series) > 0:
-            logger.error(
-                f"Could not parse any dates in column '{date_col}' in file {filename_for_logging} even with dayfirst=True."
-            )
+    parsed_dates = parse_dates_robustly(date_series)
     nat_count = parsed_dates.isnull().sum()
     total_count = len(parsed_dates)
     success_count = total_count - nat_count
@@ -224,32 +186,17 @@ def _parse_date_column(
     return parsed_dates
 
 
-def _convert_value_columns(
-    df: pd.DataFrame, value_cols: List[str], benchmark_col_present: bool
-) -> List[str]:
+def _convert_value_columns(df: pd.DataFrame, value_cols: list) -> list:
     """
-    Converts value columns (fund and benchmark) to numeric, returns the list of columns converted.
+    Converts specified columns in the DataFrame to numeric using convert_to_numeric_robustly.
+    Returns the list of columns that were successfully converted.
     """
-    value_cols_to_convert = value_cols[:]
-    if benchmark_col_present:
-        value_cols_to_convert.append(STD_BENCHMARK_COL)
-    valid_cols_for_conversion = [
-        col for col in value_cols_to_convert if col in df.columns
-    ]
-    if not valid_cols_for_conversion:
-        logger.error(
-            f"No valid fund or benchmark value columns found to convert after processing."
-        )
-        return []
-    df[valid_cols_for_conversion] = df[valid_cols_for_conversion].apply(
-        pd.to_numeric, errors="coerce"
-    )
-    nan_check_cols = [col for col in valid_cols_for_conversion if col in df.columns]
-    if nan_check_cols and df[nan_check_cols].isnull().all().all():
-        logger.warning(
-            f"All values in value columns {nan_check_cols} became NaN after conversion. Check data types."
-        )
-    return valid_cols_for_conversion
+    converted_cols = []
+    for col in value_cols:
+        if col in df.columns:
+            df[col] = convert_to_numeric_robustly(df[col])
+            converted_cols.append(col)
+    return converted_cols
 
 
 def _process_single_file(
@@ -272,13 +219,17 @@ def _process_single_file(
         logger.warning(f"File not found, skipping: {filepath}")
         return None
     try:
-        header_df = pd.read_csv(
+        # Use robust CSV reader for header
+        header_df = read_csv_robustly(
             filepath,
             nrows=0,
             encoding="utf-8",
             encoding_errors="replace",
             on_bad_lines="skip",
         )
+        if header_df is None:
+            logger.warning(f"Header could not be read for {filepath}")
+            return None
         original_cols = [col.strip() for col in header_df.columns.tolist()]
         logger.info(
             f"Processing file: '{filename_for_logging}'. Original columns: {original_cols}"
@@ -306,36 +257,17 @@ def _process_single_file(
         if actual_scope_col:
             dtype_map[actual_scope_col] = str  # Read scope as string
 
-        try:
-            # Read only necessary columns
-            df = pd.read_csv(
-                filepath,
-                usecols=list(cols_to_read),
-                encoding="utf-8",
-                encoding_errors="replace",
-                on_bad_lines="skip",
-                dtype=dtype_map,
-            )
-        except FileNotFoundError:
-            logger.error(f"File not found during reading: {filepath}", exc_info=True)
-            return None
-        except pd.errors.EmptyDataError:
-            logger.warning(f"File is empty: {filepath}")
-            return None
-        except pd.errors.ParserError as e:
-            logger.error(f"Parser error in file {filepath}: {e}", exc_info=True)
-            return None
-        except PermissionError:
-            logger.error(f"Permission denied when accessing {filepath}", exc_info=True)
-            return None
-        except OSError as e:
-            logger.error(f"OS error when accessing {filepath}: {e}", exc_info=True)
-            return None
-        except ValueError as e:
-            logger.error(f"Value error reading {filename_for_logging}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error reading {filename_for_logging}: {e}", exc_info=True)
+        # Use robust CSV reader for data
+        df = read_csv_robustly(
+            filepath,
+            usecols=list(cols_to_read),
+            encoding="utf-8",
+            encoding_errors="replace",
+            on_bad_lines="skip",
+            dtype=dtype_map,
+        )
+        if df is None:
+            logger.warning(f"Data could not be read for {filepath}")
             return None
 
         # If not filtering on S&P Valid, aggregate (Date, Code) pairs to combine TRUE and FALSE rows
@@ -437,7 +369,7 @@ def _process_single_file(
         df.set_index([STD_DATE_COL, STD_CODE_COL], inplace=True)
 
         # Convert value columns *after* setting the index
-        _convert_value_columns(df, original_fund_val_col_names, benchmark_col_present)
+        _convert_value_columns(df, original_fund_val_col_names)
 
         # After conversion, log if any rows are dropped due to NaNs in value columns
         for col in original_fund_val_col_names:
