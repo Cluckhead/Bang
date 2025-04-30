@@ -5,15 +5,23 @@
 
 import pandas as pd
 import os
+import config
+import argparse
 
 # Test parameters
-SECURITY_ID = "XS4035425"
-CSV_FILE = "Data/sec_Spread.csv"
-PLACEHOLDER_VALUE = 100
-CONSECUTIVE_THRESHOLD = 3
-
-
 def main():
+    parser = argparse.ArgumentParser(description="Direct placeholder detection for a security in a CSV file.")
+    parser.add_argument("--security_id", type=str, default="XS4035425", help="Security ID to check")
+    parser.add_argument("--csv_file", type=str, default="Data/sec_Spread.csv", help="CSV file to check")
+    parser.add_argument("--placeholder_value", type=float, default=None, help="Placeholder value to check (default: config.STALENESS_PLACEHOLDERS[0])")
+    parser.add_argument("--consecutive_threshold", type=int, default=None, help="Consecutive threshold (default: config.STALENESS_THRESHOLD_DAYS)")
+    args = parser.parse_args()
+
+    SECURITY_ID = args.security_id
+    CSV_FILE = args.csv_file
+    PLACEHOLDER_VALUE = args.placeholder_value if args.placeholder_value is not None else config.STALENESS_PLACEHOLDERS[0]
+    CONSECUTIVE_THRESHOLD = args.consecutive_threshold if args.consecutive_threshold is not None else config.STALENESS_THRESHOLD_DAYS
+
     print(f"Testing direct placeholder detection for {SECURITY_ID} in {CSV_FILE}")
 
     # Check if file exists

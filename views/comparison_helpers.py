@@ -9,6 +9,7 @@ import pandas as pd
 import math
 import logging
 import os
+import config
 
 from utils import load_weights_and_held_status, parse_fund_list
 from security_processing import load_and_process_security_data
@@ -311,8 +312,8 @@ def get_holdings_for_security(security_id, chart_dates, data_folder):
             return holdings_data, chart_dates, "Holdings file (w_secs.csv) not found."
         df_holdings = pd.read_csv(holdings_file, low_memory=False)
         log.info(f"Loaded w_secs.csv with columns: {df_holdings.columns.tolist()}")
-        id_col_holding = "ISIN"
-        fund_col_holding = "Funds"
+        id_col_holding = config.ISIN_COL
+        fund_col_holding = config.FUNDS_COL
         if (
             id_col_holding not in df_holdings.columns
             or fund_col_holding not in df_holdings.columns

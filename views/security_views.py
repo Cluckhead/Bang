@@ -19,9 +19,10 @@ from datetime import datetime
 from flask import request  # Import request
 import math
 import json
+import config
 
 # Import necessary functions/constants from other modules
-from config import COLOR_PALETTE  # Keep palette
+from config import COLOR_PALETTE, STATIC_INFO_GROUPS  # Keep palette and STATIC_INFO_GROUPS
 from security_processing import (
     load_and_process_security_data,
     calculate_security_latest_metrics,
@@ -40,7 +41,9 @@ from views.comparison_helpers import get_holdings_for_security
 # Define the blueprint
 security_bp = Blueprint("security", __name__, url_prefix="/security")
 
-PER_PAGE = 50  # Define how many items per page
+# Use config.SECURITIES_PER_PAGE for pagination
+
+# Purpose: This file defines the Flask Blueprint and routes for security-level data checks, including summary and details pages, filtering, and static info display.
 
 
 def get_active_exclusions(data_folder_path: str):
@@ -158,7 +161,7 @@ def securities_page():
             )
 
         # Define ID column name
-        id_col_name = "ISIN"  # <<< Use ISIN as the identifier
+        id_col_name = config.ISIN_COL  # <<< Use ISIN as the identifier
 
         # Check if the chosen ID column exists in the index or columns
         if id_col_name in combined_metrics_df.index.names:
@@ -223,9 +226,9 @@ def securities_page():
         if selected_fund_group and selected_fund_group in fund_groups_dict:
             allowed_funds = set(fund_groups_dict[selected_fund_group])
             # If 'Funds' column exists, filter by checking if any allowed fund is in the parsed list
-            if "Funds" in combined_metrics_df.columns:
+            if config.FUNDS_COL in combined_metrics_df.columns:
                 combined_metrics_df = combined_metrics_df[
-                    combined_metrics_df["Funds"].apply(
+                    combined_metrics_df[config.FUNDS_COL].apply(
                         lambda x: (
                             any(f in allowed_funds for f in parse_fund_list(x))
                             if pd.notna(x)
@@ -237,7 +240,7 @@ def securities_page():
                 # Fallback: Try to filter by a static column that matches fund code, e.g., 'Fund', 'Fund Code', or similar
                 fund_col_candidates = [
                     col
-                    for col in ["Fund", "Fund Code", "Code"]
+                    for col in ["Fund", "Fund Code", config.CODE_COL]
                     if col in combined_metrics_df.columns
                 ]
                 if fund_col_candidates:
@@ -248,14 +251,14 @@ def securities_page():
             # If no fund column, skip filtering (could log a warning)
         # --- Prepare Fund Group Filtering for UI (only groups with securities in current data) ---
         all_funds_in_data = set()
-        if "Funds" in combined_metrics_df.columns:
+        if config.FUNDS_COL in combined_metrics_df.columns:
             all_funds_in_data = set()
-            for x in combined_metrics_df["Funds"].dropna():
+            for x in combined_metrics_df[config.FUNDS_COL].dropna():
                 all_funds_in_data.update(parse_fund_list(x))
         else:
             fund_col_candidates = [
                 col
-                for col in ["Fund", "Fund Code", "Code"]
+                for col in ["Fund", "Fund Code", config.CODE_COL]
                 if col in combined_metrics_df.columns
             ]
             if fund_col_candidates:
@@ -418,7 +421,7 @@ def securities_page():
         # --- Pagination ---
         total_items = len(combined_metrics_df)
         # Ensure PER_PAGE is positive to avoid division by zero or negative pages
-        safe_per_page = max(1, PER_PAGE)
+        safe_per_page = max(1, config.SECURITIES_PER_PAGE)
         total_pages = math.ceil(total_items / safe_per_page)
         total_pages = max(
             1, total_pages
@@ -568,7 +571,7 @@ def security_details(metric_name, security_id):
         try:
             ref_df = pd.read_csv(reference_path, dtype=str)
             reference_columns = ref_df.columns.tolist()
-            ref_row = ref_df[ref_df["ISIN"] == decoded_security_id]
+            ref_row = ref_df[ref_df[config.ISIN_COL] == decoded_security_id]
             if not ref_row.empty:
                 reference_row = ref_row.iloc[0].to_dict()
             else:
@@ -722,8 +725,8 @@ def security_details(metric_name, security_id):
                     f"Warning: No data found for {id_column_name}='{security_id_to_filter}' in {filename}"
                 )
                 # Try alternative common ID column 'Security Name' if ISIN failed and it exists
-                alt_id_col = "Security Name"
-                if id_column_name == "ISIN" and alt_id_col in df_long.columns:
+                alt_id_col = config.SEC_NAME_COL
+                if id_column_name == config.ISIN_COL and alt_id_col in df_long.columns:
                     current_app.logger.info(
                         f"--> Retrying filter with '{alt_id_col}'..."
                     )
@@ -744,7 +747,7 @@ def security_details(metric_name, security_id):
 
             # Extract the relevant data series (Date index, Value column)
             # The value column is typically the first column after resetting index, or 'Value'
-            value_col_name = "Value"  # Default assumption from melt
+            value_col_name = config.VALUE_COL  # Default assumption from melt
             if value_col_name not in filtered_df.columns:
                 # Find the first non-ID, non-static column if 'Value' isn't present
                 potential_value_cols = [
@@ -764,16 +767,16 @@ def security_details(metric_name, security_id):
                     return None, set(), {}
 
             # Ensure 'Date' is the index
-            if "Date" in filtered_df.columns:
-                filtered_df = filtered_df.set_index("Date")
+            if config.DATE_COL in filtered_df.columns:
+                filtered_df = filtered_df.set_index(config.DATE_COL)
             elif not isinstance(filtered_df.index, pd.DatetimeIndex):
                 # If Date is part of a MultiIndex, extract it
-                if "Date" in filtered_df.index.names:
+                if config.DATE_COL in filtered_df.index.names:
                     # Reset the index, set 'Date' as the main index
-                    filtered_df = filtered_df.reset_index().set_index("Date")
+                    filtered_df = filtered_df.reset_index().set_index(config.DATE_COL)
                 else:
                     current_app.logger.error(
-                        f"Error: Cannot find 'Date' index or column in {filename}."
+                        f"Error: Cannot find '{config.DATE_COL}' index or column in {filename}."
                     )
                     return None, set(), {}
 
@@ -1072,54 +1075,14 @@ def security_details(metric_name, security_id):
     # --- NEW: Group static info for display ---
     static_groups = []
     if reference_row:
-        # Group 1: Identifiers
-        identifiers = {
-            k: reference_row[k]
-            for k in ["ISIN", "Security Name", "BBG ID", "BBG Ticker Yellow"]
-            if k in reference_row
-        }
-        # Group 2: Classification
-        classification = {
-            k: reference_row[k]
-            for k in [
-                "Security Sub Type",
-                "SS Project - In Scope",
-                "Is Distressed",
-                "Rating",
-                "BBG LEVEL 3",
-                "CCY",
-                "Country Of Risk",
-            ]
-            if k in reference_row
-        }
-        # Group 3: Call/Redemption
-        call_info = {
-            k: reference_row[k]
-            for k in ["Call Indicator", "Make Whole Call"]
-            if k in reference_row
-        }
-        # Group 4: Financials
-        financials = {
-            k: reference_row[k]
-            for k in ["Coupon Rate", "Maturity Date"]
-            if k in reference_row
-        }
-        # Group 5: Other
-        others = {
-            k: reference_row[k]
-            for k in reference_row
-            if k not in identifiers
-            and k not in classification
-            and k not in call_info
-            and k not in financials
-        }
-        static_groups = [
-            ("Identifiers", identifiers),
-            ("Classification", classification),
-            ("Call/Redemption", call_info),
-            ("Financials", financials),
-            ("Other Details", others),
-        ]
+        used_keys = set()
+        for group_name, col_list in STATIC_INFO_GROUPS:
+            group_dict = {k: reference_row[k] for k in col_list if k in reference_row}
+            used_keys.update(group_dict.keys())
+            static_groups.append((group_name, group_dict))
+        # Add 'Other Details' for any remaining keys
+        others = {k: reference_row[k] for k in reference_row if k not in used_keys}
+        static_groups.append(("Other Details", others))
     else:
         static_groups = []
 

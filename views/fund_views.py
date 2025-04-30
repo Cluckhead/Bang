@@ -10,6 +10,7 @@ import logging  # Added for logging
 import glob  # Added for finding files
 import re  # Added for extracting metric name
 import numpy as np
+import config
 
 # Import necessary functions from other modules
 from utils import _is_date_like, parse_fund_list  # Import required utils
@@ -56,7 +57,7 @@ def fund_duration_details(fund_code):
         all_cols = [col.strip() for col in header_df.columns.tolist()]
 
         # Define ID column (specific to this file/route)
-        id_col_name = "ISIN"
+        id_col_name = config.ISIN_COL
         if id_col_name not in all_cols:
             current_app.logger.error(
                 f"Error: Expected ID column '{id_col_name}' not found in {duration_filename}."
@@ -72,7 +73,7 @@ def fund_duration_details(fund_code):
         for col in all_cols:
             if col == id_col_name:
                 continue  # Skip the ID column
-            if col == "Security Name":
+            if col == config.SEC_NAME_COL:
                 continue  # Skip the old ID column if it exists
             if _is_date_like(col):  # Use the helper function from utils
                 date_cols.append(col)
@@ -98,7 +99,7 @@ def fund_duration_details(fund_code):
         df.columns = df.columns.str.strip()  # Strip again after full read
 
         # Ensure the Funds column exists (still needed for filtering)
-        funds_col = "Funds"  # Keep this assumption for now as it's key to filtering
+        funds_col = config.FUNDS_COL  # Keep this assumption for now as it's key to filtering
         if funds_col not in static_cols:
             current_app.logger.warning(
                 f"Warning: Expected column '{funds_col}' for filtering not found among static columns."
@@ -168,8 +169,8 @@ def fund_duration_details(fund_code):
                 weights_df.columns = weights_df.columns.str.strip()
 
                 # Define expected columns in weights file
-                weight_id_col = "Security Name"
-                weight_fund_col = "Funds"
+                weight_id_col = config.SEC_NAME_COL
+                weight_fund_col = config.FUNDS_COL
 
                 # Check if necessary columns exist in weights_df
                 # Convert the dates from duration file (YYYY-MM-DD) to the format in weights file (DD/MM/YYYY)
@@ -352,16 +353,16 @@ def fund_duration_details(fund_code):
             col for col in static_cols if col in filtered_df.columns
         ]
         if (
-            "Security Name" in filtered_df.columns
-            and "Security Name" not in existing_static_cols
+            config.SEC_NAME_COL in filtered_df.columns
+            and config.SEC_NAME_COL not in existing_static_cols
         ):
             existing_static_cols.insert(
-                0, "Security Name"
+                0, config.SEC_NAME_COL
             )  # Add Security Name near the start
 
         # Define column order, putting ISIN (the new id_col_name) first
         display_cols = (
-            [id_col_name]
+            [config.ISIN_COL]
             + existing_static_cols
             + [second_last_date_col, last_date_col, change_col_name]
         )
@@ -396,7 +397,7 @@ def fund_duration_details(fund_code):
             fund_code=fund_code,
             securities_data=securities_data_list,
             column_order=final_col_order,
-            id_col_name=id_col_name,
+            id_col_name=config.ISIN_COL,
             message=None,
         )
 
@@ -513,12 +514,12 @@ def fund_detail(fund_code):
                     skipped_files += 1
                     continue
 
-                if "Code" not in df.index.names:
+                if config.CODE_COL not in df.index.names:
                     current_app.logger.error(
-                        f"Index level 'Code' not found in DataFrame loaded from {filename}. Index: {df.index.names}. Skipping."
+                        f"Index level '{config.CODE_COL}' not found in DataFrame loaded from {filename}. Index: {df.index.names}. Skipping."
                     )
                     error_messages.append(
-                        f"Failed to process {filename}: Missing 'Code' index level."
+                        f"Failed to process {filename}: Missing '{config.CODE_COL}' index level."
                     )
                     skipped_files += 1
                     continue
@@ -558,12 +559,12 @@ def fund_detail(fund_code):
                             f"No data loaded or DataFrame empty for SP file {sp_filename}."
                         )
                         sp_df = None  # Ensure sp_df is None if empty
-                    elif "Code" not in sp_df.index.names:
+                    elif config.CODE_COL not in sp_df.index.names:
                         current_app.logger.error(
-                            f"Index level 'Code' not found in DataFrame loaded from SP file {sp_filename}. Index: {sp_df.index.names}."
+                            f"Index level '{config.CODE_COL}' not found in DataFrame loaded from SP file {sp_filename}. Index: {sp_df.index.names}."
                         )
                         sp_df = None  # Ensure sp_df is None if index is wrong
-                        sp_load_error = f"SP file {sp_filename} missing 'Code' index."
+                        sp_load_error = f"SP file {sp_filename} missing '{config.CODE_COL}' index."
                         error_messages.append(sp_load_error)
                     else:
                         # Find the fund column name in the SP data
@@ -586,7 +587,7 @@ def fund_detail(fund_code):
                     sp_df = None  # Ensure sp_df is None on error
 
             # --- Filter primary data for the fund ---
-            fund_mask = df.index.get_level_values("Code") == fund_code
+            fund_mask = df.index.get_level_values(config.CODE_COL) == fund_code
             fund_df = df[fund_mask]
 
             if fund_df.empty:
@@ -602,15 +603,15 @@ def fund_detail(fund_code):
             available_metrics.append(metric_name_display)  # Use display name
 
             # Drop the 'Code' level now we've filtered
-            fund_df = fund_df.droplevel("Code")
+            fund_df = fund_df.droplevel(config.CODE_COL)
 
             # --- Filter SP data for the fund (if loaded) ---
             sp_fund_df = None
             if sp_df is not None:
-                sp_fund_mask = sp_df.index.get_level_values("Code") == fund_code
+                sp_fund_mask = sp_df.index.get_level_values(config.CODE_COL) == fund_code
                 sp_fund_df = sp_df[sp_fund_mask]
                 if not sp_fund_df.empty:
-                    sp_fund_df = sp_fund_df.droplevel("Code")
+                    sp_fund_df = sp_fund_df.droplevel(config.CODE_COL)
                     current_app.logger.info(
                         f"Fund code '{fund_code}' found in SP data from {sp_filename}."
                     )

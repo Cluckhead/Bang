@@ -14,6 +14,7 @@ from flask import current_app  # Added current_app
 import numpy as np
 import csv
 from typing import Any, Optional, List, Dict
+import config
 
 # Configure logging
 # Removed basicConfig - logging is now configured centrally in app.py
@@ -24,25 +25,12 @@ DEFAULT_RELATIVE_PATH = "Data"
 
 def _is_date_like(column_name: str) -> bool:
     """Check if a column name looks like a date (e.g., YYYY-MM-DD or DD/MM/YYYY).
-    Updated regex to match various formats and not require matching the entire string.
-    Also handles cases where column name might not be a string.
+    Uses regex patterns from config.DATE_COLUMN_PATTERNS.
     """
     if not isinstance(column_name, str):
         return False
-
-    # Match common date formats potentially within column names
-    # Loosened the regex to not require start/end anchors (^$)
-    date_patterns = [
-        r"\d{4}-\d{2}-\d{2}",  # YYYY-MM-DD
-        r"\d{2}/\d{2}/\d{4}",  # DD/MM/YYYY
-        r"\d{2}-\d{2}-\d{4}",  # DD-MM-YYYY
-        r"\d{4}/\d{2}/\d{2}",  # YYYY/MM/DD
-        # Add more specific patterns if needed, e.g., for time
-        # r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}' # YYYY-MM-DDTHH:MM:SS
-    ]
-
-    # Return True if any pattern is found within the string
-    return any(re.search(pattern, column_name) for pattern in date_patterns)
+    # Use patterns from config
+    return any(re.search(pattern, column_name) for pattern in config.DATE_COLUMN_PATTERNS)
 
 
 def parse_fund_list(fund_string: str) -> list:

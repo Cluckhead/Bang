@@ -482,4 +482,7 @@ sec_Spread.csv:
 
 **5.2.10** Commit the final, refactored codebase.
 
+# Phase 6: Check up with Gemini
+**6.1** has 2.1 been fully completed
+**6.2** has 2.2.1 been fully completed
 ---

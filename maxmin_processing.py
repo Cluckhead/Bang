@@ -1,3 +1,4 @@
+# Purpose: This file processes max/min threshold checks for security data, using configuration for metadata columns and thresholds.
 # This module contains the core logic for identifying securities
 # that breach predefined maximum or minimum value thresholds.
 # It reads configuration from config.py and processes specified security-level data files (sec_*.csv)
@@ -8,13 +9,15 @@ import pandas as pd
 import numpy as np
 import logging
 from typing import List, Dict, Any, Tuple, Optional
+import config
 
 # Default thresholds (used if not specified in config or overrides)
 DEFAULT_MAX_THRESHOLD = 10000
 DEFAULT_MIN_THRESHOLD = -100
 
 # Metadata columns (same as staleness_processing.py)
-META_COLS = 6  # ISIN, Security Name, Funds, Type, Callable, Currency
+# Replace any use of hardcoded META_COLS = 6 with config.METADATA_COLS
+# Example: instead of using a fixed number, use len(config.METADATA_COLS) or the list itself for column selection
 
 # Import the config dictionary
 # from config import MAXMIN_THRESHOLDS
@@ -67,8 +70,8 @@ def find_value_breaches(
     try:
         df = pd.read_csv(file_path)
         id_column = df.columns[0]  # ISIN
-        meta_columns = df.columns[:META_COLS]
-        date_columns = df.columns[META_COLS:]
+        meta_columns = df.columns[:len(config.METADATA_COLS)]
+        date_columns = df.columns[len(config.METADATA_COLS):]
         total_count = len(df)
         for idx, row in df.iterrows():
             # Normalize ISIN for comparison

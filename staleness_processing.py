@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import logging
+import config
 
 try:
     from config import DATA_FOLDER, ID_COLUMN
@@ -21,14 +22,14 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Constants
-DEFAULT_STALENESS_THRESHOLD_DAYS = 5
 FLOAT_TOLERANCE = 1e-6
 
+# Use config.STALENESS_PLACEHOLDERS for placeholder values in staleness detection
 
 def get_staleness_summary(
     data_folder=DATA_FOLDER,
     exclusions_df=None,
-    threshold_days=DEFAULT_STALENESS_THRESHOLD_DAYS,
+    threshold_days=config.STALENESS_THRESHOLD_DAYS,
 ):
     """
     Generate a summary of stale data across all files in the data folder.
@@ -44,9 +45,9 @@ def get_staleness_summary(
                     stale_securities, latest_date, total_count = (
                         get_stale_securities_details(
                             filename=filename,
-                            threshold_days=threshold_days,
                             data_folder=data_folder,
                             exclusions_df=exclusions_df,
+                            threshold_days=threshold_days,
                         )
                     )
                     stale_count = len(stale_securities)
@@ -83,9 +84,9 @@ def get_staleness_summary(
 
 def get_stale_securities_details(
     filename,
-    threshold_days=DEFAULT_STALENESS_THRESHOLD_DAYS,
     data_folder=DATA_FOLDER,
     exclusions_df=None,
+    threshold_days=config.STALENESS_THRESHOLD_DAYS,
 ):
     """
     Get detailed information about stale securities in a specific file.
@@ -106,8 +107,8 @@ def get_stale_securities_details(
             )
         else:
             id_column = ID_COLUMN
-        meta_columns = df.columns[:6]
-        date_columns = df.columns[6:]
+        meta_columns = df.columns[:len(config.METADATA_COLS)]
+        date_columns = df.columns[len(config.METADATA_COLS):]
         # Parse date columns for latest date
         date_objects = []
         for col in date_columns:

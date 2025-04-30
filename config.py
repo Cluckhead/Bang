@@ -1,3 +1,19 @@
+# Purpose: This file contains configuration variables and constants for the Simple Data Checker application.
+# It centralizes settings, file paths, color palettes, and standard column names for use throughout the codebase.
+
+# Standard column name constants
+FUNDS_COL = 'Funds'
+ISIN_COL = 'ISIN'
+SEC_NAME_COL = 'Security Name'
+DATE_COL = 'Date'
+VALUE_COL = 'Value'
+CODE_COL = 'Code'
+TYPE_COL = 'Type'
+CURRENCY_COL = 'Currency'
+PICKED_COL = 'Picked'
+TOTAL_ASSET_VALUE_COL = 'Total Asset Value USD'
+FUND_CODE_COL = 'Fund Code'
+
 # This file defines configuration variables for the Simple Data Checker application.
 # It centralizes settings like file paths, feature configurations (e.g., comparisons, thresholds),
 # and visual parameters (e.g., chart colors) to make them easily adjustable
@@ -204,3 +220,122 @@ CURVE_MONOTONICITY_DROP_THRESHOLD = -0.5
 CURVE_ANOMALY_STD_MULTIPLIER = 3
 # Minimum absolute threshold for anomaly detection in curve change profile
 CURVE_ANOMALY_ABS_THRESHOLD = 0.2
+
+# List of known metadata column names used for identifying non-data columns in wide-format files
+METADATA_COLS: list = [
+    FUNDS_COL,
+    ISIN_COL,
+    SEC_NAME_COL,
+    DATE_COL,
+    CODE_COL,
+    TYPE_COL,
+    CURRENCY_COL,
+    FUND_CODE_COL,
+]
+
+# List of placeholder values used for staleness detection (e.g., 100 for missing/placeholder data)
+STALENESS_PLACEHOLDERS: list = [100]
+
+# Default threshold (in days) for staleness detection
+STALENESS_THRESHOLD_DAYS: int = 5
+
+# Number of securities to display per page in security views
+SECURITIES_PER_PAGE: int = 50
+
+# Number of comparison rows to display per page in generic comparison views
+COMPARISON_PER_PAGE: int = 50
+
+# List of regex patterns for detecting date-like column names (used in utils._is_date_like and elsewhere)
+DATE_COLUMN_PATTERNS: list = [
+    r"\d{4}-\d{2}-\d{2}",  # YYYY-MM-DD
+    r"\d{2}/\d{2}/\d{4}",  # DD/MM/YYYY
+    r"\d{2}-\d{2}-\d{4}",  # DD-MM-YYYY
+    r"\d{4}/\d{2}/\d{2}",  # YYYY/MM/DD
+]
+
+# Pattern for ISIN suffixing when duplicate Security Names are found (used in process_data.py)
+ISIN_SUFFIX_PATTERN: str = "{isin}-{n}"
+
+# L1 and L2 factor groupings for attribution (used in views/attribution_views.py)
+ATTRIBUTION_L1_GROUPS = {
+    "Rates": [
+        "Rates Carry Daily",
+        "Rates Convexity Daily",
+        "Rates Curve Daily",
+        "Rates Duration Daily",
+        "Rates Roll Daily",
+    ],
+    "Credit": [
+        "Credit Spread Change Daily",
+        "Credit Convexity Daily",
+        "Credit Carry Daily",
+        "Credit Defaulted",
+    ],
+    "FX": ["FX Carry Daily", "FX Change Daily"],
+}
+ATTRIBUTION_L2_GROUPS = {
+    "Credit": [
+        "Credit Spread Change Daily",
+        "Credit Convexity Daily",
+        "Credit Carry Daily",
+        "Credit Defaulted",
+    ],
+    "Rates": [
+        "Rates Carry Daily",
+        "Rates Convexity Daily",
+        "Rates Curve Daily",
+        "Rates Duration Daily",
+        "Rates Roll Daily",
+    ],
+    "FX": ["FX Carry Daily", "FX Change Daily"],
+}
+
+# List of expected statistic keys for generic comparison details (used in views/generic_comparison_views.py)
+GENERIC_COMPARISON_STATS_KEYS = [
+    "Level_Correlation",
+    "Change_Correlation",
+    "Mean_Abs_Diff",
+    "Max_Abs_Diff",
+    "Same_Date_Range",
+    "is_held",
+    "StaticCol",
+    "NaN_Count_Orig",
+    "NaN_Count_New",
+    "Total_Points",
+]
+
+# Example data and selectors for Playwright screenshot script
+PLAYWRIGHT_EXAMPLE_DATA = {
+    "EXAMPLE_METRIC": "Metric1",
+    "EXAMPLE_SECURITY_METRIC": "spread",
+    "EXAMPLE_SECURITY_ID": "XS4363421503",
+    "EXAMPLE_FUND_CODE": "IG01",
+    "EXAMPLE_COMPARISON": "spread",
+    "EXAMPLE_CURRENCY": "USD",
+    "EXAMPLE_MAXMIN_FILE": "sec_Spread.csv",
+    "EXAMPLE_BREACH_TYPE": "max",
+    "EXAMPLE_FUND_GROUP": "IG01",
+}
+PLAYWRIGHT_SELECTORS = {
+    "inspect_modal": "button:has-text('Inspect')",
+    "raise_issue_modal": "button.btn-warning:has-text('Raise Data Issue')",
+    "add_exclusion_modal": "button.btn-danger:has-text('Add Exclusion')",
+    "add_watchlist_modal": "button.btn-success:has-text('Add to Watchlist')",
+    "clear_watchlist_modal": "button.btn-danger:has-text('Clear')",
+}
+
+# Static info groupings for security details (used in views/security_views.py)
+STATIC_INFO_GROUPS = [
+    ("Identifiers", [ISIN_COL, SEC_NAME_COL, "BBG ID", "BBG Ticker Yellow"]),
+    ("Classification", [
+        "Security Sub Type",
+        "SS Project - In Scope",
+        "Is Distressed",
+        "Rating",
+        "BBG LEVEL 3",
+        "CCY",
+        "Country Of Risk",
+    ]),
+    ("Call/Redemption", ["Call Indicator", "Make Whole Call"]),
+    ("Financials", ["Coupon Rate", "Maturity Date"]),
+]

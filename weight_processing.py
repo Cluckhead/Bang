@@ -11,6 +11,7 @@ import io
 import re
 from collections import Counter
 from typing import List, Optional
+import config
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
@@ -48,10 +49,13 @@ def clean_date_format(dates):
 
 def detect_metadata_columns(df: pd.DataFrame, min_numeric_cols: int = 3) -> int:
     """
-    Dynamically detect the number of metadata columns in a DataFrame by finding the first column
-    where at least `min_numeric_cols` subsequent columns are numeric (likely date columns).
+    Detect the number of metadata columns in a DataFrame. If all config.METADATA_COLS are present, use their count. Otherwise, fall back to dynamic detection.
     Returns the index (int) of the last metadata column (exclusive for slicing).
     """
+    # Use config.METADATA_COLS if all are present
+    if all(col in df.columns for col in config.METADATA_COLS):
+        return len(config.METADATA_COLS)
+    # Fallback to dynamic detection
     for i in range(1, len(df.columns)):
         numeric_count = 0
         for j in range(i, min(i + min_numeric_cols, len(df.columns))):

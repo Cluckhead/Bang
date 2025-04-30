@@ -1,3 +1,4 @@
+# Purpose: This file defines the Flask Blueprint and routes for time-series metric details, including contribution analysis, chart rendering, and metric calculations.
 # This file defines the routes for displaying detailed views of specific time-series metrics.
 # It handles requests where the user wants to see the data and charts for a single metric
 # (like 'Yield' or 'Spread Duration') across all applicable funds.
@@ -23,6 +24,7 @@ import numpy as np
 import traceback
 import math
 from datetime import datetime  # Added for inspect route date parsing
+import config
 
 # Import necessary functions/constants from other modules
 from config import COLOR_PALETTE

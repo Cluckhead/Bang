@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 from playwright.sync_api import sync_playwright, expect
+from config import PLAYWRIGHT_EXAMPLE_DATA, PLAYWRIGHT_SELECTORS
 
 # --- Configuration ---
 BASE_URL = "http://localhost:5000"

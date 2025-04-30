@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import argparse
+import config
 
 
 def is_placeholder_value(value, placeholder_indicators=[100]):
@@ -155,14 +156,14 @@ def main():
         "--placeholder",
         type=int,
         nargs="+",
-        default=[100],
-        help="Placeholder values to detect (default: 100)",
+        default=config.STALENESS_PLACEHOLDERS,
+        help="Placeholder values to detect (default: config.STALENESS_PLACEHOLDERS)",
     )
     parser.add_argument(
         "--threshold",
         type=int,
-        default=3,
-        help="Number of consecutive placeholders to consider data stale (default: 3)",
+        default=config.STALENESS_THRESHOLD_DAYS,
+        help="Number of consecutive placeholders to consider data stale (default: config.STALENESS_THRESHOLD_DAYS)",
     )
     parser.add_argument("--output", help="Output file path for results CSV (optional)")
     parser.add_argument("--quiet", action="store_true", help="Reduce output verbosity")

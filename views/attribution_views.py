@@ -34,6 +34,7 @@ from .attribution_processing import (
 )
 import typing
 from typing import Any, Dict, List, Optional
+import config
 
 attribution_bp = Blueprint("attribution_bp", __name__, url_prefix="/attribution")
 
@@ -136,40 +137,9 @@ def attribution_summary() -> Response:
         pd.to_datetime(end_date_str, errors="coerce") if end_date_str else max_date
     )
 
-    # Helper: L2 column names for each group
-    l2_credit = [
-        "Credit Spread Change Daily",
-        "Credit Convexity Daily",
-        "Credit Carry Daily",
-        "Credit Defaulted",
-    ]
-    l2_rates = [
-        "Rates Carry Daily",
-        "Rates Convexity Daily",
-        "Rates Curve Daily",
-        "Rates Duration Daily",
-        "Rates Roll Daily",
-    ]
-    l2_fx = ["FX Carry Daily", "FX Change Daily"]
-    l2_all = l2_credit + l2_rates + l2_fx
-
-    # L1 factor groupings
-    l1_groups = {
-        "Rates": [
-            "Rates Carry Daily",
-            "Rates Convexity Daily",
-            "Rates Curve Daily",
-            "Rates Duration Daily",
-            "Rates Roll Daily",
-        ],
-        "Credit": [
-            "Credit Spread Change Daily",
-            "Credit Convexity Daily",
-            "Credit Carry Daily",
-            "Credit Defaulted",
-        ],
-        "FX": ["FX Carry Daily", "FX Change Daily"],
-    }
+    # Use L1 and L2 groupings from config
+    l1_groups = config.ATTRIBUTION_L1_GROUPS
+    l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
 
     # Prepare results: group by Date, Fund, and selected characteristic
     group_cols = ["Date", "Fund"]
@@ -430,21 +400,9 @@ def attribution_charts() -> Response:
     # Filter by date range
     df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
 
-    # Helper: L2 column names for each group
-    l2_credit = [
-        "Credit Spread Change Daily",
-        "Credit Convexity Daily",
-        "Credit Carry Daily",
-        "Credit Defaulted",
-    ]
-    l2_rates = [
-        "Rates Carry Daily",
-        "Rates Convexity Daily",
-        "Rates Curve Daily",
-        "Rates Duration Daily",
-        "Rates Roll Daily",
-    ]
-    l2_fx = ["FX Carry Daily", "FX Change Daily"]
+    # Use L1 and L2 groupings from config
+    l1_groups = config.ATTRIBUTION_L1_GROUPS
+    l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
 
     # Group by Date (and characteristic if grouping)
     group_cols = ["Date"]
@@ -463,7 +421,7 @@ def attribution_charts() -> Response:
             char_val = None
         bench_prod_res = group.apply(
             lambda row: calc_residual(
-                row, "L0 Bench Total Daily", "L2 Bench ", l2_credit + l2_rates + l2_fx
+                row, "L0 Bench Total Daily", "L2 Bench ", l2_all
             ),
             axis=1,
         )
@@ -472,13 +430,13 @@ def attribution_charts() -> Response:
                 row,
                 "L0 Bench Total Daily",
                 "SPv3_L2 Bench ",
-                l2_credit + l2_rates + l2_fx,
+                l2_all,
             ),
             axis=1,
         )
         port_prod_res = group.apply(
             lambda row: calc_residual(
-                row, "L0 Port Total Daily ", "L2 Port ", l2_credit + l2_rates + l2_fx
+                row, "L0 Port Total Daily ", "L2 Port ", l2_all
             ),
             axis=1,
         )
@@ -487,7 +445,7 @@ def attribution_charts() -> Response:
                 row,
                 "L0 Port Total Daily ",
                 "SPv3_L2 Port ",
-                l2_credit + l2_rates + l2_fx,
+                l2_all,
             ),
             axis=1,
         )
@@ -651,40 +609,9 @@ def attribution_radar() -> Response:
     # Filter by date range
     df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
 
-    # Helper: L2 column names for each group
-    l2_credit = [
-        "Credit Spread Change Daily",
-        "Credit Convexity Daily",
-        "Credit Carry Daily",
-        "Credit Defaulted",
-    ]
-    l2_rates = [
-        "Rates Carry Daily",
-        "Rates Convexity Daily",
-        "Rates Curve Daily",
-        "Rates Duration Daily",
-        "Rates Roll Daily",
-    ]
-    l2_fx = ["FX Carry Daily", "FX Change Daily"]
-    l2_all = l2_credit + l2_rates + l2_fx
-
-    # L1 groupings
-    l1_groups = {
-        "Rates": [
-            "Rates Carry Daily",
-            "Rates Convexity Daily",
-            "Rates Curve Daily",
-            "Rates Duration Daily",
-            "Rates Roll Daily",
-        ],
-        "Credit": [
-            "Credit Spread Change Daily",
-            "Credit Convexity Daily",
-            "Credit Carry Daily",
-            "Credit Defaulted",
-        ],
-        "FX": ["FX Carry Daily", "FX Change Daily"],
-    }
+    # Use L1 and L2 groupings from config
+    l1_groups = config.ATTRIBUTION_L1_GROUPS
+    l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
 
     # --- Aggregation for Radar Chart ---
     # sum_l2s_block, sum_l1s_block, and compute_residual_block are now imported from attribution_processing
@@ -923,22 +850,9 @@ def attribution_security_page() -> Response:
         "FX Change Daily",
     ]
     # L1 groupings (must be in this scope)
-    l1_groups = {
-        "Rates": [
-            "Rates Carry Daily",
-            "Rates Convexity Daily",
-            "Rates Curve Daily",
-            "Rates Duration Daily",
-            "Rates Roll Daily",
-        ],
-        "Credit": [
-            "Credit Spread Change Daily",
-            "Credit Convexity Daily",
-            "Credit Carry Daily",
-            "Credit Defaulted",
-        ],
-        "FX": ["FX Carry Daily", "FX Change Daily"],
-    }
+    l1_groups = config.ATTRIBUTION_L1_GROUPS
+    # L2 groupings (must be in this scope)
+    l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
 
     # Residual calculation
     def calc_residual(row, l0, l1_prefix):

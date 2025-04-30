@@ -14,6 +14,7 @@ import logging
 from typing import List, Tuple, Optional, Dict, Any
 import re  # Import regex for pattern matching
 from flask import current_app  # Import current_app to access config
+import config
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
@@ -122,14 +123,22 @@ def _find_columns_for_file(
     Returns:
         actual_date_col, actual_code_col, benchmark_col_present, actual_benchmark_col, original_fund_val_col_names, actual_scope_col
     """
-    date_pattern = r"\b(Position\s*)?Date\b"
-    actual_date_col = _find_column(
-        date_pattern, original_cols, filename_for_logging, "Date"
-    )
+    # Use patterns from config for date and code columns
+    date_pattern = None
+    for pattern in config.DATE_COLUMN_PATTERNS:
+        for col in original_cols:
+            if re.search(pattern, col):
+                date_pattern = pattern
+                break
+        if date_pattern:
+            break
+    if date_pattern:
+        actual_date_col = _find_column(date_pattern, original_cols, filename_for_logging, "Date")
+    else:
+        # Fallback to previous logic
+        actual_date_col = _find_column(r"\b(Position\s*)?Date\b", original_cols, filename_for_logging, "Date")
     code_pattern = r"\b(Fund\s*)?Code\b"
-    actual_code_col = _find_column(
-        code_pattern, original_cols, filename_for_logging, "Code"
-    )
+    actual_code_col = _find_column(code_pattern, original_cols, filename_for_logging, "Code")
 
     benchmark_col_present = False
     actual_benchmark_col = None

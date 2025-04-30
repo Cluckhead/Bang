@@ -1,3 +1,4 @@
+# Purpose: This module handles loading, preprocessing, and metric calculation for security-level data files, including wide-to-long conversion and static info extraction.
 # This file handles the loading, processing, and analysis of security-level data.
 # It assumes input CSV files are structured with one security per row and time series data
 # spread across columns where headers represent dates (e.g., YYYY-MM-DD).
@@ -17,6 +18,7 @@ import re  # For checking date-like column headers
 import logging
 import traceback
 from utils import _is_date_like
+import config
 
 # Note: Does not import current_app, relies on caller to pass the path.
 
@@ -83,13 +85,13 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
             )
         # --- Identify Essential ID Columns ---
         essential_id_cols = []
-        if "ISIN" in all_cols:
-            essential_id_cols.append("ISIN")
-        if "Security Name" in all_cols:
-            essential_id_cols.append("Security Name")
+        if config.ISIN_COL in all_cols:
+            essential_id_cols.append(config.ISIN_COL)
+        if config.SEC_NAME_COL in all_cols:
+            essential_id_cols.append(config.SEC_NAME_COL)
         if not essential_id_cols:
             logger.warning(
-                f"{log_prefix}Neither 'ISIN' nor 'Security Name' found. Using first column '{all_cols[0]}' as potential ID."
+                f"{log_prefix}Neither '{config.ISIN_COL}' nor '{config.SEC_NAME_COL}' found. Using first column '{all_cols[0]}' as potential ID."
             )
             essential_id_cols.append(all_cols[0])
         logger.info(f"{log_prefix}Essential ID Columns identified: {essential_id_cols}")
@@ -230,10 +232,10 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
 
         # Determine ID column name for index
         id_col_name = None
-        if "ISIN" in df_long.columns:
-            id_col_name = "ISIN"
-        elif "Security Name" in df_long.columns:
-            id_col_name = "Security Name"
+        if config.ISIN_COL in df_long.columns:
+            id_col_name = config.ISIN_COL
+        elif config.SEC_NAME_COL in df_long.columns:
+            id_col_name = config.SEC_NAME_COL
         elif essential_id_cols and essential_id_cols[0] in df_long.columns:
             id_col_name = essential_id_cols[0]
             logger.warning(
@@ -305,7 +307,7 @@ def calculate_security_latest_metrics(df: pd.DataFrame, static_cols: List[str]) 
         )
         return pd.DataFrame()
 
-    if "Value" not in df.columns:
+    if config.VALUE_COL not in df.columns:
         logger.error(
             "Input DataFrame for security metrics calculation must contain a 'Value' column."
         )
@@ -368,14 +370,14 @@ def calculate_security_latest_metrics(df: pd.DataFrame, static_cols: List[str]) 
                         sec_metrics[static_col] = np.nan
 
                 # Calculate metrics for the 'Value' column
-                value_hist = sec_data_hist["Value"]
+                value_hist = sec_data_hist[config.VALUE_COL]
                 # Calculate diff only if series has enough data
                 value_change_hist = pd.Series(index=value_hist.index, dtype=np.float64)
                 if not value_hist.dropna().empty and len(value_hist.dropna()) > 1:
                     value_change_hist = value_hist.diff()
                 else:
                     logger.debug(
-                        f"Cannot calculate difference for 'Value' column, security '{sec_id}' due to insufficient data."
+                        f"Cannot calculate difference for '{config.VALUE_COL}' column, security '{sec_id}' due to insufficient data."
                     )
 
                 # Base historical stats (level) - handle potential all-NaN series
@@ -404,7 +406,7 @@ def calculate_security_latest_metrics(df: pd.DataFrame, static_cols: List[str]) 
                 # Latest values
                 # Check if latest_date exists in this security's specific history
                 if latest_date in sec_data_hist.index:
-                    latest_value = sec_data_hist.loc[latest_date, "Value"]
+                    latest_value = sec_data_hist.loc[latest_date, config.VALUE_COL]
                     latest_change = value_change_hist.get(latest_date, np.nan)
 
                     sec_metrics["Latest Value"] = latest_value

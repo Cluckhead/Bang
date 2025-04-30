@@ -32,6 +32,8 @@ from .comparison_helpers import (
     get_holdings_for_security,
     load_fund_codes_from_csv,
 )
+import config
+from config import GENERIC_COMPARISON_STATS_KEYS
 
 # Import shared utilities and processing functions
 try:
@@ -60,7 +62,9 @@ generic_comparison_bp = Blueprint(
     static_folder="../static",
 )
 
-PER_PAGE_COMPARISON = 50  # Items per page for summary view
+# Use config.COMPARISON_PER_PAGE for pagination
+
+# Purpose: This file defines the Flask Blueprint and routes for generic security data comparisons, including summary and detail views, statistics, filtering, and pagination.
 
 # --- Refactored Helper Functions ---
 
@@ -300,8 +304,8 @@ def get_holdings_for_security(security_id, chart_dates, data_folder):
 
         # Identify potential date columns (heuristic: check format like DD/MM/YYYY or YYYY-MM-DD)
         # and the ID column (assuming 'ISIN') and 'Funds' column
-        id_col_holding = "ISIN"  # Assuming this is the standard ID in w_secs
-        fund_col_holding = "Funds"
+        id_col_holding = config.ISIN_COL  # Assuming this is the standard ID in w_secs
+        fund_col_holding = config.FUNDS_COL
 
         if (
             id_col_holding not in df_holdings.columns
@@ -459,12 +463,12 @@ def load_fund_codes_from_csv(data_folder: str) -> list:
         return []
     try:
         df = pd.read_csv(fund_list_path)
-        if "Fund Code" in df.columns:
-            fund_codes = sorted(df["Fund Code"].dropna().astype(str).unique().tolist())
+        if config.FUND_CODE_COL in df.columns:
+            fund_codes = sorted(df[config.FUND_CODE_COL].dropna().astype(str).unique().tolist())
             return fund_codes
         else:
             current_app.logger.warning(
-                f"'Fund Code' column not found in FundList.csv at {fund_list_path}"
+                f"'{config.FUND_CODE_COL}' column not found in FundList.csv at {fund_list_path}"
             )
             return []
     except Exception as e:
@@ -571,9 +575,9 @@ def summary(comparison_type):
     if selected_fund_group and selected_fund_group in fund_groups_dict:
         allowed_funds = set(fund_groups_dict[selected_fund_group])
         # If 'Funds' column exists, filter by checking if any allowed fund is in the parsed list
-        if "Funds" in summary_stats.columns:
+        if config.FUNDS_COL in summary_stats.columns:
             summary_stats = summary_stats[
-                summary_stats["Funds"].apply(
+                summary_stats[config.FUNDS_COL].apply(
                     lambda x: (
                         any(f in allowed_funds for f in parse_fund_list(x))
                         if pd.notna(x)
@@ -585,7 +589,7 @@ def summary(comparison_type):
             # Fallback: Try to filter by a static column that matches fund code
             fund_col_candidates = [
                 col
-                for col in ["Fund", "Fund Code", "Code"]
+                for col in ["Fund", config.FUND_CODE_COL, config.CODE_COL]
                 if col in summary_stats.columns
             ]
             if fund_col_candidates:
@@ -596,8 +600,8 @@ def summary(comparison_type):
         # If no fund column, skip filtering (could log a warning)
     # --- Prepare Fund Group Filtering for UI (only groups with funds in current data) ---
     all_funds_in_data = set()
-    if "Funds" in summary_stats.columns:
-        for x in summary_stats["Funds"].dropna():
+    if config.FUNDS_COL in summary_stats.columns:
+        for x in summary_stats[config.FUNDS_COL].dropna():
             all_funds_in_data.update(parse_fund_list(x))
     else:
         fund_col_candidates = [
@@ -829,7 +833,7 @@ def summary(comparison_type):
 
     # --- Pagination ---
     total_items = len(filtered_data)
-    safe_per_page = max(1, PER_PAGE_COMPARISON)
+    safe_per_page = max(1, config.COMPARISON_PER_PAGE)
     total_pages = math.ceil(total_items / safe_per_page)
     page = max(1, min(page, total_pages))  # Ensure page is valid
     start_index = (page - 1) * safe_per_page
@@ -1028,27 +1032,6 @@ def details(comparison_type, security_id):
     stats_df = calculate_generic_comparison_stats(
         security_data, security_static_row, actual_id_col
     )
-
-    expected_keys = [
-        "Level_Correlation",
-        "Change_Correlation",
-        "Mean_Abs_Diff",
-        "Max_Abs_Diff",
-        "Same_Date_Range",
-        "is_held",
-        "StaticCol",
-        "NaN_Count_Orig",
-        "NaN_Count_New",
-        "Total_Points",
-    ]
-    if not stats_df.empty:
-        stats = stats_df.iloc[0].to_dict()
-        for key in expected_keys:
-            if key not in stats:
-                stats[key] = None
-    else:
-        stats = {key: None for key in expected_keys}
-        stats[actual_id_col] = decoded_security_id
 
     stats = {}
     security_name = decoded_security_id  # Default name is the ID

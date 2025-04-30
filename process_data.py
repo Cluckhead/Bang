@@ -1,4 +1,4 @@
-# This script serves as a pre-processing step for specific CSV files within the configured data directory.
+# Purpose: This script serves as a pre-processing step for specific CSV files within the configured data directory, handling grouping, aggregation, and header normalization for downstream security-level analysis.
 # It targets files prefixed with 'pre_', reads them, and performs data aggregation and cleaning.
 # The core logic involves grouping rows based on identical values across most columns, excluding 'Funds', 'Security Name', and potentially 'ISIN'.
 # For rows sharing the same 'Security Name' but differing in other data points, the script attempts to find
@@ -18,6 +18,7 @@
 import os
 import pandas as pd
 import logging
+import config
 
 # Add datetime for date parsing and sorting
 from datetime import datetime
@@ -226,6 +227,11 @@ def replace_headers_with_dates(
     return df
 
 
+def suffix_isin(isin: str, n: int) -> str:
+    """Return a suffixed ISIN using the pattern from config."""
+    return config.ISIN_SUFFIX_PATTERN.format(isin=isin, n=n)
+
+
 def aggregate_data(
     df: pd.DataFrame, required_cols: list, logger: logging.Logger, input_path: str
 ) -> pd.DataFrame:
@@ -262,10 +268,10 @@ def aggregate_data(
             new_row_series = current_version_df.iloc[0].copy()
             new_row_series["Funds"] = f"[{','.join(funds_list)}]"
             if num_versions > 1:
-                isin_col_name = "ISIN"
+                isin_col_name = config.ISIN_COL
                 if isin_col_name in new_row_series.index:
                     original_isin = new_row_series[isin_col_name]
-                    new_isin = f"{str(original_isin)}-{i+1}"
+                    new_isin = suffix_isin(original_isin, i+1)
                     new_row_series[isin_col_name] = new_isin
                     logger.debug(
                         f"Suffixed ISIN for duplicate Security Name '{sec_name}'. Original: '{original_isin}', New: '{new_isin}'"
@@ -306,23 +312,23 @@ def process_csv_file(input_path, output_path, date_columns, dates_file_path):
             return
         original_cols = df.columns.tolist()
         fund_col_name = None
-        if "Funds" in original_cols:
-            fund_col_name = "Funds"
-        elif "Fund" in original_cols:
-            fund_col_name = "Fund"
+        if config.FUNDS_COL in original_cols:
+            fund_col_name = config.FUNDS_COL
+        elif config.FUND_CODE_COL in original_cols:
+            fund_col_name = config.FUND_CODE_COL
             logger.info(
-                f"Found 'Fund' column in {input_path}. Will rename to 'Funds' for processing."
+                f"Found '{config.FUND_CODE_COL}' column in {input_path}. Will rename to '{config.FUNDS_COL}' for processing."
             )
-            df.rename(columns={"Fund": "Funds"}, inplace=True)
+            df.rename(columns={config.FUND_CODE_COL: config.FUNDS_COL}, inplace=True)
         else:
             logger.error(
-                f"Skipping {input_path}: Missing required fund column (neither 'Funds' nor 'Fund' found). Found columns: {original_cols}"
+                f"Skipping {input_path}: Missing required fund column (neither '{config.FUNDS_COL}' nor '{config.FUND_CODE_COL}' found). Found columns: {original_cols}"
             )
             return
-        required_cols = ["Funds", "Security Name"]
-        if "Security Name" not in original_cols:
+        required_cols = [config.FUNDS_COL, config.SEC_NAME_COL]
+        if config.SEC_NAME_COL not in original_cols:
             logger.error(
-                f"Skipping {input_path}: Missing required column 'Security Name'. Found columns: {original_cols}"
+                f"Skipping {input_path}: Missing required column '{config.SEC_NAME_COL}'. Found columns: {original_cols}"
             )
             return
         current_df_cols = df.columns.tolist()

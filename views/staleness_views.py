@@ -8,7 +8,6 @@ import urllib.parse
 from staleness_processing import (
     get_staleness_summary,
     get_stale_securities_details,
-    DEFAULT_STALENESS_THRESHOLD_DAYS,
 )
 from utils import load_exclusions
 from config import (
@@ -18,6 +17,7 @@ from config import (
     COMPARISON_CONFIG,
     MAXMIN_THRESHOLDS,
 )
+import config
 
 # Create blueprint
 staleness_bp = Blueprint("staleness_bp", __name__, template_folder="../templates")
@@ -54,14 +54,14 @@ def dashboard():
     try:
         # Get staleness threshold from query parameters, default to constant
         threshold_str = request.args.get(
-            "threshold", str(DEFAULT_STALENESS_THRESHOLD_DAYS)
+            "threshold", str(config.STALENESS_THRESHOLD_DAYS)
         )
         try:
             threshold = int(threshold_str)
             if threshold < 0:
                 threshold = 0  # Prevent negative thresholds
         except ValueError:
-            threshold = DEFAULT_STALENESS_THRESHOLD_DAYS
+            threshold = config.STALENESS_THRESHOLD_DAYS
             current_app.logger.warning(
                 f"Invalid threshold value '{threshold_str}' provided to dashboard, using default {threshold}."
             )
@@ -127,14 +127,14 @@ def details(filename):
     try:
         # Get staleness threshold from query parameters (now set by dashboard link), default if missing
         threshold_str = request.args.get(
-            "threshold", str(DEFAULT_STALENESS_THRESHOLD_DAYS)
+            "threshold", str(config.STALENESS_THRESHOLD_DAYS)
         )
         try:
             threshold = int(threshold_str)
             if threshold < 0:
                 threshold = 0  # Prevent negative thresholds
         except ValueError:
-            threshold = DEFAULT_STALENESS_THRESHOLD_DAYS
+            threshold = config.STALENESS_THRESHOLD_DAYS
             current_app.logger.warning(
                 f"Invalid threshold value '{threshold_str}', using default {threshold}."
             )
