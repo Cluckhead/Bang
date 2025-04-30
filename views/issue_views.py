@@ -15,12 +15,13 @@ import pandas as pd
 from datetime import datetime
 import os  # Added to check for users.csv
 from config import DATA_SOURCES  # Import from config.py
+from typing import List
 
 issue_bp = Blueprint("issue_bp", __name__, template_folder="templates")
 
 
 # Function to load users from CSV
-def load_users():
+def load_users() -> List[str]:
     """Loads the list of users from users.csv."""
     users_file = os.path.join("Data", "users.csv")
     if os.path.exists(users_file):

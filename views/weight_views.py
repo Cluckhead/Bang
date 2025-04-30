@@ -7,6 +7,7 @@ import traceback
 import logging
 from flask import Blueprint, render_template, current_app
 from utils import _is_date_like
+from typing import Tuple, Dict, List, Any
 
 # Define the blueprint
 weight_bp = Blueprint("weight", __name__, url_prefix="/weights")
@@ -24,7 +25,7 @@ def _parse_percentage(value):
         return None  # Indicate parsing failure
 
 
-def load_and_process_weight_data(data_folder_path: str, filename: str):
+def load_and_process_weight_data(data_folder_path: str, filename: str) -> Tuple[Dict[str, Any], List[str]]:
     """Loads a wide weight file, converts decimal values to percentages, checks against 100%.
 
     Args:

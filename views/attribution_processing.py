@@ -1,8 +1,9 @@
 # Purpose: Utility functions for attribution calculations (residuals, L1/L2 aggregation, normalization) used by attribution views.
+from typing import List, Dict, Any
 import pandas as pd
 
 
-def sum_l2s_block(df_block, prefix, l2_cols):
+def sum_l2s_block(df_block: pd.DataFrame, prefix: str, l2_cols: List[str]) -> List[Any]:
     """
     Sums each L2 column in l2_cols for the given DataFrame block, using the specified prefix.
     Returns a list of sums in the same order as l2_cols.
@@ -13,7 +14,7 @@ def sum_l2s_block(df_block, prefix, l2_cols):
     ]
 
 
-def sum_l1s_block(df_block, prefix, l1_groups):
+def sum_l1s_block(df_block: pd.DataFrame, prefix: str, l1_groups: Dict[str, List[str]]) -> List[Any]:
     """
     Sums all L2 columns for each L1 group in l1_groups for the given DataFrame block, using the specified prefix.
     Returns a list of sums in the order of l1_groups.values().
@@ -26,7 +27,7 @@ def sum_l1s_block(df_block, prefix, l1_groups):
     ]
 
 
-def compute_residual_block(df_block, l0_col, l2_prefix, l2_cols):
+def compute_residual_block(df_block: pd.DataFrame, l0_col: str, l2_prefix: str, l2_cols: List[str]) -> Any:
     """
     Computes the residual for a DataFrame block: L0 minus the sum of all L2 columns (with prefix).
     """
@@ -52,7 +53,7 @@ def calc_residual(row, l0, l1_prefix, l1_factors):
     return row.get(l0, 0) - l1_sum
 
 
-def norm(row, col, weight_col, normalize):
+def norm(row: Dict[str, Any], col: str, weight_col: str, normalize: bool) -> Any:
     """
     Normalizes a value in a row by the weight column if normalize is True and weight is nonzero.
     """

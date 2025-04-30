@@ -464,7 +464,7 @@ def load_and_process_data(
     secondary_filename: Optional[str] = None,
     data_folder_path: Optional[str] = None,  # Renamed and made optional
     filter_sp_valid: bool = False,  # Add parameter here
-) -> LoadResult:
+) -> Tuple[Optional[pd.DataFrame], Optional[List[str]], Optional[str], Optional[pd.DataFrame], Optional[List[str]], Optional[str]]:
     """Loads and processes a primary CSV file and optionally a secondary CSV file.
 
     Retrieves the data folder path from Flask's current_app.config['DATA_FOLDER']

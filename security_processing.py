@@ -9,6 +9,7 @@
 #   various metrics for each security's 'Value' over time, including latest value, change,
 #   historical stats (mean, max, min), and change Z-score. It also preserves the static attributes.
 
+from typing import Tuple, List
 import pandas as pd
 import os
 import numpy as np
@@ -28,7 +29,7 @@ _dataframe_cache = {}
 # Removed DATA_FOLDER constant - path is now passed to functions
 
 
-def load_and_process_security_data(filename: str, data_folder_path: str):
+def load_and_process_security_data(filename: str, data_folder_path: str) -> Tuple[pd.DataFrame, List[str]]:
     """Loads security data, identifies static/date columns, and melts to long format. Uses in-memory cache to avoid redundant loads."""
     cache_key = (filename, os.path.abspath(data_folder_path))
     if cache_key in _dataframe_cache:
@@ -285,7 +286,7 @@ def load_and_process_security_data(filename: str, data_folder_path: str):
         return pd.DataFrame(), []
 
 
-def calculate_security_latest_metrics(df, static_cols):
+def calculate_security_latest_metrics(df: pd.DataFrame, static_cols: List[str]) -> pd.DataFrame:
     """Calculates latest metrics for each security based on its 'Value' column.
 
     Args:

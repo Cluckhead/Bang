@@ -4,6 +4,7 @@
 # to support summary and detail pages, including statistics calculation, holdings lookup, and fund code loading.
 # This module is Flask-agnostic and uses standard logging.
 
+from typing import Tuple, List, Any
 import pandas as pd
 import math
 import logging
@@ -13,7 +14,7 @@ from utils import load_weights_and_held_status, parse_fund_list
 from security_processing import load_and_process_security_data
 
 
-def load_generic_comparison_data(data_folder_path: str, file1: str, file2: str):
+def load_generic_comparison_data(data_folder_path: str, file1: str, file2: str) -> Tuple[pd.DataFrame, pd.DataFrame, List[str], Any]:
     """
     Loads, processes, and merges data from two specified security data files.
     Args:

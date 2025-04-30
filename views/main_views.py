@@ -5,6 +5,7 @@
 Blueprint for main application routes, like the index page.
 """
 from flask import Blueprint, render_template, current_app
+from typing import Any
 import os
 import pandas as pd
 import traceback
@@ -19,7 +20,7 @@ main_bp = Blueprint("main", __name__)
 
 
 @main_bp.route("/")
-def index():
+def index() -> Any:
     """Renders the main dashboard page (`index.html`).
 
     This view performs the following steps:

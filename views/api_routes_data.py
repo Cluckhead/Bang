@@ -7,7 +7,7 @@ import pandas as pd
 from flask import render_template, request, current_app, jsonify, Response
 import datetime
 from pandas.tseries.offsets import BDay
-import typing
+from typing import Union, Tuple
 
 # Import from our local modules
 from views.api_core import api_bp, get_data_file_statuses
@@ -16,7 +16,7 @@ from data_audit import run_data_consistency_audit  # Import the audit function
 
 
 @api_bp.route("/get_data")
-def get_data_page() -> typing.Union[str, typing.Tuple[str, int], Response]:
+def get_data_page() -> Union[str, Tuple[str, int], Response]:
     """Renders the page for users to select parameters for API data retrieval."""
     try:
         # Construct the path to FundList.csv relative to the app's instance path or root

@@ -13,6 +13,7 @@ from pathlib import Path  # Added pathlib
 from flask import current_app  # Added current_app
 import numpy as np
 import csv
+from typing import Any, Optional, List, Dict
 
 # Configure logging
 # Removed basicConfig - logging is now configured centrally in app.py
@@ -21,7 +22,7 @@ import csv
 DEFAULT_RELATIVE_PATH = "Data"
 
 
-def _is_date_like(column_name):
+def _is_date_like(column_name: str) -> bool:
     """Check if a column name looks like a date (e.g., YYYY-MM-DD or DD/MM/YYYY).
     Updated regex to match various formats and not require matching the entire string.
     Also handles cases where column name might not be a string.
@@ -44,7 +45,7 @@ def _is_date_like(column_name):
     return any(re.search(pattern, column_name) for pattern in date_patterns)
 
 
-def parse_fund_list(fund_string):
+def parse_fund_list(fund_string: str) -> list:
     """Safely parses the fund list string like '[FUND1,FUND2]' or '[FUND1]' into a list.
     Handles potential errors and variations in spacing.
     """
@@ -67,7 +68,7 @@ def parse_fund_list(fund_string):
         return []
 
 
-def get_data_folder_path(app_root_path=None):
+def get_data_folder_path(app_root_path: Optional[str] = None) -> str:
     """
     Retrieves the data folder path, prioritizing config.py, then a default.
 
@@ -157,7 +158,7 @@ def get_data_folder_path(app_root_path=None):
 
 
 # --- NEW: Function to load exclusions ---
-def load_exclusions(exclusion_file_path):
+def load_exclusions(exclusion_file_path: str) -> Optional[pd.DataFrame]:
     """
     Loads the exclusion data from the specified CSV file.
     Args:
@@ -470,7 +471,7 @@ def load_weights_and_held_status(
         return pd.Series(dtype=bool)
 
 
-def replace_nan_with_none(obj):
+def replace_nan_with_none(obj: Any) -> Any:
     """Recursively replaces np.nan with None in a nested structure (dicts, lists).
     Useful for preparing data for JSON serialization where NaN is not valid.
     """

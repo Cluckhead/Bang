@@ -9,6 +9,7 @@ Configuration settings for the Flask application.
 
 import os
 from pathlib import Path
+from typing import List, Dict
 
 # Base directory of the application
 BASE_DIR = Path(__file__).resolve().parent
@@ -26,7 +27,7 @@ EXCLUSIONS_FILE = "exclusions.csv"
 
 # Define a list of distinct colors for chart lines
 # Add more colors if you expect more fund columns
-COLOR_PALETTE = [
+COLOR_PALETTE: List[str] = [
     "blue",
     "red",
     "green",
@@ -53,7 +54,7 @@ BLOOMBERG_YAS_URL_FORMAT = "http://Bloomberg:{ticker} YAS"
 #   - display_name: User-friendly name for titles and labels.
 #   - file1: The filename for the 'original' dataset.
 #   - file2: The filename for the 'new' or 'comparison' dataset.
-COMPARISON_CONFIG = {
+COMPARISON_CONFIG: Dict[str, Dict[str, str]] = {
     "spread": {
         "display_name": "Spread",
         "file1": "sec_spread.csv",
@@ -101,7 +102,7 @@ COMPARISON_CONFIG = {
 #   - 'max': The maximum acceptable value (inclusive).
 #   - 'display_name': A user-friendly name for the dashboard card.
 #   - 'group': The name of the dashboard group this file belongs to (e.g., 'Yields', 'Spreads').
-MAXMIN_THRESHOLDS = {
+MAXMIN_THRESHOLDS: Dict[str, Dict[str, str]] = {
     "sec_Spread.csv": {
         "min": -50,  # Example: Minimum spread allowed
         "max": 1000,  # Example: Maximum spread allowed
@@ -192,25 +193,6 @@ LOGGING_CONFIG = {
 # for different features, such as the data comparison types.
 # Using a central configuration file makes the application easier to manage and modify.
 # Environment variables can be used to override defaults (e.g., DATA_FOLDER).
-
-# Define a list of distinct colors for chart lines
-# Add more colors if you expect more fund columns
-COLOR_PALETTE = [
-    "blue",
-    "red",
-    "green",
-    "purple",
-    "#FF7F50",
-    "#6495ED",
-    "#DC143C",
-    "#00FFFF",
-    "#FFA500",
-    "#8A2BE2",
-    "#228B22",
-    "#FF1493",
-    "#A52A2A",
-    "#20B2AA",
-]
 
 # Define allowed data sources for issue tracking and related features
 DATA_SOURCES = ["S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug", "Rimes"]

@@ -33,6 +33,7 @@ from .attribution_processing import (
     norm,
 )
 import typing
+from typing import Any, Dict, List, Optional
 
 attribution_bp = Blueprint("attribution_bp", __name__, url_prefix="/attribution")
 
