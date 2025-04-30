@@ -130,55 +130,46 @@ def create_app() -> Flask:
     # No need to set app.static_folder = 'static' explicitly unless changing the folder name/path
 
     # --- Register Blueprints ---
-    from views.main_views import main_bp
-    from views.metric_views import metric_bp
-    from views.security_views import security_bp
-    from views.fund_views import fund_bp
-    from views.api_views import api_bp
-    from views.exclusion_views import exclusion_bp
+    try:
+        from views.main_views import main_bp
+        from views.metric_views import metric_bp
+        from views.security_views import security_bp
+        from views.fund_views import fund_bp
+        from views.api_views import api_bp
+        from views.exclusion_views import exclusion_bp
+        from views.weight_views import weight_bp
+        from views.curve_views import curve_bp
+        from views.issue_views import issue_bp
+        from views.attribution_views import attribution_bp
+        from views.generic_comparison_views import generic_comparison_bp
+        from views.staleness_views import staleness_bp
+        from views.maxmin_views import maxmin_bp
+        from views.watchlist_views import watchlist_bp
+    except ImportError as imp_err:
+        app.logger.error(f"Blueprint import failed: {imp_err}", exc_info=True)
+        raise
+    except Exception as e:
+        app.logger.error(f"Unexpected error during blueprint import: {e}", exc_info=True)
+        raise
 
-    # from views.comparison_views import comparison_bp # OLD - Replaced by generic
-    from views.weight_views import weight_bp
-
-    # --- Import new blueprints ---
-    # from views.duration_comparison_views import duration_comparison_bp # OLD - Replaced by generic
-    # from views.spread_duration_comparison_views import spread_duration_comparison_bp # OLD - Replaced by generic
-    # --- End import new blueprints ---
-    from views.curve_views import curve_bp  # Import the new blueprint
-    from views.issue_views import issue_bp  # Import the issue tracking blueprint
-    from views.attribution_views import (
-        attribution_bp,
-    )  # Import the attribution blueprint
-    from views.generic_comparison_views import (
-        generic_comparison_bp,
-    )  # NEW Generic Comparison BP
-    from views.staleness_views import staleness_bp  # Import the staleness blueprint
-    from views.maxmin_views import (
-        maxmin_bp,
-    )  # Import the max/min value breach blueprint
-    from views.watchlist_views import watchlist_bp  # Import the Watchlist blueprint
-
-    app.register_blueprint(main_bp)
-    app.register_blueprint(metric_bp)
-    app.register_blueprint(security_bp)
-    app.register_blueprint(fund_bp)
-    app.register_blueprint(api_bp)
-    app.register_blueprint(exclusion_bp)
-    # app.register_blueprint(comparison_bp) # OLD - Replaced by generic
-    app.register_blueprint(weight_bp)
-    # --- Register new blueprints ---
-    # app.register_blueprint(duration_comparison_bp) # OLD - Replaced by generic
-    # app.register_blueprint(spread_duration_comparison_bp) # OLD - Replaced by generic
-    # --- End register new blueprints ---
-    app.register_blueprint(curve_bp)  # Register the new blueprint
-    app.register_blueprint(issue_bp)  # Register the issue tracking blueprint
-    app.register_blueprint(attribution_bp)  # Register the attribution blueprint
-    app.register_blueprint(
-        generic_comparison_bp, url_prefix="/compare"
-    )  # NEW - Register generic comparison with a base prefix
-    app.register_blueprint(staleness_bp)  # Register the staleness blueprint
-    app.register_blueprint(maxmin_bp)  # Register the max/min value breach blueprint
-    app.register_blueprint(watchlist_bp)  # Register the Watchlist blueprint
+    try:
+        app.register_blueprint(main_bp)
+        app.register_blueprint(metric_bp)
+        app.register_blueprint(security_bp)
+        app.register_blueprint(fund_bp)
+        app.register_blueprint(api_bp)
+        app.register_blueprint(exclusion_bp)
+        app.register_blueprint(weight_bp)
+        app.register_blueprint(curve_bp)
+        app.register_blueprint(issue_bp)
+        app.register_blueprint(attribution_bp)
+        app.register_blueprint(generic_comparison_bp, url_prefix="/compare")
+        app.register_blueprint(staleness_bp)
+        app.register_blueprint(maxmin_bp)
+        app.register_blueprint(watchlist_bp)
+    except Exception as reg_err:
+        app.logger.error(f"Blueprint registration failed: {reg_err}", exc_info=True)
+        raise
 
     app.logger.info("Registered Blueprints:")
     app.logger.info(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
@@ -187,12 +178,7 @@ def create_app() -> Flask:
     app.logger.info(f"- {fund_bp.name} (prefix: {fund_bp.url_prefix})")
     app.logger.info(f"- {api_bp.name} (prefix: {api_bp.url_prefix})")
     app.logger.info(f"- {exclusion_bp.name} (prefix: {exclusion_bp.url_prefix})")
-    # app.logger.info(f"- {comparison_bp.name} (prefix: {comparison_bp.url_prefix})") # OLD
     app.logger.info(f"- {weight_bp.name} (prefix: {weight_bp.url_prefix})")
-    # --- Print new blueprints ---
-    # print(f"- {duration_comparison_bp.name} (prefix: {duration_comparison_bp.url_prefix})") # OLD
-    # print(f"- {spread_duration_comparison_bp.name} (prefix: {spread_duration_comparison_bp.url_prefix})") # OLD
-    # --- End print new blueprints ---
     app.logger.info(
         f"- {curve_bp.name} (prefix: {curve_bp.url_prefix})"
     )  # Log registration
@@ -223,7 +209,7 @@ def create_app() -> Flask:
     # --- Add the new cleanup route ---
     @app.route("/run-cleanup", methods=["POST"])
     def run_cleanup() -> Response:
-        """Endpoint to trigger the process_data.py script."""
+        """Endpoint to trigger the process_data.py script. Improved exception handling for clarity and robustness."""
         script_path = os.path.join(os.path.dirname(__file__), "process_data.py")
         python_executable = sys.executable  # Use the same python that runs flask
 
@@ -237,13 +223,14 @@ def create_app() -> Flask:
         app.logger.info(f"Attempting to run cleanup script: {script_path}")
         try:
             # Run the script using the same Python interpreter that is running Flask
-            # Capture stdout and stderr, decode as UTF-8, handle potential errors
+            # Equivalent PowerShell: python process_data.py
             result = subprocess.run(
                 [python_executable, script_path],
                 capture_output=True,
                 text=True,
                 check=False,  # Don't raise exception on non-zero exit code
                 encoding="utf-8",  # Explicitly set encoding
+                timeout=300,  # 5 minute timeout for safety
             )
 
             log_output = f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
@@ -278,7 +265,29 @@ def create_app() -> Flask:
                     500,
                 )
 
+        except FileNotFoundError as fnf_err:
+            # Raised if the Python executable or script is not found
+            app.logger.error(f"FileNotFoundError: {fnf_err}", exc_info=True)
+            return (
+                jsonify({"status": "error", "message": f"File not found: {fnf_err}"}),
+                500,
+            )
+        except subprocess.TimeoutExpired as timeout_err:
+            # Raised if the script takes too long
+            app.logger.error(f"TimeoutExpired: {timeout_err}", exc_info=True)
+            return (
+                jsonify({"status": "error", "message": "Cleanup script timed out."}),
+                500,
+            )
+        except subprocess.SubprocessError as sub_err:
+            # Raised for other subprocess-related errors
+            app.logger.error(f"SubprocessError: {sub_err}", exc_info=True)
+            return (
+                jsonify({"status": "error", "message": f"Subprocess error: {sub_err}"}),
+                500,
+            )
         except Exception as e:
+            # Generic fallback for any other exception
             app.logger.error(
                 f"Exception occurred while running cleanup script: {e}", exc_info=True
             )

@@ -1,3 +1,11 @@
+# <Purpose>
+# This file contains functions for processing security-related data, including loading, cleaning, and calculating metrics for financial securities.
+# It emphasizes robust error handling, detailed logging, and clear exception management to ensure reliability and traceability in data processing workflows.
+#
+# Logging is used throughout for info, debug, warning, and error messages, and all exceptions are logged with context and stack traces where appropriate.
+#
+# All functions return sensible defaults (e.g., empty DataFrames) on error, and exception handling is documented inline.
+
 # Purpose: This module handles loading, preprocessing, and metric calculation for security-level data files, including wide-to-long conversion and static info extraction.
 # This file handles the loading, processing, and analysis of security-level data.
 # It assumes input CSV files are structured with one security per row and time series data

@@ -50,13 +50,12 @@ def validate_data(df: pd.DataFrame, filename: str) -> Tuple[bool, List[str]]:
             errors.append(
                 f"Missing required columns for time-series data: Expected {required_cols}, got {list(df.columns)}"
             )
-
         # Check if 'Date' column is datetime type (or can be coerced)
-        # try:
-        #     pd.to_datetime(df['Date'])
-        # except Exception as e:
-        #     errors.append(f"'Date' column cannot be parsed as datetime: {e}")
-
+        if "Date" in df.columns:
+            try:
+                pd.to_datetime(df["Date"])
+            except Exception as e:
+                errors.append(f"'Date' column cannot be parsed as datetime: {e}")
         # Check if value columns (excluding Date, Code, Benchmark if exists) are numeric
         value_cols = [
             col for col in df.columns if col not in ["Date", "Code", "Benchmark"]
@@ -67,10 +66,24 @@ def validate_data(df: pd.DataFrame, filename: str) -> Tuple[bool, List[str]]:
 
     elif filename.startswith("sec_"):
         # Checks for security-level files
-        # Example: Check for an ID column (e.g., 'Security ID', 'ISIN')
-        # Example: Check if columns intended as dates are parseable
-        # Example: Check if value columns are numeric
-        pass  # Add specific checks here
+        # Check for an ID column (e.g., 'ISIN')
+        id_cols = [col for col in df.columns if col.upper() in ["ISIN", "SECURITY ID"]]
+        if not id_cols:
+            errors.append("No ID column found (expected 'ISIN' or 'Security ID').")
+        # Check if columns intended as dates are parseable
+        date_like_cols = [col for col in df.columns if _is_date_like(col)]
+        if not date_like_cols:
+            errors.append("No date-like columns found in security-level file.")
+        else:
+            for col in date_like_cols:
+                try:
+                    pd.to_datetime(df[col])
+                except Exception as e:
+                    errors.append(f"Date-like column '{col}' cannot be parsed as datetime: {e}")
+        # Check if value columns are numeric (date-like columns should be numeric)
+        for col in date_like_cols:
+            if not pd.api.types.is_numeric_dtype(df[col]):
+                errors.append(f"Date column '{col}' in security-level data is not numeric.")
 
     elif filename == "FundList.csv":
         # Example: Check required columns for FundList
@@ -79,6 +92,23 @@ def validate_data(df: pd.DataFrame, filename: str) -> Tuple[bool, List[str]]:
             errors.append(
                 f"Missing required columns for FundList.csv: Expected {required_cols}, got {list(df.columns)}"
             )
+
+    elif filename.startswith("w_"):
+        # Checks for weight files
+        id_col = df.columns[0] if len(df.columns) > 0 else None
+        if not id_col:
+            errors.append("No ID column found in weight file (expected in first column).")
+        # All columns after the first are expected to be dates
+        date_cols = df.columns[1:]
+        if not date_cols.any():
+            errors.append("No date columns found in weight file.")
+        for col in date_cols:
+            try:
+                pd.to_datetime(col)
+            except Exception as e:
+                errors.append(f"Column header '{col}' in weight file is not a valid date: {e}")
+            if not pd.api.types.is_numeric_dtype(df[col]):
+                errors.append(f"Weight column '{col}' is not numeric.")
 
     # --- Add more specific validation rules as needed based on data specs ---
 
@@ -147,3 +177,15 @@ if __name__ == "__main__":
     assert "DataFrame is None" in errors[0]
 
     print("Validation tests completed.")
+
+
+# Helper for date-like column detection (copied from data_audit.py for validation use)
+def _is_date_like(s: str) -> bool:
+    import re
+    s = s.strip()
+    date_patterns = [
+        r"^\d{4}-\d{2}-\d{2}$",
+        r"^\d{2}/\d{2}/\d{4}$",
+        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}",
+    ]
+    return any(re.match(p, s) for p in date_patterns)

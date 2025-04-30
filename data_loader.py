@@ -316,8 +316,26 @@ def _process_single_file(
                 on_bad_lines="skip",
                 dtype=dtype_map,
             )
+        except FileNotFoundError:
+            logger.error(f"File not found during reading: {filepath}", exc_info=True)
+            return None
+        except pd.errors.EmptyDataError:
+            logger.warning(f"File is empty: {filepath}")
+            return None
+        except pd.errors.ParserError as e:
+            logger.error(f"Parser error in file {filepath}: {e}", exc_info=True)
+            return None
+        except PermissionError:
+            logger.error(f"Permission denied when accessing {filepath}", exc_info=True)
+            return None
+        except OSError as e:
+            logger.error(f"OS error when accessing {filepath}: {e}", exc_info=True)
+            return None
+        except ValueError as e:
+            logger.error(f"Value error reading {filename_for_logging}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Error reading file '{filename_for_logging}': {e}")
+            logger.error(f"Unexpected error reading {filename_for_logging}: {e}", exc_info=True)
             return None
 
         # If not filtering on S&P Valid, aggregate (Date, Code) pairs to combine TRUE and FALSE rows
@@ -421,6 +439,14 @@ def _process_single_file(
         # Convert value columns *after* setting the index
         _convert_value_columns(df, original_fund_val_col_names, benchmark_col_present)
 
+        # After conversion, log if any rows are dropped due to NaNs in value columns
+        for col in original_fund_val_col_names:
+            before = len(df)
+            df.dropna(subset=[col], inplace=True)
+            dropped = before - len(df)
+            if dropped > 0:
+                logger.warning(f"Dropped {dropped} rows from {filename_for_logging} due to NaN values in column '{col}' after type conversion.")
+
         final_benchmark_col_name = (
             STD_BENCHMARK_COL
             if benchmark_col_present and STD_BENCHMARK_COL in df.columns
@@ -433,7 +459,7 @@ def _process_single_file(
         return df, original_fund_val_col_names, final_benchmark_col_name
 
     except FileNotFoundError:
-        logger.error(f"File not found during processing: {filepath}")
+        logger.error(f"File not found during processing: {filepath}", exc_info=True)
         return None
     except pd.errors.EmptyDataError:
         logger.warning(f"File is empty: {filepath}")
@@ -450,7 +476,7 @@ def _process_single_file(
     except ValueError as e:  # Catch ValueErrors from _find_columns or other steps
         logger.error(
             f"Value error processing {filename_for_logging}: {e}"
-        )  # Removed exc_info=True as it might be verbose for config errors
+        )
         return None
     except Exception as e:
         logger.exception(f"Unexpected error processing {filename_for_logging}: {e}")

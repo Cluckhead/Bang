@@ -65,7 +65,7 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
     print(f"tqs({QueryID}, {FundCodeList}, {StartDate}, {EndDate})")
     print(f"--------------------------------------------------------")
 
-    dataframe = None  # Initialize dataframe to None
+    dataframe = None
     try:
         # --- !!! Replace this comment and the line below with the actual API call !!! ---
         # Ensure the `tqs` function/library is imported (commented out at the top)
@@ -105,6 +105,24 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
         print(
             f"     ERROR: TQS function not available. Ensure 'from tqs import tqs_query as tqs' is uncommented and the library is installed."
         )
+        return None
+    except ConnectionError as ce:
+        current_app.logger.error(
+            f"Connection error during TQS API call for QueryID: {QueryID}: {ce}", exc_info=True
+        )
+        print(f"     ERROR: Connection error during real API call: {ce}")
+        return None
+    except TimeoutError as te:
+        current_app.logger.error(
+            f"Timeout error during TQS API call for QueryID: {QueryID}: {te}", exc_info=True
+        )
+        print(f"     ERROR: Timeout during real API call: {te}")
+        return None
+    except PermissionError as pe:
+        current_app.logger.error(
+            f"Authentication/permission error during TQS API call for QueryID: {QueryID}: {pe}", exc_info=True
+        )
+        print(f"     ERROR: Permission error during real API call: {pe}")
         return None
     except Exception as e:
         # Handle API call errors (timeout, connection issues, authentication, etc.)

@@ -222,7 +222,7 @@ def process_weight_file(
 
     except FileNotFoundError:
         logger.error(
-            f"Error: Input weight file not found during processing - {input_path}"
+            f"Error: Input weight file not found during processing - {input_path}", exc_info=True
         )
     except pd.errors.EmptyDataError:
         logger.warning(f"Weight file is empty - {input_path}. Skipping save.")
@@ -236,6 +236,8 @@ def process_weight_file(
             f"Permission error saving to {output_path}: {pe}. Ensure the file is not open in another program.",
             exc_info=True,
         )
+    except OSError as e:
+        logger.error(f"OS error when writing to {output_path}: {e}", exc_info=True)
     except Exception as e:
         logger.error(
             f"An unexpected error occurred processing weight file {input_path} to {output_path}: {e}",

@@ -373,7 +373,7 @@ def process_csv_file(input_path, output_path, date_columns, dates_file_path):
         output_df.to_csv(output_path, index=False, encoding="utf-8")
         logger.info(f"Successfully created: {output_path} with {len(output_df)} rows.")
     except FileNotFoundError:
-        logger.error(f"Error: Input file not found - {input_path}")
+        logger.error(f"Error: Input file not found - {input_path}", exc_info=True)
     except pd.errors.EmptyDataError:
         logger.warning(
             f"Input file is empty or contains only header - {input_path}. Skipping."
@@ -389,7 +389,7 @@ def process_csv_file(input_path, output_path, date_columns, dates_file_path):
         logger.error(f"OS error when writing to {output_path}: {e}", exc_info=True)
     except Exception as e:
         logger.error(
-            f"An unexpected error occurred processing {input_path}: {e}", exc_info=True
+            f"An unexpected error occurred processing {input_path}: {e}", exc_info=True,
         )
 
 

@@ -145,45 +145,45 @@ ignore = E203, W503 # Example ignores (Whitespace before ':', line break before 
 
 ## 2.2 Eliminate Hardcoded Values/Logic
 
-**2.2.1** In `config.py`, define constants for standard column names used frequently: `FUNDS_COL = 'Funds'`, `ISIN_COL = 'ISIN'`, `SEC_NAME_COL = 'Security Name'`, `DATE_COL = 'Date'`, `VALUE_COL = 'Value'`, etc..
+**2.2.1** In `config.py`, define constants for standard column names used frequently: `FUNDS_COL = 'Funds'`, `ISIN_COL = 'ISIN'`, `SEC_NAME_COL = 'Security Name'`, `DATE_COL = 'Date'`, `VALUE_COL = 'Value'`, etc.. [Complete]
 
-**2.2.2** Replace hardcoded string literals like 'ISIN', 'Funds', 'Date', 'Value', 'Security Name' in `.py` files (e.g., `utils.py`, `data_loader.py`, `security_processing.py`, views) with the constants defined in `config.py`.
+**2.2.2** Replace hardcoded string literals like 'ISIN', 'Funds', 'Date', 'Value', 'Security Name' in `.py` files (e.g., `utils.py`, `data_loader.py`, `security_processing.py`, views) with the constants defined in `config.py`. [Complete]
 
-**2.2.3** In `maxmin_processing.py`, replace the hardcoded `META_COLS = 6` with a dynamically determined index or a list of known metadata column names defined in `config.py`.
+**2.2.3** In `maxmin_processing.py`, replace the hardcoded `META_COLS = 6` with a dynamically determined index or a list of known metadata column names defined in `config.py`. [Complete]
 
-**2.2.4** In `staleness_processing.py`, replace the hardcoded `META_COLS = 6` similar to step 2.2.3.
+**2.2.4** In `staleness_processing.py`, replace the hardcoded `META_COLS = 6` similar to step 2.2.3. [Complete]
 
-**2.2.5** In `staleness_processing.py`, move `DEFAULT_PLACEHOLDER_VALUES = [100]` to `config.py` as `STALENESS_PLACEHOLDERS: List[Union[int, str]]`. Update `staleness_processing.py` and `direct_test.py` to use this config variable.
+**2.2.5** In `staleness_processing.py`, move `DEFAULT_PLACEHOLDER_VALUES = [100]` to `config.py` as `STALENESS_PLACEHOLDERS: List[Union[int, str]]`. Update `staleness_processing.py` and `direct_test.py` to use this config variable. [Complete]
 
-**2.2.6** In `staleness_processing.py`, move `DEFAULT_STALENESS_THRESHOLD_DAYS = 5` to `config.py` as `STALENESS_THRESHOLD_DAYS: int`. Update `staleness_processing.py` and `test_staleness.py` to use this.
+**2.2.6** In `staleness_processing.py`, move `DEFAULT_STALENESS_THRESHOLD_DAYS = 5` to `config.py` as `STALENESS_THRESHOLD_DAYS: int`. Update `staleness_processing.py` and `test_staleness.py` to use this. [Complete]
 
-**2.2.7** In `curve_processing.py`, move `CURVE_MONOTONICITY_DROP_THRESHOLD = -0.5`, `CURVE_ANOMALY_STD_MULTIPLIER = 3`, `CURVE_ANOMALY_ABS_THRESHOLD = 0.2` from `config.py` into the `check_curve_inconsistencies` function signature with defaults, or keep in config if external configuration is desired. Review if these should be configurable per-currency.
+**2.2.7** In `curve_processing.py`, move `CURVE_MONOTONICITY_DROP_THRESHOLD = -0.5`, `CURVE_ANOMALY_STD_MULTIPLIER = 3`, `CURVE_ANOMALY_ABS_THRESHOLD = 0.2` from `config.py` into the `check_curve_inconsistencies` function signature with defaults, or keep in config if external configuration is desired. Review if these should be configurable per-currency. [Complete]
 
-**2.2.8** In `views/security_views.py`, replace hardcoded `PER_PAGE = 50` with a constant `SECURITIES_PER_PAGE` in `config.py`.
+**2.2.8** In `views/security_views.py`, replace hardcoded `PER_PAGE = 50` with a constant `SECURITIES_PER_PAGE` in `config.py`. [Complete]
 
-**2.2.9** In `views/generic_comparison_views.py`, replace hardcoded `PER_PAGE_COMPARISON = 50` with a constant `COMPARISON_PER_PAGE` in `config.py`.
+**2.2.9** In `views/generic_comparison_views.py`, replace hardcoded `PER_PAGE_COMPARISON = 50` with a constant `COMPARISON_PER_PAGE` in `config.py`. [Complete]
 
-**2.2.10** Review `utils._is_date_like`. Consider if the date patterns should be moved to `config.py` or if a more robust date parsing approach (e.g., trying multiple formats with `pd.to_datetime`) should be used universally, reducing reliance on regex patterns. Implement the improved parsing in `_is_date_like` or a new utility function.
+**2.2.10** Review `utils._is_date_like`. Consider if the date patterns should be moved to `config.py` or if a more robust date parsing approach (e.g., trying multiple formats with `pd.to_datetime`) should be used universally, reducing reliance on regex patterns. Implement the improved parsing in `_is_date_like` or a new utility function. [Complete]
 
-**2.2.11** In `process_data.py`, examine the ISIN suffixing logic (`f"{str(original_isin)}-{i+1}"`). Determine if this suffixing (`-1`, `-2`) is always desired or should be configurable. Refactor into a helper function, potentially taking a suffix pattern from config.
+**2.2.11** In `process_data.py`, examine the ISIN suffixing logic (`f"{str(original_isin)}-{i+1}"`). Determine if this suffixing (`-1`, `-2`) is always desired or should be configurable. Refactor into a helper function, potentially taking a suffix pattern from config. [Complete]
 
-**2.2.12** In `data_loader.py`, review the column finding logic (`_find_column` using regex patterns like `r'\b(Position\s*)?Date\b'`). Make these patterns configurable in `config.py` (e.g., `DATE_COLUMN_PATTERNS = [r'\bDate\b', r'\bPosition\s*Date\b']`).
+**2.2.12** In `data_loader.py`, review the column finding logic (`_find_column` using regex patterns like `r'\b(Position\s*)?Date\b'`). Make these patterns configurable in `config.py` (e.g., `DATE_COLUMN_PATTERNS = [r'\bDate\b', r'\bPosition\s*Date\b']`). [Complete]
 
-**2.2.13** Review `views/attribution_views.py` for hardcoded L1/L2 factor names/groupings. Consider moving these definitions to `config.py` if they might change.
+**2.2.13** Review `views/attribution_views.py` for hardcoded L1/L2 factor names/groupings. Consider moving these definitions to `config.py` if they might change. [Complete]
 
-**2.2.14** In `views/generic_comparison_views.py` `calculate_generic_comparison_stats`, review the hardcoded list of statistic keys `expected_keys`. Ensure this list aligns with the actual calculated keys.
+**2.2.14** In `views/generic_comparison_views.py` `calculate_generic_comparison_stats`, review the hardcoded list of statistic keys `expected_keys`. Ensure this list aligns with the actual calculated keys. [Complete]
 
-**2.2.15** In `templates/watchlist_page.html`, the `min-width` and `width` for the 'Reason' column are hardcoded. Move these styling details purely to CSS or Tailwind classes if possible.
+**2.2.15** In `templates/watchlist_page.html`, the `min-width` and `width` for the 'Reason' column are hardcoded. Move these styling details purely to CSS or Tailwind classes if possible. [Complete]
 
-**2.2.16** Review `playwright_screenshot_all.py`. Move example data (`EXAMPLE_METRIC`, `EXAMPLE_SECURITY_ID`, etc.) and selectors into a separate configuration section or file to avoid hardcoding within the script logic.
+**2.2.16** Review `playwright_screenshot_all.py`. Move example data (`EXAMPLE_METRIC`, `EXAMPLE_SECURITY_ID`, etc.) and selectors into a separate configuration section or file to avoid hardcoding within the script logic. [Complete]
 
-**2.2.17** Review `direct_test.py`. Move test parameters (`SECURITY_ID`, `CSV_FILE`, `PLACEHOLDER_VALUE`, `CONSECUTIVE_THRESHOLD`) to command-line arguments or a config section.
+**2.2.17** Review `direct_test.py`. Move test parameters (`SECURITY_ID`, `CSV_FILE`, `PLACEHOLDER_VALUE`, `CONSECUTIVE_THRESHOLD`) to command-line arguments or a config section. [Complete]
 
-**2.2.18** Review `staleness_detection.py`. Ensure placeholder values and threshold come from config or arguments, not hardcoded defaults within the function logic.
+**2.2.18** Review `staleness_detection.py`. Ensure placeholder values and threshold come from config or arguments, not hardcoded defaults within the function logic. [Complete]
 
-**2.2.19** Review `weight_processing.py`. The logic for detecting metadata columns relies on heuristics (`detect_metadata_columns`). Could this be made more explicit or configurable? Evaluate if the `min_numeric_cols` default of 3 is robust.
+**2.2.19** Review `weight_processing.py`. The logic for detecting metadata columns relies on heuristics (`detect_metadata_columns`). Could this be made more explicit or configurable? Evaluate if the `min_numeric_cols` default of 3 is robust. [Complete]
 
-**2.2.20** Review `views/security_details.py`. The grouping logic for static info relies on hardcoded lists of column names. Consider making these groupings configurable if the `reference.csv` schema changes frequently.
+**2.2.20** Review `views/security_details.py`. The grouping logic for static info relies on hardcoded lists of column names. Consider making these groupings configurable if the `reference.csv` schema changes frequently. [Complete]
 
 ## 2.3 Enhance Error Handling & Validation
 
@@ -207,25 +207,25 @@ ignore = E203, W503 # Example ignores (Whitespace before ':', line break before 
 
 **2.3.10** In `weight_processing.py` `process_weight_file`, refine `except Exception as e:` to handle specific file/parsing/permission errors.
 
-**2.3.11** In `data_validation.py` `validate_data`, implement checks for `ts_*.csv` files: verify `Date` is datetime-parseable, `Code` exists, and value columns are numeric.
+**2.3.11** In `data_validation.py` `validate_data`, implement checks for `ts_*.csv` files: verify `Date` is datetime-parseable, `Code` exists, and value columns are numeric. [Complete]
 
-**2.3.12** In `data_validation.py` `validate_data`, implement checks for `sec_*.csv` files: verify an ID column exists (e.g., `ISIN`), date-like columns are parseable, and value columns are numeric.
+**2.3.12** In `data_validation.py` `validate_data`, implement checks for `sec_*.csv` files: verify an ID column exists (e.g., `ISIN`), date-like columns are parseable, and value columns are numeric. [Complete]
 
-**2.3.13** In `data_validation.py` `validate_data`, implement checks for `FundList.csv`: verify required columns exist (`Fund Code`, `Total Asset Value USD`, `Picked`).
+**2.3.13** In `data_validation.py` `validate_data`, implement checks for `FundList.csv`: verify required columns exist (`Fund Code`, `Total Asset Value USD`, `Picked`). [Complete]
 
-**2.3.14** In `data_validation.py` `validate_data`, implement checks for `w_*.csv` files: verify ID column exists, date columns are parseable, weight columns are numeric.
+**2.3.14** In `data_validation.py` `validate_data`, implement checks for `w_*.csv` files: verify ID column exists, date columns are parseable, weight columns are numeric. [Complete]
 
-**2.3.15** In `views/api_routes_call.py`, integrate calls to `data_validation.validate_data` after fetching data (`_fetch_real_tqs_data`) and before saving/merging (`_save_or_merge_data`).
+**2.3.15** In `views/api_routes_call.py`, integrate calls to `data_validation.validate_data` after fetching data (`_fetch_real_tqs_data`) and before saving/merging (`_save_or_merge_data`). [Complete]
 
-**2.3.16** Modify `_save_or_merge_data` in `views/api_routes_call.py` to handle the validation status. If validation fails, log the errors and potentially skip saving or save to a quarantined location. Update the `summary['status']` accordingly.
+**2.3.16** Modify `_save_or_merge_data` in `views/api_routes_call.py` to handle the validation status. If validation fails, log the errors and potentially skip saving or save to a quarantined location. Update the `summary['status']` accordingly. [Complete]
 
-**2.3.17** In `data_loader.py` `_process_single_file`, add more specific logging when dropping rows due to NaN values after type conversion or date parsing, indicating which column caused the drop.
+**2.3.17** In `data_loader.py` `_process_single_file`, add more specific logging when dropping rows due to NaN values after type conversion or date parsing, indicating which column caused the drop. [Complete]
 
-**2.3.18** In `curve_processing.py` `load_curve_data`, improve logging when dropping rows due to unparseable 'Date' or non-numeric 'Value', showing examples of dropped values if feasible.
+**2.3.18** In `curve_processing.py` `load_curve_data`, improve logging when dropping rows due to unparseable 'Date' or non-numeric 'Value', showing examples of dropped values if feasible. [Complete]
 
-**2.3.19** In `security_processing.py` `load_and_process_security_data`, improve logging when dropping rows due to missing required values, specifying which values were missing.
+**2.3.19** In `security_processing.py` `load_and_process_security_data`, improve logging when dropping rows due to missing required values, specifying which values were missing. [Complete]
 
-**2.3.20** In `views/api_core.py` `_fetch_real_tqs_data`, add more specific logging or exception handling if the `tqs` library (currently commented out) raises specific API-related exceptions.
+**2.3.20** In `views/api_core.py` `_fetch_real_tqs_data`, add more specific logging or exception handling if the `tqs` library (currently commented out) raises specific API-related exceptions. [Complete]
 
 ---
 
@@ -233,7 +233,7 @@ ignore = E203, W503 # Example ignores (Whitespace before ':', line break before 
 
 ## 3.1 Refactor Data Loading/Processing Logic
 
-**3.1.1** Create a new file `data_utils.py` (or add to `utils.py`).
+**3.1.1** Create a new file `data_utils.py`
 
 **3.1.2** Define a function `read_csv_robustly(filepath: str, **kwargs) -> Optional[pd.DataFrame]` in `data_utils.py`. This function should handle `FileNotFoundError`, `pd.errors.EmptyDataError`, `pd.errors.ParserError`, `UnicodeDecodeError` with logging, and return `None` on error. It should accept standard `pd.read_csv` kwargs.
 
