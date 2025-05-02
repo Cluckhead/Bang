@@ -1,0 +1,32 @@
+# Example maxmin_thresholds.yaml
+sec_Spread.csv:
+  min: -50
+  max: 1000
+  display_name: 'Spread'
+  group: 'Spreads'
+sec_SpreadSP.csv:
+  min: -50
+  max: 1000
+  display_name: 'Spread (S&P)'
+  group: 'Spreads'
+sec_YTM.csv:
+  min: 0
+  max: 100
+  display_name: 'YTM'
+  group: 'Yields'
+sec_YTMSP.csv:
+  min: 0
+  max: 100
+  display_name: 'YTM (S&P)'
+  group: 'Yields'
+sec_YTW.csv:
+  min: 0
+  max: 100
+  display_name: 'YTW'
+  group: 'Yields'
+sec_YTWSP.csv:
+  min: 0
+  max: 100
+  display_name: 'YTW (S&P)'
+  group: 'Yields'
+# Add other files to check here as needed 

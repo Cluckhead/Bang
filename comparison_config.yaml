@@ -1,0 +1,27 @@
+# Example comparison_config.yaml
+spread:
+  display_name: 'Spread'
+  file1: 'sec_spread.csv'
+  file2: 'sec_spreadSP.csv'
+  value_label: 'Spread'
+duration:
+  display_name: 'Duration'
+  file1: 'sec_duration.csv'
+  file2: 'sec_durationSP.csv'
+  value_label: 'Duration'
+ytm:
+  display_name: 'Yield to Maturity (YTM)'
+  file1: 'sec_YTM.csv'
+  file2: 'sec_YTMSP.csv'
+  value_label: 'YTM (%)'
+ytw:
+  display_name: 'Yield to Worst (YTW)'
+  file1: 'sec_YTW.csv'
+  file2: 'sec_YTWSP.csv'
+  value_label: 'YTW (%)'
+spread_duration:
+  display_name: 'Spread Duration'
+  file1: 'sec_Spread duration.csv'
+  file2: 'sec_Spread durationSP.csv'
+  value_label: 'Spread Duration'
+# Add more comparison types as needed 

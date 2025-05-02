@@ -2,6 +2,9 @@
 # These functions provide common helper functionalities like parsing specific string formats
 # or validating data types, helping to keep the main application logic cleaner.
 
+# Purpose: Utility functions for the Flask application, including YAML config loading, date parsing, fund list parsing, and more.
+# Provides helpers for robust file I/O, configuration, and data validation across the Simple Data Checker app.
+
 """
 Utility functions for the Flask application.
 """
@@ -16,6 +19,7 @@ import csv
 from typing import Any, Optional, List, Dict
 import config
 from data_utils import read_csv_robustly, melt_wide_data
+import yaml
 
 # Configure logging
 # Removed basicConfig - logging is now configured centrally in app.py
@@ -23,15 +27,40 @@ from data_utils import read_csv_robustly, melt_wide_data
 
 DEFAULT_RELATIVE_PATH = "Data"
 
+def load_yaml_config(filepath: str) -> dict:
+    """
+    Loads a YAML configuration file and returns its contents as a dictionary.
+    Args:
+        filepath (str): Path to the YAML file.
+    Returns:
+        dict: Parsed YAML contents, or empty dict on error.
+    """
+    logger = logging.getLogger(__name__)
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+            logger.info(f"Loaded YAML config from {filepath}")
+            return data if data else {}
+    except FileNotFoundError:
+        logger.error(f"YAML config file not found: {filepath}")
+    except yaml.YAMLError as e:
+        logger.error(f"YAML parsing error in {filepath}: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error loading YAML config {filepath}: {e}", exc_info=True)
+    return {}
+
+# Load date patterns from YAML once at module level
+_date_patterns_yaml = load_yaml_config(os.path.join(os.path.dirname(__file__), 'config', 'date_patterns.yaml'))
+DATE_COLUMN_PATTERNS = _date_patterns_yaml.get('date_patterns', [])
+
 
 def _is_date_like(column_name: str) -> bool:
     """Check if a column name looks like a date (e.g., YYYY-MM-DD or DD/MM/YYYY).
-    Uses regex patterns from config.DATE_COLUMN_PATTERNS.
+    Uses regex patterns loaded from config/date_patterns.yaml.
     """
     if not isinstance(column_name, str):
         return False
-    # Use patterns from config
-    return any(re.search(pattern, column_name) for pattern in config.DATE_COLUMN_PATTERNS)
+    return any(re.search(pattern, column_name) for pattern in DATE_COLUMN_PATTERNS)
 
 
 def parse_fund_list(fund_string: str) -> list:

@@ -26,6 +26,7 @@ Configuration settings for the Flask application.
 import os
 from pathlib import Path
 from typing import List, Dict
+from utils import load_yaml_config
 
 # Base directory of the application
 BASE_DIR = Path(__file__).resolve().parent
@@ -64,100 +65,12 @@ COLOR_PALETTE: List[str] = [
 BLOOMBERG_YAS_URL_FORMAT = "http://Bloomberg:{ticker} YAS"
 
 # --- NEW: Comparison Configuration ---
-# Defines the different types of security data comparisons available.
-# Keys are the identifier used in URLs (e.g., 'spread').
-# Values are dictionaries containing:
-#   - display_name: User-friendly name for titles and labels.
-#   - file1: The filename for the 'original' dataset.
-#   - file2: The filename for the 'new' or 'comparison' dataset.
-COMPARISON_CONFIG: Dict[str, Dict[str, str]] = {
-    "spread": {
-        "display_name": "Spread",
-        "file1": "sec_spread.csv",
-        "file2": "sec_spreadSP.csv",
-        "value_label": "Spread",  # Label for the 'Value' column in charts/stats
-    },
-    "duration": {
-        "display_name": "Duration",
-        "file1": "sec_duration.csv",
-        "file2": "sec_durationSP.csv",
-        "value_label": "Duration",
-    },
-    "spread_duration": {
-        "display_name": "Spread Duration",
-        "file1": "sec_Spread duration.csv",  # Note the space in filename
-        "file2": "sec_Spread durationSP.csv",  # Note the space in filename
-        "value_label": "Spread Duration",
-    },
-    "ytm": {
-        "display_name": "YTM",
-        "file1": "sec_YTM.csv",
-        "file2": "sec_YTMSP.csv",
-        "value_label": "YTM",
-    },
-    "ytw": {
-        "display_name": "YTW",
-        "file1": "sec_YTW.csv",
-        "file2": "sec_YTWSP.csv",
-        "value_label": "YTW",
-    },
-    # Add new comparison types here in the future
-    # 'yield': {
-    #     'display_name': 'Yield',
-    #     'file1': 'sec_yield.csv',
-    #     'file2': 'sec_yieldSP.csv',
-    #     'value_label': 'Yield'
-    # }
-}
+# Loads the different types of security data comparisons from YAML.
+COMPARISON_CONFIG: Dict[str, Dict[str, str]] = load_yaml_config('comparison_config.yaml')
 
 # --- NEW: Max/Min Value Threshold Configuration ---
-# Defines files and their corresponding min/max value thresholds for the Max/Min Breach check.
-# Keys are the filename (relative to DATA_FOLDER) to check.
-# Values are dictionaries containing:
-#   - 'min': The minimum acceptable value (inclusive).
-#   - 'max': The maximum acceptable value (inclusive).
-#   - 'display_name': A user-friendly name for the dashboard card.
-#   - 'group': The name of the dashboard group this file belongs to (e.g., 'Yields', 'Spreads').
-MAXMIN_THRESHOLDS: Dict[str, Dict[str, str]] = {
-    "sec_Spread.csv": {
-        "min": -50,  # Example: Minimum spread allowed
-        "max": 1000,  # Example: Maximum spread allowed
-        "display_name": "Spread",
-        "group": "Spreads",
-    },
-    "sec_SpreadSP.csv": {
-        "min": -50,
-        "max": 1000,
-        "display_name": "Spread (S&P)",
-        "group": "Spreads",
-    },
-    "sec_YTM.csv": {
-        "min": 0,  # 0%
-        "max": 100,  # 100%
-        "display_name": "YTM",
-        "group": "Yields",
-    },
-    "sec_YTMSP.csv": {
-        "min": 0,  # 0%
-        "max": 100,  # 100%
-        "display_name": "YTM (S&P)",
-        "group": "Yields",
-    },
-    "sec_YTW.csv": {
-        "min": 0,  # 0%
-        "max": 100,  # 100%
-        "display_name": "YTW",
-        "group": "Yields",
-    },
-    "sec_YTWSP.csv": {
-        "min": 0,  # 0%
-        "max": 100,  # 100%
-        "display_name": "YTW (S&P)",
-        "group": "Yields",
-    },
-    # Add other files to check here, e.g.:
-    # 'sec_Price.csv': {'min': 0.01, 'max': 200, 'display_name': 'Price', 'group': 'Other'},
-}
+# Loads max/min value thresholds for files from YAML.
+MAXMIN_THRESHOLDS: Dict[str, Dict[str, str]] = load_yaml_config('maxmin_thresholds.yaml')
 
 # Logging configuration (optional, Flask's default logging can be used)
 LOGGING_CONFIG = {

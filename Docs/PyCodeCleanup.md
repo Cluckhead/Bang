@@ -328,7 +328,7 @@ sec_Spread.csv:
 
 **3.2.12** Add tests in `test_config_loading.py` to mock the YAML files and verify that `config.COMPARISON_CONFIG` and `config.MAXMIN_THRESHOLDS` are loaded correctly. Mock `load_yaml_config`.
 
-**3.2.13** Create `config/date_patterns.yaml` (or similar). Move regex patterns used in `utils._is_date_like` and `data_loader._find_column` to this file.
+**3.2.13** Create `config/date_patterns.yaml` . Move regex patterns used in `utils._is_date_like` and `data_loader._find_column` to this file.
 
 **3.2.14** Modify `utils.py` and `data_loader.py` to load these patterns from the YAML file instead of having them hardcoded.
 
@@ -480,6 +480,12 @@ sec_Spread.csv:
 **5.2.10** Commit the final, refactored codebase.
 
 # Phase 6: Check up with Gemini
-**6.1** has 2.1 been fully completed
-**6.2** has 2.2.1 been fully completed
+
+Submit both repo to Gemini, ask it to check systematically whether all 200 points have been completed as it to list changes and where to get the information for  the Readme.md and Features.md files accordingly.
+
+Any gaps in the 200 - implement them.
+
+Ask it to score the code and give a report, score it out of 10
+if below a 9 ask what is needed to get to a 9 and how much work that would be
+
 ---

@@ -20,6 +20,7 @@ import re  # Import regex for pattern matching
 from flask import current_app  # Import current_app to access config
 import config
 from data_utils import read_csv_robustly, parse_dates_robustly, identify_columns, convert_to_numeric_robustly
+from utils import load_yaml_config
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
@@ -37,6 +38,9 @@ STD_CODE_COL = "Code"
 STD_BENCHMARK_COL = "Benchmark"
 STD_SCOPE_COL = "SS Project - In Scope"  # Standardized name for the scope column
 
+# Load date patterns from YAML once at module level
+_date_patterns_yaml = load_yaml_config(os.path.join(os.path.dirname(__file__), 'config', 'date_patterns.yaml'))
+DATE_COLUMN_PATTERNS = _date_patterns_yaml.get('date_patterns', [])
 
 # --- NEW HELPER FUNCTION ---
 def load_simple_csv(filepath: str, filename_for_logging: str) -> Optional[pd.DataFrame]:
@@ -129,7 +133,7 @@ def _find_columns_for_file(
     """
     # Use patterns from config for date, code, benchmark, and scope columns
     patterns = {
-        "date": config.DATE_COLUMN_PATTERNS,
+        "date": DATE_COLUMN_PATTERNS,
         "code": config.CODE_COLUMN_PATTERNS,
         "benchmark": config.BENCHMARK_COLUMN_PATTERNS,
         "scope": config.SCOPE_COLUMN_PATTERNS,
