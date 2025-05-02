@@ -178,6 +178,9 @@ def clear_watchlist_entry(
     watchlist = load_watchlist(data_folder_path)
     df = pd.DataFrame(watchlist)
     now = datetime.now()
+    # Handle empty DataFrame case
+    if df.empty:
+        return False, "Active watchlist entry not found."
     idx = df[(df["ISIN"] == isin) & (df["Status"] == "Active")].index
     if len(idx) == 0:
         return False, "Active watchlist entry not found."
@@ -196,6 +199,9 @@ def update_last_checked(data_folder_path: str, isin: str):
     """
     watchlist = load_watchlist(data_folder_path)
     df = pd.DataFrame(watchlist)
+    # Handle empty DataFrame case
+    if df.empty:
+        return False
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     idx = df[(df["ISIN"] == isin) & (df["Status"] == "Active")].index
     if len(idx) == 0:
@@ -247,21 +253,21 @@ def manage_watchlist():
 
 @watchlist_bp.route("/watchlist/clear", methods=["POST"])
 def clear_watchlist():
-    """
-    Handles clearing a watchlist entry (marks as cleared, does not delete).
-    """
+    """Handles POST request to clear a watchlist entry."""
     data_folder = current_app.config["DATA_FOLDER"]
+    # Use standard form names matching the add form for consistency
     isin = request.form.get("isin")
-    cleared_by = request.form.get("cleared_by")
-    clear_reason = request.form.get("clear_reason")
+    cleared_by = request.form.get("user") # Use 'user' from form
+    clear_reason = request.form.get("reason") # Use 'reason' from form
+
     if not isin or not cleared_by or not clear_reason:
         flash("ISIN, user, and reason are required to clear an entry.", "danger")
-        return redirect(url_for("watchlist_bp.manage_watchlist"))
-    success, msg = clear_watchlist_entry(data_folder, isin, cleared_by, clear_reason)
-    if success:
-        flash(msg, "success")
     else:
-        flash(msg, "danger")
+        success, msg = clear_watchlist_entry(
+            data_folder, isin, cleared_by, clear_reason
+        )
+        flash(msg, "success" if success else "danger")
+
     return redirect(url_for("watchlist_bp.manage_watchlist"))
 
 
@@ -269,12 +275,18 @@ def clear_watchlist():
 def check_watchlist_entry(isin):
     """
     Updates LastChecked for the ISIN and redirects to the security details page.
+    If the update fails (e.g., ISIN not active), redirects back to the watchlist with an error flash.
     """
     data_folder = current_app.config["DATA_FOLDER"]
-    update_last_checked(data_folder, isin)
-    # Redirect to the security details page
-    # NOTE: The security_details endpoint requires both 'metric_name' and 'security_id'.
-    # Here, we default to 'Duration' as the metric. Change as needed for your app logic.
-    return redirect(
-        url_for("security.security_details", metric_name="Duration", security_id=isin)
-    )
+    success = update_last_checked(data_folder, isin)
+
+    if success:
+        # Redirect to the security details page
+        # NOTE: The security_details endpoint requires both 'metric_name' and 'security_id'.
+        # Here, we default to 'Duration' as the metric. Change as needed for your app logic.
+        return redirect(
+            url_for("security.security_details", metric_name="Duration", security_id=isin)
+        )
+    else:
+        flash(f"Failed to update check time or find active entry for ISIN {isin}.", "danger")
+        return redirect(url_for("watchlist_bp.manage_watchlist"))

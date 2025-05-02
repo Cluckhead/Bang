@@ -37,6 +37,7 @@ from typing import List, Dict, Any
 
 
 def create_app() -> Flask:
+    print("create_app() called")
     """Factory function to create and configure the Flask app."""
     app = Flask(
         __name__, instance_relative_config=True
@@ -167,6 +168,7 @@ def create_app() -> Flask:
         app.register_blueprint(staleness_bp)
         app.register_blueprint(maxmin_bp)
         app.register_blueprint(watchlist_bp)
+        print("Registered watchlist_bp in create_app")
     except Exception as reg_err:
         app.logger.error(f"Blueprint registration failed: {reg_err}", exc_info=True)
         raise

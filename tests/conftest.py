@@ -2,12 +2,15 @@
 
 import pytest
 import os
+import app
+print("Imported app.py from:", app.__file__)
 from app import create_app  # Import the application factory
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def test_app():
     """Provides a Flask application context for the test session."""
+    print("test_app fixture called")
     app = create_app()  # Use the factory to create a new app instance
     # Ensure the template folder path is correct relative to the app root
     template_dir = os.path.abspath(os.path.join(app.root_path, "templates"))
@@ -19,6 +22,7 @@ def test_app():
             "WTF_CSRF_ENABLED": False,  # Often disabled for testing forms
             "SECRET_KEY": "test",  # Needed for session, flash messages
             "SERVER_NAME": "localhost.test",  # Helps url_for work correctly outside request context
+            "PROPAGATE_EXCEPTIONS": True,  # Show exceptions in tests
         }
     )
 
@@ -29,7 +33,8 @@ def test_app():
 @pytest.fixture(scope="function")  # Changed scope to function for isolation
 def client(test_app):
     """Provides a Flask test client for each test function."""
-    return test_app.test_client()
+    with test_app.test_client() as client:
+        yield client
 
 
 # Removed duplicate app and client fixtures below
