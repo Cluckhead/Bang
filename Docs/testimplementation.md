@@ -1,210 +1,566 @@
-# Unit Testing Implementation Plan
+### Test Coverage Improvement Plan
 
-- **Always update Docs/Tests.md with details of each test implemented and what it is testing.**  
+**Overall Goal:** Increase the test coverage significantly from the current 34%. Focus on core application logic, views, and utility functions.
 
+**Instructions for LLM Agent:**
 
-This plan outlines the steps to introduce comprehensive unit testing to the Simple Data Checker application using the `pytest` framework.
+- Use `pytest` for writing tests.
+- Use the `pytest-mock` library (`mocker` fixture) to mock dependencies like file I/O (`open`, `pd.read_csv`, `os.path.exists`), external APIs (if any), database interactions (if any), and functions from other modules.
+- Place new test files in the corresponding `tests/` subdirectory (e.g., tests for `views/watchlist_views.py` go in `tests/views/test_watchlist_views.py`).
+- Ensure tests cover various scenarios: success paths, edge cases (e.g., empty data, invalid inputs), and error handling (e.g., file not found, exceptions).
+- Aim to cover all functions and branches within the specified files.
+    
+**Phase 1: Critical Views & Logic (0-10% Coverage)**
 
-## Phase 1: Setup and Foundation
+1. **Task:** Write unit tests for `views/watchlist_views.py`.
+    
+    - **Target File:** `views/watchlist_views.py`
+        
+    - **Test File:** `tests/views/test_watchlist_views.py` (Create if not exists)
+        
+    - **Functions to Test:** `load_watchlist`, `save_watchlist`, `load_users`, `load_available_securities`, `add_to_watchlist`, `clear_watchlist_entry`, `update_last_checked`, `manage_watchlist` (GET/POST), `clear_watchlist` (POST), `check_watchlist_entry` (GET).
+        
+    - **Mocking:** Mock file operations (`pd.read_csv`, `os.path.exists`, `df.to_csv`), `load_available_securities`, `load_users`. Test logic for adding/clearing entries, checking for existing active entries, loading/saving CSV data. Test the view routes using the Flask test client, mocking helper functions.
+        
+2. **Task:** Write unit tests for `views/maxmin_views.py` and `maxmin_processing.py`.
+    
+    - **Target Files:** `views/maxmin_views.py`, `maxmin_processing.py`
+        
+    - **Test Files:** `tests/views/test_maxmin_views.py`, `tests/processing/test_maxmin_processing.py` (Create if not exists)
+        
+    - **Functions to Test:** `maxmin_processing.find_value_breaches`, `maxmin_processing.get_breach_summary`, `maxmin_processing.get_breach_details`, `views.maxmin_views.dashboard` (GET), `views.maxmin_views.details` (GET).
+        
+    - **Mocking:** Mock `pd.read_csv`, `os.path.exists`, `config.MAXMIN_THRESHOLDS`. Test breach detection logic with various thresholds and data values (including NaNs). Test view routes with different query parameters (overrides, group_name) and mock the processing functions.
+        
+3. **Task:** Write unit tests for `views/attribution_views.py`.
+    
+    - **Target File:** `views/attribution_views.py`
+        
+    - **Test File:** `tests/views/test_attribution_views.py` (Expand existing)
+        
+    - **Functions to Test:** `get_available_funds`, `attribution_summary` (GET), `attribution_charts` (GET), `attribution_radar` (GET), `attribution_security_page` (GET).
+        
+    - **Mocking:** Mock file operations (`pd.read_csv`, `os.path.exists`), `w_secs.csv` loading, `config.ATTRIBUTION_L1_GROUPS`, `config.ATTRIBUTION_L2_GROUPS`. Test data loading for specific funds, filtering logic (date, characteristic, level), aggregation logic for different levels (L0, L1, L2), and data preparation for charts/tables. Use the Flask test client.
+        
+4. **Task:** Write unit tests for `views/metric_views.py`.
+    
+    - **Target File:** `views/metric_views.py`
+        
+    - **Test File:** `tests/views/test_metric_views.py` (Expand existing)
+        
+    - **Functions to Test:** `metric_page` (GET), `_calculate_contributions`, `inspect_metric_contribution` (POST), `inspect_results_page` (GET).
+        
+    - **Mocking:** Mock `load_and_process_data`, `calculate_latest_metrics`, `load_simple_csv`, `_melt_data`, `reference.csv` loading. Test `metric_page` with/without secondary data, with/without fund group filter. Test `_calculate_contributions` logic thoroughly (baseline, average, diff, ranking). Test API endpoint and results page rendering. Use the Flask test client.
+        
+5. **Task:** Write unit tests for `views/api_core.py`.
+    
+    - **Target File:** `views/api_core.py`
+        
+    - **Test File:** `tests/views/test_api_core.py` (Create if not exists)
+        
+    - **Functions to Test:** `_simulate_and_print_tqs_call`, `_fetch_real_tqs_data` (mock external API), `_find_key_columns`, `get_data_file_statuses`.
+        
+    - **Mocking:** Mock `tqs` library (if `USE_REAL_TQS_API` is True), `pd.read_csv`, `os.path.exists`, `os.path.getmtime`, `datetime.datetime`. Test column finding logic, file status retrieval, API simulation output, and error handling in real API fetch.
+        
+6. **Task:** Write unit tests for `views/security_views.py`.
+    
+    - **Target File:** `views/security_views.py`
+        
+    - **Test File:** `tests/views/test_security_views.py` (Expand existing)
+        
+    - **Functions to Test:** `get_active_exclusions`, `securities_page` (GET), `security_details` (GET).
+        
+    - **Mocking:** Mock `load_and_process_security_data`, `calculate_security_latest_metrics`, `load_exclusions`, `reference.csv` loading, `issue_processing` functions, `get_holdings_for_security`. Test filtering (search, static, min=0, fund group), sorting, pagination logic in `securities_page`. Test data loading and chart data preparation in `security_details`. Use the Flask test client.
+        
+7. **Task:** Write unit tests for `views/fund_views.py`.
+    
+    - **Target File:** `views/fund_views.py`
+        
+    - **Test File:** `tests/views/test_fund_views.py` (Expand existing)
+        
+    - **Functions to Test:** `fund_duration_details` (GET), `fund_detail` (GET).
+        
+    - **Mocking:** Mock `load_and_process_security_data`, `load_and_process_data`, `w_secs.csv` loading, `read_and_sort_dates`, `glob.glob`. Test duration details calculation and filtering. Test `fund_detail` aggregation logic across multiple metric files, including SP data handling and chart data preparation. Use the Flask test client.
+        
+8. **Task:** Write unit tests for `views/curve_views.py`.
+    
+    - **Target File:** `views/curve_views.py`
+        
+    - **Test File:** `tests/views/test_curve_views.py` (Expand existing)
+        
+    - **Functions to Test:** `curve_summary` (GET), `curve_details` (GET).
+        
+    - **Mocking:** Mock `load_curve_data`, `check_curve_inconsistencies`, `get_latest_curve_date`. Test summary generation. Test details page with different dates and `prev_days` parameters, including chart data prep and table calculation. Use the Flask test client.
+        
+9. **Task:** Write unit tests for `data_validation.py`.
+    
+    - **Target File:** `data_validation.py`
+        
+    - **Test File:** `tests/processing/test_data_validation.py` (Create if not exists)
+        
+    - **Functions to Test:** `validate_data`, `_is_date_like`.
+        
+    - **Mocking:** None needed for direct function tests. Provide various mock DataFrames (valid and invalid) for different file types (`ts_`, `sec_`, `w_`, `FundList`, etc.) and assert correct validation results and error messages. Test `_is_date_like` with various date/non-date strings.
+        
 
-### Step 1.1: Install Testing Framework
+**Phase 2: Important Views & Logic (10-30% Coverage)**
 
-- **Action:** Add `pytest` and `pytest-cov` (for coverage) to your development dependencies. (Complete)
-- **Command:** `pip install pytest pytest-cov pytest-mock` (or add to `requirements-dev.txt`). (Complete)
-- **Target:** Project dependencies. (Complete)
+10. **Task:** Write unit tests for `views/exclusion_views.py`.
+    
+    - **Target File:** `views/exclusion_views.py`
+        
+    - **Test File:** `tests/views/test_exclusion_views.py` (Expand existing)
+        
+    - **Functions to Test:** `load_exclusions`, `load_available_securities`, `load_users`, `add_exclusion`, `remove_exclusion`, `manage_exclusions` (GET/POST), `remove_exclusion_route` (POST).
+        
+    - **Mocking:** Mock file operations (`pd.read_csv`, `os.path.exists`, `open`), `reference.csv` loading, `users.csv` loading. Test adding/removing logic, loading logic. Test view routes using Flask test client, mocking helpers.
+        
+11. **Task:** Write unit tests for `views/issue_views.py`.
+    
+    - **Target File:** `views/issue_views.py`
+        
+    - **Test File:** `tests/views/test_issue_views.py` (Expand existing)
+        
+    - **Functions to Test:** `load_users`, `manage_issues` (GET/POST), `close_issue_route` (POST).
+        
+    - **Mocking:** Mock `issue_processing` functions (`load_issues`, `add_issue`, `close_issue`, `load_fund_list`), `users.csv` loading. Test view routes for displaying, adding, and closing issues using Flask test client.
+        
+12. **Task:** Write unit tests for `views/weight_views.py`.
+    
+    - **Target File:** `views/weight_views.py`
+        
+    - **Test File:** `tests/views/test_weight_views.py` (Expand existing)
+        
+    - **Functions to Test:** `_parse_percentage`, `load_and_process_weight_data`, `weight_check` (GET).
+        
+    - **Mocking:** Mock `pd.read_csv`, `os.path.exists`. Test percentage parsing. Test loading/processing logic for different weight files. Test view route using Flask test client.
+        
+13. **Task:** Write unit tests for `views/staleness_views.py`.
+    
+    - **Target File:** `views/staleness_views.py`
+        
+    - **Test File:** `tests/views/test_staleness_views.py` (Expand existing)
+        
+    - **Functions to Test:** `get_display_name_for_staleness_file`, `dashboard` (GET), `details` (GET).
+        
+    - **Mocking:** Mock `staleness_processing` functions (`get_staleness_summary`, `get_stale_securities_details`), `load_exclusions`, `config` variables. Test display name logic. Test view routes with different thresholds and mock processing functions. Use Flask test client.
+        
+14. **Task:** Write unit tests for `views/generic_comparison_views.py`.
+    
+    - **Target File:** `views/generic_comparison_views.py`, `views/comparison_helpers.py`
+        
+    - **Test File:** `tests/views/test_generic_comparison_views.py` (Expand existing)
+        
+    - **Functions to Test:** `comparison_helpers.load_generic_comparison_data`, `comparison_helpers.calculate_generic_comparison_stats`, `comparison_helpers.get_holdings_for_security`, `views.generic_comparison_views.summary` (GET), `views.generic_comparison_views.details` (GET).
+        
+    - **Mocking:** Mock `load_and_process_security_data`, `load_weights_and_held_status`, `w_secs.csv` loading. Test data loading/merging, stats calculation (correlations, diffs), holdings lookup. Test view routes with different comparison types, filters, sorting, pagination. Use Flask test client.
+        
+
+**Phase 3: Core Logic & Utilities (30-70% Coverage)**
+
+15. **Task:** Write unit tests for `process_data.py`.
+    
+    - **Target File:** `process_data.py`
+        
+    - **Test File:** `tests/processing/test_process_data.py` (Expand existing)
+        
+    - **Functions to Test:** `read_and_sort_dates`, `replace_headers_with_dates`, `aggregate_data`, `process_csv_file`, `main`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `df.to_csv`, `os.path.exists`, `os.listdir`), `weight_processing.process_weight_file`. Test date reading/sorting, header replacement logic (patterns A & B), aggregation logic (fund merging, ISIN suffixing), main script execution flow.
+        
+16. **Task:** Write unit tests for `utils.py`.
+    
+    - **Target File:** `utils.py`
+        
+    - **Test File:** `tests/utils/test_utils.py` (Expand existing)
+        
+    - **Functions to Test:** `load_yaml_config`, `_is_date_like`, `parse_fund_list`, `load_exclusions`, `load_weights_and_held_status`, `replace_nan_with_none`, `load_fund_groups`.
+        
+    - **Mocking:** Mock file I/O (`open`, `yaml.safe_load`, `pd.read_csv`, `os.path.exists`). Test YAML loading, date regex patterns, fund string parsing, exclusion/weight loading logic, NaN replacement, fund group loading.
+        
+17. **Task:** Write unit tests for `curve_processing.py`.
+    
+    - **Target File:** `curve_processing.py`
+        
+    - **Test File:** `tests/processing/test_curve_processing.py` (Expand existing)
+        
+    - **Functions to Test:** `_term_to_days`, `load_curve_data`, `get_latest_curve_date`, `check_curve_inconsistencies`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `os.path.exists`). Test term conversion, data loading/parsing, latest date finding, inconsistency checks (monotonicity, anomaly detection).
+        
+18. **Task:** Write unit tests for `metric_calculator.py`.
+    
+    - **Target File:** `metric_calculator.py`
+        
+    - **Test File:** `tests/processing/test_metric_calculator.py` (Expand existing)
+        
+    - **Functions to Test:** `_calculate_column_stats`, `_process_dataframe_metrics`, `calculate_latest_metrics`, `load_metrics_from_csv`.
+        
+    - **Mocking:** None needed for calculation functions if testing with direct DataFrame inputs. Mock `pd.read_csv` for `load_metrics_from_csv`. Test stat calculations (mean, max, min, change, Z-score), handling of NaNs, zero std dev, processing primary/secondary data, relative metrics, merging, and sorting logic.
+        
+19. **Task:** Write unit tests for `weight_processing.py`.
+    
+    - **Target File:** `weight_processing.py`
+        
+    - **Test File:** `tests/processing/test_weight_processing.py` (Expand existing)
+        
+    - **Functions to Test:** `clean_date_format`, `detect_metadata_columns`, `process_weight_file`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `df.to_csv`, `os.path.exists`). Test date cleaning, metadata detection (config vs dynamic), header replacement logic for different file types (`w_Funds`, `w_Bench`, `w_secs`), handling of date/column count mismatches.
+        
+20. **Task:** Write unit tests for `data_loader.py`.
+    
+    - **Target File:** `data_loader.py`
+        
+    - **Test File:** `tests/processing/test_data_loader.py` (Expand existing)
+        
+    - **Functions to Test:** `load_simple_csv`, `_find_column`, `_create_empty_dataframe`, `_find_columns_for_file`, `_parse_date_column`, `_convert_value_columns`, `_process_single_file`, `load_and_process_data`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `os.path.exists`), `data_utils` functions (or test them directly via `data_utils_test.py`). Test column finding logic, date/numeric parsing, S&P valid filtering, aggregation logic, processing primary/secondary files.
+        
+21. **Task:** Write unit tests for `security_processing.py`.
+    
+    - **Target File:** `security_processing.py`
+        
+    - **Test File:** `tests/processing/test_security_processing.py` (Expand existing)
+        
+    - **Functions to Test:** `find_all_date_columns`, `load_and_process_security_data`, `calculate_security_latest_metrics`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `os.path.exists`), `data_utils` functions. Test date column finding, wide-to-long melting, static column identification, metric calculations (latest, change, Z-score, mean, max, min).
+        
+22. **Task:** Write unit tests for `staleness_processing.py`.
+    
+    - **Target File:** `staleness_processing.py`
+        
+    - **Test File:** `tests/processing/test_staleness_processing.py` (Expand existing)
+        
+    - **Functions to Test:** `get_staleness_summary`, `get_stale_securities_details`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `os.path.exists`, `os.listdir`), `load_exclusions`. Test summary generation and details retrieval logic, including threshold application and exclusion filtering.
+        
+23. **Task:** Write unit tests for `data_utils.py`.
+    
+    - **Target File:** `data_utils.py`
+        
+    - **Test File:** `tests/utils/test_data_utils.py` (Create if not exists)
+        
+    - **Functions to Test:** `read_csv_robustly`, `parse_dates_robustly`, `identify_columns`, `convert_to_numeric_robustly`, `melt_wide_data`.
+        
+    - **Mocking:** Mock `pd.read_csv` for `read_csv_robustly`. Test robust file reading, date parsing with various formats, column identification with patterns, numeric conversion, and wide-to-long melting logic.
+        
+
+**Phase 4: App Setup & Remaining Views**
+
+24. **Task:** Write unit tests for `app.py`.
+    
+    - **Target File:** `app.py`
+        
+    - **Test File:** `tests/test_app.py` (Create if not exists)
+        
+    - **Functions to Test:** `create_app`, `run_cleanup` (POST endpoint).
+        
+    - **Mocking:** Mock `config` loading, `os.makedirs`, logging handlers, blueprint imports/registration, `subprocess.run`. Test app factory creation with different configurations, logging setup, blueprint registration success/failure. Test the `/run-cleanup` endpoint using Flask test client, mocking `subprocess.run` for success and failure cases.
+        
+25. **Task:** Write unit tests for `views/main_views.py`.
+    
+    - **Target File:** `views/main_views.py`
+        
+    - **Test File:** `tests/views/test_main_views.py` (Expand existing)
+        
+    - **Functions to Test:** `index` (GET).
+        
+    - **Mocking:** Mock `os.listdir`, `load_and_process_data`, `calculate_latest_metrics`. Test dashboard data aggregation logic, handling of missing files or calculation errors. Use Flask test client.
+        
+
+**Phase 5: Review & Refine**
+
+26. **Task:** Run `pytest --cov=. --cov-report=html` again.
+    
+27. **Task:** Analyze the new coverage report. Identify any remaining critical gaps, especially in error handling or complex conditional logic.
+    
+28. **Task:** Add specific tests for any missed branches or edge cases identified in the review.### Test Coverage Improvement Plan
+
+**Overall Goal:** Increase the test coverage significantly from the current 34%. Focus on core application logic, views, and utility functions.
+
+**Instructions for LLM Agent:**
+
+- Use `pytest` for writing tests.
+    
+- Use the `pytest-mock` library (`mocker` fixture) to mock dependencies like file I/O (`open`, `pd.read_csv`, `os.path.exists`), external APIs (if any), database interactions (if any), and functions from other modules.
+    
+- Place new test files in the corresponding `tests/` subdirectory (e.g., tests for `views/watchlist_views.py` go in `tests/views/test_watchlist_views.py`).
+    
+- Ensure tests cover various scenarios: success paths, edge cases (e.g., empty data, invalid inputs), and error handling (e.g., file not found, exceptions).
+    
+- Aim to cover all functions and branches within the specified files.
     
 
-### Step 1.2: Create Testing Directory Structure
+**Phase 1: Critical Views & Logic (0-10% Coverage)**
 
-- **Action:** Create a dedicated `tests/` directory at the root of your project. (Complete)
-- **Action:** Inside `tests/`, create subdirectories mirroring your main application structure (e.g., `tests/views/`, `tests/utils/`, `tests/processing/`). (Complete)
-- **Action:** Add an empty `__init__.py` file to the `tests/` directory and each subdirectory to make them recognizable as Python packages. (Complete)
-- **Target:** Project file structure. (Complete)
+1. **Task:** Write unit tests for `views/watchlist_views.py`.
     
-### Step 1.3: Initial pytest Configuration
-
-- **Action:** Create a `pytest.ini` file in the project root. (Complete)
-- **Content:**
+    - **Target File:** `views/watchlist_views.py`
+        
+    - **Test File:** `tests/views/test_watchlist_views.py` (Create if not exists)
+        
+    - **Functions to Test:** `load_watchlist`, `save_watchlist`, `load_users`, `load_available_securities`, `add_to_watchlist`, `clear_watchlist_entry`, `update_last_checked`, `manage_watchlist` (GET/POST), `clear_watchlist` (POST), `check_watchlist_entry` (GET).
+        
+    - **Mocking:** Mock file operations (`pd.read_csv`, `os.path.exists`, `df.to_csv`), `load_available_securities`, `load_users`. Test logic for adding/clearing entries, checking for existing active entries, loading/saving CSV data. Test the view routes using the Flask test client, mocking helper functions.
+        
+2. **Task:** Write unit tests for `views/maxmin_views.py` and `maxmin_processing.py`.
     
-    ```
-    [pytest]
-    minversion = 6.0
-    testpaths = tests
-    python_files = test_*.py
-    addopts = -ra -q --cov=. --cov-report=html
-    ```
+    - **Target Files:** `views/maxmin_views.py`, `maxmin_processing.py`
+        
+    - **Test Files:** `tests/views/test_maxmin_views.py`, `tests/processing/test_maxmin_processing.py` (Create if not exists)
+        
+    - **Functions to Test:** `maxmin_processing.find_value_breaches`, `maxmin_processing.get_breach_summary`, `maxmin_processing.get_breach_details`, `views.maxmin_views.dashboard` (GET), `views.maxmin_views.details` (GET).
+        
+    - **Mocking:** Mock `pd.read_csv`, `os.path.exists`, `config.MAXMIN_THRESHOLDS`. Test breach detection logic with various thresholds and data values (including NaNs). Test view routes with different query parameters (overrides, group_name) and mock the processing functions.
+        
+3. **Task:** Write unit tests for `views/attribution_views.py`.
     
-- **Target:** `pytest.ini` (new file). (Complete)
-
-
-### Step 1.4: Basic Flask App Fixture
-
-- **Action:** Create a `tests/conftest.py` file.
-- **Action:** Implement a `pytest` fixture that creates and configures a test instance of the Flask application using the `create_app` factory from `app.py`. This fixture will provide the necessary application context for testing views and components that rely on `current_app`.
+    - **Target File:** `views/attribution_views.py`
+        
+    - **Test File:** `tests/views/test_attribution_views.py` (Expand existing)
+        
+    - **Functions to Test:** `get_available_funds`, `attribution_summary` (GET), `attribution_charts` (GET), `attribution_radar` (GET), `attribution_security_page` (GET).
+        
+    - **Mocking:** Mock file operations (`pd.read_csv`, `os.path.exists`), `w_secs.csv` loading, `config.ATTRIBUTION_L1_GROUPS`, `config.ATTRIBUTION_L2_GROUPS`. Test data loading for specific funds, filtering logic (date, characteristic, level), aggregation logic for different levels (L0, L1, L2), and data preparation for charts/tables. Use the Flask test client.
+        
+4. **Task:** Write unit tests for `views/metric_views.py`.
     
-- **Action:** Implement a fixture for the Flask test client (`app.test_client()`).
-- **Target:** `tests/conftest.py` (new file).
+    - **Target File:** `views/metric_views.py`
+        
+    - **Test File:** `tests/views/test_metric_views.py` (Expand existing)
+        
+    - **Functions to Test:** `metric_page` (GET), `_calculate_contributions`, `inspect_metric_contribution` (POST), `inspect_results_page` (GET).
+        
+    - **Mocking:** Mock `load_and_process_data`, `calculate_latest_metrics`, `load_simple_csv`, `_melt_data`, `reference.csv` loading. Test `metric_page` with/without secondary data, with/without fund group filter. Test `_calculate_contributions` logic thoroughly (baseline, average, diff, ranking). Test API endpoint and results page rendering. Use the Flask test client.
+        
+5. **Task:** Write unit tests for `views/api_core.py`.
     
-
-## Phase 2: Testing Core Utilities and Logic
-
-### Step 2.1: Test Utility Functions (`utils.py`)
-
-- **Action:** Create `tests/utils/test_utils.py`. (Complete)
-- **Action:** Write tests for `_is_date_like`, covering various valid and invalid date string formats.
-- **Action:** Write tests for `parse_fund_list`, covering valid inputs, empty inputs, malformed inputs, and inputs with varying spacing.
-- **Action:** Write tests for `get_data_folder_path`. Mock `config.DATA_FOLDER` and `os.getcwd()`/`os.path.isdir()`/`os.path.isabs()` using `pytest-mock` (`mocker` fixture) to test different scenarios (config set, config missing, relative path, absolute path, path doesn't exist). (Complete)
-- **Action:** Write tests for `load_exclusions`. Mock file system interactions (`os.path.exists`, `pd.read_csv`) to test file not found, empty file, valid file scenarios.
-- **Action:** Write tests for `load_weights_and_held_status`. Mock file system (`pd.read_csv`), test different file formats (wide vs. long), missing columns, date parsing variations, and calculation logic.
-- **Action:** Write tests for `replace_nan_with_none`. Test with nested dictionaries, lists, various data types including `np.nan` and `pd.NA`.
-- **Target:** `tests/utils/test_utils.py` (new file). (Complete)
-
-### Step 2.2: Test Configuration Loading (`config.py`)
-
-- **Action:** Create `tests/config/test_config.py`. (Complete)
-- **Action:** Write simple tests to verify that expected configuration variables exist and have the correct basic types (e.g., `COLOR_PALETTE` is a list, `COMPARISON_CONFIG` is a dict). This is less about testing Python's import and more about ensuring config structure is maintained. (Complete)
+    - **Target File:** `views/api_core.py`
+        
+    - **Test File:** `tests/views/test_api_core.py` (Create if not exists)
+        
+    - **Functions to Test:** `_simulate_and_print_tqs_call`, `_fetch_real_tqs_data` (mock external API), `_find_key_columns`, `get_data_file_statuses`.
+        
+    - **Mocking:** Mock `tqs` library (if `USE_REAL_TQS_API` is True), `pd.read_csv`, `os.path.exists`, `os.path.getmtime`, `datetime.datetime`. Test column finding logic, file status retrieval, API simulation output, and error handling in real API fetch.
+        
+6. **Task:** Write unit tests for `views/security_views.py`.
     
-- **Target:** `tests/config/test_config.py` (new file). (Complete)
+    - **Target File:** `views/security_views.py`
+        
+    - **Test File:** `tests/views/test_security_views.py` (Expand existing)
+        
+    - **Functions to Test:** `get_active_exclusions`, `securities_page` (GET), `security_details` (GET).
+        
+    - **Mocking:** Mock `load_and_process_security_data`, `calculate_security_latest_metrics`, `load_exclusions`, `reference.csv` loading, `issue_processing` functions, `get_holdings_for_security`. Test filtering (search, static, min=0, fund group), sorting, pagination logic in `securities_page`. Test data loading and chart data preparation in `security_details`. Use the Flask test client.
+        
+7. **Task:** Write unit tests for `views/fund_views.py`.
     
-
-### Step 2.3: Test Standalone Processing Logic
-
-- **Action:** Create test files for modules containing logic usable _without_ a full Flask app context (mocking file I/O where necessary). (Complete)
-- **Action:** (`tests/processing/test_metric_calculator.py`): Test `_calculate_column_stats` and `calculate_latest_metrics`. Provide sample DataFrames (created directly or loaded from test CSVs using mocked `pd.read_csv`), test calculations, NaN handling, and edge cases (e.g., single data point, zero standard deviation). Mock `load_and_process_data` if testing the main function directly. (Complete)
-- **Action:** (`tests/processing/test_curve_processing.py`): Test `_term_to_days`, `load_curve_data` (mock `pd.read_csv`), `get_latest_curve_date`, and `check_curve_inconsistencies`. Use sample DataFrames to test inconsistency detection logic (monotonicity, anomaly checks). (Complete)
-- **Action:** (`tests/processing/test_issue_processing.py`): Test `load_issues`, `_generate_issue_id`, `add_issue`, `close_issue`, `load_fund_list`. Mock file I/O (`os.path.exists`, `pd.read_csv`, `df.to_csv`). Test ID generation logic, adding/closing issues, and file handling. (Complete)
-- **Action:** (`tests/processing/test_staleness_processing.py`): Test `is_placeholder_value`, `get_staleness_summary`, `get_stale_securities_details`. Mock file I/O and test detection logic with various data patterns. (Complete)
-- **Action:** (`tests/processing/test_attribution_processing.py`): Test `sum_l2s_block`, `sum_l1s_block`, `compute_residual_block`, `calc_residual`, `norm`. Use sample DataFrames/rows. (Complete)
-- **Target:** New test files in `tests/processing/`. (Complete)
-
-## Phase 3: Testing Data Loading and File Processing
-
-### Step 3.1: Test Data Loader (`data_loader.py`)
-
-- **Action:** Create `tests/processing/test_data_loader.py`. (Complete)
-- **Action:** Test helper functions: `_find_column`, `_create_empty_dataframe`, `_find_columns_for_file`, `_parse_date_column`, `_convert_value_columns`. Use sample column lists and DataFrames. (Complete)
-- **Action:** Test `_process_single_file`. Mock `pd.read_csv` and `os.path.exists`. Provide mock CSV content (using `io.StringIO`) representing different scenarios: missing columns, date format variations, non-numeric values, empty files. Verify the returned DataFrame structure, column names, data types, and index. (Complete)
+    - **Target File:** `views/fund_views.py`
+        
+    - **Test File:** `tests/views/test_fund_views.py` (Expand existing)
+        
+    - **Functions to Test:** `fund_duration_details` (GET), `fund_detail` (GET).
+        
+    - **Mocking:** Mock `load_and_process_security_data`, `load_and_process_data`, `w_secs.csv` loading, `read_and_sort_dates`, `glob.glob`. Test duration details calculation and filtering. Test `fund_detail` aggregation logic across multiple metric files, including SP data handling and chart data preparation. Use the Flask test client.
+        
+8. **Task:** Write unit tests for `views/curve_views.py`.
     
-- **Action:** Test `load_and_process_data`. Mock `_process_single_file` or mock file system interactions. Test loading primary only vs. primary and secondary files. Test error handling when files are missing or processing fails. Use the app context fixture if testing the part that reads `current_app.config['DATA_FOLDER']`. (Complete)
-- **Target:** `tests/processing/test_data_loader.py` (new file). (Complete)
+    - **Target File:** `views/curve_views.py`
+        
+    - **Test File:** `tests/views/test_curve_views.py` (Expand existing)
+        
+    - **Functions to Test:** `curve_summary` (GET), `curve_details` (GET).
+        
+    - **Mocking:** Mock `load_curve_data`, `check_curve_inconsistencies`, `get_latest_curve_date`. Test summary generation. Test details page with different dates and `prev_days` parameters, including chart data prep and table calculation. Use the Flask test client.
+        
+9. **Task:** Write unit tests for `data_validation.py`.
     
-### Step 3.2: Test Security Processing (`security_processing.py`)
+    - **Target File:** `data_validation.py`
+        
+    - **Test File:** `tests/processing/test_data_validation.py` (Create if not exists)
+        
+    - **Functions to Test:** `validate_data`, `_is_date_like`.
+        
+    - **Mocking:** None needed for direct function tests. Provide various mock DataFrames (valid and invalid) for different file types (`ts_`, `sec_`, `w_`, `FundList`, etc.) and assert correct validation results and error messages. Test `_is_date_like` with various date/non-date strings.
+        
 
-- **Action:** Create `tests/processing/test_security_processing.py`. (Complete)
-- **Action:** Test `load_and_process_security_data`. Mock `pd.read_csv`. Provide mock wide-format CSV content. Test column identification (ID, static, date), melting process, date parsing, NaN handling, and index setting. Test the caching mechanism. (Complete)
+**Phase 2: Important Views & Logic (10-30% Coverage)**
+
+10. **Task:** Write unit tests for `views/exclusion_views.py`.
     
-- **Action:** Test `calculate_security_latest_metrics`. Provide sample long-format DataFrames (output from the previous function). Test metric calculations (latest value, change, Z-score, mean, max, min), handling of missing data for latest date, and preservation of static columns. (Complete)
-- **Target:** `tests/processing/test_security_processing.py` (new file). (Complete)
-
-### Step 3.3: Test File Processors (`process_data.py`, `weight_processing.py`)
-
-- **Action:** Create `tests/processing/test_process_data.py`. (Complete)
-- **Action:** Refactor `process_data.py`'s `process_csv_file` and helper functions (`replace_headers_with_dates`, `aggregate_data`) to be more easily testable if needed (e.g., reduce reliance on global state or side effects). (Complete)
+    - **Target File:** `views/exclusion_views.py`
+        
+    - **Test File:** `tests/views/test_exclusion_views.py` (Expand existing)
+        
+    - **Functions to Test:** `load_exclusions`, `load_available_securities`, `load_users`, `add_exclusion`, `remove_exclusion`, `manage_exclusions` (GET/POST), `remove_exclusion_route` (POST).
+        
+    - **Mocking:** Mock file operations (`pd.read_csv`, `os.path.exists`, `open`), `reference.csv` loading, `users.csv` loading. Test adding/removing logic, loading logic. Test view routes using Flask test client, mocking helpers.
+        
+11. **Task:** Write unit tests for `views/issue_views.py`.
     
-- **Action:** Write tests for `replace_headers_with_dates` and `aggregate_data`. Provide sample DataFrames and mock `Dates.csv` data. Verify header replacement logic and data aggregation rules (fund merging, ISIN suffixing). Mock file I/O (`pd.read_csv`, `df.to_csv`). (Complete)
+    - **Target File:** `views/issue_views.py`
+        
+    - **Test File:** `tests/views/test_issue_views.py` (Expand existing)
+        
+    - **Functions to Test:** `load_users`, `manage_issues` (GET/POST), `close_issue_route` (POST).
+        
+    - **Mocking:** Mock `issue_processing` functions (`load_issues`, `add_issue`, `close_issue`, `load_fund_list`), `users.csv` loading. Test view routes for displaying, adding, and closing issues using Flask test client.
+        
+12. **Task:** Write unit tests for `views/weight_views.py`.
     
-- **Action:** Create `tests/processing/test_weight_processing.py`. (Complete)
-- **Action:** Test `process_weight_file`. Mock file I/O (`pd.read_csv`, `df.to_csv`). Provide sample weight files (`pre_w_*.csv`) and a mock `Dates.csv`. Verify header replacement, date sorting, and output format for different weight file types (funds, bench, secs). Test dynamic metadata detection for `w_secs`. (Complete)
+    - **Target File:** `views/weight_views.py`
+        
+    - **Test File:** `tests/views/test_weight_views.py` (Expand existing)
+        
+    - **Functions to Test:** `_parse_percentage`, `load_and_process_weight_data`, `weight_check` (GET).
+        
+    - **Mocking:** Mock `pd.read_csv`, `os.path.exists`. Test percentage parsing. Test loading/processing logic for different weight files. Test view route using Flask test client.
+        
+13. **Task:** Write unit tests for `views/staleness_views.py`.
     
-- **Target:** New test files in `tests/processing/`. (Complete)
-
-## Phase 4: Testing Flask Views and API Endpoints
-
-### Step 4.1: Test Main Views (`main_views.py`)
-
-- **Action:** Create `tests/views/test_main_views.py`.
-- **Action:** Use the test client fixture (`client`).
-- **Action:** Test the `/` route (`index` function). Mock `load_and_process_data` and `calculate_latest_metrics` to return controlled data. Verify the response status code (200). Verify that the correct template (`index.html`) is rendered. Check the context passed to the template (e.g., `metrics`, `summary_data`, `summary_metrics`).
+    - **Target File:** `views/staleness_views.py`
+        
+    - **Test File:** `tests/views/test_staleness_views.py` (Expand existing)
+        
+    - **Functions to Test:** `get_display_name_for_staleness_file`, `dashboard` (GET), `details` (GET).
+        
+    - **Mocking:** Mock `staleness_processing` functions (`get_staleness_summary`, `get_stale_securities_details`), `load_exclusions`, `config` variables. Test display name logic. Test view routes with different thresholds and mock processing functions. Use Flask test client.
+        
+14. **Task:** Write unit tests for `views/generic_comparison_views.py`.
     
-- **Target:** `tests/views/test_main_views.py` (new file).
+    - **Target File:** `views/generic_comparison_views.py`, `views/comparison_helpers.py`
+        
+    - **Test File:** `tests/views/test_generic_comparison_views.py` (Expand existing)
+        
+    - **Functions to Test:** `comparison_helpers.load_generic_comparison_data`, `comparison_helpers.calculate_generic_comparison_stats`, `comparison_helpers.get_holdings_for_security`, `views.generic_comparison_views.summary` (GET), `views.generic_comparison_views.details` (GET).
+        
+    - **Mocking:** Mock `load_and_process_security_data`, `load_weights_and_held_status`, `w_secs.csv` loading. Test data loading/merging, stats calculation (correlations, diffs), holdings lookup. Test view routes with different comparison types, filters, sorting, pagination. Use Flask test client.
+        
+
+**Phase 3: Core Logic & Utilities (30-70% Coverage)**
+
+15. **Task:** Write unit tests for `process_data.py`.
     
-
-### Step 4.2: Test Metric Views (`metric_views.py`)
-
-- **Action:** Create `tests/views/test_metric_views.py`.
-- **Action:** Test the `/metric/<metric_name>` route (`metric_page` function). Mock data loading and metric calculation. Test with valid and invalid metric names. Test scenarios with and without secondary data (`sp_` files). Verify response code, template rendering, and context variables (`metric_name`, `charts_data_json`, `latest_date`, `missing_funds`).
+    - **Target File:** `process_data.py`
+        
+    - **Test File:** `tests/processing/test_process_data.py` (Expand existing)
+        
+    - **Functions to Test:** `read_and_sort_dates`, `replace_headers_with_dates`, `aggregate_data`, `process_csv_file`, `main`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `df.to_csv`, `os.path.exists`, `os.listdir`), `weight_processing.process_weight_file`. Test date reading/sorting, header replacement logic (patterns A & B), aggregation logic (fund merging, ISIN suffixing), main script execution flow.
+        
+16. **Task:** Write unit tests for `utils.py`.
     
-- **Target:** `tests/views/test_metric_views.py` (new file).
+    - **Target File:** `utils.py`
+        
+    - **Test File:** `tests/utils/test_utils.py` (Expand existing)
+        
+    - **Functions to Test:** `load_yaml_config`, `_is_date_like`, `parse_fund_list`, `load_exclusions`, `load_weights_and_held_status`, `replace_nan_with_none`, `load_fund_groups`.
+        
+    - **Mocking:** Mock file I/O (`open`, `yaml.safe_load`, `pd.read_csv`, `os.path.exists`). Test YAML loading, date regex patterns, fund string parsing, exclusion/weight loading logic, NaN replacement, fund group loading.
+        
+17. **Task:** Write unit tests for `curve_processing.py`.
     
-### Step 4.3: Test Security Views (`security_views.py`)
-
-- **Action:** Create `tests/views/test_security_views.py`.
-- **Action:** Test `/security/summary` (`securities_page`). Mock data loading/metric calculation. Test pagination logic (requesting different `page` args). Test filtering (passing `filter_` args). Test sorting (passing `sort_by`, `sort_order` args). Test search (passing `search_term`). Verify response code, template, and context (pagination object, table data, filter options, active filters, sort state).
+    - **Target File:** `curve_processing.py`
+        
+    - **Test File:** `tests/processing/test_curve_processing.py` (Expand existing)
+        
+    - **Functions to Test:** `_term_to_days`, `load_curve_data`, `get_latest_curve_date`, `check_curve_inconsistencies`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `os.path.exists`). Test term conversion, data loading/parsing, latest date finding, inconsistency checks (monotonicity, anomaly detection).
+        
+18. **Task:** Write unit tests for `metric_calculator.py`.
     
-- **Action:** Test `/security/details/<metric_name>/<path:security_id>` (`security_details`). Mock data loading. Test with valid and invalid IDs (including those with special characters). Verify response code, template, and context (`security_id`, `metric_name`, `chart_data_json`, `static_info`).
-- **Target:** `tests/views/test_security_views.py` (new file).
-
-### Step 4.4: Test Comparison Views (`generic_comparison_views.py`) (complete)
-
-- **Action:** Create `tests/views/test_generic_comparison_views.py`.
-- **Action:** Test `/compare/<comparison_type>/summary`. Mock `load_generic_comparison_data`, `calculate_generic_comparison_stats`, `load_weights_and_held_status`. Test for different `comparison_type` values. Test filtering, sorting, pagination, and the `show_sold` toggle. Verify template and context.
-- **Action:** Test `/compare/<comparison_type>/details/<path:security_id>`. Mock data loading and stats calculation. Test with valid/invalid IDs. Verify template and context, including `chart_data` and `holdings_data`.
-- **Target:** `tests/views/test_generic_comparison_views.py` (new file).
+    - **Target File:** `metric_calculator.py`
+        
+    - **Test File:** `tests/processing/test_metric_calculator.py` (Expand existing)
+        
+    - **Functions to Test:** `_calculate_column_stats`, `_process_dataframe_metrics`, `calculate_latest_metrics`, `load_metrics_from_csv`.
+        
+    - **Mocking:** None needed for calculation functions if testing with direct DataFrame inputs. Mock `pd.read_csv` for `load_metrics_from_csv`. Test stat calculations (mean, max, min, change, Z-score), handling of NaNs, zero std dev, processing primary/secondary data, relative metrics, merging, and sorting logic.
+        
+19. **Task:** Write unit tests for `weight_processing.py`.
     
+    - **Target File:** `weight_processing.py`
+        
+    - **Test File:** `tests/processing/test_weight_processing.py` (Expand existing)
+        
+    - **Functions to Test:** `clean_date_format`, `detect_metadata_columns`, `process_weight_file`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `df.to_csv`, `os.path.exists`). Test date cleaning, metadata detection (config vs dynamic), header replacement logic for different file types (`w_Funds`, `w_Bench`, `w_secs`), handling of date/column count mismatches.
+        
+20. **Task:** Write unit tests for `data_loader.py`.
+    
+    - **Target File:** `data_loader.py`
+        
+    - **Test File:** `tests/processing/test_data_loader.py` (Expand existing)
+        
+    - **Functions to Test:** `load_simple_csv`, `_find_column`, `_create_empty_dataframe`, `_find_columns_for_file`, `_parse_date_column`, `_convert_value_columns`, `_process_single_file`, `load_and_process_data`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `os.path.exists`), `data_utils` functions (or test them directly via `data_utils_test.py`). Test column finding logic, date/numeric parsing, S&P valid filtering, aggregation logic, processing primary/secondary files.
+        
+21. **Task:** Write unit tests for `security_processing.py`.
+    
+    - **Target File:** `security_processing.py`
+        
+    - **Test File:** `tests/processing/test_security_processing.py` (Expand existing)
+        
+    - **Functions to Test:** `find_all_date_columns`, `load_and_process_security_data`, `calculate_security_latest_metrics`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `os.path.exists`), `data_utils` functions. Test date column finding, wide-to-long melting, static column identification, metric calculations (latest, change, Z-score, mean, max, min).
+        
+22. **Task:** Write unit tests for `staleness_processing.py`.
+    
+    - **Target File:** `staleness_processing.py`
+        
+    - **Test File:** `tests/processing/test_staleness_processing.py` (Expand existing)
+        
+    - **Functions to Test:** `get_staleness_summary`, `get_stale_securities_details`.
+        
+    - **Mocking:** Mock file I/O (`pd.read_csv`, `os.path.exists`, `os.listdir`), `load_exclusions`. Test summary generation and details retrieval logic, including threshold application and exclusion filtering.
+        
+23. **Task:** Write unit tests for `data_utils.py`.
+    
+    - **Target File:** `data_utils.py`
+        
+    - **Test File:** `tests/utils/test_data_utils.py` (Create if not exists)
+        
+    - **Functions to Test:** `read_csv_robustly`, `parse_dates_robustly`, `identify_columns`, `convert_to_numeric_robustly`, `melt_wide_data`.
+        
+    - **Mocking:** Mock `pd.read_csv` for `read_csv_robustly`. Test robust file reading, date parsing with various formats, column identification with patterns, numeric conversion, and wide-to-long melting logic.
+        
 
-### Step 4.5: Test Other View Blueprints
+**Phase 4: App Setup & Remaining Views**
 
-- **Action:** Create corresponding test files (e.g., `test_fund_views.py`, `test_exclusion_views.py`, `test_issue_views.py`, `test_curve_views.py`, `test_attribution_views.py`, `test_staleness_views.py`, `test_weight_views.py`) in `tests/views/`. (Complete)
-- **Action:** For each blueprint, test its routes using the test client. (Complete)
-- **Action:** Mock underlying data loading and processing functions specific to each view. (Complete)
-- **Action:** Verify response codes, template rendering, context variables, redirects, and flash messages where applicable. (Complete)
-- **Action:** For views handling POST requests (e.g., adding exclusions, closing issues), simulate form submissions using `client.post()` with `data={...}` and `follow_redirects=True`. (Complete)
+24. **Task:** Write unit tests for `app.py`.
+    
+    - **Target File:** `app.py`
+        
+    - **Test File:** `tests/test_app.py` (Create if not exists)
+        
+    - **Functions to Test:** `create_app`, `run_cleanup` (POST endpoint).
+        
+    - **Mocking:** Mock `config` loading, `os.makedirs`, logging handlers, blueprint imports/registration, `subprocess.run`. Test app factory creation with different configurations, logging setup, blueprint registration success/failure. Test the `/run-cleanup` endpoint using Flask test client, mocking `subprocess.run` for success and failure cases.
+        
+25. **Task:** Write unit tests for `views/main_views.py`.
+    
+    - **Target File:** `views/main_views.py`
+        
+    - **Test File:** `tests/views/test_main_views.py` (Expand existing)
+        
+    - **Functions to Test:** `index` (GET).
+        
+    - **Mocking:** Mock `os.listdir`, `load_and_process_data`, `calculate_latest_metrics`. Test dashboard data aggregation logic, handling of missing files or calculation errors. Use Flask test client.
+        
 
-- **Target:** New test files in `tests/views/`. (Complete)
+**Phase 5: Review & Refine**
 
-- **Status:** All view test files created and running. 'Test Fund Views' is now complete and correctly tests the /fund/<fund_code> route with proper mocking and chart data validation.
-
-### Step 4.6: Test API Endpoints (`api_views.py`, `api_routes_call.py`, `api_routes_data.py`) (Complete)
-
-- **Action:** Created `tests/views/test_api_views.py` with tests for `/get_data`, `/run_api_calls`, `/rerun-api-call`, and `/schedules` endpoints.
-- **Action:** Used proper mocking to simulate API calls, file operations, and database access.
-- **Action:** Tested both success paths and error handling for all API endpoints.
-- **Target:** API routes and data handling logic.
-- **Status:** All API endpoint tests are passing successfully. Each test verifies the correct behavior of the respective endpoints, including proper parameter handling and response formatting.
-
-
-### Step 5###
-
-Fix the tests that are failing.
-Okay, I've analyzed the pytest.log content you provided.
-
-While there are no outright test failures (F or E) reported by pytest, the log reveals several important issues contributing to the "mess":
-
-Critical Configuration Error: The KeyError: 'COLOR_PALETTE' during the fund_views tests is the most significant problem. It means the test setup isn't loading the application configuration correctly, which likely affects many view tests.
-Test Data File Issues: Several errors (FundList.csv not found, Dates.csv not found) and warnings show that tests requiring specific data files are not finding them in the temporary test environment.
-Inconsistent Path Handling: Warnings about app_root_path not being provided and errors about DATA_FOLDER not existing suggest the way tests handle file paths and the data directory needs refinement.
-Code Robustness Warnings: Warnings related to parsing terms ('BAD') and mismatches between dates and data columns in weight files indicate areas where the application code might need to be more resilient to unexpected input, and tests should cover these cases.
-Log Noise: The high volume of INFO logs makes it harder to spot the important warnings and errors.
-Here is a specific, prioritized plan to address these issues:
-
-Phase 1: Fix Critical Test Setup Errors
-
-Fix Configuration Loading (High Priority):
-Action: Modify the app fixture in tests/views/conftest.py. Immediately after the app = Flask(...) line, add app.config.from_object('config') to explicitly load your application's configuration, including COLOR_PALETTE.   
-File: tests/views/conftest.py
-Verification: Rerun pytest and confirm the KeyError: 'COLOR_PALETTE' in tests/views/test_fund_views.py is gone.
-Fix Test Data File Management (High Priority):
-Action: Review tests that failed due to missing files (test_api_views.py needs FundList.csv, test_weight_processing.py needs Dates.csv). Update the setup for these tests (or relevant fixtures in conftest.py) to create necessary dummy versions of FundList.csv, Dates.csv, etc., within the temporary directory provided by the app fixture (tmp_path).   
-Files: tests/views/test_api_views.py, tests/processing/test_weight_processing.py, tests/processing/test_process_data.py, tests/views/conftest.py (if using fixtures for data setup).
-Verification: Rerun tests and confirm the FileNotFoundError logs for FundList.csv and Dates.csv are resolved.
-Standardize Data Folder Path Handling:
-Action (Code): Ensure all application code (views/*.py, utils.py, etc.) consistently retrieves the data folder path from current_app.config['DATA_FOLDER'] rather than relying on relative paths or os.getcwd().
-Action (Tests): Ensure all tests needing a data folder use the app fixture from conftest.py. This fixture correctly sets app.config['DATA_FOLDER'] to a temporary path (tmp_path), eliminating the /mock/data/folder error and the warnings about app_root_path. Remove any direct mocking of DATA_FOLDER in individual tests if they use the app fixture.
-Files: views/main_views.py, utils.py, tests/views/test_main_views.py, tests/utils/test_utils.py, potentially others.
-Verification: Rerun tests and check that the DATA_FOLDER does not exist error and the app_root_path warnings are gone.
-Phase 2: Improve Test Quality and Reduce Noise
-
-Reduce Log Noise:
-Action: Modify pytest.ini. Change --log-file-level=INFO to --log-file-level=WARNING. This will make the pytest.log much cleaner, only showing warnings and errors by default. You can temporarily switch back to INFO if needed for debugging specific tests.   
-File: pytest.ini
-Verification: Run pytest again. The pytest.log should be significantly shorter and focus on potential problems.
-Address Code Robustness Warnings:
-Action (curve_processing): Add specific test cases to tests/processing/test_curve_processing.py for invalid terms like 'BAD' and '' to explicitly assert that _term_to_days returns None as expected.
-Action (weight_processing): In tests/processing/test_weight_processing.py, add test cases with mismatched numbers of dates vs. data columns to verify the truncation logic works correctly and the warnings are expected under those conditions.
-Action (generic_comparison_views): In the view or comparison_helpers.py, ensure ID columns are cast to the same type (e.g., str) before merging summary_stats and held_status to avoid the dtype warning.
-Phase 3: General Health Check (Revisit from General Plan)
-
-Review Coverage: Once the tests are stable and less noisy, regenerate the coverage report (pytest --cov=. --cov-report=html) and identify areas needing more tests.
-Check for Flakiness: Run the test suite multiple times (e.g., pytest -n auto --count=5) to see if any tests fail intermittently. Address any flaky tests found.
-Optimize: Use pytest --durations=10 to find slow tests and investigate optimizations.
-By following these steps, focusing on fixing the configuration and data handling in the test environment first, you should be able to bring the unit tests back into a reliable and useful state.
+26. **Task:** Run `pytest --cov=. --cov-report=html` again.
+    
+27. **Task:** Analyze the new coverage report. Identify any remaining critical gaps, especially in error handling or complex conditional logic.
+    
+28. **Task:** Add specific tests for any missed branches or edge cases identified in the review.

@@ -1,6 +1,6 @@
 **Important Note on Date Formats:**
 
-Throughout this application, date processing logic (especially when identifying date columns in input files) is now fully flexible. The loader will handle common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`) where appropriate, particularly during initial data loading and column identification steps. If a date cannot be parsed with these, pandas' flexible parser is used as a final fallback. This ensures robust handling of a wide variety of date formats in your data files.
+Throughout this application, date processing logic (especially when identifying date columns in input files) is now fully flexible. The loader will handle common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`) where appropriate, particularly during initial data loading and column identification steps. If a date cannot be parsed with these, pandas' flexible parser is used as a final fallback, leveraging patterns defined in `config/date_patterns.yaml` and the `data_utils.parse_dates_robustly` function. This ensures robust handling of a wide variety of date formats in your data files.
 
 ISIN is used as the primary identifier for securities, and is stored in the `w_secs.csv` file.
 
@@ -25,7 +25,7 @@ The frontend has been recently refactored using **Tailwind CSS** for a modern lo
 | **Yield Curve Analysis**         | Check curve inconsistencies via `/curve/summary`, `/curve/details/<currency>`. Highlights staleness/missing data. |
 | **Attribution Residuals**        | Analyze via `/attribution`. 3-way toggle (L0/L1/L2), per-fund files, color-coded.                            |
 | **Data Simulation**              | API simulation via `/get_data`.                                                                              |
-| **Special Character Handling**   | Security IDs URL-encoded/decoded.                                                                            |
+| **Special Character Handling**   | Security IDs URL-encoded/decoded, primarily for URL routing (e.g., in `/security/details/<path:security_id>`). |
 | **Max/Min Value Breach**         | Checks `sec_*.csv` against thresholds. Dashboard: `/maxmin/dashboard`. Details: `/maxmin/details/<file>/<type>`. |
 | **Watchlist Management**         | Track/add/clear securities via `/watchlist`. Filterable, auditable, modal UI.                                |
 | **Inspect (Contribution Analysis)**      | Analyze top contributors/detractors to metric changes over a date range. Modal UI, supports all analytics. See below for technical details. |
@@ -58,13 +58,13 @@ graph TD
     B[data_loader.py]
     C[metric_calculator.py]
     D[security_processing.py]
-    E[process_data.py]
+    E[preprocessing.py]
     F[curve_processing.py]
     G[issue_processing.py]
-    H[weight_processing.py]
-    I[data_validation.py]
-    J[process_w_secs.py]
-    K[process_weights.py]
+    H[data_validation.py]
+    I[run_preprocessing.py]
+    J[utils.py]
+    K[data_utils.py]
     A --> B
     A --> C
     A --> D
@@ -150,7 +150,7 @@ graph TD
 
 The primary static assets are:
 - `static/css/style.css`: The main stylesheet generated from Tailwind CSS. The build process uses `tailwind.config.js` and `postcss.config.js`.
-- `static/js/`: Contains JavaScript modules for UI interactions (e.g., chart rendering, table sorting, filtering, toggle switches, sidebar behavior, filters drawer) and utility functions. Key files include `main.js` (entry point), `modules/ui/chartRenderer.js`, `modules/ui/tableSorter.js`, etc.
+- `static/js/`: Contains JavaScript modules for UI interactions (e.g., chart rendering, table sorting, filtering, sidebar behavior, filters drawer) and utility functions. Key files include `main.js` (entry point), `modules/ui/chartRenderer.js`, `modules/ui/tableSorter.js`, `modules/ui/securityTableFilter.js`, `modules/utils/helpers.js`, and `modules/charts/timeSeriesChart.js`.
 - `static/images/`: Contains any necessary image assets.
 
 ### Config/Utils
@@ -158,7 +158,18 @@ The primary static assets are:
 graph TD
     A[config.py]
     B[utils.py]
+    C[data_utils.py]
+    D[YAML Config Files]
+    A --> D
+    B --> D
 ```
+
+### External Configuration (YAML)
+
+The application relies on several external YAML files for configuration, loaded using `utils.load_yaml_config`:
+- `comparison_config.yaml`: Defines the datasets, display names, and labels for the generic comparison feature.
+- `maxmin_thresholds.yaml`: Specifies the maximum and minimum acceptable values for security metrics checked by the Max/Min feature.
+- `config/date_patterns.yaml`: Contains a list of common date format strings used by `data_utils.parse_dates_robustly` for flexible date parsing.
 
 ## Application Components
 
@@ -168,9 +179,9 @@ graph TD
 |------|-------------|
 | `ts_*.csv` | Time-series data indexed by Date and Code (Fund/Benchmark) |
 | `sp_ts_*.csv` | (Optional) Secondary/comparison time-series data corresponding to `ts_*.csv` |
-| `sec_*.csv` | Security-level data in wide format (dates as columns). Used for Securities Check and Comparisons. Date parsing is fully flexible: supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others. |
-| `pre_*.csv` | Input files for the `process_data.py` script |
-| `new_*.csv` | Output files from the `process_data.py` script |
+| `sec_*.csv` | Security-level data in wide format (dates as columns). Used for Securities Check and Comparisons. **Note:** While input files are wide, `security_processing.py` melts them into a long format for internal processing. Date parsing is fully flexible using `data_utils.parse_dates_robustly` and patterns from `config/date_patterns.yaml`. |
+| `pre_*.csv` | Input files for the `preprocessing.py` script (e.g., `pre_sec_*.csv`, `pre_w_*.csv`). |
+| `new_*.csv` | Intermediate output files potentially generated during preprocessing. |
 | `exclusions.csv` | Excluded securities list (`SecurityID`, `AddDate`, `EndDate`, `Comment`) |
 | `QueryMap.csv` | Maps query IDs to filenames for API simulation |
 | `FundList.csv` | Fund codes and metadata for the API simulation page |
@@ -190,18 +201,29 @@ graph TD
 | File | Purpose | Key Functions |
 |------|---------|--------------|
 | `app.py` | Application entry point using Flask factory pattern | `create_app()`, `run_cleanup()` |
-| `config.py` | Configuration variables | `DATA_FOLDER`, `COLOR_PALETTE`, `COMPARISON_CONFIG` |
-| `data_loader.py` | Load and preprocess time-series data | `load_and_process_data()`, `_find_column()` |
-| `metric_calculator.py` | Calculate statistical metrics | `calculate_latest_metrics()`, `_calculate_column_stats()` |
-| `process_data.py` | Preprocess CSV files | `process_csv_file()`, `main()` |
-| `security_processing.py` | Process security-level data | `load_and_process_security_data()`, `calculate_security_latest_metrics()` |
-| `utils.py` | Utility functions | `_is_date_like()`, `parse_fund_list()`, `load_weights_and_held_status()` |
-| `curve_processing.py` | Process yield curve data | `load_curve_data()`, `check_curve_inconsistencies()` |
-| `issue_processing.py` | Manage data issues (load, add, close) using `data_issues.csv` and `users.csv` | `add_issue()`, `close_issue()`, `load_issues()` |
-| `weight_processing.py` | Process and clean weight files, replacing generic headers with dates from Dates.csv for fund, benchmark, and security weights. | `process_weight_file()` |
-| `process_weights.py` | Batch process all weight files in Data/, converting pre_w_*.csv to w_*.csv with correct date headers. | `main()`, `process_weight_file_with_reversed_dates()`, `process_securities_file()` |
-| `process_w_secs.py` | Process pre_w_secs.csv to w_secs.csv, replacing weight columns with dates and preserving metadata columns. | `process_securities_file()` |
-| `data_validation.py` | Validate structure and content of DataFrames before saving, checking columns and types by file type. | `validate_data()` |
+| `config.py` | Configuration variables and constants | `DATA_FOLDER`, `COLOR_PALETTE`, `COMPARISON_CONFIG`, `MAXMIN_THRESHOLDS`, `LOGGING_CONFIG` |
+| `data_loader.py` | Load and preprocess time-series data (`ts_*.csv`) | `load_and_process_data()`, `_find_column()` |
+| `metric_calculator.py` | Calculate statistical metrics for time-series and security data | `calculate_latest_metrics()`, `_calculate_column_stats()`, `calculate_security_latest_metrics()` |
+| `preprocessing.py` | Core preprocessing logic for various input files (`pre_*.csv`, `pre_w_*.csv`). Handles date header replacement, data type conversion, aggregation, and formatting based on file type. | `process_file()`, `replace_date_headers()`, `aggregate_data()` (example functions) |
+| `run_preprocessing.py` | Script to orchestrate the preprocessing of multiple files by calling functions in `preprocessing.py`. Likely triggered manually or via an endpoint like `/run-cleanup`. | `main()` |
+| `security_processing.py` | Load and process security-level data (`sec_*.csv`), melting wide format to long format. | `load_and_process_security_data()` |
+| `utils.py` | General utility functions | `load_yaml_config()`, `parse_fund_list()`, `load_weights_and_held_status()`, `load_fund_groups()` |
+| `data_utils.py` | Data-specific utility functions, particularly for date handling | `parse_dates_robustly()` |
+| `curve_processing.py` | Process yield curve data (`curves.csv`) | `load_curve_data()`, `check_curve_inconsistencies()` |
+| `issue_processing.py` | Manage data issues (`data_issues.csv`, `users.csv`) | `add_issue()`, `close_issue()`, `load_issues()` |
+| `data_validation.py` | Validate structure, columns, and data types of DataFrames, often used before saving processed data or after API calls. | `validate_data()` |
+
+## Data Preprocessing Workflow
+
+The application includes a preprocessing step, primarily handled by `preprocessing.py` and orchestrated by `run_preprocessing.py`. This step standardizes various input files located in the `Data/` directory, typically those prefixed with `pre_` (e.g., `pre_sec_*.csv`, `pre_w_*.csv`).
+
+Key tasks performed during preprocessing include:
+- **Date Header Replacement:** Replacing generic column headers (like 'D1', 'D2') in weight files (`pre_w_*.csv`) with actual dates, often sourced from `Dates.csv`.
+- **Data Type Conversion:** Ensuring columns have the correct data types (numeric, string, datetime).
+- **Aggregation/Pivoting:** Potentially transforming data formats (e.g., pivoting or melting).
+- **Output Generation:** Saving the processed data into standardized formats (e.g., `w_secs.csv`, `sec_*.csv`).
+
+This preprocessing is typically run offline via the `run_preprocessing.py` script or potentially triggered through an application endpoint like `/run-cleanup` (check `app.py`). The goal is to prepare the raw input data into the consistent formats expected by the main application components. `data_validation.py` may be used within this workflow to ensure the integrity of the processed data before saving.
 
 ## Logging and Diagnostics
 
@@ -474,3 +496,17 @@ To ensure a modern, space-efficient, and consistent filter/search form experienc
 - This approach ensures all filter/search forms are visually compact, aligned, and responsive to available space.
 - The pattern is compatible with the `@tailwindcss/forms` plugin, which is used to reset browser defaults and provide a neutral base for form controls.
 - For consistency, always use these classes for filter/search forms in new templates or when refactoring existing ones.
+
+## Testing
+
+The project includes a suite of tests using the `pytest` framework, located in the `tests/` directory. Configuration for pytest is managed in `pytest.ini`.
+
+To run the tests:
+1.  Install development dependencies:
+    ```powershell
+    pip install -r requirements-dev.txt
+    ```
+2.  Run pytest from the project root directory:
+    ```powershell
+    pytest
+    ```
