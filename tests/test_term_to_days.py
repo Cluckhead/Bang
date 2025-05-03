@@ -17,4 +17,4 @@ from curve_processing import _term_to_days
 )
 def test_term_to_days_conversions(input_term, expected_days):
     """Validate that _term_to_days converts term strings to approximate day counts or None."""
-    assert _term_to_days(input_term) == expected_days 
+    assert _term_to_days(input_term) == expected_days

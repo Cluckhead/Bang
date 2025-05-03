@@ -420,9 +420,7 @@ def attribution_charts() -> Response:
             (date,) = group_keys
             char_val = None
         bench_prod_res = group.apply(
-            lambda row: calc_residual(
-                row, "L0 Bench Total Daily", "L2 Bench ", l2_all
-            ),
+            lambda row: calc_residual(row, "L0 Bench Total Daily", "L2 Bench ", l2_all),
             axis=1,
         )
         bench_sp_res = group.apply(
@@ -435,9 +433,7 @@ def attribution_charts() -> Response:
             axis=1,
         )
         port_prod_res = group.apply(
-            lambda row: calc_residual(
-                row, "L0 Port Total Daily ", "L2 Port ", l2_all
-            ),
+            lambda row: calc_residual(row, "L0 Port Total Daily ", "L2 Port ", l2_all),
             axis=1,
         )
         port_sp_res = group.apply(

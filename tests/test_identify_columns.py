@@ -54,4 +54,4 @@ def test_identify_columns_missing_required(sample_patterns, caplog):
 
     # Ensure an error was logged for the missing required column
     logged_errors = [rec.getMessage() for rec in caplog.records]
-    assert any("Required category 'date' not found" in msg for msg in logged_errors) 
+    assert any("Required category 'date' not found" in msg for msg in logged_errors)

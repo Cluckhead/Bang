@@ -19,7 +19,12 @@ from typing import List, Tuple, Optional, Dict, Any
 import re  # Import regex for pattern matching
 from flask import current_app  # Import current_app to access config
 import config
-from data_utils import read_csv_robustly, parse_dates_robustly, identify_columns, convert_to_numeric_robustly
+from data_utils import (
+    read_csv_robustly,
+    parse_dates_robustly,
+    identify_columns,
+    convert_to_numeric_robustly,
+)
 from utils import load_yaml_config
 
 # Get the logger instance. Assumes Flask app has configured logging.
@@ -39,8 +44,11 @@ STD_BENCHMARK_COL = "Benchmark"
 STD_SCOPE_COL = "SS Project - In Scope"  # Standardized name for the scope column
 
 # Load date patterns from YAML once at module level
-_date_patterns_yaml = load_yaml_config(os.path.join(os.path.dirname(__file__), 'config', 'date_patterns.yaml'))
-DATE_COLUMN_PATTERNS = _date_patterns_yaml.get('date_patterns', [])
+_date_patterns_yaml = load_yaml_config(
+    os.path.join(os.path.dirname(__file__), "config", "date_patterns.yaml")
+)
+DATE_COLUMN_PATTERNS = _date_patterns_yaml.get("date_patterns", [])
+
 
 # --- NEW HELPER FUNCTION ---
 def load_simple_csv(filepath: str, filename_for_logging: str) -> Optional[pd.DataFrame]:
@@ -257,7 +265,9 @@ def _filter_by_scope(
         return df
 
     df_filtered = df.copy()
-    df_filtered[scope_col] = df_filtered[scope_col].astype(str).str.upper().fillna("FALSE")
+    df_filtered[scope_col] = (
+        df_filtered[scope_col].astype(str).str.upper().fillna("FALSE")
+    )
     df_filtered = df_filtered[df_filtered[scope_col] == "TRUE"]
     logger.info(
         f"Filtered '{filename_for_logging}' based on '{scope_col}'. Kept {len(df_filtered)}/{original_count} rows where value is 'TRUE'."
@@ -447,7 +457,9 @@ def _process_single_file(
             df.dropna(subset=[col], inplace=True)
             dropped = before - len(df)
             if dropped > 0:
-                logger.warning(f"Dropped {dropped} rows from {filename_for_logging} due to NaN values in column '{col}' after type conversion.")
+                logger.warning(
+                    f"Dropped {dropped} rows from {filename_for_logging} due to NaN values in column '{col}' after type conversion."
+                )
 
         final_benchmark_col_name = (
             STD_BENCHMARK_COL
@@ -476,9 +488,7 @@ def _process_single_file(
         logger.error(f"OS error when accessing {filepath}: {e}", exc_info=True)
         return None
     except ValueError as e:  # Catch ValueErrors from _find_columns or other steps
-        logger.error(
-            f"Value error processing {filename_for_logging}: {e}"
-        )
+        logger.error(f"Value error processing {filename_for_logging}: {e}")
         return None
     except Exception as e:
         logger.exception(f"Unexpected error processing {filename_for_logging}: {e}")
@@ -501,7 +511,14 @@ def load_and_process_data(
     secondary_filename: Optional[str] = None,
     data_folder_path: Optional[str] = None,  # Renamed and made optional
     filter_sp_valid: bool = False,  # Add parameter here
-) -> Tuple[Optional[pd.DataFrame], Optional[List[str]], Optional[str], Optional[pd.DataFrame], Optional[List[str]], Optional[str]]:
+) -> Tuple[
+    Optional[pd.DataFrame],
+    Optional[List[str]],
+    Optional[str],
+    Optional[pd.DataFrame],
+    Optional[List[str]],
+    Optional[str],
+]:
     """Loads and processes a primary CSV file and optionally a secondary CSV file.
 
     Retrieves the data folder path from Flask's current_app.config['DATA_FOLDER']

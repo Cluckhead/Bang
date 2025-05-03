@@ -72,6 +72,7 @@ generic_comparison_bp = Blueprint(
 
 # --- Refactored Helper Functions ---
 
+
 # Calculate comparison stats function (seems largely reusable, maybe minor tweaks needed)
 # Keep it similar to the original version found in comparison_views.py etc.
 def calculate_generic_comparison_stats(merged_df, static_data, id_col):
@@ -440,7 +441,9 @@ def summary(comparison_type):
         for x in filtered_data[config.FUNDS_COL].dropna():
             all_funds_in_data.update(parse_fund_list(x))
     else:
-        fcands = [c for c in ["Fund", "Fund Code", "Code"] if c in filtered_data.columns]
+        fcands = [
+            c for c in ["Fund", "Fund Code", "Code"] if c in filtered_data.columns
+        ]
         if fcands:
             all_funds_in_data = set(filtered_data[fcands[0]].unique())
     filtered_fund_groups = {
@@ -453,7 +456,9 @@ def summary(comparison_type):
     filter_options = {}
     if not filtered_data.empty:
         potential_filter_cols = [
-            col for col in static_cols if col in filtered_data.columns and col != actual_id_col
+            col
+            for col in static_cols
+            if col in filtered_data.columns and col != actual_id_col
         ]
         for col in potential_filter_cols:
             if col == "Funds":
@@ -462,7 +467,8 @@ def summary(comparison_type):
                 uniques = filtered_data[col].dropna().unique()
                 try:
                     sorted_vals = sorted(
-                        uniques, key=lambda x: (isinstance(x, (int, float)), str(x).lower())
+                        uniques,
+                        key=lambda x: (isinstance(x, (int, float)), str(x).lower()),
                     )
                 except TypeError:
                     sorted_vals = sorted(uniques, key=str)
@@ -819,11 +825,15 @@ def details(comparison_type, security_id):
                 # but including for completeness. It might also mean the fund exists
                 # for the security but not within the chart's date range.
                 fund_holdings_summary[fund] = "Not held during period"
-    elif not holdings_error: # No error, but no data either
-         fund_holdings_summary = {"Note": "No holding information found for this security in w_secs.csv."}
+    elif not holdings_error:  # No error, but no data either
+        fund_holdings_summary = {
+            "Note": "No holding information found for this security in w_secs.csv."
+        }
     # If there was a holdings_error, the flash message handles it.
 
-    log.info(f"--- Successfully Prepared Data for Generic Comparison Detail ({comparison_type}, {decoded_security_id}) ---")
+    log.info(
+        f"--- Successfully Prepared Data for Generic Comparison Detail ({comparison_type}, {decoded_security_id}) ---"
+    )
     return render_template(
         "comparison_details_base.html",
         comparison_type=comparison_type,
@@ -837,5 +847,5 @@ def details(comparison_type, security_id):
         message=None,  # No error message if we got this far, warnings flashed
         holdings_data=holdings_data,  # Pass holdings dict
         chart_dates=chart_dates,  # Pass list of dates
-        fund_holdings_summary=fund_holdings_summary # Pass summary dict
+        fund_holdings_summary=fund_holdings_summary,  # Pass summary dict
     )

@@ -6,6 +6,7 @@ from data_validation import validate_data
 
 # ------------------ Time-Series ------------------
 
+
 def test_validate_data_ts_good():
     df = pd.DataFrame(
         {
@@ -33,8 +34,9 @@ def test_validate_data_ts_missing_code():
 
 # ------------------ Security-Level ------------------
 
+
 def test_validate_data_sec_missing_isin():
     df = pd.DataFrame({"2024-01-01": [1.0]})
     valid, errors = validate_data(df, "sec_Data.csv")
     assert not valid
-    assert any("No ID column" in e for e in errors) 
+    assert any("No ID column" in e for e in errors)

@@ -51,7 +51,11 @@ def get_active_exclusions(data_folder_path: str) -> Set[str]:
             end_date = ex["EndDate"].date() if pd.notna(ex["EndDate"]) else None
             security_id = str(ex["SecurityID"])  # Ensure comparison as str
 
-            if add_date and add_date <= today and (end_date is None or end_date >= today):
+            if (
+                add_date
+                and add_date <= today
+                and (end_date is None or end_date >= today)
+            ):
                 active_exclusions.add(security_id)
         except Exception as exc:  # pragma: no cover – defensive
             current_app.logger.error(
@@ -65,6 +69,7 @@ def get_active_exclusions(data_folder_path: str) -> Set[str]:
 # ---------------------------------------------------------------------------
 # Dataframe utilities
 # ---------------------------------------------------------------------------
+
 
 def apply_security_filters(
     df: pd.DataFrame,
@@ -99,7 +104,9 @@ def apply_security_filters(
             ]
         else:
             fund_col_candidates = [
-                col for col in ["Fund", "Fund Code", config.CODE_COL] if col in filtered_df.columns
+                col
+                for col in ["Fund", "Fund Code", config.CODE_COL]
+                if col in filtered_df.columns
             ]
             if fund_col_candidates:
                 fund_col = fund_col_candidates[0]
@@ -108,7 +115,9 @@ def apply_security_filters(
     # ---- Search-term filter ---------------------------------------------
     if search_term:
         filtered_df = filtered_df[
-            filtered_df[id_col_name].astype(str).str.contains(search_term, case=False, na=False)
+            filtered_df[id_col_name]
+            .astype(str)
+            .str.contains(search_term, case=False, na=False)
         ]
 
     # ---- Active exclusions ----------------------------------------------
@@ -167,7 +176,9 @@ def apply_security_sorting(
             ascending=ascending_order,
             inplace=True,
             na_position="last",
-            key=lambda col: col.astype(str).str.lower() if col.dtype == "object" else col,
+            key=lambda col: (
+                col.astype(str).str.lower() if col.dtype == "object" else col
+            ),
         )
     except Exception:  # pragma: no cover – best-effort fallback
         df.sort_values(by=id_col_name, ascending=True, inplace=True, na_position="last")
@@ -184,6 +195,7 @@ def apply_security_sorting(
 # ---------------------------------------------------------------------------
 # Pagination
 # ---------------------------------------------------------------------------
+
 
 def paginate_security_data(
     df: pd.DataFrame,
@@ -227,6 +239,7 @@ def paginate_security_data(
 # File loader helper
 # ---------------------------------------------------------------------------
 
+
 def load_filter_and_extract(
     data_folder: str,
     filename: str,
@@ -252,9 +265,14 @@ def load_filter_and_extract(
             return None, set(), {}
 
         # Ensure ID column is present (either column or index level)
-        if id_column_name not in df_long.index.names and id_column_name not in df_long.columns:
+        if (
+            id_column_name not in df_long.index.names
+            and id_column_name not in df_long.columns
+        ):
             current_app.logger.error(
-                "ID column '%s' not found in processed data from %s", id_column_name, filename
+                "ID column '%s' not found in processed data from %s",
+                id_column_name,
+                filename,
             )
             fallback_id_col = df_long.index.name
             if fallback_id_col and fallback_id_col in df_long.index.names:
@@ -276,7 +294,10 @@ def load_filter_and_extract(
 
         if filtered_df.empty:
             current_app.logger.warning(
-                "No data found for %s='%s' in %s", id_column_name, security_id_to_filter, filename
+                "No data found for %s='%s' in %s",
+                id_column_name,
+                security_id_to_filter,
+                filename,
             )
             alt_id_col = config.SEC_NAME_COL
             if id_column_name == config.ISIN_COL and alt_id_col in df_long.columns:
@@ -291,13 +312,17 @@ def load_filter_and_extract(
         value_col_name = config.VALUE_COL
         if value_col_name not in filtered_df.columns:
             potential_value_cols = [
-                col for col in filtered_df.columns if col not in static_cols and col != id_column_name
+                col
+                for col in filtered_df.columns
+                if col not in static_cols and col != id_column_name
             ]
             if potential_value_cols:
                 value_col_name = potential_value_cols[0]
                 current_app.logger.info("Using '%s' as value column", value_col_name)
             else:
-                current_app.logger.error("Could not determine value column in %s", filename)
+                current_app.logger.error(
+                    "Could not determine value column in %s", filename
+                )
                 return None, set(), {}
 
         # Ensure 'Date' is the index
@@ -307,7 +332,9 @@ def load_filter_and_extract(
             if config.DATE_COL in filtered_df.index.names:
                 filtered_df = filtered_df.reset_index().set_index(config.DATE_COL)
             else:
-                current_app.logger.error("Cannot find '%s' in %s", config.DATE_COL, filename)
+                current_app.logger.error(
+                    "Cannot find '%s' in %s", config.DATE_COL, filename
+                )
                 return None, set(), {}
 
         data_series = filtered_df[value_col_name].sort_index()
@@ -316,16 +343,20 @@ def load_filter_and_extract(
         # Static info (take first row)
         local_static_info: dict[str, Any] = {}
         relevant_static_cols = [
-            col for col in static_cols if col in filtered_df.columns and col != id_column_name
+            col
+            for col in static_cols
+            if col in filtered_df.columns and col != id_column_name
         ]
         if not filtered_df.empty and relevant_static_cols:
             first_row = filtered_df.iloc[0]
             local_static_info = {
-                col: first_row[col] for col in relevant_static_cols if pd.notna(first_row[col])
+                col: first_row[col]
+                for col in relevant_static_cols
+                if pd.notna(first_row[col])
             }
 
         return data_series, dates, local_static_info
 
     except Exception as exc:  # pragma: no cover – diagnostics
         current_app.logger.error("Error processing file %s: %s", filename, exc)
-        return None, set(), {} 
+        return None, set(), {}

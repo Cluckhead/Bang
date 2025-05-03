@@ -30,6 +30,7 @@ DEFAULT_PLACEHOLDER_VALUES = config.STALENESS_PLACEHOLDERS
 
 # Use config.STALENESS_PLACEHOLDERS for placeholder values in staleness detection
 
+
 def get_staleness_summary(
     data_folder=DATA_FOLDER,
     exclusions_df=None,
@@ -111,8 +112,8 @@ def get_stale_securities_details(
             )
         else:
             id_column = ID_COLUMN
-        meta_columns = df.columns[:len(config.METADATA_COLS)]
-        date_columns = df.columns[len(config.METADATA_COLS):]
+        meta_columns = df.columns[: len(config.METADATA_COLS)]
+        date_columns = df.columns[len(config.METADATA_COLS) :]
         # Parse date columns for latest date
         date_objects = []
         for col in date_columns:

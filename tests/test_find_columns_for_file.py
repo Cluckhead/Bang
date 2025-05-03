@@ -28,4 +28,4 @@ def test_find_columns_for_file_basic():
     assert benchmark_col == "Benchmark"
     # Fund value columns should be the ones not identified as date/code/benchmark
     assert set(fund_val_cols) == {"Value", "Other"}
-    assert scope_col is None 
+    assert scope_col is None

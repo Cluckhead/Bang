@@ -14,16 +14,25 @@ import config
 
 # Import shared utilities and processing functions
 try:
-    from utils import load_fund_groups, parse_fund_list, load_weights_and_held_status # Added load_weights
+    from utils import (
+        load_fund_groups,
+        parse_fund_list,
+        load_weights_and_held_status,
+    )  # Added load_weights
     from security_processing import load_and_process_security_data
     from preprocessing import read_and_sort_dates
 except ImportError as e:
     logging.error(f"Error importing modules in generic_comparison_helpers: {e}")
-    from ..utils import load_fund_groups, parse_fund_list, load_weights_and_held_status # Added load_weights
+    from ..utils import (
+        load_fund_groups,
+        parse_fund_list,
+        load_weights_and_held_status,
+    )  # Added load_weights
     from ..security_processing import load_and_process_security_data
     from ..preprocessing import read_and_sort_dates
 
 # === Stats Calculation Helper ===============================================
+
 
 def calculate_generic_comparison_stats(merged_df, static_data, id_col):
     """
@@ -226,6 +235,7 @@ def calculate_generic_comparison_stats(merged_df, static_data, id_col):
 
 # === Holdings Helper ========================================================
 
+
 def get_holdings_for_security(security_id, chart_dates, data_folder):
     """
     Loads w_secs.csv and determines which funds held the given security on the specified dates.
@@ -409,6 +419,7 @@ def get_holdings_for_security(security_id, chart_dates, data_folder):
 
 # === Fund Loading Helper =====================================================
 
+
 def load_fund_codes_from_csv(data_folder: str) -> list:
     """
     Loads the list of fund codes from FundList.csv in the given data folder.
@@ -416,12 +427,16 @@ def load_fund_codes_from_csv(data_folder: str) -> list:
     """
     fund_list_path = os.path.join(data_folder, "FundList.csv")
     if not os.path.exists(fund_list_path):
-        logging.getLogger(__name__).warning(f"FundList.csv not found at {fund_list_path}")
+        logging.getLogger(__name__).warning(
+            f"FundList.csv not found at {fund_list_path}"
+        )
         return []
     try:
         df = pd.read_csv(fund_list_path)
         if config.FUND_CODE_COL in df.columns:
-            fund_codes = sorted(df[config.FUND_CODE_COL].dropna().astype(str).unique().tolist())
+            fund_codes = sorted(
+                df[config.FUND_CODE_COL].dropna().astype(str).unique().tolist()
+            )
             return fund_codes
         else:
             logging.getLogger(__name__).warning(
@@ -434,6 +449,7 @@ def load_fund_codes_from_csv(data_folder: str) -> list:
 
 
 # === Filtering Helper ========================================================
+
 
 def _apply_summary_filters(
     df: pd.DataFrame,
@@ -501,7 +517,9 @@ def _apply_summary_filters(
                         filtered = filtered[
                             filtered[col].apply(
                                 lambda x: (
-                                    value in parse_fund_list(x) if pd.notna(x) else False
+                                    value in parse_fund_list(x)
+                                    if pd.notna(x)
+                                    else False
                                 )
                             )
                         ].copy()
@@ -518,6 +536,7 @@ def _apply_summary_filters(
 
 
 # === Sorting Helper ===========================================================
+
 
 def _apply_summary_sorting(
     df: pd.DataFrame,
@@ -541,7 +560,9 @@ def _apply_summary_sorting(
     try:
         if pd.api.types.is_numeric_dtype(df[sort_by]):
             df[sort_by] = pd.to_numeric(df[sort_by], errors="coerce")
-            sorted_df = df.sort_values(by=sort_by, ascending=ascending, na_position="last")
+            sorted_df = df.sort_values(
+                by=sort_by, ascending=ascending, na_position="last"
+            )
         else:
             sorted_df = df.sort_values(
                 by=sort_by,
@@ -560,6 +581,7 @@ def _apply_summary_sorting(
 
 
 # === Pagination Helper =======================================================
+
 
 def _paginate_summary_data(
     df: pd.DataFrame,
@@ -600,4 +622,4 @@ def _paginate_summary_data(
         # 'url_for_page' needs to be added by the caller (view function)
     }
 
-    return paginated_df, context 
+    return paginated_df, context

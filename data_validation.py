@@ -79,11 +79,15 @@ def validate_data(df: pd.DataFrame, filename: str) -> Tuple[bool, List[str]]:
                 try:
                     pd.to_datetime(df[col])
                 except Exception as e:
-                    errors.append(f"Date-like column '{col}' cannot be parsed as datetime: {e}")
+                    errors.append(
+                        f"Date-like column '{col}' cannot be parsed as datetime: {e}"
+                    )
         # Check if value columns are numeric (date-like columns should be numeric)
         for col in date_like_cols:
             if not pd.api.types.is_numeric_dtype(df[col]):
-                errors.append(f"Date column '{col}' in security-level data is not numeric.")
+                errors.append(
+                    f"Date column '{col}' in security-level data is not numeric."
+                )
 
     elif filename == "FundList.csv":
         # Example: Check required columns for FundList
@@ -97,7 +101,9 @@ def validate_data(df: pd.DataFrame, filename: str) -> Tuple[bool, List[str]]:
         # Checks for weight files
         id_col = df.columns[0] if len(df.columns) > 0 else None
         if not id_col:
-            errors.append("No ID column found in weight file (expected in first column).")
+            errors.append(
+                "No ID column found in weight file (expected in first column)."
+            )
         # All columns after the first are expected to be dates
         date_cols = df.columns[1:]
         if not date_cols.any():
@@ -106,7 +112,9 @@ def validate_data(df: pd.DataFrame, filename: str) -> Tuple[bool, List[str]]:
             try:
                 pd.to_datetime(col)
             except Exception as e:
-                errors.append(f"Column header '{col}' in weight file is not a valid date: {e}")
+                errors.append(
+                    f"Column header '{col}' in weight file is not a valid date: {e}"
+                )
             if not pd.api.types.is_numeric_dtype(df[col]):
                 errors.append(f"Weight column '{col}' is not numeric.")
 
@@ -182,6 +190,7 @@ if __name__ == "__main__":
 # Helper for date-like column detection (copied from data_audit.py for validation use)
 def _is_date_like(s: str) -> bool:
     import re
+
     s = s.strip()
     date_patterns = [
         r"^\d{4}-\d{2}-\d{2}$",

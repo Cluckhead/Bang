@@ -27,6 +27,7 @@ import yaml
 
 DEFAULT_RELATIVE_PATH = "Data"
 
+
 def load_yaml_config(filepath: str) -> dict:
     """
     Loads a YAML configuration file and returns its contents as a dictionary.
@@ -37,7 +38,7 @@ def load_yaml_config(filepath: str) -> dict:
     """
     logger = logging.getLogger(__name__)
     try:
-        with open(filepath, 'r') as file:
+        with open(filepath, "r") as file:
             config = yaml.safe_load(file)
         return config
     except FileNotFoundError:
@@ -47,28 +48,52 @@ def load_yaml_config(filepath: str) -> dict:
         logger.error(f"YAML parsing error in {filepath}: {e}", exc_info=True)
         return None
     except Exception as e:
-        logger.error(f"Unexpected error loading YAML config {filepath}: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error loading YAML config {filepath}: {e}", exc_info=True
+        )
         return None
 
+
 # Load date patterns from YAML once at module level
-_date_patterns_yaml = load_yaml_config(os.path.join(os.path.dirname(__file__), 'config', 'date_patterns.yaml'))
-DATE_COLUMN_PATTERNS = _date_patterns_yaml.get('date_patterns', [])
+_date_patterns_yaml = load_yaml_config(
+    os.path.join(os.path.dirname(__file__), "config", "date_patterns.yaml")
+)
+DATE_COLUMN_PATTERNS = _date_patterns_yaml.get("date_patterns", [])
 
 
 def _is_date_like(column_name: str) -> bool:
-    """Check if a column name looks like a date (e.g., YYYY-MM-DD or DD/MM/YYYY).
-    Uses regex patterns loaded from config/date_patterns.yaml.
+    """
+    Check if a column name appears to be a date string based on pattern matching.
+
+    Uses regex patterns loaded from config/date_patterns.yaml to identify common
+    date formats in column names (e.g., YYYY-MM-DD, DD/MM/YYYY, "Date", etc.).
+
+    Args:
+        column_name (str): Column name to check
+
+    Returns:
+        bool: True if the column name matches any of the date patterns,
+              False otherwise or if column_name is not a string
     """
     if not isinstance(column_name, str):
         return False
     return any(re.search(pattern, column_name) for pattern in DATE_COLUMN_PATTERNS)
 
 
-def parse_fund_list(fund_string: str) -> list:
+def parse_fund_list(fund_string: str) -> List[str]:
     """
-    Parse a string representing a list of fund codes (e.g., '[F01, F02]') into a Python list.
-    Returns a parsed list if successful, empty list otherwise.
-    Handles various formats like '[A,B]', '[A]', '[]', 'A,B', '[ A , B ]'.
+    Parse a string representing a list of fund codes into a Python list.
+
+    Takes various string formats representing a list of fund codes and
+    converts them to a proper Python list of strings.
+
+    Args:
+        fund_string (str): String representing fund codes, which can be in formats:
+                          '[A,B]', '[A]', '[]', 'A,B', '[ A , B ]', etc.
+
+    Returns:
+        List[str]: List of fund codes as strings. Returns empty list for empty input,
+                  invalid input, or on error.
     """
     logger = logging.getLogger(__name__)
     try:
@@ -188,17 +213,20 @@ def load_exclusions(exclusion_file_path: str) -> Optional[pd.DataFrame]:
         if os.path.exists(exclusion_file_path):
             logger.info(f"Loading exclusions from {exclusion_file_path}")
             exclusions_df = pd.read_csv(exclusion_file_path)
-            
+
             # Convert date columns to datetime
             for date_col in ["AddDate", "EndDate"]:
                 if date_col in exclusions_df.columns:
                     exclusions_df[date_col] = pd.to_datetime(
                         exclusions_df[date_col], errors="coerce"
                     )
-            
+
             return exclusions_df
         else:
-            logger.error(f"Exclusion file not found during read: {exclusion_file_path}", exc_info=True)
+            logger.error(
+                f"Exclusion file not found during read: {exclusion_file_path}",
+                exc_info=True,
+            )
             return None
     except Exception as e:
         logger.error(f"Error loading exclusions: {e}", exc_info=True)
@@ -245,29 +273,36 @@ def replace_nan_with_none(obj: Any) -> Any:
         return obj
 
 
-def load_fund_groups(data_folder: str, fund_groups_filename: str = 'FundGroups.csv') -> dict:
+def load_fund_groups(
+    data_folder: str, fund_groups_filename: str = "FundGroups.csv"
+) -> Dict[str, List[str]]:
     """
-    Load fund groups from FundGroups.csv. Returns a dictionary mapping
-    group names to lists of fund codes belonging to each group.
-    
+    Load fund groups from FundGroups.csv and return as a dictionary.
+
+    Reads the fund groups file and creates a mapping between group names and the fund
+    codes that belong to each group. Uses parse_fund_list to convert fund strings
+    to Python lists.
+
     Args:
-        data_folder: Path to data folder
-        fund_groups_filename: Name of the fund groups CSV file
-        
+        data_folder (str): Path to the data folder containing the file
+        fund_groups_filename (str, optional): Name of the fund groups CSV file.
+                                              Defaults to 'FundGroups.csv'.
+
     Returns:
-        Dictionary mapping group names to lists of fund codes
+        Dict[str, List[str]]: Dictionary mapping group names to lists of fund codes.
+                             Returns empty dict if file not found or on error.
     """
     logger = logging.getLogger(__name__)
     result = {}
-    
+
     try:
         fund_groups_path = os.path.join(data_folder, fund_groups_filename)
         if os.path.exists(fund_groups_path):
             df = pd.read_csv(fund_groups_path)
-            if 'Group' in df.columns and 'Funds' in df.columns:
+            if "Group" in df.columns and "Funds" in df.columns:
                 for _, row in df.iterrows():
-                    group_name = row['Group']
-                    funds_str = row['Funds']
+                    group_name = row["Group"]
+                    funds_str = row["Funds"]
                     funds_list = parse_fund_list(funds_str)
                     result[group_name] = funds_list
         return result

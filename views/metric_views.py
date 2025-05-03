@@ -1296,14 +1296,18 @@ def inspect_metric_contribution(metric_name):
         return jsonify(results), 200
 
     except FileNotFoundError as e:
-        current_app.logger.error(f"Inspect API Error: File not found - {e}", exc_info=True)
+        current_app.logger.error(
+            f"Inspect API Error: File not found - {e}", exc_info=True
+        )
         return jsonify({"error": f"Required file not found: {e}"}), 404
     except ValueError as e:
         current_app.logger.error(f"Inspect API Error: Value error - {e}", exc_info=True)
         return jsonify({"error": f"Invalid input value: {e}"}), 400
     except KeyError as e:
         # Usually this means a required column is missing from the data
-        current_app.logger.error(f"Inspect API Error: Missing column - {e}", exc_info=True)
+        current_app.logger.error(
+            f"Inspect API Error: Missing column - {e}", exc_info=True
+        )
         return jsonify({"error": f"Required column missing: {e}"}), 400
     except Exception as e:
         current_app.logger.error(

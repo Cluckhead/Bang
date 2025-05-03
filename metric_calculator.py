@@ -331,7 +331,11 @@ def _calculate_relative_metrics(
             continue
 
         rel_series = port_series - bench_series
-        rel_change_series = rel_series.diff() if rel_series.dropna().size > 1 else pd.Series(index=rel_series.index, dtype=np.float64)
+        rel_change_series = (
+            rel_series.diff()
+            if rel_series.dropna().size > 1
+            else pd.Series(index=rel_series.index, dtype=np.float64)
+        )
 
         rel_stats = _calculate_column_stats(
             rel_series,
@@ -489,7 +493,9 @@ def calculate_latest_metrics(
     # --- Calculate RELATIVE Metrics (Secondary) ---
     sec_fund_col_used = next(
         (
-            col for col in (secondary_fund_cols or []) if secondary_df_sorted is not None and col in secondary_df_sorted.columns
+            col
+            for col in (secondary_fund_cols or [])
+            if secondary_df_sorted is not None and col in secondary_df_sorted.columns
         ),
         None,
     )

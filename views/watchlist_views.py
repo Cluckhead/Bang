@@ -41,7 +41,9 @@ def load_watchlist(data_folder_path: str):
     Returns a list of dicts, each representing a watchlist entry.
     """
     if not data_folder_path:
-        current_app.logger.error("No data_folder_path provided to load_watchlist.", exc_info=True)
+        current_app.logger.error(
+            "No data_folder_path provided to load_watchlist.", exc_info=True
+        )
         return []
     watchlist_path = os.path.join(data_folder_path, WATCHLIST_FILE)
     try:
@@ -257,8 +259,8 @@ def clear_watchlist():
     data_folder = current_app.config["DATA_FOLDER"]
     # Use standard form names matching the add form for consistency
     isin = request.form.get("isin")
-    cleared_by = request.form.get("user") # Use 'user' from form
-    clear_reason = request.form.get("reason") # Use 'reason' from form
+    cleared_by = request.form.get("user")  # Use 'user' from form
+    clear_reason = request.form.get("reason")  # Use 'reason' from form
 
     if not isin or not cleared_by or not clear_reason:
         flash("ISIN, user, and reason are required to clear an entry.", "danger")
@@ -285,8 +287,13 @@ def check_watchlist_entry(isin):
         # NOTE: The security_details endpoint requires both 'metric_name' and 'security_id'.
         # Here, we default to 'Duration' as the metric. Change as needed for your app logic.
         return redirect(
-            url_for("security.security_details", metric_name="Duration", security_id=isin)
+            url_for(
+                "security.security_details", metric_name="Duration", security_id=isin
+            )
         )
     else:
-        flash(f"Failed to update check time or find active entry for ISIN {isin}.", "danger")
+        flash(
+            f"Failed to update check time or find active entry for ISIN {isin}.",
+            "danger",
+        )
         return redirect(url_for("watchlist_bp.manage_watchlist"))

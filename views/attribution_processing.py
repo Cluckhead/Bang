@@ -14,7 +14,9 @@ def sum_l2s_block(df_block: pd.DataFrame, prefix: str, l2_cols: List[str]) -> Li
     ]
 
 
-def sum_l1s_block(df_block: pd.DataFrame, prefix: str, l1_groups: Dict[str, List[str]]) -> List[Any]:
+def sum_l1s_block(
+    df_block: pd.DataFrame, prefix: str, l1_groups: Dict[str, List[str]]
+) -> List[Any]:
     """
     Sums all L2 columns for each L1 group in l1_groups for the given DataFrame block, using the specified prefix.
     Returns a list of sums in the order of l1_groups.values().
@@ -27,7 +29,9 @@ def sum_l1s_block(df_block: pd.DataFrame, prefix: str, l1_groups: Dict[str, List
     ]
 
 
-def compute_residual_block(df_block: pd.DataFrame, l0_col: str, l2_prefix: str, l2_cols: List[str]) -> Any:
+def compute_residual_block(
+    df_block: pd.DataFrame, l0_col: str, l2_prefix: str, l2_cols: List[str]
+) -> Any:
     """
     Computes the residual for a DataFrame block: L0 minus the sum of all L2 columns (with prefix).
     """

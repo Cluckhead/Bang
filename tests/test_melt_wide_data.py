@@ -25,6 +25,9 @@ def test_melt_wide_data_success():
     assert pd.api.types.is_datetime64_any_dtype(melted["Date"])
     # Values should align (check one sample)
     assert (
-        melted.loc[(melted["ISIN"] == "X1") & (melted["Date"] == pd.Timestamp("2024-01-02")), "Value"].iloc[0]
+        melted.loc[
+            (melted["ISIN"] == "X1") & (melted["Date"] == pd.Timestamp("2024-01-02")),
+            "Value",
+        ].iloc[0]
         == 1.1
-    ) 
+    )

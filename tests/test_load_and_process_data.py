@@ -5,9 +5,7 @@ from data_loader import load_and_process_data
 
 
 def _write_ts_csv(tmp_dir):
-    csv_content = (
-        "Date,Code,Value\n" "2024-01-01,F1,1.0\n" "2024-01-02,F1,1.2\n"
-    )
+    csv_content = "Date,Code,Value\n" "2024-01-01,F1,1.0\n" "2024-01-02,F1,1.2\n"
     f = tmp_dir / "ts_test.csv"
     f.write_text(csv_content)
     return f.name  # return filename only
@@ -27,4 +25,4 @@ def test_load_and_process_data_happy_path(tmp_path):
     # One value column present and numeric
     assert val_cols == ["Value"]
     assert pd.api.types.is_numeric_dtype(df["Value"])
-    assert bm_col is None 
+    assert bm_col is None

@@ -22,7 +22,7 @@ from playwright.sync_api import sync_playwright, expect
 from config import PLAYWRIGHT_EXAMPLE_DATA, PLAYWRIGHT_SELECTORS
 
 # --- Configuration ---
-BASE_URL = "http://localhost:5000"
+BASE_URL = os.environ.get("SIMPLE_DATA_CHECKER_BASE_URL", "http://localhost:5000")
 SCREENSHOT_DIR = Path("screenshots")
 SCREENSHOT_DIR.mkdir(exist_ok=True)
 LOG_FILE = SCREENSHOT_DIR / "Playwright.log"

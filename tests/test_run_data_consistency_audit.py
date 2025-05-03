@@ -20,4 +20,4 @@ def test_run_data_consistency_audit_mismatch(tmp_path):
 
     assert not report["ts_files"]["all_match"], "Expected date ranges not to match."
     # Ensure offending filenames listed in summary or details
-    assert "ts_A.csv" in report["file_details"] and "ts_B.csv" in report["file_details"] 
+    assert "ts_A.csv" in report["file_details"] and "ts_B.csv" in report["file_details"]

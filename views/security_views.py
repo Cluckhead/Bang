@@ -22,14 +22,17 @@ import json
 import config
 
 # Import necessary functions/constants from other modules
-from config import COLOR_PALETTE, STATIC_INFO_GROUPS  # Keep palette and STATIC_INFO_GROUPS
+from config import (
+    COLOR_PALETTE,
+    STATIC_INFO_GROUPS,
+)  # Keep palette and STATIC_INFO_GROUPS
 from security_processing import (
     load_and_process_security_data,
     calculate_security_latest_metrics,
 )
 
 # Import the exclusion loading function
-from views.exclusion_views import load_exclusions  # Only import load_exclusions
+from utils import load_exclusions  # Import DataFrame-based load_exclusions from utils
 from utils import replace_nan_with_none
 
 # Add import for fund group utility
@@ -230,16 +233,21 @@ def securities_page():
                 all_funds_in_data.update(parse_fund_list(x))
         else:
             fund_col_candidates = [
-                col for col in ["Fund", "Fund Code", config.CODE_COL] if col in combined_metrics_df.columns
+                col
+                for col in ["Fund", "Fund Code", config.CODE_COL]
+                if col in combined_metrics_df.columns
             ]
             if fund_col_candidates:
                 fund_col = fund_col_candidates[0]
                 all_funds_in_data = set(combined_metrics_df[fund_col].unique())
 
         filtered_fund_groups = {
-            g: [f for f in funds if f in all_funds_in_data] for g, funds in fund_groups_dict.items()
+            g: [f for f in funds if f in all_funds_in_data]
+            for g, funds in fund_groups_dict.items()
         }
-        filtered_fund_groups = {g: funds for g, funds in filtered_fund_groups.items() if funds}
+        filtered_fund_groups = {
+            g: funds for g, funds in filtered_fund_groups.items() if funds
+        }
 
         # --- Apply Sorting via helper ---
         current_app.logger.info("Applying sorting via helper...")
@@ -315,7 +323,9 @@ def securities_page():
 
         # --- Handle Empty DataFrame After Filtering ---
         if combined_metrics_df.empty:
-            current_app.logger.warning("No data matches the specified filters after applying helper.")
+            current_app.logger.warning(
+                "No data matches the specified filters after applying helper."
+            )
             message_parts = [
                 "No securities found matching the current criteria.",
             ]
@@ -343,8 +353,7 @@ def securities_page():
 
     except Exception as e:
         current_app.logger.error(
-            f"!!! Unexpected error during security page processing: {e}",
-            exc_info=True
+            f"!!! Unexpected error during security page processing: {e}", exc_info=True
         )
         traceback.print_exc()
         return render_template(
@@ -357,8 +366,12 @@ def securities_page():
             ),
             active_filters=active_filters,
             exclude_min_zero=exclude_min_zero,
-            fund_groups=filtered_fund_groups if "filtered_fund_groups" in locals() else {},
-            selected_fund_group=selected_fund_group if "selected_fund_group" in locals() else None,
+            fund_groups=(
+                filtered_fund_groups if "filtered_fund_groups" in locals() else {}
+            ),
+            selected_fund_group=(
+                selected_fund_group if "selected_fund_group" in locals() else None
+            ),
         )
 
     # --- Render Template ---
@@ -423,34 +436,44 @@ def security_details(metric_name, security_id):
     is_excluded = False
     exclusion_info = None
     try:
-        exclusions_df = utils.load_exclusions(os.path.join(data_folder, "exclusions.csv"))
+        exclusions_df = load_exclusions(os.path.join(data_folder, "exclusions.csv"))
         if exclusions_df is not None and not exclusions_df.empty:
-            security_exclusions = exclusions_df[exclusions_df['SecurityID'] == decoded_security_id]
+            security_exclusions = exclusions_df[
+                exclusions_df["SecurityID"] == decoded_security_id
+            ]
             if not security_exclusions.empty:
                 active_exclusions = security_exclusions[
-                    (security_exclusions['EndDate'].isna()) | 
-                    (pd.to_datetime(security_exclusions['EndDate']) >= pd.Timestamp.now())
+                    (security_exclusions["EndDate"].isna())
+                    | (
+                        pd.to_datetime(security_exclusions["EndDate"])
+                        >= pd.Timestamp.now()
+                    )
                 ]
                 if not active_exclusions.empty:
                     is_excluded = True
                     # Get the most recent exclusion
-                    exclusion_info = active_exclusions.sort_values('AddDate', ascending=False).iloc[0].to_dict()
+                    exclusion_info = (
+                        active_exclusions.sort_values("AddDate", ascending=False)
+                        .iloc[0]
+                        .to_dict()
+                    )
     except Exception as e:
         current_app.logger.error(f"Error checking exclusions: {e}", exc_info=True)
-    
+
     # --- NEW: Check for open data issues ---
     open_issues = []
     try:
         from issue_processing import load_issues
+
         issues_df = load_issues(data_folder)
         if not issues_df.empty:
             # Filter to issues for this security
             security_issues = issues_df[
-                (issues_df['SecurityID'] == decoded_security_id) & 
-                (issues_df['Status'] == 'Open')
+                (issues_df["SecurityID"] == decoded_security_id)
+                & (issues_df["Status"] == "Open")
             ]
             if not security_issues.empty:
-                open_issues = security_issues.to_dict('records')
+                open_issues = security_issues.to_dict("records")
     except Exception as e:
         current_app.logger.error(f"Error checking data issues: {e}", exc_info=True)
 
@@ -458,7 +481,7 @@ def security_details(metric_name, security_id):
     bloomberg_yas_url = None
     if reference_row and "BBG Ticker Yellow" in reference_row:
         bbg_ticker = reference_row["BBG Ticker Yellow"]
-        bloomberg_yas_url = f"http://Bloomberg:{bbg_ticker} YAS"
+        bloomberg_yas_url = config.BLOOMBERG_YAS_URL_FORMAT.format(ticker=bbg_ticker)
 
     # --- Load Data for Each Chart Section ---
 
@@ -498,7 +521,9 @@ def security_details(metric_name, security_id):
         data_folder, spread_dur_filename, decoded_security_id
     )
     sp_spread_dur_series, sp_spread_dur_dates, sp_spread_dur_static = (
-        load_filter_and_extract(data_folder, sp_spread_dur_filename, decoded_security_id)
+        load_filter_and_extract(
+            data_folder, sp_spread_dur_filename, decoded_security_id
+        )
     )
     all_dates.update(spread_dur_dates)
     all_dates.update(sp_spread_dur_dates)

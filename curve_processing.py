@@ -80,33 +80,39 @@ def load_curve_data(data_folder_path: str) -> pd.DataFrame:
     try:
         # Attempt to read the curves.csv file
         df = pd.read_csv(file_path)
-        
+
         # Verify 'Date' column exists
-        if 'Date' not in df.columns:
-            logger.error(f"Critical: 'Date' column not found in {file_path}", exc_info=True)
+        if "Date" not in df.columns:
+            logger.error(
+                f"Critical: 'Date' column not found in {file_path}", exc_info=True
+            )
             return pd.DataFrame()
-            
+
         # Ensure Date column is datetime
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         # Drop rows where Date couldn't be parsed
         before_len = len(df)
-        df = df.dropna(subset=['Date'])
+        df = df.dropna(subset=["Date"])
         dropped_dates = before_len - len(df)
         if dropped_dates > 0:
-            logger.warning(f"Dropped {dropped_dates} rows with unparseable dates in {file_path}")
-        
+            logger.warning(
+                f"Dropped {dropped_dates} rows with unparseable dates in {file_path}"
+            )
+
         # Ensure Value column is numeric
-        if 'Value' in df.columns:
-            df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
+        if "Value" in df.columns:
+            df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
             # Drop rows where Value couldn't be converted to numeric
             before_len = len(df)
-            df = df.dropna(subset=['Value'])
+            df = df.dropna(subset=["Value"])
             dropped_values = before_len - len(df)
             if dropped_values > 0:
-                logger.warning(f"Dropped {dropped_values} rows with non-numeric values in {file_path}")
-        
+                logger.warning(
+                    f"Dropped {dropped_values} rows with non-numeric values in {file_path}"
+                )
+
         return df
-        
+
     except FileNotFoundError:
         logger.error(f"Curve data file not found at {file_path}", exc_info=True)
         return pd.DataFrame()
@@ -117,7 +123,9 @@ def load_curve_data(data_folder_path: str) -> pd.DataFrame:
         logger.error(f"Parser error in curve data file {file_path}: {e}", exc_info=True)
         return pd.DataFrame()
     except Exception as e:
-        logger.error(f"Unexpected error loading curve data from {file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error loading curve data from {file_path}: {e}", exc_info=True
+        )
         return pd.DataFrame()
 
     # Rename columns for consistency if necessary (adjust based on actual CSV)

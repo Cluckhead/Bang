@@ -150,7 +150,9 @@ def create_app() -> Flask:
         app.logger.error(f"Blueprint import failed: {imp_err}", exc_info=True)
         raise
     except Exception as e:
-        app.logger.error(f"Unexpected error during blueprint import: {e}", exc_info=True)
+        app.logger.error(
+            f"Unexpected error during blueprint import: {e}", exc_info=True
+        )
         raise
 
     try:
@@ -219,7 +221,9 @@ def create_app() -> Flask:
         """
 
         try:
-            from run_preprocessing import main as run_preprocessing_main  # Local import to avoid circular deps
+            from run_preprocessing import (
+                main as run_preprocessing_main,
+            )  # Local import to avoid circular deps
 
             start_time = time.perf_counter()
 

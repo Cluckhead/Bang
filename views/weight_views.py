@@ -25,7 +25,9 @@ def _parse_percentage(value):
         return None  # Indicate parsing failure
 
 
-def load_and_process_weight_data(data_folder_path: str, filename: str) -> Tuple[Dict[str, Any], List[str]]:
+def load_and_process_weight_data(
+    data_folder_path: str, filename: str
+) -> Tuple[Dict[str, Any], List[str]]:
     """Loads a wide weight file, converts decimal values to percentages, checks against 100%.
 
     Args:
@@ -149,8 +151,14 @@ def weight_check():
                 return lower_map[cand.lower()]
         return None
 
-    fund_filename = _locate_weight_file(data_folder, ["w_Funds.csv", "w_fund.csv", "w_funds.csv"]) or "w_Funds.csv"
-    bench_filename = _locate_weight_file(data_folder, ["w_Bench.csv", "w_bench.csv"]) or "w_Bench.csv"
+    fund_filename = (
+        _locate_weight_file(data_folder, ["w_Funds.csv", "w_fund.csv", "w_funds.csv"])
+        or "w_Funds.csv"
+    )
+    bench_filename = (
+        _locate_weight_file(data_folder, ["w_Bench.csv", "w_bench.csv"])
+        or "w_Bench.csv"
+    )
 
     # Pass the absolute data folder path to the helper function
     fund_data, fund_date_headers = load_and_process_weight_data(

@@ -27,7 +27,13 @@ import logging
 import traceback
 from utils import _is_date_like
 import config
-from data_utils import read_csv_robustly, parse_dates_robustly, identify_columns, convert_to_numeric_robustly, melt_wide_data
+from data_utils import (
+    read_csv_robustly,
+    parse_dates_robustly,
+    identify_columns,
+    convert_to_numeric_robustly,
+    melt_wide_data,
+)
 
 # Note: Does not import current_app, relies on caller to pass the path.
 
@@ -39,6 +45,7 @@ _dataframe_cache = {}
 
 # Removed DATA_FOLDER constant - path is now passed to functions
 
+
 def find_all_date_columns(columns, date_patterns):
     date_cols = []
     for col in columns:
@@ -48,7 +55,10 @@ def find_all_date_columns(columns, date_patterns):
                 break
     return date_cols
 
-def load_and_process_security_data(filename: str, data_folder_path: str) -> Tuple[pd.DataFrame, List[str]]:
+
+def load_and_process_security_data(
+    filename: str, data_folder_path: str
+) -> Tuple[pd.DataFrame, List[str]]:
     """Loads security data, identifies static/date columns, and melts to long format. Uses in-memory cache to avoid redundant loads."""
     cache_key = (filename, os.path.abspath(data_folder_path))
     if cache_key in _dataframe_cache:
@@ -120,22 +130,32 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
         logger.info(f"{log_prefix}Read full data. Shape: {df_wide.shape}")
 
         # --- Melt Data ---
-        id_vars_melt = [col for col in essential_id_cols if col in df_wide.columns] + [col for col in static_cols if col in df_wide.columns]
+        id_vars_melt = [col for col in essential_id_cols if col in df_wide.columns] + [
+            col for col in static_cols if col in df_wide.columns
+        ]
         df_long = melt_wide_data(df_wide, id_vars=id_vars_melt)
         if df_long is None:
-            logger.error(f"{log_prefix}Failed to melt wide-format data using melt_wide_data.")
+            logger.error(
+                f"{log_prefix}Failed to melt wide-format data using melt_wide_data."
+            )
             return pd.DataFrame(), static_cols
         # Convert Value column
         df_long["Value"] = convert_to_numeric_robustly(df_long["Value"])
         # Drop rows where essential data is missing
         initial_rows = len(df_long)
-        required_cols_for_dropna = ["Date", "Value"] + [col for col in essential_id_cols if col in df_long.columns]
+        required_cols_for_dropna = ["Date", "Value"] + [
+            col for col in essential_id_cols if col in df_long.columns
+        ]
         df_long.dropna(subset=required_cols_for_dropna, inplace=True)
         rows_dropped = initial_rows - len(df_long)
         if rows_dropped > 0:
-            logger.warning(f"{log_prefix}Dropped {rows_dropped} rows due to missing required values (Date, Value, or Essential IDs).")
+            logger.warning(
+                f"{log_prefix}Dropped {rows_dropped} rows due to missing required values (Date, Value, or Essential IDs)."
+            )
         if df_long.empty:
-            logger.warning(f"{log_prefix}DataFrame is empty after melting, conversion, and NaN drop.")
+            logger.warning(
+                f"{log_prefix}DataFrame is empty after melting, conversion, and NaN drop."
+            )
             return pd.DataFrame(), static_cols
         # Determine ID column name for index
         id_col_name = None
@@ -145,9 +165,13 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
             id_col_name = config.SEC_NAME_COL
         elif essential_id_cols and essential_id_cols[0] in df_long.columns:
             id_col_name = essential_id_cols[0]
-            logger.warning(f"{log_prefix}Using fallback ID '{id_col_name}' for index setting.")
+            logger.warning(
+                f"{log_prefix}Using fallback ID '{id_col_name}' for index setting."
+            )
         else:
-            logger.error(f"{log_prefix}Cannot determine a valid ID column ({essential_id_cols}) to set index. Columns: {df_long.columns.tolist()}")
+            logger.error(
+                f"{log_prefix}Cannot determine a valid ID column ({essential_id_cols}) to set index. Columns: {df_long.columns.tolist()}"
+            )
             return pd.DataFrame(), []
         logger.info(f"{log_prefix}Determined ID column for index: '{id_col_name}'")
         # Sort before setting index
@@ -157,13 +181,19 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
         try:
             logger.debug(f"{log_prefix}Setting index to ['Date', '{id_col_name}']...")
             df_long.set_index(["Date", id_col_name], inplace=True)
-            logger.info(f"{log_prefix}Set MultiIndex ('Date', '{id_col_name}'). Final shape: {df_long.shape}")
+            logger.info(
+                f"{log_prefix}Set MultiIndex ('Date', '{id_col_name}'). Final shape: {df_long.shape}"
+            )
         except KeyError as e:
-            logger.error(f"{log_prefix}Failed to set index using ['Date', '{id_col_name}']. Error: {e}. Columns: {df_long.columns.tolist()}")
+            logger.error(
+                f"{log_prefix}Failed to set index using ['Date', '{id_col_name}']. Error: {e}. Columns: {df_long.columns.tolist()}"
+            )
             return pd.DataFrame(), []
         # Identify static columns *excluding* essential ID cols to return
         final_static_cols = [col for col in static_cols if col in df_long.columns]
-        logger.info(f"{log_prefix}--- Exiting load_and_process_security_data. Returning DataFrame and static cols: {final_static_cols} ---")
+        logger.info(
+            f"{log_prefix}--- Exiting load_and_process_security_data. Returning DataFrame and static cols: {final_static_cols} ---"
+        )
         _dataframe_cache[cache_key] = (df_long, final_static_cols)
         return df_long, final_static_cols  # Return only non-ID static cols
 
@@ -174,7 +204,9 @@ def load_and_process_security_data(filename: str, data_folder_path: str) -> Tupl
         return pd.DataFrame(), []
 
 
-def calculate_security_latest_metrics(df: pd.DataFrame, static_cols: List[str]) -> pd.DataFrame:
+def calculate_security_latest_metrics(
+    df: pd.DataFrame, static_cols: List[str]
+) -> pd.DataFrame:
     """Calculates latest metrics for each security based on its 'Value' column.
 
     Args:

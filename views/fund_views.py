@@ -99,7 +99,9 @@ def fund_duration_details(fund_code):
         df.columns = df.columns.str.strip()  # Strip again after full read
 
         # Ensure the Funds column exists (still needed for filtering)
-        funds_col = config.FUNDS_COL  # Keep this assumption for now as it's key to filtering
+        funds_col = (
+            config.FUNDS_COL
+        )  # Keep this assumption for now as it's key to filtering
         if funds_col not in static_cols:
             current_app.logger.warning(
                 f"Warning: Expected column '{funds_col}' for filtering not found among static columns."
@@ -564,7 +566,9 @@ def fund_detail(fund_code):
                             f"Index level '{config.CODE_COL}' not found in DataFrame loaded from SP file {sp_filename}. Index: {sp_df.index.names}."
                         )
                         sp_df = None  # Ensure sp_df is None if index is wrong
-                        sp_load_error = f"SP file {sp_filename} missing '{config.CODE_COL}' index."
+                        sp_load_error = (
+                            f"SP file {sp_filename} missing '{config.CODE_COL}' index."
+                        )
                         error_messages.append(sp_load_error)
                     else:
                         # Find the fund column name in the SP data
@@ -608,7 +612,9 @@ def fund_detail(fund_code):
             # --- Filter SP data for the fund (if loaded) ---
             sp_fund_df = None
             if sp_df is not None:
-                sp_fund_mask = sp_df.index.get_level_values(config.CODE_COL) == fund_code
+                sp_fund_mask = (
+                    sp_df.index.get_level_values(config.CODE_COL) == fund_code
+                )
                 sp_fund_df = sp_df[sp_fund_mask]
                 if not sp_fund_df.empty:
                     sp_fund_df = sp_fund_df.droplevel(config.CODE_COL)

@@ -8,6 +8,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
+
 def read_csv_robustly(filepath: str, **kwargs) -> Optional[pd.DataFrame]:
     """
     Attempts to read a CSV file robustly, handling common errors gracefully.
@@ -28,7 +29,8 @@ def read_csv_robustly(filepath: str, **kwargs) -> Optional[pd.DataFrame]:
         logger.error(f"Unicode decode error in {filepath}: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"Unexpected error reading {filepath}: {e}", exc_info=True)
-    return None 
+    return None
+
 
 def parse_dates_robustly(series: pd.Series, formats: list = None) -> pd.Series:
     """
@@ -49,7 +51,9 @@ def parse_dates_robustly(series: pd.Series, formats: list = None) -> pd.Series:
         mask = parsed.isna() & remaining.notna()
         if mask.any():
             try:
-                parsed_dates = pd.to_datetime(remaining[mask], format=fmt, errors="coerce")
+                parsed_dates = pd.to_datetime(
+                    remaining[mask], format=fmt, errors="coerce"
+                )
                 parsed.loc[mask] = parsed_dates
             except Exception as e:
                 logger.warning(f"Error parsing dates with format {fmt}: {e}")
@@ -65,12 +69,19 @@ def parse_dates_robustly(series: pd.Series, formats: list = None) -> pd.Series:
     total = len(series)
     nat_count = parsed.isna().sum()
     if nat_count > 0:
-        logger.warning(f"parse_dates_robustly: {nat_count}/{total} values could not be parsed as dates. Examples: {series[parsed.isna()].unique()[:5]}")
+        logger.warning(
+            f"parse_dates_robustly: {nat_count}/{total} values could not be parsed as dates. Examples: {series[parsed.isna()].unique()[:5]}"
+        )
     else:
-        logger.info(f"parse_dates_robustly: Successfully parsed all {total} date values.")
-    return parsed 
+        logger.info(
+            f"parse_dates_robustly: Successfully parsed all {total} date values."
+        )
+    return parsed
 
-def identify_columns(columns: List[str], patterns: Dict[str, List[str]], required: List[str]) -> Dict[str, Optional[str]]:
+
+def identify_columns(
+    columns: List[str], patterns: Dict[str, List[str]], required: List[str]
+) -> Dict[str, Optional[str]]:
     """
     Identifies columns in a list based on regex patterns for each category.
     Args:
@@ -93,15 +104,19 @@ def identify_columns(columns: List[str], patterns: Dict[str, List[str]], require
                 break
         result[category] = found
         if found:
-            logger.info(f"identify_columns: Found {category} column: '{found}' using pattern(s) {regex_list}")
+            logger.info(
+                f"identify_columns: Found {category} column: '{found}' using pattern(s) {regex_list}"
+            )
         else:
-            logger.warning(f"identify_columns: No column found for category '{category}' using patterns {regex_list}")
+            logger.warning(
+                f"identify_columns: No column found for category '{category}' using patterns {regex_list}"
+            )
     # After scanning, ensure all required categories were located.
     missing_required = [req for req in required if not result.get(req)]
     for req in missing_required:
         logger.error(
             f"identify_columns: Required category '{req}' not found in columns: {columns}",
-            exc_info=True
+            exc_info=True,
         )
 
     # If any required category is absent, raise an explicit error so callers/tests can react.
@@ -111,7 +126,8 @@ def identify_columns(columns: List[str], patterns: Dict[str, List[str]], require
         raise ValueError(
             f"Required column(s) not found: {missing_str}. Columns provided: {columns}"
         )
-    return result 
+    return result
+
 
 def convert_to_numeric_robustly(series: pd.Series) -> pd.Series:
     """
@@ -124,12 +140,21 @@ def convert_to_numeric_robustly(series: pd.Series) -> pd.Series:
     numeric = pd.to_numeric(series, errors="coerce")
     coerced_nans = numeric.isna().sum() - series.isna().sum()
     if coerced_nans > 0:
-        logger.warning(f"convert_to_numeric_robustly: {coerced_nans} values could not be converted to numeric and were set to NaN. Examples: {series[numeric.isna()].unique()[:5]}")
+        logger.warning(
+            f"convert_to_numeric_robustly: {coerced_nans} values could not be converted to numeric and were set to NaN. Examples: {series[numeric.isna()].unique()[:5]}"
+        )
     else:
-        logger.info(f"convert_to_numeric_robustly: All {len(series)} values converted to numeric.")
-    return numeric 
+        logger.info(
+            f"convert_to_numeric_robustly: All {len(series)} values converted to numeric."
+        )
+    return numeric
 
-def melt_wide_data(df: pd.DataFrame, id_vars: List[str], date_like_check_func: Optional[Callable] = None) -> Optional[pd.DataFrame]:
+
+def melt_wide_data(
+    df: pd.DataFrame,
+    id_vars: List[str],
+    date_like_check_func: Optional[Callable] = None,
+) -> Optional[pd.DataFrame]:
     """
     Converts a wide-format DataFrame (dates as columns) to long format using melt.
     Identifies date columns using the provided date_like_check_func.
@@ -144,18 +169,28 @@ def melt_wide_data(df: pd.DataFrame, id_vars: List[str], date_like_check_func: O
     try:
         if date_like_check_func is None:
             from utils import _is_date_like
+
             date_like_check_func = _is_date_like
         all_cols = df.columns.tolist()
         date_cols = [col for col in all_cols if date_like_check_func(col)]
         if not date_cols:
-            logger.error(f"melt_wide_data: No date-like columns found in DataFrame columns: {all_cols}", exc_info=True)
+            logger.error(
+                f"melt_wide_data: No date-like columns found in DataFrame columns: {all_cols}",
+                exc_info=True,
+            )
             return None
         logger.info(f"melt_wide_data: Identified date columns: {date_cols}")
-        melted = pd.melt(df, id_vars=id_vars, value_vars=date_cols, var_name="Date_Str", value_name="Value")
+        melted = pd.melt(
+            df,
+            id_vars=id_vars,
+            value_vars=date_cols,
+            var_name="Date_Str",
+            value_name="Value",
+        )
         melted["Date"] = parse_dates_robustly(melted["Date_Str"])
         melted.drop(columns=["Date_Str"], inplace=True)
         logger.info(f"melt_wide_data: Melted DataFrame shape: {melted.shape}")
         return melted
     except Exception as e:
         logger.error(f"melt_wide_data: Error during melt: {e}", exc_info=True)
-        return None 
+        return None

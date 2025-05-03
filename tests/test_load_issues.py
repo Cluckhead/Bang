@@ -21,4 +21,4 @@ def test_load_issues_adds_missing_cols(tmp_path):
     # All required columns now present
     assert set(REQUIRED_ISSUE_COLUMNS).issubset(df.columns)
     # Row count unchanged (1)
-    assert len(df) == 1 
+    assert len(df) == 1

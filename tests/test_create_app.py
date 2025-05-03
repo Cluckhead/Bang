@@ -9,4 +9,4 @@ def test_create_app_blueprints():
     assert isinstance(app, Flask)
     # Expected blueprint names
     expected_bps = {"metric", "staleness_bp"}
-    assert expected_bps.issubset(set(app.blueprints.keys())) 
+    assert expected_bps.issubset(set(app.blueprints.keys()))

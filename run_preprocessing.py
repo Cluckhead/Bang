@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Public entry-point callable
 # -----------------------------------------------------------------------------
 
+
 def main(data_dir: str | None = None, *, config_dict: dict | None = None) -> None:
     """Batch-process all *pre_*.csv files under *data_dir*.
 
@@ -60,7 +61,10 @@ def main(data_dir: str | None = None, *, config_dict: dict | None = None) -> Non
     # Recursively walk the data directory
     for root, _dirs, files in os.walk(data_dir):
         for filename in files:
-            if not (filename.lower().startswith("pre_") and filename.lower().endswith(".csv")):
+            if not (
+                filename.lower().startswith("pre_")
+                and filename.lower().endswith(".csv")
+            ):
                 continue
 
             input_path = os.path.join(root, filename)
@@ -72,7 +76,7 @@ def main(data_dir: str | None = None, *, config_dict: dict | None = None) -> Non
                 # with 'sec_' this will naturally produce 'sec_*.csv'; otherwise
                 # it simply removes the preprocessing marker without duplicating
                 # the 'sec_' prefix.
-                output_filename = filename[len("pre_"):]
+                output_filename = filename[len("pre_") :]
 
             output_path = os.path.join(root, output_filename)
 
@@ -84,18 +88,24 @@ def main(data_dir: str | None = None, *, config_dict: dict | None = None) -> Non
 
             processed_files.append(output_path)
 
-    logger.info("Batch preprocessing finished. Created/updated %s file(s).", len(processed_files))
+    logger.info(
+        "Batch preprocessing finished. Created/updated %s file(s).",
+        len(processed_files),
+    )
+
 
 # -----------------------------------------------------------------------------
 # CLI entry-point
 # -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s"
+    )
     logger.info("--- Starting batch preprocessing (CLI) ---")
     try:
         main()
     except Exception as e:
         logger.error(f"Error in run_preprocessing (CLI): {e}", exc_info=True)
         sys.exit(1)
-    logger.info("--- Batch preprocessing finished (CLI) ---") 
+    logger.info("--- Batch preprocessing finished (CLI) ---")

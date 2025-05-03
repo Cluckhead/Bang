@@ -2,17 +2,17 @@
 # It centralizes settings, file paths, color palettes, and standard column names for use throughout the codebase.
 
 # Standard column name constants
-FUNDS_COL = 'Funds'
-ISIN_COL = 'ISIN'
-SEC_NAME_COL = 'Security Name'
-DATE_COL = 'Date'
-VALUE_COL = 'Value'
-CODE_COL = 'Code'
-TYPE_COL = 'Type'
-CURRENCY_COL = 'Currency'
-PICKED_COL = 'Picked'
-TOTAL_ASSET_VALUE_COL = 'Total Asset Value USD'
-FUND_CODE_COL = 'Fund Code'
+FUNDS_COL = "Funds"
+ISIN_COL = "ISIN"
+SEC_NAME_COL = "Security Name"
+DATE_COL = "Date"
+VALUE_COL = "Value"
+CODE_COL = "Code"
+TYPE_COL = "Type"
+CURRENCY_COL = "Currency"
+PICKED_COL = "Picked"
+TOTAL_ASSET_VALUE_COL = "Total Asset Value USD"
+FUND_CODE_COL = "Fund Code"
 
 # This file defines configuration variables for the Simple Data Checker application.
 # It centralizes settings like file paths, feature configurations (e.g., comparisons, thresholds),
@@ -66,11 +66,15 @@ BLOOMBERG_YAS_URL_FORMAT = "http://Bloomberg:{ticker} YAS"
 
 # --- NEW: Comparison Configuration ---
 # Loads the different types of security data comparisons from YAML.
-COMPARISON_CONFIG: Dict[str, Dict[str, str]] = load_yaml_config('comparison_config.yaml')
+COMPARISON_CONFIG: Dict[str, Dict[str, str]] = load_yaml_config(
+    "comparison_config.yaml"
+)
 
 # --- NEW: Max/Min Value Threshold Configuration ---
 # Loads max/min value thresholds for files from YAML.
-MAXMIN_THRESHOLDS: Dict[str, Dict[str, str]] = load_yaml_config('maxmin_thresholds.yaml')
+MAXMIN_THRESHOLDS: Dict[str, Dict[str, str]] = load_yaml_config(
+    "maxmin_thresholds.yaml"
+)
 
 # Logging configuration (optional, Flask's default logging can be used)
 LOGGING_CONFIG = {
@@ -164,11 +168,11 @@ DATE_COLUMN_PATTERNS: list = [
     r"\d{2}/\d{2}/\d{4}",  # DD/MM/YYYY
     r"\d{2}-\d{2}-\d{4}",  # DD-MM-YYYY
     r"\d{4}/\d{2}/\d{2}",  # YYYY/MM/DD
-    r"^Date$",             # Exact 'Date'
-    r"^Position Date$",    # Exact 'Position Date'
-    r"^Trade Date$",       # Exact 'Trade Date'
-    r"^AsOfDate$",         # Exact 'AsOfDate'
-    r"^Effective Date$",   # Exact 'Effective Date'
+    r"^Date$",  # Exact 'Date'
+    r"^Position Date$",  # Exact 'Position Date'
+    r"^Trade Date$",  # Exact 'Trade Date'
+    r"^AsOfDate$",  # Exact 'AsOfDate'
+    r"^Effective Date$",  # Exact 'Effective Date'
 ]
 
 # Pattern for ISIN suffixing when duplicate Security Names are found (used in process_data.py)
@@ -245,15 +249,18 @@ PLAYWRIGHT_SELECTORS = {
 # Static info groupings for security details (used in views/security_views.py)
 STATIC_INFO_GROUPS = [
     ("Identifiers", [ISIN_COL, SEC_NAME_COL, "BBG ID", "BBG Ticker Yellow"]),
-    ("Classification", [
-        "Security Sub Type",
-        "SS Project - In Scope",
-        "Is Distressed",
-        "Rating",
-        "BBG LEVEL 3",
-        "CCY",
-        "Country Of Risk",
-    ]),
+    (
+        "Classification",
+        [
+            "Security Sub Type",
+            "SS Project - In Scope",
+            "Is Distressed",
+            "Rating",
+            "BBG LEVEL 3",
+            "CCY",
+            "Country Of Risk",
+        ],
+    ),
     ("Call/Redemption", ["Call Indicator", "Make Whole Call"]),
     ("Financials", ["Coupon Rate", "Maturity Date"]),
 ]

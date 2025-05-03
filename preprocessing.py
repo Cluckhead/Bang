@@ -18,6 +18,7 @@ PRE_WEIGHT_PREFIX: str = "pre_w_"  # Input weight files that need preprocessing
 
 logger = logging.getLogger(__name__)
 
+
 def read_and_sort_dates(dates_file_path: str) -> Optional[List[str]]:
     """
     Reads dates from a CSV file, sorts them, and returns them as a list of strings (YYYY-MM-DD).
@@ -29,10 +30,14 @@ def read_and_sort_dates(dates_file_path: str) -> Optional[List[str]]:
     try:
         dates_df = pd.read_csv(dates_file_path, parse_dates=[0])
         if dates_df.iloc[:, 0].isnull().any():
-            logger.warning(f"Some values in {dates_file_path} could not be parsed as dates.")
+            logger.warning(
+                f"Some values in {dates_file_path} could not be parsed as dates."
+            )
             dates_df = dates_df.dropna(subset=[dates_df.columns[0]])
             if dates_df.empty:
-                logger.error(f"No valid dates found in {dates_file_path} after handling parsing issues.")
+                logger.error(
+                    f"No valid dates found in {dates_file_path} after handling parsing issues."
+                )
                 return None
         sorted_dates = dates_df.iloc[:, 0].sort_values()
         date_strings = sorted_dates.dt.strftime("%Y-%m-%d").tolist()
@@ -46,6 +51,7 @@ def read_and_sort_dates(dates_file_path: str) -> Optional[List[str]]:
     except Exception as e:
         logger.error(f"Error reading dates from {dates_file_path}: {e}", exc_info=True)
         return None
+
 
 def replace_headers_with_dates(
     df: pd.DataFrame,
@@ -92,7 +98,11 @@ def replace_headers_with_dates(
         meta_len = 1
 
     if meta_len > len(all_cols):
-        log.error("metadata_cols length (%s) exceeds dataframe column count (%s).", meta_len, len(all_cols))
+        log.error(
+            "metadata_cols length (%s) exceeds dataframe column count (%s).",
+            meta_len,
+            len(all_cols),
+        )
         return df
 
     # Slice columns into metadata and data sections
@@ -115,9 +125,9 @@ def replace_headers_with_dates(
 
     # Replace up to the minimum length between the two lists
     replace_count: int = min(len(data_section), len(date_columns))
-    new_data_section: List[str] = date_columns[:replace_count] + data_section[
-        replace_count:
-    ]
+    new_data_section: List[str] = (
+        date_columns[:replace_count] + data_section[replace_count:]
+    )
 
     new_columns: List[str] = meta_section + new_data_section
 
@@ -130,9 +140,23 @@ def replace_headers_with_dates(
     log.info("Replaced %s data column headers with dates.", replace_count)
     return df
 
+
 def suffix_isin(isin: str, n: int) -> str:
-    """Return a suffixed ISIN using the pattern from config."""
+    """
+    Suffix an ISIN for duplicate security handling using the pattern from config.
+
+    When multiple securities have the same name but different attributes,
+    this function appends a suffix to the ISIN to make it unique.
+
+    Args:
+        isin (str): The original ISIN to suffix
+        n (int): The suffix number (typically the index in a group of duplicates)
+
+    Returns:
+        str: The suffixed ISIN following the pattern in config.ISIN_SUFFIX_PATTERN
+    """
     return config.ISIN_SUFFIX_PATTERN.format(isin=isin, n=n)
+
 
 def aggregate_data(
     df: pd.DataFrame, required_cols: List[str], logger: logging.Logger, input_path: str
@@ -153,7 +177,10 @@ def aggregate_data(
                 sub_grouped = sec_group.groupby(id_cols, dropna=False, sort=False)
                 distinct_versions = [group for _, group in sub_grouped]
             except Exception as e:
-                logger.error(f"Error during sub-grouping for Security Name '{sec_name}' in {input_path}: {e}", exc_info=True)
+                logger.error(
+                    f"Error during sub-grouping for Security Name '{sec_name}' in {input_path}: {e}",
+                    exc_info=True,
+                )
                 continue
         else:
             distinct_versions = [sec_group]
@@ -169,22 +196,31 @@ def aggregate_data(
                 isin_col_name = config.ISIN_COL
                 if isin_col_name in new_row_series.index:
                     original_isin = new_row_series[isin_col_name]
-                    new_isin = suffix_isin(original_isin, i+1)
+                    new_isin = suffix_isin(original_isin, i + 1)
                     new_row_series[isin_col_name] = new_isin
-                    logger.debug(f"Suffixed ISIN for duplicate Security Name '{sec_name}'. Original: '{original_isin}', New: '{new_isin}'")
+                    logger.debug(
+                        f"Suffixed ISIN for duplicate Security Name '{sec_name}'. Original: '{original_isin}', New: '{new_isin}'"
+                    )
                 else:
-                    logger.warning(f"Found {num_versions} distinct data versions for Security Name '{sec_name}' but column '{isin_col_name}' not found. Cannot apply suffix to ISIN.")
+                    logger.warning(
+                        f"Found {num_versions} distinct data versions for Security Name '{sec_name}' but column '{isin_col_name}' not found. Cannot apply suffix to ISIN."
+                    )
             processed_rows.append(new_row_series.to_dict())
     if not processed_rows:
-        logger.warning(f"No data rows processed for {input_path}. Output file will not be created.")
+        logger.warning(
+            f"No data rows processed for {input_path}. Output file will not be created."
+        )
         return pd.DataFrame(columns=current_cols)
     output_df = pd.DataFrame(processed_rows)
     final_cols = [col for col in current_cols if col in output_df.columns]
     output_df = output_df[final_cols]
     output_df = output_df.fillna(0)
-    return output_df 
+    return output_df
 
-def process_input_file(input_path: str, output_path: str, dates_path: str, config_dict: dict) -> None:
+
+def process_input_file(
+    input_path: str, output_path: str, dates_path: str, config_dict: dict
+) -> None:
     """
     Processes an input CSV file and writes the processed output to output_path.
     Handles both pre_*.csv and pre_w_*.csv files, replacing headers with dates and aggregating as needed.
@@ -196,13 +232,19 @@ def process_input_file(input_path: str, output_path: str, dates_path: str, confi
     """
     logger.info(f"Processing input file: {input_path} -> {output_path}")
     try:
-        df = read_csv_robustly(input_path, encoding="utf-8", encoding_errors="replace", on_bad_lines="skip")
+        df = read_csv_robustly(
+            input_path, encoding="utf-8", encoding_errors="replace", on_bad_lines="skip"
+        )
         if df is None or df.empty:
-            logger.warning(f"Input file {input_path} is empty or could not be read. Skipping.")
+            logger.warning(
+                f"Input file {input_path} is empty or could not be read. Skipping."
+            )
             return
         dates = read_and_sort_dates(dates_path)
         if dates is None:
-            logger.warning(f"Could not read or process dates from {dates_path}. Skipping {input_path}.")
+            logger.warning(
+                f"Could not read or process dates from {dates_path}. Skipping {input_path}."
+            )
             return
         filename = os.path.basename(input_path)
         if filename.startswith("pre_w_"):
@@ -221,9 +263,13 @@ def process_input_file(input_path: str, output_path: str, dates_path: str, confi
             last_required_idx = -1
             for req_col in required_cols:
                 try:
-                    last_required_idx = max(last_required_idx, current_df_cols.index(req_col))
+                    last_required_idx = max(
+                        last_required_idx, current_df_cols.index(req_col)
+                    )
                 except ValueError:
-                    logger.error(f"Required column '{req_col}' not found in {input_path}. Skipping.")
+                    logger.error(
+                        f"Required column '{req_col}' not found in {input_path}. Skipping."
+                    )
                     return
             candidate_start_index = last_required_idx + 1
             candidate_cols = current_df_cols[candidate_start_index:]
@@ -231,14 +277,19 @@ def process_input_file(input_path: str, output_path: str, dates_path: str, confi
             df = replace_headers_with_dates(df, dates, metadata_cols)
             output_df = aggregate_data(df, required_cols, logger, input_path)
             if output_df.empty:
-                logger.warning(f"No data rows processed for {input_path}. Output file will not be created.")
+                logger.warning(
+                    f"No data rows processed for {input_path}. Output file will not be created."
+                )
                 return
             output_df.to_csv(output_path, index=False, encoding="utf-8")
             logger.info(f"Successfully processed file: {output_path}")
         else:
-            logger.warning(f"File {input_path} does not match expected pre_ or pre_w_ pattern. Skipping.")
+            logger.warning(
+                f"File {input_path} does not match expected pre_ or pre_w_ pattern. Skipping."
+            )
     except Exception as e:
-        logger.error(f"Error processing input file {input_path}: {e}", exc_info=True) 
+        logger.error(f"Error processing input file {input_path}: {e}", exc_info=True)
+
 
 def detect_metadata_columns(df: pd.DataFrame, min_numeric_cols: int = 3) -> int:
     """Detect the number of metadata columns in a DataFrame.
@@ -268,7 +319,9 @@ def detect_metadata_columns(df: pd.DataFrame, min_numeric_cols: int = 3) -> int:
         ``df.iloc[:, :meta_end_idx]`` to obtain the metadata columns).
     """
     # Fast-path: use predefined list if all present
-    if hasattr(config, "METADATA_COLS") and all(col in df.columns for col in config.METADATA_COLS):
+    if hasattr(config, "METADATA_COLS") and all(
+        col in df.columns for col in config.METADATA_COLS
+    ):
         return len(config.METADATA_COLS)
 
     # Heuristic detection fallback
@@ -277,10 +330,14 @@ def detect_metadata_columns(df: pd.DataFrame, min_numeric_cols: int = 3) -> int:
         # Look ahead up to ``min_numeric_cols`` columns
         for j in range(i, min(i + min_numeric_cols, len(df.columns))):
             sample = df.iloc[:, j].dropna().head(10)
-            if sample.apply(lambda x: pd.api.types.is_number(x) or pd.api.types.is_float(x) or pd.api.types.is_integer(x)).all():
+            if sample.apply(
+                lambda x: pd.api.types.is_number(x)
+                or pd.api.types.is_float(x)
+                or pd.api.types.is_integer(x)
+            ).all():
                 numeric_count += 1
         if numeric_count == min_numeric_cols:
             return i  # Metadata columns occupy positions < i
 
     # Fallback: assume only the first column is metadata
-    return 1 
+    return 1

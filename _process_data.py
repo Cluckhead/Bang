@@ -31,7 +31,11 @@ from weight_processing import process_weight_file
 from utils import get_data_folder_path
 
 # Bring in shared preprocessing helpers
-from preprocessing import read_and_sort_dates, aggregate_data, replace_headers_with_dates  # unified helper
+from preprocessing import (
+    read_and_sort_dates,
+    aggregate_data,
+    replace_headers_with_dates,
+)  # unified helper
 
 # Get the logger instance. Assumes logging is configured elsewhere (e.g., by Flask app or calling script).
 logger = logging.getLogger(__name__)
@@ -132,7 +136,8 @@ def process_csv_file(input_path, output_path, date_columns, dates_file_path):
         logger.error(f"OS error when writing to {output_path}: {e}", exc_info=True)
     except Exception as e:
         logger.error(
-            f"An unexpected error occurred processing {input_path}: {e}", exc_info=True,
+            f"An unexpected error occurred processing {input_path}: {e}",
+            exc_info=True,
         )
 
 

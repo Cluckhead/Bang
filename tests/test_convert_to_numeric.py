@@ -21,5 +21,7 @@ def test_convert_to_numeric_basic(caplog):
     assert pd.api.types.is_float_dtype(result)
 
     # Ensure a warning about coerced values was logged (bad string)
-    coerced_msgs = [rec.getMessage() for rec in caplog.records if rec.levelname == "WARNING"]
-    assert any("could not be converted" in msg for msg in coerced_msgs) 
+    coerced_msgs = [
+        rec.getMessage() for rec in caplog.records if rec.levelname == "WARNING"
+    ]
+    assert any("could not be converted" in msg for msg in coerced_msgs)

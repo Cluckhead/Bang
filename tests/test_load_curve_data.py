@@ -86,4 +86,4 @@ def test_check_curve_inconsistencies_detects_jump(monkeypatch):
     # Should contain message about anomalous change profile
     assert any(
         "Anomalous change profile" in msg for msg in summary["USD"]
-    ), "Expected anomalous change profile message not found." 
+    ), "Expected anomalous change profile message not found."

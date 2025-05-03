@@ -14,7 +14,10 @@ from typing import List, Optional
 import config
 
 # Import shared utilities from preprocessing (detect_metadata_columns, read_and_sort_dates, replace_headers_with_dates)
-from preprocessing import detect_metadata_columns, replace_headers_with_dates  # noqa: F401
+from preprocessing import (
+    detect_metadata_columns,
+    replace_headers_with_dates,
+)  # noqa: F401
 
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
@@ -148,7 +151,8 @@ def process_weight_file(
 
     except FileNotFoundError:
         logger.error(
-            f"Error: Input weight file not found during processing - {input_path}", exc_info=True
+            f"Error: Input weight file not found during processing - {input_path}",
+            exc_info=True,
         )
     except pd.errors.EmptyDataError:
         logger.warning(f"Weight file is empty - {input_path}. Skipping save.")

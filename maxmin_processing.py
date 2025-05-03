@@ -70,8 +70,8 @@ def find_value_breaches(
     try:
         df = pd.read_csv(file_path)
         id_column = df.columns[0]  # ISIN
-        meta_columns = df.columns[:len(config.METADATA_COLS)]
-        date_columns = df.columns[len(config.METADATA_COLS):]
+        meta_columns = df.columns[: len(config.METADATA_COLS)]
+        date_columns = df.columns[len(config.METADATA_COLS) :]
         total_count = len(df)
         for idx, row in df.iterrows():
             # Normalize ISIN for comparison
