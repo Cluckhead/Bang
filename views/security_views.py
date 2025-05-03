@@ -343,7 +343,8 @@ def securities_page():
 
     except Exception as e:
         current_app.logger.error(
-            f"!!! Unexpected error during security page processing: {e}"
+            f"!!! Unexpected error during security page processing: {e}",
+            exc_info=True
         )
         traceback.print_exc()
         return render_template(
@@ -413,64 +414,45 @@ def security_details(metric_name, security_id):
             else:
                 reference_row = None
         except Exception as e:
-            current_app.logger.error(f"Error loading reference.csv: {e}")
-            reference_row = None
+            current_app.logger.error(f"Error loading reference.csv: {e}", exc_info=True)
+            ref_df = pd.DataFrame()
     else:
         current_app.logger.warning("reference.csv not found in Data folder.")
-        reference_row = None
 
     # --- NEW: Check exclusion list ---
     is_excluded = False
-    exclusion_comment = None
+    exclusion_info = None
     try:
-        exclusions_path = os.path.join(data_folder, "exclusions.csv")
-        if os.path.exists(exclusions_path):
-            exclusions_df = pd.read_csv(exclusions_path, dtype=str)
-            today = datetime.now().date()
-            for _, row in exclusions_df.iterrows():
-                if row["SecurityID"] == decoded_security_id:
-                    add_date = (
-                        pd.to_datetime(row["AddDate"], errors="coerce").date()
-                        if pd.notna(row["AddDate"])
-                        else None
-                    )
-                    end_date = (
-                        pd.to_datetime(row["EndDate"], errors="coerce").date()
-                        if pd.notna(row["EndDate"])
-                        else None
-                    )
-                    if (
-                        add_date
-                        and add_date <= today
-                        and (end_date is None or end_date >= today)
-                    ):
-                        is_excluded = True
-                        exclusion_comment = row.get("Comment", None)
-                        break
+        exclusions_df = utils.load_exclusions(os.path.join(data_folder, "exclusions.csv"))
+        if exclusions_df is not None and not exclusions_df.empty:
+            security_exclusions = exclusions_df[exclusions_df['SecurityID'] == decoded_security_id]
+            if not security_exclusions.empty:
+                active_exclusions = security_exclusions[
+                    (security_exclusions['EndDate'].isna()) | 
+                    (pd.to_datetime(security_exclusions['EndDate']) >= pd.Timestamp.now())
+                ]
+                if not active_exclusions.empty:
+                    is_excluded = True
+                    # Get the most recent exclusion
+                    exclusion_info = active_exclusions.sort_values('AddDate', ascending=False).iloc[0].to_dict()
     except Exception as e:
-        current_app.logger.error(f"Error checking exclusions: {e}")
-
-    # --- NEW: Check issue list ---
+        current_app.logger.error(f"Error checking exclusions: {e}", exc_info=True)
+    
+    # --- NEW: Check for open data issues ---
     open_issues = []
     try:
-        issues_path = os.path.join(data_folder, "data_issues.csv")
-        if os.path.exists(issues_path):
-            issues_df = pd.read_csv(issues_path, dtype=str)
-            # Only consider issues where FundImpacted or Description mentions the ISIN
-            for _, row in issues_df.iterrows():
-                # Consider open if Status is not 'Closed' (case-insensitive)
-                status = (row.get("Status") or "").strip().lower()
-                if status != "closed":
-                    # Check if ISIN is mentioned in FundImpacted or Description
-                    fund_impacted = row.get("FundImpacted") or ""
-                    description = row.get("Description") or ""
-                    if (
-                        decoded_security_id in fund_impacted
-                        or decoded_security_id in description
-                    ):
-                        open_issues.append(row)
+        from issue_processing import load_issues
+        issues_df = load_issues(data_folder)
+        if not issues_df.empty:
+            # Filter to issues for this security
+            security_issues = issues_df[
+                (issues_df['SecurityID'] == decoded_security_id) & 
+                (issues_df['Status'] == 'Open')
+            ]
+            if not security_issues.empty:
+                open_issues = security_issues.to_dict('records')
     except Exception as e:
-        current_app.logger.error(f"Error checking data issues: {e}")
+        current_app.logger.error(f"Error checking data issues: {e}", exc_info=True)
 
     # --- NEW: Prepare Bloomberg YAS link ---
     bloomberg_yas_url = None
@@ -588,7 +570,7 @@ def security_details(metric_name, security_id):
             static_groups=[],
             reference_missing=True,
             is_excluded=is_excluded,
-            exclusion_comment=exclusion_comment,
+            exclusion_comment=exclusion_info,
             open_issues=open_issues,
             bloomberg_yas_url=bloomberg_yas_url,
         )
@@ -767,7 +749,7 @@ def security_details(metric_name, security_id):
         static_groups=static_groups,
         reference_missing=(reference_row is None),
         is_excluded=is_excluded,
-        exclusion_comment=exclusion_comment,
+        exclusion_comment=exclusion_info,
         open_issues=open_issues,
         bloomberg_yas_url=bloomberg_yas_url,
         holdings_data=holdings_data,

@@ -41,7 +41,7 @@ def load_watchlist(data_folder_path: str):
     Returns a list of dicts, each representing a watchlist entry.
     """
     if not data_folder_path:
-        current_app.logger.error("No data_folder_path provided to load_watchlist.")
+        current_app.logger.error("No data_folder_path provided to load_watchlist.", exc_info=True)
         return []
     watchlist_path = os.path.join(data_folder_path, WATCHLIST_FILE)
     try:
@@ -66,7 +66,7 @@ def load_watchlist(data_folder_path: str):
         else:
             return []
     except Exception as e:
-        current_app.logger.error(f"Error loading watchlist: {e}")
+        current_app.logger.error(f"Error loading watchlist: {e}", exc_info=True)
         return []
 
 
@@ -76,7 +76,7 @@ def save_watchlist(df: pd.DataFrame, data_folder_path: str):
     try:
         df.to_csv(watchlist_path, index=False)
     except Exception as e:
-        current_app.logger.error(f"Error saving watchlist: {e}")
+        current_app.logger.error(f"Error saving watchlist: {e}", exc_info=True)
 
 
 def load_users(data_folder_path: str):
@@ -89,7 +89,7 @@ def load_users(data_folder_path: str):
                 return df["Name"].dropna().astype(str).tolist()
         return []
     except Exception as e:
-        current_app.logger.error(f"Error loading users: {e}")
+        current_app.logger.error(f"Error loading users: {e}", exc_info=True)
         return []
 
 
@@ -110,7 +110,7 @@ def load_available_securities(data_folder_path: str):
             return df.to_dict("records")
         return []
     except Exception as e:
-        current_app.logger.error(f"Error loading securities: {e}")
+        current_app.logger.error(f"Error loading securities: {e}", exc_info=True)
         return []
 
 

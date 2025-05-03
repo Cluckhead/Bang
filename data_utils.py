@@ -19,13 +19,13 @@ def read_csv_robustly(filepath: str, **kwargs) -> Optional[pd.DataFrame]:
         df = pd.read_csv(filepath, **kwargs)
         return df
     except FileNotFoundError:
-        logger.error(f"File not found: {filepath}")
+        logger.error(f"File not found: {filepath}", exc_info=True)
     except pd.errors.EmptyDataError:
-        logger.error(f"Empty data: {filepath}")
+        logger.error(f"Empty data: {filepath}", exc_info=True)
     except pd.errors.ParserError as e:
-        logger.error(f"Parser error in {filepath}: {e}")
+        logger.error(f"Parser error in {filepath}: {e}", exc_info=True)
     except UnicodeDecodeError as e:
-        logger.error(f"Unicode decode error in {filepath}: {e}")
+        logger.error(f"Unicode decode error in {filepath}: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"Unexpected error reading {filepath}: {e}", exc_info=True)
     return None 
@@ -100,7 +100,8 @@ def identify_columns(columns: List[str], patterns: Dict[str, List[str]], require
     missing_required = [req for req in required if not result.get(req)]
     for req in missing_required:
         logger.error(
-            f"identify_columns: Required category '{req}' not found in columns: {columns}"
+            f"identify_columns: Required category '{req}' not found in columns: {columns}",
+            exc_info=True
         )
 
     # If any required category is absent, raise an explicit error so callers/tests can react.
@@ -147,7 +148,7 @@ def melt_wide_data(df: pd.DataFrame, id_vars: List[str], date_like_check_func: O
         all_cols = df.columns.tolist()
         date_cols = [col for col in all_cols if date_like_check_func(col)]
         if not date_cols:
-            logger.error(f"melt_wide_data: No date-like columns found in DataFrame columns: {all_cols}")
+            logger.error(f"melt_wide_data: No date-like columns found in DataFrame columns: {all_cols}", exc_info=True)
             return None
         logger.info(f"melt_wide_data: Identified date columns: {date_cols}")
         melted = pd.melt(df, id_vars=id_vars, value_vars=date_cols, var_name="Date_Str", value_name="Value")

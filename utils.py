@@ -37,17 +37,18 @@ def load_yaml_config(filepath: str) -> dict:
     """
     logger = logging.getLogger(__name__)
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
-            logger.info(f"Loaded YAML config from {filepath}")
-            return data if data else {}
+        with open(filepath, 'r') as file:
+            config = yaml.safe_load(file)
+        return config
     except FileNotFoundError:
-        logger.error(f"YAML config file not found: {filepath}")
+        logger.error(f"YAML config file not found: {filepath}", exc_info=True)
+        return None
     except yaml.YAMLError as e:
-        logger.error(f"YAML parsing error in {filepath}: {e}")
+        logger.error(f"YAML parsing error in {filepath}: {e}", exc_info=True)
+        return None
     except Exception as e:
         logger.error(f"Unexpected error loading YAML config {filepath}: {e}", exc_info=True)
-    return {}
+        return None
 
 # Load date patterns from YAML once at module level
 _date_patterns_yaml = load_yaml_config(os.path.join(os.path.dirname(__file__), 'config', 'date_patterns.yaml'))
@@ -64,25 +65,26 @@ def _is_date_like(column_name: str) -> bool:
 
 
 def parse_fund_list(fund_string: str) -> list:
-    """Safely parses the fund list string like '[FUND1,FUND2]' or '[FUND1]' into a list.
-    Handles potential errors and variations in spacing.
     """
-    if (
-        not isinstance(fund_string, str)
-        or not fund_string.startswith("[")
-        or not fund_string.endswith("]")
-    ):
-        return []  # Return empty list if format is unexpected
+    Parse a string representing a list of fund codes (e.g., '[F01, F02]') into a Python list.
+    Returns a parsed list if successful, empty list otherwise.
+    Handles various formats like '[A,B]', '[A]', '[]', 'A,B', '[ A , B ]'.
+    """
+    logger = logging.getLogger(__name__)
     try:
-        # Remove brackets and split by comma
-        content = fund_string[1:-1]
-        # Split by comma, strip whitespace from each element
-        funds = [f.strip() for f in content.split(",") if f.strip()]
-        return funds
+        if not fund_string or fund_string.strip() == "" or fund_string.strip() == "[]":
+            return []
+
+        # Strip surrounding [] if present
+        cleaned = fund_string.strip()
+        if cleaned.startswith("[") and cleaned.endswith("]"):
+            cleaned = cleaned[1:-1]
+
+        # Split by commas and clean each item
+        items = [item.strip() for item in cleaned.split(",") if item.strip()]
+        return items
     except Exception as e:
-        # Use logger if available, otherwise print
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error parsing fund string '{fund_string}': {e}")
+        logger.error(f"Error parsing fund string '{fund_string}': {e}", exc_info=True)
         return []
 
 
@@ -178,58 +180,28 @@ def get_data_folder_path(app_root_path: Optional[str] = None) -> str:
 # --- NEW: Function to load exclusions ---
 def load_exclusions(exclusion_file_path: str) -> Optional[pd.DataFrame]:
     """
-    Loads the exclusion data from the specified CSV file.
-    Args:
-        exclusion_file_path (str): The full path to the exclusions CSV file.
-    Returns:
-        pandas.DataFrame or None: A DataFrame containing the exclusion data
-                                 if the file exists and is loaded successfully,
-                                 otherwise None.
+    Load and prepare the exclusions data. Returns a DataFrame with exclusions if the file exists,
+    None otherwise. Converts dates to datetime format and handles missing values.
     """
     logger = logging.getLogger(__name__)
     try:
-        if not os.path.exists(exclusion_file_path):
-            logger.warning(
-                f"Exclusion file not found: {exclusion_file_path}. Returning None."
-            )
+        if os.path.exists(exclusion_file_path):
+            logger.info(f"Loading exclusions from {exclusion_file_path}")
+            exclusions_df = pd.read_csv(exclusion_file_path)
+            
+            # Convert date columns to datetime
+            for date_col in ["AddDate", "EndDate"]:
+                if date_col in exclusions_df.columns:
+                    exclusions_df[date_col] = pd.to_datetime(
+                        exclusions_df[date_col], errors="coerce"
+                    )
+            
+            return exclusions_df
+        else:
+            logger.error(f"Exclusion file not found during read: {exclusion_file_path}", exc_info=True)
             return None
-        try:
-            exclusions_df = pd.read_csv(
-                exclusion_file_path, dtype=str
-            )  # Read all as string initially
-        except FileNotFoundError:
-            logger.error(f"Exclusion file not found during read: {exclusion_file_path}")
-            return None
-        except pd.errors.EmptyDataError:
-            logger.warning(
-                f"Exclusion file is empty: {exclusion_file_path}. Returning empty DataFrame."
-            )
-            return pd.DataFrame()  # Return an empty DataFrame for consistency
-        except pd.errors.ParserError as e:
-            logger.error(
-                f"Parser error in exclusion file {exclusion_file_path}: {e}",
-                exc_info=True,
-            )
-            return None
-        except Exception as e:
-            logger.error(
-                f"Unexpected error reading exclusion file {exclusion_file_path}: {e}",
-                exc_info=True,
-            )
-            return None
-        # Optional: Convert date columns if needed, handle potential errors
-        # Example:
-        # for col in ['AddDate', 'EndDate']:
-        #     if col in exclusions_df.columns:
-        #         exclusions_df[col] = pd.to_datetime(exclusions_df[col], errors='coerce')
-        logger.info(
-            f"Successfully loaded exclusions from {exclusion_file_path}. Shape: {exclusions_df.shape}"
-        )
-        return exclusions_df
     except Exception as e:
-        logger.error(
-            f"Error loading exclusion file {exclusion_file_path}: {e}", exc_info=True
-        )
+        logger.error(f"Error loading exclusions: {e}", exc_info=True)
         return None
 
 
@@ -273,33 +245,34 @@ def replace_nan_with_none(obj: Any) -> Any:
         return obj
 
 
-def load_fund_groups(
-    data_folder: str, fund_groups_filename: str = "FundGroups.csv"
-) -> dict:
+def load_fund_groups(data_folder: str, fund_groups_filename: str = 'FundGroups.csv') -> dict:
     """
-    Loads fund group definitions from FundGroups.csv in the given data folder.
-    Returns a dict mapping group name to list of fund codes.
-    Skips empty cells and trims whitespace. Ignores empty groups.
+    Load fund groups from FundGroups.csv. Returns a dictionary mapping
+    group names to lists of fund codes belonging to each group.
+    
+    Args:
+        data_folder: Path to data folder
+        fund_groups_filename: Name of the fund groups CSV file
+        
+    Returns:
+        Dictionary mapping group names to lists of fund codes
     """
     logger = logging.getLogger(__name__)
-    fund_groups_path = os.path.join(data_folder, fund_groups_filename)
-    if not os.path.exists(fund_groups_path):
-        logger.warning(f"FundGroups.csv not found at {fund_groups_path}")
-        return {}
-    groups = {}
+    result = {}
+    
     try:
-        with open(fund_groups_path, newline="", encoding="utf-8") as csvfile:
-            reader = csv.DictReader(csvfile)
-            # DictReader uses first row as fieldnames
-            for row in reader:
-                for group, fund in row.items():
-                    if fund and fund.strip():
-                        groups.setdefault(group, []).append(fund.strip())
-        # Remove empty groups
-        groups = {k: v for k, v in groups.items() if v}
-        return groups
+        fund_groups_path = os.path.join(data_folder, fund_groups_filename)
+        if os.path.exists(fund_groups_path):
+            df = pd.read_csv(fund_groups_path)
+            if 'Group' in df.columns and 'Funds' in df.columns:
+                for _, row in df.iterrows():
+                    group_name = row['Group']
+                    funds_str = row['Funds']
+                    funds_list = parse_fund_list(funds_str)
+                    result[group_name] = funds_list
+        return result
     except Exception as e:
-        logger.error(f"Error loading FundGroups.csv: {e}")
+        logger.error(f"Error loading FundGroups.csv: {e}", exc_info=True)
         return {}
 
 

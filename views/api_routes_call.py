@@ -558,7 +558,7 @@ def run_api_calls() -> Response:
             results_summary.append(summary)
             completed_queries += 1
             if USE_REAL_TQS_API and completed_queries < total_queries:
-                print(
+                current_app.logger.info(
                     f"Pausing for 3 seconds before next real API call ({completed_queries}/{total_queries})..."
                 )
                 time.sleep(3)

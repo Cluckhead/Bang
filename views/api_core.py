@@ -5,9 +5,12 @@ the Flask Blueprint, and feature switch configurations.
 
 import os
 import pandas as pd
-from flask import Blueprint, current_app
+from flask import Blueprint, current_app, request, jsonify, render_template, Response
+from typing import Dict, List, Optional, Tuple, Any, Union
 import datetime
 import config
+import time
+from data_validation import validate_data
 
 # from tqs import tqs_query as tqs
 
@@ -19,14 +22,14 @@ USE_REAL_TQS_API = False
 
 # Blueprint Configuration
 api_bp = Blueprint(
-    "api_bp", __name__, template_folder="../templates", static_folder="../static"
+    "api_bp", __name__, template_folder="../templates", static_folder="../static", url_prefix="/api"
 )
 
 
 def _simulate_and_print_tqs_call(QueryID, FundCodeList, StartDate, EndDate):
-    """Simulates calling the TQS API by printing the call signature.
+    """Simulates a TQS API call by printing the details and returning a simulated row count.
 
-    This function is used when USE_REAL_TQS_API is False.
+    This function is called when USE_REAL_TQS_API is False.
     It does NOT interact with any external API.
 
     Returns:
@@ -34,9 +37,9 @@ def _simulate_and_print_tqs_call(QueryID, FundCodeList, StartDate, EndDate):
     """
     # Format the call signature exactly as requested: tqs(QueryID,[FundList],StartDate,EndDate)
     call_signature = f"tqs({QueryID}, {FundCodeList}, {StartDate}, {EndDate})"
-    print(f"--- SIMULATING TQS API CALL (USE_REAL_TQS_API = False) ---")
-    print(call_signature)
-    print(f"--------------------------------------------------------")
+    current_app.logger.info(f"--- SIMULATING TQS API CALL (USE_REAL_TQS_API = False) ---")
+    current_app.logger.info(call_signature)
+    current_app.logger.info(f"--------------------------------------------------------")
     # Return a simulated row count for the summary table
     simulated_row_count = (
         len(FundCodeList) * 10 if FundCodeList else 0
@@ -61,20 +64,20 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
                               or None if the API call fails or returns no data.
     """
     current_app.logger.info(f"Attempting real TQS API call for QueryID: {QueryID}")
-    print(f"--- EXECUTING REAL TQS API CALL (USE_REAL_TQS_API = True) --- ")
-    print(f"tqs({QueryID}, {FundCodeList}, {StartDate}, {EndDate})")
-    print(f"--------------------------------------------------------")
+    current_app.logger.info(f"--- EXECUTING REAL TQS API CALL (USE_REAL_TQS_API = True) --- ")
+    current_app.logger.info(f"tqs({QueryID}, {FundCodeList}, {StartDate}, {EndDate})")
+    current_app.logger.info(f"--------------------------------------------------------")
 
     dataframe = None
     try:
         # --- !!! Replace this comment and the line below with the actual API call !!! ---
         # Ensure the `tqs` function/library is imported (commented out at the top)
         # dataframe = tqs.get_data(QueryID, FundCodeList, StartDate, EndDate) # Example real call
-        (
-            print(dataframe.head())
-            if dataframe is not None
-            else print("No data to display")
-        )
+        if dataframe is not None:
+            current_app.logger.info(f"Data preview: {dataframe.head().to_string()}")
+        else:
+            current_app.logger.info("No data to display")
+        
         pass  # Remove this pass when uncommenting the line above
         # --- End of section to replace ---
 
@@ -100,29 +103,30 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
     except NameError as ne:
         # Specific handling if the tqs function isn't defined (import is commented out)
         current_app.logger.error(
-            f"Real TQS API call failed for QueryID: {QueryID}. TQS function not imported/defined. Error: {ne}"
+            f"Real TQS API call failed for QueryID: {QueryID}. TQS function not imported/defined. Error: {ne}",
+            exc_info=True
         )
-        print(
-            f"     ERROR: TQS function not available. Ensure 'from tqs import tqs_query as tqs' is uncommented and the library is installed."
+        current_app.logger.error(
+            f"TQS function not available. Ensure 'from tqs import tqs_query as tqs' is uncommented and the library is installed."
         )
         return None
     except ConnectionError as ce:
         current_app.logger.error(
-            f"Connection error during TQS API call for QueryID: {QueryID}: {ce}", exc_info=True
+            f"Connection error during TQS API call for QueryID: {QueryID}: {ce}", 
+            exc_info=True
         )
-        print(f"     ERROR: Connection error during real API call: {ce}")
         return None
     except TimeoutError as te:
         current_app.logger.error(
-            f"Timeout error during TQS API call for QueryID: {QueryID}: {te}", exc_info=True
+            f"Timeout error during TQS API call for QueryID: {QueryID}: {te}", 
+            exc_info=True
         )
-        print(f"     ERROR: Timeout during real API call: {te}")
         return None
     except PermissionError as pe:
         current_app.logger.error(
-            f"Authentication/permission error during TQS API call for QueryID: {QueryID}: {pe}", exc_info=True
+            f"Authentication/permission error during TQS API call for QueryID: {QueryID}: {pe}", 
+            exc_info=True
         )
-        print(f"     ERROR: Permission error during real API call: {pe}")
         return None
     except Exception as e:
         # Handle API call errors (timeout, connection issues, authentication, etc.)
@@ -130,7 +134,6 @@ def _fetch_real_tqs_data(QueryID, FundCodeList, StartDate, EndDate):
             f"Real TQS API call failed for QueryID: {QueryID}. Error: {e}",
             exc_info=True,
         )
-        print(f"     ERROR during real API call: {e}")
         return None
 
 
