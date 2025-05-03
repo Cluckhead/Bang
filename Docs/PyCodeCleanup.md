@@ -450,9 +450,7 @@ sec_Spread.csv:
 
 ## 5.2 Final Review & Cleanup
 
-**5.2.1** Review all files modified during the refactoring process. Look for any remaining complex functions or potential code duplication that might have been missed.
 
-**5.2.2** Check for any unused imports across all Python files and remove them.
 
 **5.2.3** Ensure logging messages are informative and consistent. Remove excessive `print` statements used for debugging. Check `exc_info=True` is used appropriately in error logs.
 
@@ -478,5 +476,7 @@ Any gaps in the 200 - implement them.
 
 Ask it to score the code and give a report, score it out of 10
 if below a 9 ask what is needed to get to a 9 and how much work that would be
+RLook for any remaining complex functions or potential code duplication that might have been missed.
+Check for any unused imports across all Python files and remove them.
 
 ---
