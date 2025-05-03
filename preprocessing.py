@@ -206,22 +206,12 @@ def process_input_file(input_path: str, output_path: str, dates_path: str, confi
             return
         filename = os.path.basename(input_path)
         if filename.startswith("pre_w_"):
-            # Weight file: identify metadata columns, replace headers with dates, save as w_*.csv
-            # Heuristic: metadata columns are all columns before the first placeholder/date col
-            # Assume candidate columns are all columns after required ones (first two: Funds, ISIN)
-            required_cols = [config.FUNDS_COL, config.ISIN_COL]
-            current_df_cols = df.columns.tolist()
-            last_required_idx = -1
-            for req_col in required_cols:
-                try:
-                    last_required_idx = max(last_required_idx, current_df_cols.index(req_col))
-                except ValueError:
-                    logger.error(f"Required column '{req_col}' not found in {input_path}. Skipping.")
-                    return
-            candidate_start_index = last_required_idx + 1
-            candidate_cols = current_df_cols[candidate_start_index:]
-            metadata_cols = current_df_cols[:candidate_start_index]
-            df = replace_headers_with_dates(df, dates, metadata_cols)
+            # Weight file: identify metadata columns dynamically (detect_metadata_columns handles w_secs vs others)
+            df = replace_headers_with_dates(
+                df,
+                dates,
+                df.columns[: detect_metadata_columns(df)].tolist(),
+            )
             df.to_csv(output_path, index=False, encoding="utf-8")
             logger.info(f"Successfully processed weight file: {output_path}")
         elif filename.startswith("pre_"):

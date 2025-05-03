@@ -30,8 +30,8 @@ from weight_processing import process_weight_file
 # Import the path utility
 from utils import get_data_folder_path
 
-# Import shared preprocessing utilities
-from preprocessing import read_and_sort_dates
+# Bring in shared preprocessing helpers
+from preprocessing import read_and_sort_dates, aggregate_data, replace_headers_with_dates  # unified helper
 
 # Get the logger instance. Assumes logging is configured elsewhere (e.g., by Flask app or calling script).
 logger = logging.getLogger(__name__)
@@ -40,182 +40,9 @@ logger = logging.getLogger(__name__)
 # Removed DATES_FILE_PATH constant - path is now determined dynamically in main()
 
 
-def replace_headers_with_dates(
-    df: pd.DataFrame,
-    required_cols: list,
-    candidate_start_index: int,
-    candidate_cols: list,
-    date_columns: list,
-    dates_file_path: str,
-    logger: logging.Logger,
-    input_path: str,
-) -> pd.DataFrame:
-    """
-    Helper to detect placeholder columns and replace them with date columns if needed.
-    Returns a DataFrame with updated headers.
-    """
-    current_cols = df.columns.tolist()
-    # --- Enhanced Placeholder Detection ---
-    # Detect sequences like 'Col', 'Col.1', ... (Pattern A) and 'Base', 'Base', ... (Pattern B)
-    potential_placeholder_base_patternA = None
-    detected_sequence_patternA = []
-    start_index_patternA = -1
-    potential_placeholder_base_patternB = None
-    detected_sequence_patternB = []
-    start_index_patternB = -1
-    is_patternB_dominant = False
-    if candidate_cols:
-        first_candidate = candidate_cols[0]
-        if all(col == first_candidate for col in candidate_cols):
-            potential_placeholder_base_patternB = first_candidate
-            detected_sequence_patternB = candidate_cols
-            start_index_patternB = 0
-            logger.debug(
-                f"Detected Pattern B: Repeated column name '{potential_placeholder_base_patternB}' for all {len(detected_sequence_patternB)} candidate columns."
-            )
-            is_patternB_dominant = True
-        else:
-            for start_idx in range(len(candidate_cols)):
-                current_potential_base = candidate_cols[start_idx]
-                if "." not in current_potential_base:
-                    temp_sequence = [current_potential_base]
-                    for i in range(1, len(candidate_cols) - start_idx):
-                        expected_col = f"{current_potential_base}.{i}"
-                        actual_col_index = start_idx + i
-                        if candidate_cols[actual_col_index] == expected_col:
-                            temp_sequence.append(candidate_cols[actual_col_index])
-                        else:
-                            break
-                    if len(temp_sequence) > 1:
-                        potential_placeholder_base_patternA = current_potential_base
-                        detected_sequence_patternA = temp_sequence
-                        start_index_patternA = start_idx
-                        break
-    # --- Date Replacement Logic ---
-    if date_columns is None:
-        logger.warning(
-            f"Date information from {dates_file_path} is unavailable. Cannot check or replace headers in {input_path}. Processing with original headers: {current_cols}"
-        )
-        return df
-    elif is_patternB_dominant:
-        placeholder_count_B = len(detected_sequence_patternB)
-        original_placeholder_start_index_B = (
-            candidate_start_index + start_index_patternB
-        )
-        if len(date_columns) == placeholder_count_B:
-            cols_before = current_cols[:original_placeholder_start_index_B]
-            cols_after = current_cols[
-                original_placeholder_start_index_B + placeholder_count_B :
-            ]
-            new_columns = cols_before + date_columns + cols_after
-            if len(new_columns) == len(current_cols):
-                df.columns = new_columns
-                logger.info(
-                    f"Replaced {placeholder_count_B} repeated '{potential_placeholder_base_patternB}' columns with dates."
-                )
-            else:
-                logger.error(
-                    f"Internal error (Pattern B): Column count mismatch after constructing new columns. Keeping original headers."
-                )
-        else:
-            logger.warning(
-                f"Count mismatch for Pattern B: Found {placeholder_count_B} repeated '{potential_placeholder_base_patternB}' columns, but expected {len(date_columns)} dates. Skipping date replacement."
-            )
-    elif potential_placeholder_base_patternA:
-        placeholder_count_A = len(detected_sequence_patternA)
-        original_placeholder_start_index_A = (
-            candidate_start_index + start_index_patternA
-        )
-        if len(date_columns) == placeholder_count_A:
-            cols_before = current_cols[:original_placeholder_start_index_A]
-            cols_after = current_cols[
-                original_placeholder_start_index_A + placeholder_count_A :
-            ]
-            new_columns = cols_before + date_columns + cols_after
-            if len(new_columns) == len(current_cols):
-                df.columns = new_columns
-                logger.info(
-                    f"Replaced {placeholder_count_A} Pattern A columns ('{potential_placeholder_base_patternA}', '{potential_placeholder_base_patternA}.1', ...) with dates."
-                )
-            else:
-                logger.error(
-                    f"Internal error (Pattern A): Column count mismatch after constructing new columns. Keeping original headers."
-                )
-        else:
-            logger.warning(
-                f"Count mismatch for Pattern A: Found {placeholder_count_A} columns in sequence ('{potential_placeholder_base_patternA}', '{potential_placeholder_base_patternA}.1', ...), but expected {len(date_columns)} dates. Skipping date replacement."
-            )
-    elif candidate_cols == date_columns:
-        logger.debug(
-            f"Columns after required ones already match the expected dates. No replacement needed."
-        )
-    return df
-
-
 def suffix_isin(isin: str, n: int) -> str:
     """Return a suffixed ISIN using the pattern from config."""
     return config.ISIN_SUFFIX_PATTERN.format(isin=isin, n=n)
-
-
-def aggregate_data(
-    df: pd.DataFrame, required_cols: list, logger: logging.Logger, input_path: str
-) -> pd.DataFrame:
-    """
-    Helper to aggregate/group data as per project rules (group by Security Name, merge Funds, suffix ISIN).
-    Returns a processed DataFrame ready for output.
-    """
-    current_cols = df.columns.tolist()
-    id_cols = [col for col in current_cols if col not in required_cols]
-    processed_rows = []
-    df["Security Name"] = df["Security Name"].astype(str)
-    df["Funds"] = df["Funds"].astype(str)
-    grouped_by_sec = df.groupby("Security Name", sort=False, dropna=False)
-    for sec_name, sec_group in grouped_by_sec:
-        distinct_versions = []
-        if id_cols:
-            try:
-                sub_grouped = sec_group.groupby(id_cols, dropna=False, sort=False)
-                distinct_versions = [group for _, group in sub_grouped]
-            except Exception as e:
-                logger.error(
-                    f"Error during sub-grouping for Security Name '{sec_name}' in {input_path}: {e}. Skipping this security.",
-                    exc_info=True,
-                )
-                continue
-        else:
-            distinct_versions = [sec_group]
-        num_versions = len(distinct_versions)
-        for i, current_version_df in enumerate(distinct_versions):
-            if current_version_df.empty:
-                continue
-            unique_funds = current_version_df["Funds"].dropna().unique()
-            funds_list = sorted([str(f) for f in unique_funds])
-            new_row_series = current_version_df.iloc[0].copy()
-            new_row_series["Funds"] = f"[{','.join(funds_list)}]"
-            if num_versions > 1:
-                isin_col_name = config.ISIN_COL
-                if isin_col_name in new_row_series.index:
-                    original_isin = new_row_series[isin_col_name]
-                    new_isin = suffix_isin(original_isin, i+1)
-                    new_row_series[isin_col_name] = new_isin
-                    logger.debug(
-                        f"Suffixed ISIN for duplicate Security Name '{sec_name}'. Original: '{original_isin}', New: '{new_isin}'"
-                    )
-                else:
-                    logger.warning(
-                        f"Found {num_versions} distinct data versions for Security Name '{sec_name}' but column '{isin_col_name}' not found. Cannot apply suffix to ISIN."
-                    )
-            processed_rows.append(new_row_series.to_dict())
-    if not processed_rows:
-        logger.warning(
-            f"No data rows processed for {input_path}. Output file will not be created."
-        )
-        return pd.DataFrame(columns=current_cols)
-    output_df = pd.DataFrame(processed_rows)
-    final_cols = [col for col in current_cols if col in output_df.columns]
-    output_df = output_df[final_cols]
-    output_df = output_df.fillna(0)
-    return output_df
 
 
 # Refactored process_csv_file
@@ -269,18 +96,9 @@ def process_csv_file(input_path, output_path, date_columns, dates_file_path):
                 )
                 return
         candidate_start_index = last_required_idx + 1
-        candidate_cols = current_df_cols[candidate_start_index:]
-        # Step 1: Header replacement
-        df = replace_headers_with_dates(
-            df,
-            required_cols,
-            candidate_start_index,
-            candidate_cols,
-            date_columns,
-            dates_file_path,
-            logger,
-            input_path,
-        )
+        metadata_cols = current_df_cols[:candidate_start_index]
+        # Step 1: Header replacement (new helper)
+        df = replace_headers_with_dates(df, date_columns, metadata_cols)
         # Step 2: Data aggregation
         output_df = aggregate_data(df, required_cols, logger, input_path)
         if output_df.empty:

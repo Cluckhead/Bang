@@ -5,7 +5,10 @@
 import os
 import logging
 import sys
-import config
+
+# Optional: import project-wide configuration – currently unused but left for future extension
+import config  # noqa: F401
+
 from utils import get_data_folder_path
 from preprocessing import process_input_file
 
@@ -21,17 +24,34 @@ if __name__ == "__main__":
         if not os.path.isdir(data_dir):
             logger.error(f"Data directory not found or is not a directory: {data_dir}. Cannot proceed.")
             sys.exit(1)
-        dates_path = os.path.join(data_dir, "dates.csv")
+        # Use a single central Dates file expected to live at the *root* of the data folder.
+        # Note: capitalisation chosen to align with most modules ("Dates.csv").
+        dates_path = os.path.join(data_dir, "Dates.csv")
         config_dict = {}  # Placeholder for future config
-        # Process pre_*.csv files (excluding pre_w_*)
-        for filename in os.listdir(data_dir):
-            if filename.startswith("pre_") and filename.endswith(".csv"):
-                input_path = os.path.join(data_dir, filename)
-                if filename.startswith("pre_w_"):
+
+        # -----------------------------------------------------------------
+        # Recursively traverse the data directory to locate *all* pre_*.csv
+        # files (including those nested in sub-directories).
+        # -----------------------------------------------------------------
+        for root, _dirs, files in os.walk(data_dir):
+            for filename in files:
+                if not (filename.lower().startswith("pre_") and filename.lower().endswith(".csv")):
+                    continue  # Skip non-pre files quickly
+
+                input_path = os.path.join(root, filename)
+
+                # Determine output file name according to naming convention
+                if filename.lower().startswith("pre_w_"):
                     output_filename = filename.replace("pre_w_", "w_", 1)
                 else:
                     output_filename = filename.replace("pre_", "sec_", 1)
-                output_path = os.path.join(data_dir, output_filename)
+
+                output_path = os.path.join(root, output_filename)
+
+                logger.info(
+                    f"Processing '{input_path}' -> '{output_path}' (dates from '{dates_path}')"
+                )
+
                 process_input_file(input_path, output_path, dates_path, config_dict)
         logger.info("--- Batch preprocessing finished ---")
     except Exception as e:
