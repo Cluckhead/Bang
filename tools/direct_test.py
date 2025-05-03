@@ -6,6 +6,9 @@
 import pandas as pd
 import os
 
+# Prevent Pytest from collecting this utility script
+__test__ = False
+
 # Test parameters
 SECURITY_ID = "XS4035425"
 CSV_FILE = "Data/sec_Spread.csv"

@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 # Constants
 FLOAT_TOLERANCE = 1e-6
 
+# List of placeholder numeric values that indicate missing data (e.g., 100 used by data providers).
+# Exposed as a public constant so that external tests/tools can import it safely.
+DEFAULT_PLACEHOLDER_VALUES = config.STALENESS_PLACEHOLDERS
+
 # Use config.STALENESS_PLACEHOLDERS for placeholder values in staleness detection
 
 def get_staleness_summary(

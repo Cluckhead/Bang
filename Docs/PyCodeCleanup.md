@@ -336,9 +336,9 @@ sec_Spread.csv:
 
 ---
 
-# PHASE 4: Testing & Refactoring Larger Components
+# PHASE 4: Testing & Refactoring Larger Components 
 
-## 4.1 Improve Test Suite Coverage
+## 4.1 Improve Test Suite Coverage [*Skipped as too annoying and flawed, need to learn a new way*]
 
 **4.1.1** Run `pytest --cov=. --cov-report=html` to generate a coverage report (`htmlcov/index.html`).
 

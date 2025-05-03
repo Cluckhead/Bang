@@ -5,7 +5,6 @@ import logging
 from typing import Optional, Any, List, Dict, Callable
 import pandas as pd
 import re
-import utils
 
 logger = logging.getLogger(__name__)
 
@@ -97,10 +96,20 @@ def identify_columns(columns: List[str], patterns: Dict[str, List[str]], require
             logger.info(f"identify_columns: Found {category} column: '{found}' using pattern(s) {regex_list}")
         else:
             logger.warning(f"identify_columns: No column found for category '{category}' using patterns {regex_list}")
-    # Check required
-    for req in required:
-        if not result.get(req):
-            logger.error(f"identify_columns: Required category '{req}' not found in columns: {columns}")
+    # After scanning, ensure all required categories were located.
+    missing_required = [req for req in required if not result.get(req)]
+    for req in missing_required:
+        logger.error(
+            f"identify_columns: Required category '{req}' not found in columns: {columns}"
+        )
+
+    # If any required category is absent, raise an explicit error so callers/tests can react.
+    if missing_required:
+        # Joining for a readable message; keep list for diagnostics.
+        missing_str = ", ".join(missing_required)
+        raise ValueError(
+            f"Required column(s) not found: {missing_str}. Columns provided: {columns}"
+        )
     return result 
 
 def convert_to_numeric_robustly(series: pd.Series) -> pd.Series:
