@@ -115,4 +115,7 @@ venv.bak/
 dmypy.json
 
 # Pyre type checker
-.pyre/ 
+.pyre/
+
+# Do not ignore requirements-dev.txt
+!requirements-dev.txt 
