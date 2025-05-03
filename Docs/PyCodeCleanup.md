@@ -420,11 +420,11 @@ sec_Spread.csv:
 
 **5.1.1** Create a new file `preprocessing.py`.
 
-**5.1.2** Define constants in `preprocessing.py` or `config.py` for filename prefixes (`PRE_PREFIX = 'pre_'`, `SEC_PREFIX = 'sec_'`, `WEIGHT_PREFIX = 'w_'`, `PRE_WEIGHT_PREFIX = 'pre_w_'`).
+**5.1.2** Define constants in `preprocessing.py` for filename prefixes (`PRE_PREFIX = 'pre_'`, `SEC_PREFIX = 'sec_'`, `WEIGHT_PREFIX = 'w_'`, `PRE_WEIGHT_PREFIX = 'pre_w_'`).
 
-**5.1.3** Move the `read_and_sort_dates` function from `process_data.py` to `preprocessing.py` (or `data_utils.py` if more appropriate). Update imports in `process_data.py` and `weight_processing.py`.
+**5.1.3** Move the `read_and_sort_dates` function from `process_data.py` to `preprocessing.py`. Update imports in `process_data.py` and `weight_processing.py`.
 
-**5.1.4** Move the `detect_metadata_columns` function from `weight_processing.py` to `preprocessing.py` (or `data_utils.py`). Update imports.
+**5.1.4** Move the `detect_metadata_columns` function from `weight_processing.py` to `preprocessing.py` . Update imports.
 
 **5.1.5** Analyze the core logic of `process_data.replace_headers_with_dates` and the header replacement logic within `weight_processing.process_weight_file`. Create a single, unified function `replace_headers_with_dates(df: pd.DataFrame, date_columns: List[str], metadata_cols: List[str]) -> pd.DataFrame` in `preprocessing.py`. This function should handle identifying data columns (those not in `metadata_cols`) and replacing them with the provided `date_columns`, managing count mismatches with logging.
 

@@ -32,7 +32,7 @@ from config import COLOR_PALETTE
 # Make sure load_and_process_data and other loaders can handle security-level data if needed
 from data_loader import load_and_process_data, LoadResult, load_simple_csv
 from metric_calculator import calculate_latest_metrics
-from process_data import read_and_sort_dates
+from preprocessing import read_and_sort_dates
 from utils import get_data_folder_path, load_fund_groups
 
 # Define the blueprint for metric routes, using '/metric' as the URL prefix

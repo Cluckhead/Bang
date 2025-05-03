@@ -16,12 +16,12 @@ import config
 try:
     from utils import load_fund_groups, parse_fund_list, load_weights_and_held_status # Added load_weights
     from security_processing import load_and_process_security_data
-    from process_data import read_and_sort_dates
+    from preprocessing import read_and_sort_dates
 except ImportError as e:
     logging.error(f"Error importing modules in generic_comparison_helpers: {e}")
     from ..utils import load_fund_groups, parse_fund_list, load_weights_and_held_status # Added load_weights
     from ..security_processing import load_and_process_security_data
-    from ..process_data import read_and_sort_dates
+    from ..preprocessing import read_and_sort_dates
 
 # === Stats Calculation Helper ===============================================
 

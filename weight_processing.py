@@ -13,6 +13,9 @@ from collections import Counter
 from typing import List, Optional
 import config
 
+# Import shared utilities from preprocessing (detect_metadata_columns, read_and_sort_dates, replace_headers_with_dates)
+from preprocessing import detect_metadata_columns, replace_headers_with_dates  # noqa: F401
+
 # Get the logger instance. Assumes Flask app has configured logging.
 logger = logging.getLogger(__name__)
 
@@ -45,30 +48,6 @@ def clean_date_format(dates):
                 cleaned_dates.append(date)
 
     return cleaned_dates
-
-
-def detect_metadata_columns(df: pd.DataFrame, min_numeric_cols: int = 3) -> int:
-    """
-    Detect the number of metadata columns in a DataFrame. If all config.METADATA_COLS are present, use their count. Otherwise, fall back to dynamic detection.
-    Returns the index (int) of the last metadata column (exclusive for slicing).
-    """
-    # Use config.METADATA_COLS if all are present
-    if all(col in df.columns for col in config.METADATA_COLS):
-        return len(config.METADATA_COLS)
-    # Fallback to dynamic detection
-    for i in range(1, len(df.columns)):
-        numeric_count = 0
-        for j in range(i, min(i + min_numeric_cols, len(df.columns))):
-            sample = df.iloc[:, j].dropna().head(10)
-            if sample.apply(
-                lambda x: pd.api.types.is_number(x)
-                or pd.api.types.is_float(x)
-                or pd.api.types.is_integer(x)
-            ).all():
-                numeric_count += 1
-        if numeric_count == min_numeric_cols:
-            return i  # metadata columns are up to i-1
-    return 1  # fallback: only first column is metadata
 
 
 def process_weight_file(
@@ -130,27 +109,10 @@ def process_weight_file(
             if df.empty:
                 logger.warning(f"Weight file {input_path} is empty. Skipping.")
                 return
-            original_cols = df.columns.tolist()
-            id_col = original_cols[0]
-            data_cols = original_cols[1:]
-            if len(data_cols) > len(dates):
-                logger.warning(
-                    f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only."
-                )
-                # Truncate data columns to match the number of dates
-                keep_cols = [id_col] + data_cols[: len(dates)]
-                df = df[keep_cols]
-                data_cols = data_cols[: len(dates)]
-                # Now len(data_cols) == len(dates)
-                dates = dates[: len(data_cols)]
-            elif len(data_cols) < len(dates):
-                logger.warning(
-                    f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates."
-                )
-                dates = dates[: len(data_cols)]
-            new_columns = [id_col] + dates
-            df.columns = new_columns
-            logger.info(f"Replaced {len(data_cols)} weight columns with dates")
+            # Use unified replacement helper
+            metadata_cols = df.columns[:1].tolist()  # first column is metadata ID
+            df = replace_headers_with_dates(df, dates, metadata_cols)
+            logger.info("Header replacement completed for %s", input_basename)
 
         elif "w_secs" in input_basename:
             df = pd.read_csv(
@@ -162,31 +124,11 @@ def process_weight_file(
             if df.empty:
                 logger.warning(f"Weight file {input_path} is empty. Skipping.")
                 return
-            original_cols = df.columns.tolist()
             # Dynamically detect metadata columns
             meta_end_idx = detect_metadata_columns(df)
-            id_col = original_cols[0]
-            metadata_cols = original_cols[:meta_end_idx]
-            data_cols = original_cols[meta_end_idx:]
-            if len(data_cols) > len(dates):
-                logger.warning(
-                    f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only."
-                )
-                # Truncate data columns to match the number of dates
-                keep_cols = metadata_cols + data_cols[: len(dates)]
-                df = df[keep_cols]
-                data_cols = data_cols[: len(dates)]
-                dates = dates[: len(data_cols)]
-            elif len(data_cols) < len(dates):
-                logger.warning(
-                    f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates."
-                )
-                dates = dates[: len(data_cols)]
-            new_columns = metadata_cols + dates
-            df.columns = new_columns
-            logger.info(
-                f"Replaced {len(data_cols)} data columns with dates after {len(metadata_cols)} metadata columns"
-            )
+            metadata_cols = df.columns[:meta_end_idx].tolist()
+            df = replace_headers_with_dates(df, dates, metadata_cols)
+            logger.info("Header replacement completed for w_secs variant")
 
         else:
             logger.warning(f"Unknown file type: {input_path}. Using default handling.")
@@ -196,26 +138,10 @@ def process_weight_file(
                 encoding="utf-8",
                 encoding_errors="replace",
             )
-            original_cols = df.columns.tolist()
-            id_col = original_cols[0]
-            data_cols = original_cols[1:]
-            if len(data_cols) > len(dates):
-                logger.warning(
-                    f"Not enough dates ({len(dates)}) for all data columns ({len(data_cols)}). Using available dates only."
-                )
-                # Truncate data columns to match the number of dates
-                keep_cols = [id_col] + data_cols[: len(dates)]
-                df = df[keep_cols]
-                data_cols = data_cols[: len(dates)]
-                dates = dates[: len(data_cols)]
-            elif len(data_cols) < len(dates):
-                logger.warning(
-                    f"More dates ({len(dates)}) than data columns ({len(data_cols)}). Using first {len(data_cols)} dates."
-                )
-                dates = dates[: len(data_cols)]
-            new_columns = [id_col] + dates
-            df.columns = new_columns
-            logger.info(f"Replaced all columns after the first with dates")
+            # Use unified replacement helper
+            metadata_cols = df.columns[:1].tolist()
+            df = replace_headers_with_dates(df, dates, metadata_cols)
+            logger.info("Header replacement completed for unknown weight file type")
 
         df.to_csv(output_path, index=False, encoding="utf-8")
         logger.info(f"Successfully processed and saved weight file to: {output_path}")

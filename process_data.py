@@ -30,89 +30,14 @@ from weight_processing import process_weight_file
 # Import the path utility
 from utils import get_data_folder_path
 
+# Import shared preprocessing utilities
+from preprocessing import read_and_sort_dates
+
 # Get the logger instance. Assumes logging is configured elsewhere (e.g., by Flask app or calling script).
 logger = logging.getLogger(__name__)
 # --- End Logging Setup ---
 
 # Removed DATES_FILE_PATH constant - path is now determined dynamically in main()
-
-
-def read_and_sort_dates(dates_file_path):
-    """
-    Reads dates from a CSV file, sorts them, and returns them as a list of strings.
-
-    Args:
-        dates_file_path (str): Absolute path to the CSV file containing dates.
-
-    Returns:
-        list[str] | None: A sorted list of date strings (YYYY-MM-DD) or None if an error occurs.
-    """
-    if not dates_file_path:
-        logger.error("No dates_file_path provided to read_and_sort_dates.")
-        return None
-    if not os.path.exists(dates_file_path):
-        logger.error(f"Dates file not found at {dates_file_path}")
-        return None
-
-    try:
-        dates_df = pd.read_csv(
-            dates_file_path, parse_dates=[0]
-        )  # Assume date is the first column
-        # Handle potential parsing errors if the column isn't purely dates
-        if dates_df.iloc[:, 0].isnull().any():
-            logger.warning(
-                f"Warning: Some values in {dates_file_path} could not be parsed as dates."
-            )
-            # Attempt to drop NaT values and proceed
-            dates_df = dates_df.dropna(subset=[dates_df.columns[0]])
-            if dates_df.empty:
-                logger.error(
-                    f"Error: No valid dates found in {dates_file_path} after handling parsing issues."
-                )
-                return None
-
-        # Sort dates chronologically
-        sorted_dates = dates_df.iloc[:, 0].sort_values()
-        # Format dates as 'YYYY-MM-DD' strings for column headers
-        date_strings = sorted_dates.dt.strftime("%Y-%m-%d").tolist()
-        logger.info(
-            f"Successfully read and sorted {len(date_strings)} dates from {dates_file_path}."
-        )
-
-        # --- Deduplicate the date list while preserving order ---
-        unique_date_strings = []
-        seen_dates = set()
-        duplicates_found = False
-        for date_str in date_strings:
-            if date_str not in seen_dates:
-                unique_date_strings.append(date_str)
-                seen_dates.add(date_str)
-            else:
-                duplicates_found = True
-
-        if duplicates_found:
-            logger.warning(
-                f"Duplicate dates found in {dates_file_path}. Using unique sorted dates: {len(unique_date_strings)} unique dates."
-            )
-        # --- End Deduplication ---
-
-        return unique_date_strings  # Return the deduplicated list
-    except FileNotFoundError:
-        # This case should ideally be caught by the initial os.path.exists check, but included for robustness
-        logger.error(f"Error: Dates file not found at {dates_file_path}")
-        return None
-    except pd.errors.EmptyDataError:
-        logger.error(f"Error: Dates file is empty - {dates_file_path}")
-        return None
-    except IndexError:
-        logger.error(f"Error: Dates file {dates_file_path} seems to have no columns.")
-        return None
-    except Exception as e:
-        logger.error(
-            f"An unexpected error occurred reading dates from {dates_file_path}: {e}",
-            exc_info=True,
-        )
-        return None
 
 
 def replace_headers_with_dates(

@@ -9,6 +9,13 @@ from typing import List, Optional
 import config
 from data_utils import read_csv_robustly
 
+# --- Filename prefix constants (5.1.2) ---
+PRE_PREFIX: str = "pre_"  # Files that require full preprocessing
+SEC_PREFIX: str = "sec_"  # Output files for security-level data
+WEIGHT_PREFIX: str = "w_"  # Output files for weight data
+PRE_WEIGHT_PREFIX: str = "pre_w_"  # Input weight files that need preprocessing
+# --- End constants ---
+
 logger = logging.getLogger(__name__)
 
 def read_and_sort_dates(dates_file_path: str) -> Optional[List[str]]:
@@ -42,36 +49,85 @@ def read_and_sort_dates(dates_file_path: str) -> Optional[List[str]]:
 
 def replace_headers_with_dates(
     df: pd.DataFrame,
-    required_cols: List[str],
-    candidate_start_index: int,
-    candidate_cols: List[str],
-    date_columns: Optional[List[str]],
-    dates_file_path: str,
-    logger: logging.Logger,
-    input_path: str,
+    date_columns: List[str],
+    metadata_cols: List[str],
+    *,
+    log: logging.Logger = logger,
 ) -> pd.DataFrame:
+    """Replace placeholder data-column headers with actual *date* strings.
+
+    Parameters
+    ----------
+    df
+        The dataframe to operate on. The dataframe **is modified in place** and
+        also returned for convenience.
+    date_columns
+        A *sorted* list of date strings (``YYYY-MM-DD``) originating from
+        ``Dates.csv``.
+    metadata_cols
+        A list of *existing* column names that should be treated as *metadata*
+        (i.e. **not** replaced). All columns *after* this list constitute the
+        *data* columns that will potentially be renamed.
+    log
+        Optional logger to use – defaults to module-level logger.
+
+    Returns
+    -------
+    pd.DataFrame
+        The dataframe with its columns potentially renamed.
     """
-    Detects placeholder columns and replaces them with date columns if needed.
-    Returns a DataFrame with updated headers.
-    """
-    current_cols = df.columns.tolist()
-    # Pattern B: all candidate columns are the same
-    is_patternB = candidate_cols and all(col == candidate_cols[0] for col in candidate_cols)
-    if date_columns is None:
-        logger.warning(f"Date information from {dates_file_path} is unavailable. Cannot check or replace headers in {input_path}. Processing with original headers: {current_cols}")
+
+    # ---------------------------------------------------------------------
+    # Determine parts of the header we want to manipulate
+    # ---------------------------------------------------------------------
+    all_cols: List[str] = list(df.columns)
+
+    if not date_columns:
+        log.warning("No date_columns supplied – skipping header replacement.")
         return df
-    if is_patternB:
-        if len(date_columns) == len(candidate_cols):
-            new_columns = current_cols[:candidate_start_index] + date_columns + current_cols[candidate_start_index+len(candidate_cols):]
-            if len(new_columns) == len(current_cols):
-                df.columns = new_columns
-                logger.info(f"Replaced {len(candidate_cols)} repeated '{candidate_cols[0]}' columns with dates.")
-            else:
-                logger.error(f"Column count mismatch after constructing new columns. Keeping original headers.")
-        else:
-            logger.warning(f"Count mismatch: Found {len(candidate_cols)} repeated '{candidate_cols[0]}' columns, but expected {len(date_columns)} dates. Skipping date replacement.")
-    elif candidate_cols == date_columns:
-        logger.debug(f"Columns after required ones already match the expected dates. No replacement needed.")
+
+    meta_len: int = len(metadata_cols)
+    if meta_len == 0:
+        log.warning("metadata_cols is empty – treating first column as metadata.")
+        meta_len = 1
+
+    if meta_len > len(all_cols):
+        log.error("metadata_cols length (%s) exceeds dataframe column count (%s).", meta_len, len(all_cols))
+        return df
+
+    # Slice columns into metadata and data sections
+    meta_section: List[str] = all_cols[:meta_len]
+    data_section: List[str] = all_cols[meta_len:]
+
+    if not data_section:
+        log.debug("No data columns after metadata – nothing to replace.")
+        return df
+
+    # ---------------------------------------------------------------------
+    # Handle mismatched counts between dates and data columns
+    # ---------------------------------------------------------------------
+    if len(data_section) != len(date_columns):
+        log.warning(
+            "Data/date column count mismatch – data_cols=%s, date_cols=%s. Adjusting to min length.",
+            len(data_section),
+            len(date_columns),
+        )
+
+    # Replace up to the minimum length between the two lists
+    replace_count: int = min(len(data_section), len(date_columns))
+    new_data_section: List[str] = date_columns[:replace_count] + data_section[
+        replace_count:
+    ]
+
+    new_columns: List[str] = meta_section + new_data_section
+
+    if len(new_columns) != len(all_cols):
+        # This should never happen but guard anyway
+        log.error("Internal error constructing new header – column count changed.")
+        return df
+
+    df.columns = new_columns
+    log.info("Replaced %s data column headers with dates.", replace_count)
     return df
 
 def suffix_isin(isin: str, n: int) -> str:
@@ -164,16 +220,8 @@ def process_input_file(input_path: str, output_path: str, dates_path: str, confi
                     return
             candidate_start_index = last_required_idx + 1
             candidate_cols = current_df_cols[candidate_start_index:]
-            df = replace_headers_with_dates(
-                df,
-                required_cols,
-                candidate_start_index,
-                candidate_cols,
-                dates,
-                dates_path,
-                logger,
-                input_path,
-            )
+            metadata_cols = current_df_cols[:candidate_start_index]
+            df = replace_headers_with_dates(df, dates, metadata_cols)
             df.to_csv(output_path, index=False, encoding="utf-8")
             logger.info(f"Successfully processed weight file: {output_path}")
         elif filename.startswith("pre_"):
@@ -189,16 +237,8 @@ def process_input_file(input_path: str, output_path: str, dates_path: str, confi
                     return
             candidate_start_index = last_required_idx + 1
             candidate_cols = current_df_cols[candidate_start_index:]
-            df = replace_headers_with_dates(
-                df,
-                required_cols,
-                candidate_start_index,
-                candidate_cols,
-                dates,
-                dates_path,
-                logger,
-                input_path,
-            )
+            metadata_cols = current_df_cols[:candidate_start_index]
+            df = replace_headers_with_dates(df, dates, metadata_cols)
             output_df = aggregate_data(df, required_cols, logger, input_path)
             if output_df.empty:
                 logger.warning(f"No data rows processed for {input_path}. Output file will not be created.")
@@ -209,3 +249,48 @@ def process_input_file(input_path: str, output_path: str, dates_path: str, confi
             logger.warning(f"File {input_path} does not match expected pre_ or pre_w_ pattern. Skipping.")
     except Exception as e:
         logger.error(f"Error processing input file {input_path}: {e}", exc_info=True) 
+
+def detect_metadata_columns(df: pd.DataFrame, min_numeric_cols: int = 3) -> int:
+    """Detect the number of metadata columns in a DataFrame.
+
+    This utility mirrors the original implementation that lived in
+    ``weight_processing.py`` but is now centralised here so it can be re-used
+    by any preprocessing logic.
+
+    The function first checks whether *all* of the standard metadata column
+    names defined in ``config.METADATA_COLS`` are present. If so, the count of
+    those columns is returned immediately.  Otherwise, it falls back to a
+    heuristic that scans the first few non-metadata columns looking for a
+    minimum number of numeric columns (``min_numeric_cols``).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame whose columns should be inspected.
+    min_numeric_cols : int, default 3
+        The minimum consecutive numeric columns that signal the start of the
+        actual numeric data section.
+
+    Returns
+    -------
+    int
+        The index *after* the last metadata column (i.e. suitable for slicing
+        ``df.iloc[:, :meta_end_idx]`` to obtain the metadata columns).
+    """
+    # Fast-path: use predefined list if all present
+    if hasattr(config, "METADATA_COLS") and all(col in df.columns for col in config.METADATA_COLS):
+        return len(config.METADATA_COLS)
+
+    # Heuristic detection fallback
+    for i in range(1, len(df.columns)):
+        numeric_count = 0
+        # Look ahead up to ``min_numeric_cols`` columns
+        for j in range(i, min(i + min_numeric_cols, len(df.columns))):
+            sample = df.iloc[:, j].dropna().head(10)
+            if sample.apply(lambda x: pd.api.types.is_number(x) or pd.api.types.is_float(x) or pd.api.types.is_integer(x)).all():
+                numeric_count += 1
+        if numeric_count == min_numeric_cols:
+            return i  # Metadata columns occupy positions < i
+
+    # Fallback: assume only the first column is metadata
+    return 1 

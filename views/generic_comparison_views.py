@@ -50,13 +50,13 @@ try:
         load_and_process_security_data,
     )  # Keep using this standard loader
     from config import COMPARISON_CONFIG, COLOR_PALETTE
-    from process_data import read_and_sort_dates
+    from preprocessing import read_and_sort_dates
 except ImportError as e:
     logging.error(f"Error importing modules in generic_comparison_views: {e}")
     from ..utils import load_weights_and_held_status, parse_fund_list
     from ..security_processing import load_and_process_security_data
     from ..config import COMPARISON_CONFIG, COLOR_PALETTE
-    from ..process_data import read_and_sort_dates
+    from ..preprocessing import read_and_sort_dates
 
 # Define the Blueprint
 generic_comparison_bp = Blueprint(
