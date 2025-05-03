@@ -203,6 +203,68 @@ def _convert_value_columns(df: pd.DataFrame, value_cols: list) -> list:
     return converted_cols
 
 
+def _aggregate_by_date_code(
+    df: pd.DataFrame,
+    date_col: str,
+    code_col: str,
+    filename_for_logging: str,
+    numeric_hint_cols: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """Aggregate duplicate (date, code) rows.
+
+    Numeric columns are averaged; non-numeric columns keep the first value.
+    If no numeric dtypes are detected, *numeric_hint_cols* are coerced to
+    numeric (best-effort) before aggregation.
+    """
+    before = len(df)
+
+    group_cols = [date_col, code_col]
+
+    # Identify numeric columns – coerce hints if necessary
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    if not numeric_cols and numeric_hint_cols:
+        for col in numeric_hint_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+
+    # Build aggregation dictionary
+    agg_dict: Dict[str, str] = {col: "mean" for col in numeric_cols}
+    for col in df.columns:
+        if col not in group_cols and col not in numeric_cols:
+            agg_dict[col] = "first"
+
+    df_agg = df.groupby(group_cols, as_index=False).agg(agg_dict)
+    after = len(df_agg)
+    if before != after:
+        logger.info(
+            f"Aggregated {before} rows to {after} unique (Date, Code) pairs in '{filename_for_logging}'."
+        )
+    return df_agg
+
+
+def _filter_by_scope(
+    df: pd.DataFrame,
+    scope_col: str,
+    filename_for_logging: str,
+) -> pd.DataFrame:
+    """Return only rows where *scope_col* equals 'TRUE' (case-insensitive)."""
+    original_count = len(df)
+    if scope_col not in df.columns:
+        logger.warning(
+            f"Scope column '{scope_col}' not found in '{filename_for_logging}'. Skipping scope filter."
+        )
+        return df
+
+    df_filtered = df.copy()
+    df_filtered[scope_col] = df_filtered[scope_col].astype(str).str.upper().fillna("FALSE")
+    df_filtered = df_filtered[df_filtered[scope_col] == "TRUE"]
+    logger.info(
+        f"Filtered '{filename_for_logging}' based on '{scope_col}'. Kept {len(df_filtered)}/{original_count} rows where value is 'TRUE'."
+    )
+    return df_filtered
+
+
 def _process_single_file(
     filepath: str,
     filename_for_logging: str,
@@ -210,20 +272,45 @@ def _process_single_file(
 ) -> Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
     """
     Internal helper to load and process a single CSV file.
-    Handles finding columns, parsing dates, renaming, indexing, type conversion,
-    and optionally filtering based on the 'SS Project - In Scope' column.
-    Returns None if the file is not found or critical processing steps fail.
+
+    The function orchestrates several distinct logical steps to transform raw CSV
+    input into a clean, analysis-ready DataFrame.  The high-level workflow is:
+
+    1. **Read header only** – obtain original column names without loading full data.
+    2. **Identify key columns** – locate date, code, benchmark, scope, and value
+       columns via `_find_columns_for_file` (uses regex patterns from config).
+    3. **Read full data** – load only the required columns using
+       `data_utils.read_csv_robustly`, applying preliminary dtype hints.
+    4. **(Optional) Aggregate rows** – when *not* filtering on *S&P Valid* scope,
+       aggregate duplicate (Date, Code) pairs to a single row (mean of numeric
+       columns, first of non-numeric).
+    5. **(Optional) Filter by scope** – when `filter_sp_valid` is *True*, keep
+       only rows where the scope column equals "TRUE" (case-insensitive).
+    6. **Rename standard columns** – map the identified columns to the internal
+       standard names (`Date`, `Code`, `Benchmark`).
+    7. **Drop helper columns** – remove the now-unused scope column (if any).
+    8. **Parse dates** – convert the `Date` column using
+       `data_utils.parse_dates_robustly`, then drop rows where parsing failed.
+    9. **Set multi-index** – set `(Date, Code)` as a MultiIndex for efficient
+       downstream operations.
+    10. **Convert value columns to numeric** – apply
+        `data_utils.convert_to_numeric_robustly` and drop rows with NaNs.
+
+    If at any stage a critical error is encountered, the function logs the issue
+    and returns `None`, ensuring the caller can handle partial failures
+    gracefully.
+
     Returns:
         Optional[Tuple[pd.DataFrame, List[str], Optional[str]]]:
-               Processed DataFrame, list of original fund value column names,
-               and the standardized benchmark column name if present, otherwise None.
-               Returns None if processing fails critically.
+            • Processed DataFrame (or an empty one with correct structure)
+            • List of original fund value column names
+            • Standardised benchmark column name (if present) or `None`.
     """
     if not os.path.exists(filepath):
         logger.warning(f"File not found, skipping: {filepath}")
         return None
     try:
-        # Use robust CSV reader for header
+        # --- Step 1: Read header (discover original columns) -------------------
         header_df = read_csv_robustly(
             filepath,
             nrows=0,
@@ -239,6 +326,7 @@ def _process_single_file(
             f"Processing file: '{filename_for_logging}'. Original columns: {original_cols}"
         )
 
+        # --- Step 2: Identify key columns (date, code, benchmark, scope, values) ---
         (
             actual_date_col,
             actual_code_col,
@@ -248,6 +336,7 @@ def _process_single_file(
             actual_scope_col,
         ) = _find_columns_for_file(original_cols, filename_for_logging)
 
+        # --- Step 3: Read full data using robust CSV reader --------------------
         # Determine columns to read, potentially including the scope column
         cols_to_read = {actual_date_col, actual_code_col}
         if benchmark_col_present and actual_benchmark_col:
@@ -274,59 +363,35 @@ def _process_single_file(
             logger.warning(f"Data could not be read for {filepath}")
             return None
 
-        # If not filtering on S&P Valid, aggregate (Date, Code) pairs to combine TRUE and FALSE rows
+        # --- Step 4: (Optional) Aggregate duplicate rows when scope filtering OFF ---
         if not filter_sp_valid:
-            before = len(df)
-            group_cols = [actual_date_col, actual_code_col]
-            numeric_cols = df.select_dtypes(include="number").columns.tolist()
-            # If numeric columns are empty (e.g., all are object due to initial read), try to coerce fund/benchmark columns
-            if not numeric_cols:
-                possible_value_cols = list(original_fund_val_col_names)
-                if benchmark_col_present and actual_benchmark_col in df.columns:
-                    possible_value_cols.append(actual_benchmark_col)
-                for col in possible_value_cols:
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors="coerce")
-                numeric_cols = df.select_dtypes(include="number").columns.tolist()
-            # Group and aggregate
-            agg_dict = {col: "mean" for col in numeric_cols}
-            # For non-numeric columns, keep the first
-            for col in df.columns:
-                if col not in group_cols and col not in numeric_cols:
-                    agg_dict[col] = "first"
-            df = df.groupby(group_cols, as_index=False).agg(agg_dict)
-            after = len(df)
-            if before != after:
-                logger.info(
-                    f"Aggregated {before} rows to {after} unique (Date, Code) pairs in '{filename_for_logging}' when S&P Valid filter is OFF."
-                )
-
-        df.columns = df.columns.str.strip()  # Strip whitespace from loaded columns
-
-        # --- Filtering Step ---
-        if filter_sp_valid and actual_scope_col and actual_scope_col in df.columns:
-            original_count = len(df)
-            # Ensure case-insensitive comparison and handle potential NAs
-            df[actual_scope_col] = (
-                df[actual_scope_col].astype(str).str.upper().fillna("FALSE")
+            numeric_hints: List[str] = list(original_fund_val_col_names)
+            if benchmark_col_present and actual_benchmark_col in df.columns:
+                numeric_hints.append(actual_benchmark_col)
+            df = _aggregate_by_date_code(
+                df,
+                actual_date_col,
+                actual_code_col,
+                filename_for_logging,
+                numeric_hint_cols=numeric_hints,
             )
-            df = df[df[actual_scope_col] == "TRUE"]
-            filtered_count = len(df)
-            logger.info(
-                f"Filtered '{filename_for_logging}' based on '{actual_scope_col}'. Kept {filtered_count}/{original_count} rows where value is 'TRUE'."
-            )
+
+        df.columns = df.columns.str.strip()  # Clean column names
+
+        # --- Step 5: (Optional) Filter rows based on S&P Valid scope column -----
+        if filter_sp_valid and actual_scope_col:
+            df = _filter_by_scope(df, actual_scope_col, filename_for_logging)
             if df.empty:
                 logger.warning(
                     f"DataFrame became empty after filtering on '{actual_scope_col}' for {filename_for_logging}"
                 )
-                # Return an empty structure consistent with success but no data
                 empty_df = _create_empty_dataframe(
                     original_fund_val_col_names, benchmark_col_present
                 )
                 final_bm_col = STD_BENCHMARK_COL if benchmark_col_present else None
                 return empty_df, original_fund_val_col_names, final_bm_col
 
-        # Rename columns *after* potential filtering
+        # --- Step 6: Rename standard columns -----------------------------------
         rename_map = {actual_date_col: STD_DATE_COL, actual_code_col: STD_CODE_COL}
         if (
             benchmark_col_present
@@ -340,6 +405,7 @@ def _process_single_file(
         df.rename(columns=rename_map, inplace=True)
         logger.info(f"Renamed standard columns in '{filename_for_logging}'.")
 
+        # --- Step 7: Drop helper columns (scope) --------------------------------
         # Now that filtering is done, drop the original scope column if it exists and we don't need it further
         if actual_scope_col and actual_scope_col in df.columns:
             df.drop(columns=[actual_scope_col], inplace=True)
@@ -347,7 +413,7 @@ def _process_single_file(
                 f"Dropped original scope column '{actual_scope_col}' after filtering."
             )
 
-        # Continue processing (date parsing, indexing, type conversion)
+        # --- Step 8: Parse dates & drop unparseable rows -----------------------
         df[STD_DATE_COL] = _parse_date_column(df, STD_DATE_COL, filename_for_logging)
 
         original_row_count = len(df)
@@ -372,7 +438,7 @@ def _process_single_file(
 
         df.set_index([STD_DATE_COL, STD_CODE_COL], inplace=True)
 
-        # Convert value columns *after* setting the index
+        # --- Step 9: Convert value columns to numeric & drop NaNs --------------
         _convert_value_columns(df, original_fund_val_col_names)
 
         # After conversion, log if any rows are dropped due to NaNs in value columns

@@ -38,37 +38,21 @@ from utils import load_fund_groups, parse_fund_list
 # Import get_holdings_for_security for fund holdings tile
 from views.comparison_helpers import get_holdings_for_security
 
+# Import get_active_exclusions, apply_security_filters, apply_security_sorting, paginate_security_data, load_filter_and_extract from security_helpers
+from views.security_helpers import (
+    get_active_exclusions,
+    apply_security_filters,  # Renamed from _apply_security_filters
+    apply_security_sorting,  # Renamed from _apply_security_sorting
+    paginate_security_data,  # Renamed from _paginate_security_data
+    load_filter_and_extract,
+)
+
 # Define the blueprint
 security_bp = Blueprint("security", __name__, url_prefix="/security")
 
 # Use config.SECURITIES_PER_PAGE for pagination
 
 # Purpose: This file defines the Flask Blueprint and routes for security-level data checks, including summary and details pages, filtering, and static info display.
-
-
-def get_active_exclusions(data_folder_path: str):
-    """Loads exclusions and returns a set of SecurityIDs that are currently active."""
-    # Pass the data folder path to the load_exclusions function
-    exclusions = load_exclusions(data_folder_path)
-    active_exclusions = set()
-    today = datetime.now().date()
-
-    for ex in exclusions:
-        try:
-            add_date = ex["AddDate"].date() if pd.notna(ex["AddDate"]) else None
-            end_date = ex["EndDate"].date() if pd.notna(ex["EndDate"]) else None
-            security_id = str(ex["SecurityID"])  # Ensure it's string for comparison
-
-            if add_date and add_date <= today:
-                if end_date is None or end_date >= today:
-                    active_exclusions.add(security_id)
-        except Exception as e:
-            current_app.logger.error(f"Error processing exclusion record {ex}: {e}")
-
-    current_app.logger.info(
-        f"Found {len(active_exclusions)} active exclusions: {active_exclusions}"
-    )
-    return active_exclusions
 
 
 @security_bp.route("/summary")
@@ -221,227 +205,64 @@ def securities_page():
         # Sort filter options dictionary by key for consistent display order
         final_filter_options = dict(sorted(filter_options.items()))
 
-        # --- Fund Group Filtering: Apply to DataFrame Before Filters ---
+        # --- Fund-group dict & active exclusions (prepare inputs for filter helper) ---
         fund_groups_dict = load_fund_groups(data_folder)
-        if selected_fund_group and selected_fund_group in fund_groups_dict:
-            allowed_funds = set(fund_groups_dict[selected_fund_group])
-            # If 'Funds' column exists, filter by checking if any allowed fund is in the parsed list
-            if config.FUNDS_COL in combined_metrics_df.columns:
-                combined_metrics_df = combined_metrics_df[
-                    combined_metrics_df[config.FUNDS_COL].apply(
-                        lambda x: (
-                            any(f in allowed_funds for f in parse_fund_list(x))
-                            if pd.notna(x)
-                            else False
-                        )
-                    )
-                ]
-            else:
-                # Fallback: Try to filter by a static column that matches fund code, e.g., 'Fund', 'Fund Code', or similar
-                fund_col_candidates = [
-                    col
-                    for col in ["Fund", "Fund Code", config.CODE_COL]
-                    if col in combined_metrics_df.columns
-                ]
-                if fund_col_candidates:
-                    fund_col = fund_col_candidates[0]
-                    combined_metrics_df = combined_metrics_df[
-                        combined_metrics_df[fund_col].isin(allowed_funds)
-                    ]
-            # If no fund column, skip filtering (could log a warning)
-        # --- Prepare Fund Group Filtering for UI (only groups with securities in current data) ---
-        all_funds_in_data = set()
+        active_exclusion_ids = get_active_exclusions(data_folder)
+
+        # --- Apply all filters via helper ------------------------------------------------
+        current_app.logger.info("Applying filters via helper...")
+        # Use imported apply_security_filters
+        combined_metrics_df = apply_security_filters(
+            df=combined_metrics_df,
+            id_col_name=id_col_name,
+            search_term=search_term,
+            fund_groups_dict=fund_groups_dict,
+            selected_fund_group=selected_fund_group,
+            active_exclusion_ids=active_exclusion_ids,
+            active_filters=active_filters,
+            exclude_min_zero=exclude_min_zero,
+        )
+
+        # --- Prepare Fund-group options for UI (only groups with securities after filtering) ---
+        all_funds_in_data: set[str] = set()
         if config.FUNDS_COL in combined_metrics_df.columns:
-            all_funds_in_data = set()
             for x in combined_metrics_df[config.FUNDS_COL].dropna():
                 all_funds_in_data.update(parse_fund_list(x))
         else:
             fund_col_candidates = [
-                col
-                for col in ["Fund", "Fund Code", config.CODE_COL]
-                if col in combined_metrics_df.columns
+                col for col in ["Fund", "Fund Code", config.CODE_COL] if col in combined_metrics_df.columns
             ]
             if fund_col_candidates:
                 fund_col = fund_col_candidates[0]
                 all_funds_in_data = set(combined_metrics_df[fund_col].unique())
+
         filtered_fund_groups = {
-            g: [f for f in funds if f in all_funds_in_data]
-            for g, funds in fund_groups_dict.items()
+            g: [f for f in funds if f in all_funds_in_data] for g, funds in fund_groups_dict.items()
         }
-        filtered_fund_groups = {
-            g: funds for g, funds in filtered_fund_groups.items() if funds
-        }
+        filtered_fund_groups = {g: funds for g, funds in filtered_fund_groups.items() if funds}
 
-        # --- Apply Filtering Steps Sequentially ---
-        current_app.logger.info("Applying filters...")
-        # 1. Search Term Filter (on ID column - now ISIN)
-        if search_term:
-            combined_metrics_df = combined_metrics_df[
-                combined_metrics_df[id_col_name]
-                .astype(str)
-                .str.contains(search_term, case=False, na=False)
-            ]
-            current_app.logger.info(
-                f"Applied search term '{search_term}'. Rows remaining: {len(combined_metrics_df)}"
-            )
+        # --- Apply Sorting via helper ---
+        current_app.logger.info("Applying sorting via helper...")
+        # Use imported apply_security_sorting
+        combined_metrics_df, sort_by, sort_order = apply_security_sorting(
+            df=combined_metrics_df,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            id_col_name=id_col_name,
+        )
+        current_app.logger.info(f"Sorted by '{sort_by}', {sort_order}.")
 
-        # 2. Active Exclusions Filter (should still work if exclusions use SecurityID/Name, adapt if needed)
-        try:
-            # Pass the absolute data folder path to get active exclusions
-            active_exclusion_ids = get_active_exclusions(data_folder)
-            # Assuming exclusions use Security Name/ID for now. If they use ISIN, this is correct.
-            # If they use Security Name, we need to filter on that column instead.
-            exclusion_col_to_check = id_col_name  # Assumes exclusions use ISIN
-            # If exclusions.csv uses Security Name, use this instead:
-            # exclusion_col_to_check = 'Security Name' if 'Security Name' in combined_metrics_df.columns else id_col_name
-
-            if active_exclusion_ids:
-                combined_metrics_df = combined_metrics_df[
-                    ~combined_metrics_df[exclusion_col_to_check]
-                    .astype(str)
-                    .isin(active_exclusion_ids)
-                ]
-                current_app.logger.info(
-                    f"Applied {len(active_exclusion_ids)} exclusions based on '{exclusion_col_to_check}'. Rows remaining: {len(combined_metrics_df)}"
-                )
-        except Exception as e:
-            current_app.logger.warning(
-                f"Warning: Error loading or applying exclusions: {e}"
-            )
-
-        # 3. Dynamic Filters (from request args)
-        if active_filters:
-            for col, value in active_filters.items():
-                if col in combined_metrics_df.columns:
-                    combined_metrics_df = combined_metrics_df[
-                        combined_metrics_df[col].astype(str) == str(value)
-                    ]
-                    current_app.logger.info(
-                        f"Applied filter '{col}={value}'. Rows remaining: {len(combined_metrics_df)}"
-                    )
-                else:
-                    current_app.logger.warning(
-                        f"Warning: Filter column '{col}' not found in DataFrame."
-                    )
-
-        # 4. Exclude Min = 0 if toggle is on
-        if exclude_min_zero and "Min" in combined_metrics_df.columns:
-            before_count = len(combined_metrics_df)
-            combined_metrics_df = combined_metrics_df[
-                ~(combined_metrics_df["Min"].fillna(0) == 0)
-            ]
-            after_count = len(combined_metrics_df)
-            current_app.logger.info(
-                f"Excluded securities where Min = 0. Rows before: {before_count}, after: {after_count}"
-            )
-
-        # --- Handle Empty DataFrame After Filtering ---
-        if combined_metrics_df.empty:
-            current_app.logger.warning("No data matches the specified filters.")
-            message = "No securities found matching the current criteria."
-            if search_term:
-                message += f" Search term: '{search_term}'."
-            if active_filters:
-                message += f" Active filters: {active_filters}."
-            return render_template(
-                "securities_page.html",
-                message=message,
-                securities_data=[],
-                filter_options=final_filter_options,
-                column_order=[],
-                id_col_name=id_col_name,
-                search_term=search_term,
-                active_filters=active_filters,
-                pagination=None,
-                current_sort_by=sort_by,
-                current_sort_order=sort_order,
-                exclude_min_zero=exclude_min_zero,
-                fund_groups=filtered_fund_groups,
-                selected_fund_group=selected_fund_group,
-            )
-
-        # --- Apply Sorting ---
-        current_app.logger.info(f"Applying sort: By='{sort_by}', Order='{sort_order}'")
-
-        # Default sort column if not provided or invalid
-        effective_sort_by = sort_by
-        is_default_sort = False
-        if sort_by not in combined_metrics_df.columns:
-            # Default to sorting by absolute Z-score if 'sort_by' is invalid or not provided
-            if "Change Z-Score" in combined_metrics_df.columns:
-                current_app.logger.info(
-                    f"'{sort_by}' not valid or not provided. Defaulting sort to 'Abs Change Z-Score' {sort_order}"
-                )
-                # Calculate Abs Z-Score temporarily for sorting
-                combined_metrics_df["_abs_z_score_"] = (
-                    combined_metrics_df["Change Z-Score"].fillna(0).abs()
-                )
-                effective_sort_by = "_abs_z_score_"
-                # Default Z-score sort is always descending unless explicitly requested otherwise for Z-score itself
-                if sort_by != "Change Z-Score":
-                    sort_order = "desc"
-                is_default_sort = True
-            else:
-                current_app.logger.warning(
-                    "Warning: Cannot apply default sort, 'Change Z-Score' missing."
-                )
-                effective_sort_by = id_col_name  # Fallback sort
-                sort_order = "asc"
-
-        ascending_order = sort_order == "asc"
-
-        try:
-            # Use na_position='last' to handle NaNs consistently
-            combined_metrics_df.sort_values(
-                by=effective_sort_by,
-                ascending=ascending_order,
-                inplace=True,
-                na_position="last",
-                key=lambda col: (
-                    col.astype(str).str.lower() if col.dtype == "object" else col
-                ),
-            )
-            current_app.logger.info(f"Sorted by '{effective_sort_by}', {sort_order}.")
-        except Exception as e:
-            current_app.logger.error(
-                f"Error during sorting by {effective_sort_by}: {e}. Falling back to sorting by ID."
-            )
-            combined_metrics_df.sort_values(
-                by=id_col_name, ascending=True, inplace=True, na_position="last"
-            )
-            sort_by = id_col_name  # Update sort_by to reflect fallback
-            sort_order = "asc"
-
-        # Remove temporary sort column if added
-        if is_default_sort and "_abs_z_score_" in combined_metrics_df.columns:
-            combined_metrics_df.drop(columns=["_abs_z_score_"], inplace=True)
-            # Set sort_by for template correctly if default was used
-            sort_by = "Change Z-Score"  # Reflect the conceptual sort column
-
-        # --- Pagination ---
-        total_items = len(combined_metrics_df)
-        # Ensure PER_PAGE is positive to avoid division by zero or negative pages
-        safe_per_page = max(1, config.SECURITIES_PER_PAGE)
-        total_pages = math.ceil(total_items / safe_per_page)
-        total_pages = max(
-            1, total_pages
-        )  # Ensure at least 1 page, even if total_items is 0
-        page = max(
-            1, min(page, total_pages)
-        )  # Ensure page is within valid range [1, total_pages]
-        start_index = (page - 1) * safe_per_page
-        end_index = start_index + safe_per_page
-
-        current_app.logger.info(
-            f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Per page={safe_per_page}"
+        # --- Pagination via helper ---
+        # Use imported paginate_security_data
+        paginated_df, pagination_context = paginate_security_data(
+            df=combined_metrics_df,
+            page=page,
+            per_page=config.SECURITIES_PER_PAGE,
         )
 
-        # Calculate page numbers to display in pagination controls (e.g., show 2 pages before and after current)
-        page_window = 2  # Number of pages to show before/after current page
-        start_page_display = max(1, page - page_window)
-        end_page_display = min(total_pages, page + page_window)
-
-        paginated_df = combined_metrics_df.iloc[start_index:end_index]
+        current_app.logger.info(
+            f"Pagination: Total items={pagination_context['total_items']}, Total pages={pagination_context['total_pages']}, Current page={pagination_context['page']}, Per page={pagination_context['per_page']}"
+        )
 
         # --- Prepare Data for Template ---
         securities_data_list = paginated_df.round(3).to_dict(orient="records")
@@ -482,28 +303,43 @@ def securities_page():
 
         current_app.logger.info(f"Final column order for display: {final_col_order}")
 
-        # Create pagination context for the template
-        pagination_context = {
-            "page": page,
-            "per_page": safe_per_page,
-            "total_pages": total_pages,
-            "total_items": total_items,
-            "has_prev": page > 1,
-            "has_next": page < total_pages,
-            "prev_num": page - 1,
-            "next_num": page + 1,
-            "start_page_display": start_page_display,  # Pass calculated start page
-            "end_page_display": end_page_display,  # Pass calculated end page
-            # Function to generate URLs for pagination links, preserving state
-            "url_for_page": lambda p: url_for(
-                "security.securities_page",
-                page=p,
+        # Extend pagination context with URL factory
+        pagination_context["url_for_page"] = lambda p: url_for(
+            "security.securities_page",
+            page=p,
+            search_term=search_term,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            **{f"filter_{k}": v for k, v in active_filters.items()},
+        )
+
+        # --- Handle Empty DataFrame After Filtering ---
+        if combined_metrics_df.empty:
+            current_app.logger.warning("No data matches the specified filters after applying helper.")
+            message_parts = [
+                "No securities found matching the current criteria.",
+            ]
+            if search_term:
+                message_parts.append(f"Search term: '{search_term}'.")
+            if active_filters:
+                message_parts.append(f"Active filters: {active_filters}.")
+
+            return render_template(
+                "securities_page.html",
+                message=" ".join(message_parts),
+                securities_data=[],
+                filter_options=final_filter_options,
+                column_order=[],
+                id_col_name=id_col_name,
                 search_term=search_term,
-                sort_by=sort_by,
-                sort_order=sort_order,
-                **{f"filter_{k}": v for k, v in active_filters.items()},
-            ),
-        }
+                active_filters=active_filters,
+                pagination=None,
+                current_sort_by=sort_by,
+                current_sort_order=sort_order,
+                exclude_min_zero=exclude_min_zero,
+                fund_groups=filtered_fund_groups,
+                selected_fund_group=selected_fund_group,
+            )
 
     except Exception as e:
         current_app.logger.error(
@@ -520,8 +356,8 @@ def securities_page():
             ),
             active_filters=active_filters,
             exclude_min_zero=exclude_min_zero,
-            fund_groups=filtered_fund_groups,
-            selected_fund_group=selected_fund_group,
+            fund_groups=filtered_fund_groups if "filtered_fund_groups" in locals() else {},
+            selected_fund_group=selected_fund_group if "selected_fund_group" in locals() else None,
         )
 
     # --- Render Template ---
@@ -642,192 +478,17 @@ def security_details(metric_name, security_id):
         bbg_ticker = reference_row["BBG Ticker Yellow"]
         bloomberg_yas_url = f"http://Bloomberg:{bbg_ticker} YAS"
 
-    # --- Helper function to load, filter, and extract data ---
-    def load_filter_and_extract(filename, security_id_to_filter, id_column_name="ISIN"):
-        """Loads a sec_*.csv file, filters by security ID, and returns the long-format series."""
-        current_app.logger.info(f"Loading file: {filename}")
-        # Construct absolute path
-        filepath = os.path.join(data_folder, filename)
-        if not os.path.exists(filepath):
-            current_app.logger.warning(f"Warning: File not found - {filename}")
-            return (
-                None,
-                set(),
-                {},
-            )  # Return None for data, empty set for dates, empty dict for static
-
-        try:
-            # Load data, specifying the data folder
-            df_long, static_cols = load_and_process_security_data(filename, data_folder)
-
-            if df_long is None or df_long.empty:
-                current_app.logger.warning(f"Warning: No data loaded from {filename}")
-                return None, set(), {}
-
-            # Ensure the ID column is available for filtering
-            # security_processing should have already set the index to 'ISIN' or made it a column
-            if (
-                id_column_name not in df_long.index.names
-                and id_column_name not in df_long.columns
-            ):
-                current_app.logger.error(
-                    f"Error: ID column '{id_column_name}' not found in processed data from {filename}."
-                )
-                # Attempt to find the index name if it wasn't 'ISIN'
-                fallback_id_col = df_long.index.name
-                if fallback_id_col and fallback_id_col in df_long.index.names:
-                    current_app.logger.info(
-                        f"Attempting filter using index name: '{fallback_id_col}'"
-                    )
-                    id_column_name = fallback_id_col  # Use the actual index name
-                else:
-                    return None, set(), {}  # Cannot filter
-
-            # Filter by the decoded security ID
-            # Check if filtering on index or column
-            if id_column_name in df_long.index.names:
-                # If the ID is in the index (MultiIndex scenario: Date, ISIN)
-                if isinstance(df_long.index, pd.MultiIndex):
-                    # Need to select based on the level corresponding to the ID column
-                    try:
-                        level_index = df_long.index.names.index(id_column_name)
-                        filtered_df = df_long[
-                            df_long.index.get_level_values(level_index)
-                            == security_id_to_filter
-                        ]
-                    except ValueError:
-                        current_app.logger.error(
-                            f"Error: Level '{id_column_name}' not found in MultiIndex."
-                        )
-                        return None, set(), {}
-                    except (
-                        KeyError
-                    ):  # Handle case where the specific ID doesn't exist in the index level
-                        current_app.logger.warning(
-                            f"Warning: Security ID '{security_id_to_filter}' not found in index level '{id_column_name}' of {filename}."
-                        )
-                        filtered_df = pd.DataFrame()  # Empty DataFrame
-                else:  # Single index (shouldn't happen if processed correctly, but handle defensively)
-                    filtered_df = df_long.loc[[security_id_to_filter]]
-            elif id_column_name in df_long.columns:
-                # If the ID is a regular column
-                filtered_df = df_long[df_long[id_column_name] == security_id_to_filter]
-            else:
-                # This case should have been caught earlier, but included for safety
-                current_app.logger.error(
-                    f"Error: Cannot filter - ID column '{id_column_name}' not found."
-                )
-                return None, set(), {}
-
-            # Check if filtering yielded results
-            if filtered_df.empty:
-                current_app.logger.warning(
-                    f"Warning: No data found for {id_column_name}='{security_id_to_filter}' in {filename}"
-                )
-                # Try alternative common ID column 'Security Name' if ISIN failed and it exists
-                alt_id_col = config.SEC_NAME_COL
-                if id_column_name == config.ISIN_COL and alt_id_col in df_long.columns:
-                    current_app.logger.info(
-                        f"--> Retrying filter with '{alt_id_col}'..."
-                    )
-                    filtered_df = df_long[df_long[alt_id_col] == security_id_to_filter]
-                    if filtered_df.empty:
-                        current_app.logger.warning(
-                            f"Warning: No data found for {alt_id_col}='{security_id_to_filter}' either."
-                        )
-                        return None, set(), {}
-                    else:
-                        current_app.logger.info(f"Found data using '{alt_id_col}'.")
-                        id_column_name = (
-                            alt_id_col  # Update the effective ID column used
-                        )
-                else:
-                    # Still empty after initial filter, and no/failed retry
-                    return None, set(), {}
-
-            # Extract the relevant data series (Date index, Value column)
-            # The value column is typically the first column after resetting index, or 'Value'
-            value_col_name = config.VALUE_COL  # Default assumption from melt
-            if value_col_name not in filtered_df.columns:
-                # Find the first non-ID, non-static column if 'Value' isn't present
-                potential_value_cols = [
-                    col
-                    for col in filtered_df.columns
-                    if col not in static_cols and col != id_column_name
-                ]
-                if potential_value_cols:
-                    value_col_name = potential_value_cols[0]
-                    current_app.logger.info(
-                        f"Using '{value_col_name}' as value column."
-                    )
-                else:
-                    current_app.logger.error(
-                        f"Error: Could not determine the value column in {filename}."
-                    )
-                    return None, set(), {}
-
-            # Ensure 'Date' is the index
-            if config.DATE_COL in filtered_df.columns:
-                filtered_df = filtered_df.set_index(config.DATE_COL)
-            elif not isinstance(filtered_df.index, pd.DatetimeIndex):
-                # If Date is part of a MultiIndex, extract it
-                if config.DATE_COL in filtered_df.index.names:
-                    # Reset the index, set 'Date' as the main index
-                    filtered_df = filtered_df.reset_index().set_index(config.DATE_COL)
-                else:
-                    current_app.logger.error(
-                        f"Error: Cannot find '{config.DATE_COL}' index or column in {filename}."
-                    )
-                    return None, set(), {}
-
-            # Extract the series and dates
-            data_series = filtered_df[value_col_name].sort_index()
-            dates = set(data_series.index)
-
-            # Extract static info from the first row (they should be constant per security)
-            local_static_info = {}
-            # Make sure we use the *effective* id_column_name used for filtering
-            relevant_static_cols = [
-                col
-                for col in static_cols
-                if col in filtered_df.columns and col != id_column_name
-            ]
-            if not filtered_df.empty and relevant_static_cols:
-                first_row = filtered_df.iloc[0]
-                local_static_info = {
-                    col: first_row[col]
-                    for col in relevant_static_cols
-                    if pd.notna(first_row[col])
-                }
-                # print(f"Static info found in {filename}: {local_static_info}")
-
-            return data_series, dates, local_static_info
-
-        except KeyError as e:
-            current_app.logger.warning(
-                f"Warning: KeyError accessing data for {id_column_name}='{security_id_to_filter}' in {filename}. Likely missing ID. Error: {e}"
-            )
-            return None, set(), {}
-        except Exception as e:
-            current_app.logger.error(
-                f"Error processing file {filename} for {id_column_name}='{security_id_to_filter}': {e}"
-            )
-            import traceback
-
-            traceback.print_exc()  # Print full traceback for debugging
-            return None, set(), {}
-
     # --- Load Data for Each Chart Section ---
 
     # 1. Primary Metric (passed in URL) + Price
     metric_filename = f"sec_{metric_name}.csv"
     price_filename = "sec_Price.csv"
-    # Use the decoded ID for filtering
+    # Use the decoded ID for filtering, call imported helper
     metric_series, metric_dates, metric_static = load_filter_and_extract(
-        metric_filename, decoded_security_id
+        data_folder, metric_filename, decoded_security_id
     )
     price_series, price_dates, price_static = load_filter_and_extract(
-        price_filename, decoded_security_id
+        data_folder, price_filename, decoded_security_id
     )
     all_dates.update(metric_dates)
     all_dates.update(price_dates)
@@ -838,10 +499,10 @@ def security_details(metric_name, security_id):
     duration_filename = "sec_Duration.csv"
     sp_duration_filename = "sec_DurationSP.csv"  # Optional SP file
     duration_series, duration_dates, duration_static = load_filter_and_extract(
-        duration_filename, decoded_security_id
+        data_folder, duration_filename, decoded_security_id
     )
     sp_duration_series, sp_duration_dates, sp_duration_static = load_filter_and_extract(
-        sp_duration_filename, decoded_security_id
+        data_folder, sp_duration_filename, decoded_security_id
     )
     all_dates.update(duration_dates)
     all_dates.update(sp_duration_dates)
@@ -852,10 +513,10 @@ def security_details(metric_name, security_id):
     spread_dur_filename = "sec_Spread duration.csv"
     sp_spread_dur_filename = "sec_Spread durationSP.csv"  # Optional SP file
     spread_dur_series, spread_dur_dates, spread_dur_static = load_filter_and_extract(
-        spread_dur_filename, decoded_security_id
+        data_folder, spread_dur_filename, decoded_security_id
     )
     sp_spread_dur_series, sp_spread_dur_dates, sp_spread_dur_static = (
-        load_filter_and_extract(sp_spread_dur_filename, decoded_security_id)
+        load_filter_and_extract(data_folder, sp_spread_dur_filename, decoded_security_id)
     )
     all_dates.update(spread_dur_dates)
     all_dates.update(sp_spread_dur_dates)
@@ -868,7 +529,7 @@ def security_details(metric_name, security_id):
     # Only load spread again if the primary metric wasn't spread
     if metric_name.lower() != "spread":
         spread_series, spread_dates, spread_static = load_filter_and_extract(
-            spread_filename, decoded_security_id
+            data_folder, spread_filename, decoded_security_id
         )
         all_dates.update(spread_dates)
         static_info.update(spread_static)
@@ -878,7 +539,7 @@ def security_details(metric_name, security_id):
         # Static info already handled
 
     sp_spread_series, sp_spread_dates, sp_spread_static = load_filter_and_extract(
-        sp_spread_filename, decoded_security_id
+        data_folder, sp_spread_filename, decoded_security_id
     )
     all_dates.update(sp_spread_dates)
     static_info.update(sp_spread_static)
@@ -887,10 +548,10 @@ def security_details(metric_name, security_id):
     ytm_filename = "sec_YTM.csv"
     sp_ytm_filename = "sec_YTMSP.csv"
     ytm_series, ytm_dates, _ = load_filter_and_extract(
-        ytm_filename, decoded_security_id
+        data_folder, ytm_filename, decoded_security_id
     )
     sp_ytm_series, sp_ytm_dates, _ = load_filter_and_extract(
-        sp_ytm_filename, decoded_security_id
+        data_folder, sp_ytm_filename, decoded_security_id
     )
     all_dates.update(ytm_dates)
     all_dates.update(sp_ytm_dates)
@@ -899,10 +560,10 @@ def security_details(metric_name, security_id):
     ytw_filename = "sec_YTW.csv"
     sp_ytw_filename = "sec_YTWSP.csv"
     ytw_series, ytw_dates, _ = load_filter_and_extract(
-        ytw_filename, decoded_security_id
+        data_folder, ytw_filename, decoded_security_id
     )
     sp_ytw_series, sp_ytw_dates, _ = load_filter_and_extract(
-        sp_ytw_filename, decoded_security_id
+        data_folder, sp_ytw_filename, decoded_security_id
     )
     all_dates.update(ytw_dates)
     all_dates.update(sp_ytw_dates)
@@ -923,6 +584,13 @@ def security_details(metric_name, security_id):
             message="No historical data found for this security.",
             holdings_data=None,
             chart_dates=None,
+            # Add missing variables for error case
+            static_groups=[],
+            reference_missing=True,
+            is_excluded=is_excluded,
+            exclusion_comment=exclusion_comment,
+            open_issues=open_issues,
+            bloomberg_yas_url=bloomberg_yas_url,
         )
 
     # Sort dates and format as strings for labels
@@ -1008,9 +676,9 @@ def security_details(metric_name, security_id):
 
     # Primary Chart Datasets (Metric + Price)
     chart_data["primary_datasets"] = []  # <<< Initialize the list here
-    current_app.logger.info(
-        f"DEBUG: COLOR_PALETTE contents just before use: {COLOR_PALETTE}"
-    )  # <<< ADDED DEBUG PRINT
+    # current_app.logger.info(
+    #     f"DEBUG: COLOR_PALETTE contents just before use: {COLOR_PALETTE}"
+    # ) # <<< REMOVED DEBUG PRINT
     if metric_series is not None:
         chart_data["primary_datasets"].append(
             prepare_dataset(metric_series, metric_name, COLOR_PALETTE[0], "y")

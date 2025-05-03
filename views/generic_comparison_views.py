@@ -34,6 +34,7 @@ from .comparison_helpers import (
 )
 import config
 from config import GENERIC_COMPARISON_STATS_KEYS
+from typing import Optional, List, Tuple, Dict
 
 # Import shared utilities and processing functions
 try:
@@ -476,7 +477,182 @@ def load_fund_codes_from_csv(data_folder: str) -> list:
         return []
 
 
-# --- Routes ---
+# === Filtering Helper =========================================================
+
+
+def _apply_summary_filters(
+    df: pd.DataFrame,
+    selected_fund_group: Optional[str],
+    show_sold: bool,
+    active_filters: dict,
+    data_folder: str,
+    actual_id_col: str,
+    static_cols: List[str],
+) -> pd.DataFrame:
+    """Apply fund-group, holding-status, and static column filters to the summary DataFrame.
+
+    Args:
+        df: The summary DataFrame to be filtered.
+        selected_fund_group: Name of the fund group selected by the user (or None).
+        show_sold: If False, only include rows where `is_held` is True.
+        active_filters: Dict mapping column name → filter value (strings from query).
+        data_folder: Path to data folder (used for fund group loading).
+        actual_id_col: Name of the security ID column.
+        static_cols: List of static column names discovered earlier.
+
+    Returns:
+        Filtered DataFrame (copy).
+    """
+    log = current_app.logger
+    filtered = df.copy()
+
+    # --- Fund group filtering -------------------------------------------------
+    fund_groups_dict = load_fund_groups(data_folder)
+    if selected_fund_group and selected_fund_group in fund_groups_dict:
+        allowed_funds = set(fund_groups_dict[selected_fund_group])
+        if config.FUNDS_COL in filtered.columns:
+            filtered = filtered[
+                filtered[config.FUNDS_COL].apply(
+                    lambda x: (
+                        any(f in allowed_funds for f in parse_fund_list(x))
+                        if pd.notna(x)
+                        else False
+                    )
+                )
+            ].copy()
+        else:
+            fund_col_candidates = [
+                col
+                for col in ["Fund", config.FUND_CODE_COL, config.CODE_COL]
+                if col in filtered.columns
+            ]
+            if fund_col_candidates:
+                fc = fund_col_candidates[0]
+                filtered = filtered[filtered[fc].isin(allowed_funds)].copy()
+
+    # --- Holding status filter ----------------------------------------------
+    if not show_sold and "is_held" in filtered.columns:
+        before = len(filtered)
+        filtered = filtered[filtered["is_held"] == True].copy()
+        log.info("Holding filter applied – kept %s/%s rows", len(filtered), before)
+
+    # --- Static column filters ----------------------------------------------
+    if active_filters:
+        log.info("Applying static column filters via helper: %s", active_filters)
+        for col, value in active_filters.items():
+            if col in filtered.columns and value:
+                try:
+                    if col == "Funds":
+                        filtered = filtered[
+                            filtered[col].apply(
+                                lambda x: (
+                                    value in parse_fund_list(x) if pd.notna(x) else False
+                                )
+                            )
+                        ].copy()
+                    else:
+                        filtered = filtered[
+                            filtered[col]
+                            .astype(str)
+                            .str.fullmatch(str(value), case=False, na=False)
+                        ].copy()
+                except Exception as e:
+                    log.warning("Static filter error for %s=%s: %s", col, value, e)
+
+    return filtered
+
+
+# === Sorting Helper ===========================================================
+
+
+def _apply_summary_sorting(
+    df: pd.DataFrame,
+    sort_by: str,
+    sort_order: str,
+    id_col: str,
+) -> Tuple[pd.DataFrame, str, str]:
+    """Sort the DataFrame based on a requested column.
+
+    Returns the sorted frame and potentially adjusted sort_by / sort_order that
+    were actually applied.
+    """
+    log = current_app.logger
+    ascending = sort_order.lower() == "asc"
+
+    if sort_by not in df.columns:
+        log.warning("Sort column '%s' not found. Defaulting to ID sort.", sort_by)
+        sort_by = id_col
+        ascending = True
+
+    try:
+        if pd.api.types.is_numeric_dtype(df[sort_by]):
+            df[sort_by] = pd.to_numeric(df[sort_by], errors="coerce")
+            sorted_df = df.sort_values(by=sort_by, ascending=ascending, na_position="last")
+        else:
+            sorted_df = df.sort_values(
+                by=sort_by,
+                ascending=ascending,
+                na_position="last",
+                key=lambda col: col.astype(str).str.lower(),
+            )
+    except Exception as e:
+        log.error("Sorting error on '%s': %s. Falling back to ID sort.", sort_by, e)
+        sort_by = id_col
+        ascending = True
+        sorted_df = df.sort_values(by=id_col, ascending=True, na_position="last")
+
+    new_order = "asc" if ascending else "desc"
+    return sorted_df, sort_by, new_order
+
+
+# === Pagination Helper =======================================================
+
+
+def _paginate_summary_data(
+    df: pd.DataFrame,
+    page: int,
+    per_page: int,
+    page_window: int = 2,
+) -> Tuple[pd.DataFrame, Dict]:
+    """Paginate the given DataFrame.
+
+    Returns a subset DataFrame and a dictionary with pagination metadata.
+    """
+    total_items = len(df)
+    per_page = max(1, per_page)
+    total_pages = math.ceil(total_items / per_page) if total_items else 1
+    page = max(1, min(page, total_pages))
+
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+
+    paginated_df = df.iloc[start_idx:end_idx]
+
+    start_page_display = max(1, page - page_window)
+    end_page_display = min(total_pages, page + page_window)
+
+    context: Dict[str, int | bool] = {
+        "page": page,
+        "per_page": per_page,
+        "total_items": total_items,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_num": page - 1,
+        "next_num": page + 1,
+        "start_page_display": start_page_display,
+        "end_page_display": end_page_display,
+    }
+
+    # Add URL builder preserving current query parameters
+    context["url_for_page"] = lambda p: url_for(
+        "generic_comparison_bp.summary",
+        comparison_type=comparison_type,
+        page=p,
+        **{k: v for k, v in request.args.items() if k != "page"},
+    )
+
+    return paginated_df, context
 
 
 @generic_comparison_bp.route("/<comparison_type>/summary")
@@ -487,7 +663,7 @@ def summary(comparison_type):
         f"--- Starting Generic Comparison Summary Request: Type = {comparison_type} ---"
     )
 
-    # --- Validate comparison_type and get config ---
+    # === Step 1: Validate comparison type & retrieve config ====================
     comp_config = COMPARISON_CONFIG.get(comparison_type)
     if not comp_config:
         log.error(f"Invalid comparison_type requested: {comparison_type}")
@@ -498,7 +674,7 @@ def summary(comparison_type):
     file2 = comp_config["file2"]
     log.info(f"Config loaded for '{comparison_type}': file1='{file1}', file2='{file2}'")
 
-    # --- Get Request Parameters ---
+    # === Step 2: Parse request parameters (sorting, filters, pagination) =======
     page = request.args.get("page", 1, type=int)
     sort_by = request.args.get("sort_by", "Change_Correlation")
     sort_order = request.args.get("sort_order", "desc").lower()
@@ -509,13 +685,13 @@ def summary(comparison_type):
         for k, v in request.args.items()
         if k.startswith("filter_") and v
     }
-    # --- Fund Group Filter ---
+    # === Fund Group Filter ===
     selected_fund_group = request.args.get("fund_group", None)
     log.info(
         f"Request Params: Page={page}, SortBy={sort_by}, Order={sort_order}, Filters={active_filters}, ShowSold={show_sold}, FundGroup={selected_fund_group}"
     )
 
-    # --- Load Data ---
+    # === Step 3: Load Data ===
     data_folder = current_app.config["DATA_FOLDER"]
     merged_data, static_data, static_cols, actual_id_col = load_generic_comparison_data(
         data_folder, file1, file2
@@ -545,7 +721,7 @@ def summary(comparison_type):
 
     log.info(f"Actual ID column identified for '{comparison_type}': '{actual_id_col}'")
 
-    # --- Calculate Stats ---
+    # === Step 4: Calculate comparison statistics ==============================
     summary_stats = calculate_generic_comparison_stats(
         merged_data, static_data, id_col=actual_id_col
     )
@@ -570,78 +746,31 @@ def summary(comparison_type):
             message=f"No {display_name} comparison statistics available.",
         )
 
-    # --- Fund Group Filtering: Apply to DataFrame Before Filters ---
-    fund_groups_dict = load_fund_groups(data_folder)
-    if selected_fund_group and selected_fund_group in fund_groups_dict:
-        allowed_funds = set(fund_groups_dict[selected_fund_group])
-        # If 'Funds' column exists, filter by checking if any allowed fund is in the parsed list
-        if config.FUNDS_COL in summary_stats.columns:
-            summary_stats = summary_stats[
-                summary_stats[config.FUNDS_COL].apply(
-                    lambda x: (
-                        any(f in allowed_funds for f in parse_fund_list(x))
-                        if pd.notna(x)
-                        else False
-                    )
-                )
-            ]
-        else:
-            # Fallback: Try to filter by a static column that matches fund code
-            fund_col_candidates = [
-                col
-                for col in ["Fund", config.FUND_CODE_COL, config.CODE_COL]
-                if col in summary_stats.columns
-            ]
-            if fund_col_candidates:
-                fund_col = fund_col_candidates[0]
-                summary_stats = summary_stats[
-                    summary_stats[fund_col].isin(allowed_funds)
-                ]
-        # If no fund column, skip filtering (could log a warning)
-    # --- Prepare Fund Group Filtering for UI (only groups with funds in current data) ---
-    all_funds_in_data = set()
-    if config.FUNDS_COL in summary_stats.columns:
-        for x in summary_stats[config.FUNDS_COL].dropna():
-            all_funds_in_data.update(parse_fund_list(x))
-    else:
-        fund_col_candidates = [
-            col for col in ["Fund", "Fund Code", "Code"] if col in summary_stats.columns
-        ]
-        if fund_col_candidates:
-            fund_col = fund_col_candidates[0]
-            all_funds_in_data = set(summary_stats[fund_col].unique())
-    filtered_fund_groups = {
-        g: [f for f in funds if f in all_funds_in_data]
-        for g, funds in fund_groups_dict.items()
-    }
-    filtered_fund_groups = {
-        g: funds for g, funds in filtered_fund_groups.items() if funds
-    }
-
-    # --- Load and Merge Held Status ---
-    # Assuming 'ISIN' is the standard ID in w_secs.csv, adjust if needed
+    # === Step 5: Load & merge held status (performed before applying filters) ===
     held_status = load_weights_and_held_status(
-        data_folder, id_col_override="ISIN"
-    )  # Use utility function
+        current_app.config["DATA_FOLDER"], id_col_override="ISIN"
+    )
+
     if not held_status.empty and actual_id_col in summary_stats.columns:
-        # Ensure merge keys match type (string conversion is safest)
         try:
             if summary_stats[actual_id_col].dtype != held_status.index.dtype:
                 log.info(
-                    f"Converting merge keys to string for held status merge (Summary: {summary_stats[actual_id_col].dtype}, Held: {held_status.index.dtype})"
+                    "Converting merge keys to string for held status merge (Summary: %s, Held: %s)",
+                    summary_stats[actual_id_col].dtype,
+                    held_status.index.dtype,
                 )
                 summary_stats[actual_id_col] = summary_stats[actual_id_col].astype(str)
                 held_status.index = held_status.index.astype(str)
-                held_status.index.name = actual_id_col  # Ensure index name matches column name after conversion
+                held_status.index.name = actual_id_col
         except Exception as e:
-            log.error(f"Failed to convert merge keys for held status merge: {e}")
+            log.error("Failed to convert merge keys for held status merge: %s", e)
 
-        # Check names before merge
         log.info(
-            f"Attempting held status merge: left_on='{actual_id_col}', right_index name='{held_status.index.name}'"
+            "Attempting held status merge: left_on='%s', right_index name='%s'",
+            actual_id_col,
+            held_status.index.name,
         )
 
-        # Perform merge
         summary_stats = pd.merge(
             summary_stats,
             held_status.rename("is_held"),
@@ -652,107 +781,67 @@ def summary(comparison_type):
 
         if "is_held" in summary_stats.columns:
             summary_stats["is_held"] = summary_stats["is_held"].fillna(False)
-            log.info("Merged held status and filled NaNs.")
         else:
             log.error("'is_held' column missing after merge attempt!")
-            summary_stats["is_held"] = False  # Add column as False if merge failed
-
+            summary_stats["is_held"] = False
     else:
         log.warning(
-            f"Could not merge held status. Held status empty: {held_status.empty} or ID mismatch ('{actual_id_col}' in summary: {actual_id_col in summary_stats.columns})"
+            "Could not merge held status. Held status empty: %s or ID mismatch ('%s' in summary: %s)",
+            held_status.empty,
+            actual_id_col,
+            actual_id_col in summary_stats.columns,
         )
-        summary_stats["is_held"] = False  # Assume not held if data is missing
+        summary_stats["is_held"] = False
 
-    # --- Apply Holding Filter ---
-    original_count = len(summary_stats)
-    if not show_sold:
-        if "is_held" in summary_stats.columns:
-            summary_stats = summary_stats[
-                summary_stats["is_held"] == True
-            ].copy()  # Use .copy() after filtering
-            log.info(
-                f"Applied 'Show Held Only' filter. Kept {len(summary_stats)} of {original_count} securities."
-            )
-        else:
-            log.warning(
-                "Cannot apply 'Show Held Only' filter because 'is_held' column is missing."
-            )
+    # === Step 6–8: Apply summary filters using helper =========================
+    filtered_data = _apply_summary_filters(
+        summary_stats,
+        selected_fund_group,
+        show_sold,
+        active_filters,
+        data_folder,
+        actual_id_col,
+        static_cols,
+    )
 
-    # --- Generate Filter Options (from data *after* holding filter) ---
+    # Prepare fund group filter options (requires data post-held filter)
+    fund_groups_dict = load_fund_groups(data_folder)
+    all_funds_in_data = set()
+    if config.FUNDS_COL in filtered_data.columns:
+        for x in filtered_data[config.FUNDS_COL].dropna():
+            all_funds_in_data.update(parse_fund_list(x))
+    else:
+        fcands = [c for c in ["Fund", "Fund Code", "Code"] if c in filtered_data.columns]
+        if fcands:
+            all_funds_in_data = set(filtered_data[fcands[0]].unique())
+    filtered_fund_groups = {
+        g: [f for f in funds if f in all_funds_in_data]
+        for g, funds in fund_groups_dict.items()
+    }
+    filtered_fund_groups = {g: v for g, v in filtered_fund_groups.items() if v}
+
+    # Regenerate filter_options after helper filters
     filter_options = {}
-    if not summary_stats.empty:
-        # Use static_cols identified earlier, ensure they exist in the filtered summary_stats
+    if not filtered_data.empty:
         potential_filter_cols = [
-            col
-            for col in static_cols
-            if col in summary_stats.columns and col != actual_id_col
+            col for col in static_cols if col in filtered_data.columns and col != actual_id_col
         ]
-        log.debug(f"Potential filter columns: {potential_filter_cols}")
         for col in potential_filter_cols:
-            # Special handling for 'Funds' column: use FundList.csv for dropdown, not unique values in data
             if col == "Funds":
-                fund_codes = load_fund_codes_from_csv(data_folder)
-                filter_options[col] = fund_codes
+                filter_options[col] = load_fund_codes_from_csv(data_folder)
             else:
-                unique_vals = summary_stats[col].dropna().unique()
+                uniques = filtered_data[col].dropna().unique()
                 try:
-                    # Attempt numeric sort first, then string sort
                     sorted_vals = sorted(
-                        unique_vals,
-                        key=lambda x: (isinstance(x, (int, float)), str(x).lower()),
+                        uniques, key=lambda x: (isinstance(x, (int, float)), str(x).lower())
                     )
                 except TypeError:
-                    sorted_vals = sorted(
-                        unique_vals, key=str
-                    )  # Fallback to string sort
-                if sorted_vals:  # Only add if there are values
+                    sorted_vals = sorted(uniques, key=str)
+                if sorted_vals:
                     filter_options[col] = sorted_vals
-        filter_options = dict(
-            sorted(filter_options.items())
-        )  # Sort filters alphabetically by column name
-        log.info(f"Filter options generated: {list(filter_options.keys())}")
-    else:
-        log.info(
-            "Skipping filter option generation as data is empty after holding filter."
-        )
+        filter_options = dict(sorted(filter_options.items()))
 
-    # --- Apply Static Column Filters ---
-    filtered_data = (
-        summary_stats.copy()
-    )  # Start with potentially filtered-by-holding data
-    if active_filters:
-        log.info(f"Applying static column filters: {active_filters}")
-        for col, value in active_filters.items():
-            if col in filtered_data.columns and value:
-                # Special handling for Funds filter: match if selected fund is in the parsed list
-                if col == "Funds":
-                    # Use parse_fund_list to turn '[IG01,IG02]' into a list, then check if value is in list
-                    filtered_data = filtered_data[
-                        filtered_data["Funds"].apply(
-                            lambda x: (
-                                value in parse_fund_list(x) if pd.notna(x) else False
-                            )
-                        )
-                    ].copy()
-                else:
-                    try:
-                        # Ensure comparison is done as string for robustness
-                        filtered_data = filtered_data[
-                            filtered_data[col]
-                            .astype(str)
-                            .str.fullmatch(str(value), case=False, na=False)
-                        ].copy()  # Use .copy()
-                    except Exception as e:
-                        log.warning(
-                            f"Could not apply filter for column '{col}' value '{value}'. Error: {e}"
-                        )
-            else:
-                log.warning(
-                    f"Filter column '{col}' not in data or value is empty. Skipping filter."
-                )
-        log.info(f"Data shape after static filtering: {filtered_data.shape}")
-
-    # --- Handle No Data After Filters ---
+    # === Handle No Data After Filters ===
     if filtered_data.empty:
         message = (
             f"No {display_name} comparison data available matching the current filters."
@@ -789,65 +878,24 @@ def summary(comparison_type):
             message=message,
         )
 
-    # --- Apply Sorting ---
-    if sort_by in filtered_data.columns:
-        log.info(
-            f"Sorting by '{sort_by}' ({'Ascending' if ascending else 'Descending'})"
-        )
-        na_position = "last"
-        try:
-            # Check if column is numeric, handling potential errors
-            is_numeric = pd.api.types.is_numeric_dtype(filtered_data[sort_by])
-            if is_numeric:
-                # Convert to numeric just before sorting to handle potential strings
-                filtered_data[sort_by] = pd.to_numeric(
-                    filtered_data[sort_by], errors="coerce"
-                )
-                filtered_data = filtered_data.sort_values(
-                    by=sort_by, ascending=ascending, na_position=na_position
-                )
-            else:
-                # Sort non-numeric columns case-insensitively as strings
-                filtered_data = filtered_data.sort_values(
-                    by=sort_by,
-                    ascending=ascending,
-                    na_position=na_position,
-                    key=lambda col: col.astype(str).str.lower(),
-                )
-        except Exception as e:
-            log.error(
-                f"Error during sorting by '{sort_by}': {e}. Applying default ID sort."
-            )
-            sort_by = actual_id_col
-            ascending = True
-            filtered_data = filtered_data.sort_values(
-                by=actual_id_col, ascending=True, na_position="last"
-            )  # Default sort
-    else:
-        log.warning(f"Sort column '{sort_by}' not found. Using default ID sort.")
-        sort_by = actual_id_col
-        ascending = True
-        filtered_data = filtered_data.sort_values(
-            by=actual_id_col, ascending=True, na_position="last"
-        )
-
-    # --- Pagination ---
-    total_items = len(filtered_data)
-    safe_per_page = max(1, config.COMPARISON_PER_PAGE)
-    total_pages = math.ceil(total_items / safe_per_page)
-    page = max(1, min(page, total_pages))  # Ensure page is valid
-    start_index = (page - 1) * safe_per_page
-    end_index = start_index + safe_per_page
-    paginated_data = filtered_data.iloc[start_index:end_index]
-    log.info(
-        f"Pagination: Total items={total_items}, Total pages={total_pages}, Current page={page}, Displaying items {start_index}-{end_index-1}"
+    # === Apply Sorting ===
+    sorted_data, sort_by, sort_order = _apply_summary_sorting(
+        filtered_data, sort_by, sort_order, actual_id_col
     )
 
-    page_window = 2
-    start_page_display = max(1, page - page_window)
-    end_page_display = min(total_pages, page + page_window)
+    # === Pagination ===
+    paginated_data, pagination_context = _paginate_summary_data(
+        sorted_data, page, config.COMPARISON_PER_PAGE
+    )
 
-    # --- Prepare for Template ---
+    pagination_context["url_for_page"] = lambda p: url_for(
+        "generic_comparison_bp.summary",
+        comparison_type=comparison_type,
+        page=p,
+        **{k: v for k, v in request.args.items() if k != "page"},
+    )
+
+    # === Prepare for Template ===
     # Define core stats columns + dynamic static columns + ID column
     core_stats_cols = [
         "Level_Correlation",
@@ -870,28 +918,6 @@ def summary(comparison_type):
     )
 
     table_data_dict = paginated_data.to_dict(orient="records")
-
-    # Create pagination context object
-    pagination_context = {
-        "page": page,
-        "per_page": safe_per_page,
-        "total_items": total_items,
-        "total_pages": total_pages,
-        "has_prev": page > 1,
-        "has_next": page < total_pages,
-        "prev_num": page - 1,
-        "next_num": page + 1,
-        "start_page_display": start_page_display,
-        "end_page_display": end_page_display,
-        # Function to generate URLs, preserving all current query parameters
-        "url_for_page": lambda p: url_for(
-            "generic_comparison_bp.summary",
-            comparison_type=comparison_type,
-            page=p,
-            # Convert request.args MultiDict to regular dict, excluding 'page'
-            **{k: v for k, v in request.args.items() if k != "page"},
-        ),
-    }
 
     log.info(
         f"--- Successfully Prepared Data for Generic Comparison Summary Template ({comparison_type}) ---"
@@ -929,6 +955,7 @@ def details(comparison_type, security_id):
         log.error(f"Error decoding security ID '{security_id_encoded}': {e}")
         abort(400, description="Invalid security ID format in URL.")
 
+    # === Step 1: Validate comparison type & retrieve config ==================
     comp_config = COMPARISON_CONFIG.get(comparison_type)
     if not comp_config:
         log.error(f"Invalid comparison_type requested: {comparison_type}")
@@ -942,12 +969,13 @@ def details(comparison_type, security_id):
         f"Config loaded for '{comparison_type}': file1='{file1}', file2='{file2}', value_label='{value_label}'"
     )
 
+    # === Step 2: Load merged data & static info ==============================
     data_folder = current_app.config["DATA_FOLDER"]
     merged_data, static_data, _, actual_id_col = load_generic_comparison_data(
         data_folder, file1, file2
     )
 
-    # --- Load full date list from Dates.csv ---
+    # === Step 3: Load full date list for chart axis ==========================
     dates_file_path = os.path.join(data_folder, "Dates.csv")
     full_date_list = read_and_sort_dates(dates_file_path) or []
     if not full_date_list:
@@ -977,7 +1005,7 @@ def details(comparison_type, security_id):
             chart_dates=None,  # Added
         )
 
-    # --- Filter for the Specific Security ---
+    # === Step 4: Filter merged data for requested security ===================
     log.debug(
         f"Filtering merged data for security ID '{decoded_security_id}' using column '{actual_id_col}'"
     )
@@ -1016,7 +1044,7 @@ def details(comparison_type, security_id):
             chart_dates=None,  # Added
         )
 
-    # --- Calculate Stats for this Security Only ---
+    # === Step 5: Calculate stats for this security ===========================
     security_static_row = pd.DataFrame()
     if not static_data.empty and actual_id_col in static_data.columns:
         try:
@@ -1052,7 +1080,7 @@ def details(comparison_type, security_id):
             f"Could not calculate statistics for security {decoded_security_id}."
         )
 
-    # --- Prepare Chart Data using full_date_list ---
+    # === Step 6: Build chart data aligned to Dates.csv =======================
     chart_data = None
     chart_dates = full_date_list.copy() if full_date_list else []
     if not security_data.empty and chart_dates:
@@ -1131,7 +1159,7 @@ def details(comparison_type, security_id):
             f"Security data is empty or chart_dates missing for {decoded_security_id}, cannot generate chart."
         )
 
-    # --- Get Holdings Data ---
+    # === Step 7: Load holdings data for overlay ==============================
     holdings_data = {}
     holdings_error = None
     if chart_dates:  # Only try to get holdings if we have dates from Dates.csv
