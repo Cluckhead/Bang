@@ -421,6 +421,8 @@ def summary(comparison_type):
         summary_stats["is_held"] = False
 
     # === Step 6–8: Apply summary filters using helper =========================
+    # preserve row count before filtering for messaging logic
+    original_count = len(summary_stats)
     filtered_data = _apply_summary_filters(
         summary_stats,
         selected_fund_group,

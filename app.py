@@ -211,94 +211,38 @@ def create_app() -> Flask:
     # --- Add the new cleanup route ---
     @app.route("/run-cleanup", methods=["POST"])
     def run_cleanup() -> Response:
-        """Endpoint to trigger the process_data.py script. Improved exception handling for clarity and robustness."""
-        script_path = os.path.join(os.path.dirname(__file__), "process_data.py")
-        python_executable = sys.executable  # Use the same python that runs flask
+        """Endpoint to trigger the *preprocessing* batch job.
 
-        if not os.path.exists(script_path):
-            app.logger.error(f"Cleanup script not found at: {script_path}")
-            return (
-                jsonify({"status": "error", "message": "Cleanup script not found."}),
-                500,
-            )
+        Instead of spawning a separate Python subprocess, we now call
+        :pyfunc:`run_preprocessing.main` directly, which improves error handling
+        and avoids the overhead of launching an external interpreter.
+        """
 
-        app.logger.info(f"Attempting to run cleanup script: {script_path}")
         try:
-            # Run the script using the same Python interpreter that is running Flask
-            # Equivalent PowerShell: python process_data.py
-            result = subprocess.run(
-                [python_executable, script_path],
-                capture_output=True,
-                text=True,
-                check=False,  # Don't raise exception on non-zero exit code
-                encoding="utf-8",  # Explicitly set encoding
-                timeout=300,  # 5 minute timeout for safety
-            )
+            from run_preprocessing import main as run_preprocessing_main  # Local import to avoid circular deps
 
-            log_output = f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            start_time = time.perf_counter()
 
-            if result.returncode == 0:
-                app.logger.info(
-                    f"Cleanup script finished successfully. Output:\n{log_output}"
-                )
-                return (
-                    jsonify(
-                        {
-                            "status": "success",
-                            "output": result.stdout or "No output",
-                            "error": result.stderr,
-                        }
-                    ),
-                    200,
-                )
-            else:
-                app.logger.error(
-                    f"Cleanup script failed with return code {result.returncode}. Output:\n{log_output}"
-                )
-                return (
-                    jsonify(
-                        {
-                            "status": "error",
-                            "message": "Cleanup script failed.",
-                            "output": result.stdout,
-                            "error": result.stderr,
-                        }
-                    ),
-                    500,
-                )
+            # Execute the preprocessing pipeline synchronously.  For long-running
+            # jobs consider dispatching to a background thread/queue – but for
+            # now synchronous execution keeps things simple and deterministic.
+            run_preprocessing_main()
+
+            duration_s = time.perf_counter() - start_time
+
+            msg = f"Preprocessing completed successfully in {duration_s:0.2f}s."
+            app.logger.info(msg)
+            return jsonify({"status": "success", "message": msg}), 200
 
         except FileNotFoundError as fnf_err:
-            # Raised if the Python executable or script is not found
-            app.logger.error(f"FileNotFoundError: {fnf_err}", exc_info=True)
-            return (
-                jsonify({"status": "error", "message": f"File not found: {fnf_err}"}),
-                500,
-            )
-        except subprocess.TimeoutExpired as timeout_err:
-            # Raised if the script takes too long
-            app.logger.error(f"TimeoutExpired: {timeout_err}", exc_info=True)
-            return (
-                jsonify({"status": "error", "message": "Cleanup script timed out."}),
-                500,
-            )
-        except subprocess.SubprocessError as sub_err:
-            # Raised for other subprocess-related errors
-            app.logger.error(f"SubprocessError: {sub_err}", exc_info=True)
-            return (
-                jsonify({"status": "error", "message": f"Subprocess error: {sub_err}"}),
-                500,
-            )
-        except Exception as e:
-            # Generic fallback for any other exception
-            app.logger.error(
-                f"Exception occurred while running cleanup script: {e}", exc_info=True
-            )
-            return (
-                jsonify({"status": "error", "message": f"An exception occurred: {e}"}),
-                500,
-            )
+            err_msg = f"Preprocessing failed – file not found: {fnf_err}"
+            app.logger.error(err_msg, exc_info=True)
+            return jsonify({"status": "error", "message": err_msg}), 500
 
-    # --- End new route ---
+        except Exception as exc:
+            err_msg = f"Unexpected error during preprocessing: {exc}"
+            app.logger.error(err_msg, exc_info=True)
+            return jsonify({"status": "error", "message": err_msg}), 500
 
     # --- Scheduled API Calls: manual scheduler loop using threading ---
     schedules_file = os.path.join(app.instance_path, "schedules.json")

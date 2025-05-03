@@ -140,8 +140,17 @@ def weight_check():
         current_app.logger.error("DATA_FOLDER is not configured in the application.")
         return "Internal Server Error: Data folder not configured", 500
 
-    fund_filename = "w_Funds.csv"
-    bench_filename = "w_Bench.csv"
+    # Detect file names in a case-insensitive manner to support different naming conventions
+    def _locate_weight_file(base_dir: str, candidate_names: list[str]) -> str | None:
+        """Return the first candidate that exists in *base_dir*, case-insensitive."""
+        lower_map = {f.lower(): f for f in os.listdir(base_dir)}
+        for cand in candidate_names:
+            if cand.lower() in lower_map:
+                return lower_map[cand.lower()]
+        return None
+
+    fund_filename = _locate_weight_file(data_folder, ["w_Funds.csv", "w_fund.csv", "w_funds.csv"]) or "w_Funds.csv"
+    bench_filename = _locate_weight_file(data_folder, ["w_Bench.csv", "w_bench.csv"]) or "w_Bench.csv"
 
     # Pass the absolute data folder path to the helper function
     fund_data, fund_date_headers = load_and_process_weight_data(

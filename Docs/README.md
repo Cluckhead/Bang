@@ -316,6 +316,7 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 | `main_views.py` | Main dashboard | `/` |
 | `metric_views.py` | Time-series metric details | `/metric/<metric_name>` |
 | `security_views.py` | Security-level data checks | `/security/summary`, `/security/details/<metric_name>/<security_id>` |
+| `security_helpers.py` | **Helper functions extracted from `security_views` for filtering, sorting, pagination, and CSV extraction — shared across Blueprints** | _N/A (utility)_ |
 | `fund_views.py` | Fund-specific views | `/fund/<fund_code>`, `/fund/duration_details/<fund_code>` |
 | `exclusion_views.py` | Security exclusion management | `/exclusions`, `/exclusions/remove` |
 | `generic_comparison_views.py` | **Generic comparison of two security datasets (e.g., Spread, Duration). Loads data, calculates stats, handles filtering/sorting/pagination for summary, and prepares data (including fund holdings from `w_secs.csv`) for detail view.** | `/compare/<comparison_type>/summary`, `/compare/<comparison_type>/details/<security_id>` |
@@ -510,3 +511,34 @@ To run the tests:
     ```powershell
     pytest
     ```
+
+## Recent Refactor – Generic Comparison Helpers  
+*(May 2025)*
+
+The **generic comparison** blueprint (`views/generic_comparison_views.py`) was recently slimmed down from ~1,200 lines to **< 500 lines**.  Functionality is unchanged, but all reusable logic has been extracted into a new helper module:
+
+```text
+views/generic_comparison_helpers.py
+```
+
+Key points:
+
+| Change | Benefit |
+|--------|---------|
+| Helper functions moved (stats calculation, holdings lookup, fund-code loading, server-side filters/sorting/pagination) to `views/generic_comparison_helpers.py`. | Smaller, easier-to-navigate view file; clear separation of concerns. |
+| All helper functions now use `logging.getLogger(__name__)` instead of `current_app.logger`. | Log messages show the correct source path and can be unit-tested without a running Flask app. |
+| View file now **imports**: `calculate_generic_comparison_stats`, `get_holdings_for_security`, `_apply_summary_filters`, `_apply_summary_sorting`, `_paginate_summary_data`. | Zero duplicated code – both summary & detail routes share the same helpers. |
+| Pagination helper returns context **without** `url_for_page`; the view adds it so the helper stays framework-agnostic. | Makes helpers reusable in non-Flask contexts (e.g., CLI reporting). |
+
+If you add new comparison-related utilities, place them in `generic_comparison_helpers.py` and update the import list in `generic_comparison_views.py`.
+
+## Recent Bug Fixes & Improvements (May 2025)
+
+- **Pre-processing Output Naming:**
+  - Fixed an issue where running the batch pre-processor (`run_preprocessing.py`) would sometimes generate files with a double prefix such as `sec_sec_*.csv`.  The script now **only strips** the leading `pre_` marker (or converts `pre_w_` → `w_`) ensuring output files are consistently named `sec_*.csv` or `w_*.csv`.
+- **Weight-File Auto-Detection:**
+  - The *Weight Check* view now looks for weight files in a **case-insensitive** manner and recognises alternative spellings such as `w_fund.csv`/`w_funds.csv` or `w_bench.csv`.  This prevents "N/A" rows when files are present but named differently.
+- **Generic Comparison Summary:**
+  - Resolved a `NameError` ("`original_count` is not defined") by capturing the row-count before filters are applied.
+
+No configuration changes are required; simply pull the latest code, restart the application, and rerun the preprocessing step if needed.

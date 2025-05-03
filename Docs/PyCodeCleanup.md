@@ -447,15 +447,6 @@ sec_Spread.csv:
 
 **5.1.10** Delete the old `process_data.py` and `weight_processing.py` files.
 
-**5.1.11** Update any import statements that previously pointed to the deleted files (e.g., in tests).
-
-**5.1.12** Create `tests/processing/test_preprocessing.py`.
-
-**5.1.13** Add unit tests for the new `preprocessing.py` functions (`replace_headers_with_dates`, `aggregate_data`, `process_input_file`). Mock file I/O and test different file types and edge cases.
-
-**5.1.14** Add integration tests in `tests/integration/` that run `run_preprocessing.py` on a set of dummy input files (`pre_*.csv`) in a temporary directory and verify the output files (`sec_*.csv`, `w_*.csv`) are created correctly.
-
-**5.1.15** Rerun all tests (`pytest`).
 
 ## 5.2 Final Review & Cleanup
 
