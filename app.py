@@ -146,6 +146,7 @@ def create_app() -> Flask:
         from views.staleness_views import staleness_bp
         from views.maxmin_views import maxmin_bp
         from views.watchlist_views import watchlist_bp
+        from views.inspect_views import inspect_bp
     except ImportError as imp_err:
         app.logger.error(f"Blueprint import failed: {imp_err}", exc_info=True)
         raise
@@ -170,6 +171,7 @@ def create_app() -> Flask:
         app.register_blueprint(staleness_bp)
         app.register_blueprint(maxmin_bp)
         app.register_blueprint(watchlist_bp)
+        app.register_blueprint(inspect_bp)
         print("Registered watchlist_bp in create_app")
     except Exception as reg_err:
         app.logger.error(f"Blueprint registration failed: {reg_err}", exc_info=True)
@@ -178,6 +180,7 @@ def create_app() -> Flask:
     app.logger.info("Registered Blueprints:")
     app.logger.info(f"- {main_bp.name} (prefix: {main_bp.url_prefix})")
     app.logger.info(f"- {metric_bp.name} (prefix: {metric_bp.url_prefix})")
+    app.logger.info(f"- {inspect_bp.name} (prefix: {inspect_bp.url_prefix})")
     app.logger.info(f"- {security_bp.name} (prefix: {security_bp.url_prefix})")
     app.logger.info(f"- {fund_bp.name} (prefix: {fund_bp.url_prefix})")
     app.logger.info(f"- {api_bp.name} (prefix: {api_bp.url_prefix})")

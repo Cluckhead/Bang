@@ -29,7 +29,7 @@ LOG_FILE = SCREENSHOT_DIR / "Playwright.log"
 
 # Example data for dynamic routes
 EXAMPLE_METRIC = (
-    "Metric1"  # Used for /metric/ - might fail if ts_Metric1.csv doesn't exist
+    "Duration"  # Used for /metric/ - might fail if ts_Metric1.csv doesn't exist
 )
 EXAMPLE_SECURITY_METRIC = "spread"  # Use a likely valid metric for security details
 EXAMPLE_SECURITY_ID = "XS4363421503"
