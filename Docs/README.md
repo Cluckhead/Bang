@@ -1,15 +1,14 @@
 **Important Note on Date Formats:**
 
-Throughout this application, date processing logic (especially when identifying date columns in input files) is now fully flexible. The loader will handle common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`) where appropriate, particularly during initial data loading and column identification steps. If a date cannot be parsed with these, pandas' flexible parser is used as a final fallback, leveraging patterns defined in `config/date_patterns.yaml` and the `data_utils.parse_dates_robustly` function. This ensures robust handling of a wide variety of date formats in your data files.
+Throughout this application, date processing logic is fully flexible, especially when identifying date columns in input files. The loader handles common formats like `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`). If a date cannot be parsed with these formats, pandas' flexible parser is used as a fallback, leveraging patterns defined in `config/date_patterns.yaml` and the `data_utils.parse_dates_robustly` function. This ensures robust handling of various date formats in your data files.
 
-ISIN is used as the primary identifier for securities, and is stored in the `w_secs.csv` file.
+ISIN (International Securities Identification Number) is used as the primary identifier for securities and is stored in the `w_secs.csv` file.
 
 ---
 
 # Simple Data Checker
 
-This application provides a web interface to load, process, and check financial data, primarily focusing on time-series metrics and security-level data. It helps identify potential data anomalies by calculating changes and Z-scores.
-The frontend has been recently refactored using **Tailwind CSS** for a modern look and feel, improved consistency, and offline-first capability.
+This application provides a web interface to load, process, and check financial data, focusing on time-series metrics and security-level data. It helps identify potential data anomalies by calculating changes and Z-scores. The frontend has been refactored using **Tailwind CSS** for a modern look, improved consistency, and offline-first capability.
 
 ## Features
 
@@ -17,7 +16,7 @@ The frontend has been recently refactored using **Tailwind CSS** for a modern lo
 |-----------------------------|------------------------------------------------------------------------------------------------------------------|
 | **Time-Series Metric Analysis** | Load `ts_*.csv`, view changes, Z-scores, charts. Route: `/metric/<metric_name>`. S&P toggles for valid/comparison data. |
 | **Security-Level Analysis**      | Load `sec_*.csv`, view changes/Z-scores, charts for YTM/YTW/Duration/Spread. Routes: `/security/summary`, `/security/details/<metric_name>/<security_id>`. |
-| **Generic Data Comparison**      | Compare pairs of security datasets (e.g., Spread vs SpreadSP). Configurable via `COMPARISON_CONFIG`. Routes: `/compare/<type>/summary`, `/compare/<type>/details/<security_id>`. Fund holdings table included. |
+| **Generic Data Comparison**      | Compare pairs of security datasets (e.g., Spread vs SpreadSP). Configurable via `comparison_config.yaml`. Routes: `/compare/<type>/summary`, `/compare/<type>/details/<security_id>`. Fund holdings table included. |
 | **Fund-Specific Views**          | `/fund/<fund_code>` (overview), `/fund/duration_details/<fund_code>` (duration details).                      |
 | **Security Exclusions**          | Manage via `/exclusions` (`Data/exclusions.csv`).                                                            |
 | **Data Issue Tracking**          | Log/manage via `/issues` (`Data/data_issues.csv`). User dropdowns, Jira link.                                 |
@@ -202,13 +201,13 @@ The application relies on several external YAML files for configuration, loaded 
 |------|---------|--------------|
 | `app.py` | Application entry point using Flask factory pattern | `create_app()`, `run_cleanup()` |
 | `config.py` | Configuration variables and constants | `DATA_FOLDER`, `COLOR_PALETTE`, `COMPARISON_CONFIG`, `MAXMIN_THRESHOLDS`, `LOGGING_CONFIG` |
-| `data_loader.py` | Load and preprocess time-series data (`ts_*.csv`) | `load_and_process_data()`, `_find_column()` |
+| `data_loader.py` | Load and preprocess time-series data (`ts_*.csv`). Relies on `data_utils.py` for CSV reading and date parsing. | `load_and_process_data()`, `_find_column()` |
 | `metric_calculator.py` | Calculate statistical metrics for time-series and security data | `calculate_latest_metrics()`, `_calculate_column_stats()`, `calculate_security_latest_metrics()` |
 | `preprocessing.py` | Core preprocessing logic for various input files (`pre_*.csv`, `pre_w_*.csv`). Handles date header replacement, data type conversion, aggregation, and formatting based on file type. | `process_file()`, `replace_date_headers()`, `aggregate_data()` (example functions) |
 | `run_preprocessing.py` | Script to orchestrate the preprocessing of multiple files by calling functions in `preprocessing.py`. Likely triggered manually or via an endpoint like `/run-cleanup`. | `main()` |
-| `security_processing.py` | Load and process security-level data (`sec_*.csv`), melting wide format to long format. | `load_and_process_security_data()` |
+| `security_processing.py` | Load and process security-level data (`sec_*.csv`), melting wide format to long format. Utilizes `data_utils.py` for CSV reading and date parsing. | `load_and_process_security_data()` |
 | `utils.py` | General utility functions | `load_yaml_config()`, `parse_fund_list()`, `load_weights_and_held_status()`, `load_fund_groups()` |
-| `data_utils.py` | Data-specific utility functions, particularly for date handling | `parse_dates_robustly()` |
+| `data_utils.py` | Provides robust data loading, parsing, and type conversion helpers. | `parse_dates_robustly()` |
 | `curve_processing.py` | Process yield curve data (`curves.csv`) | `load_curve_data()`, `check_curve_inconsistencies()` |
 | `issue_processing.py` | Manage data issues (`data_issues.csv`, `users.csv`) | `add_issue()`, `close_issue()`, `load_issues()` |
 | `data_validation.py` | Validate structure, columns, and data types of DataFrames, often used before saving processed data or after API calls. | `validate_data()` |
@@ -379,23 +378,19 @@ Attribution residuals are calculated using the following formulas:
 Thanks to the refactored generic comparison framework, adding a new comparison (e.g., Yield vs YieldSP) is straightforward:
 
 1.  **Ensure Data Files Exist:** Make sure the two security-level data files you want to compare exist in the `Data/` folder and follow the standard wide format (e.g., `Data/sec_yield.csv` and `Data/sec_yieldSP.csv`). They should have dates as columns and include an identifier column (like `ISIN`) and any relevant static attribute columns (like `Type`, `Currency`).
-2.  **Update Configuration:** Open `config.py` and add a new entry to the `COMPARISON_CONFIG` dictionary. The key will be used in the URL (e.g., `'yield'`). The value should be a dictionary containing:
+2.  **Update Configuration:** Edit the `comparison_config.yaml` file directly to add a new entry. The key will be used in the URL (e.g., `'yield'`). The value should be a dictionary containing:
     *   `'display_name'`: The user-friendly name (e.g., `'Yield'`).
     *   `'file1'`: The filename of the first dataset (e.g., `'sec_yield.csv'`).
     *   `'file2'`: The filename of the second dataset (e.g., `'sec_yieldSP.csv'`).
     *   `'value_label'`: The label to use for the data value on charts and axes (e.g., `'Yield'`).
 
-    ```python
-    # Example entry in config.py
-    COMPARISON_CONFIG = {
-        # ... existing entries ...
-        'yield': {
-            'display_name': 'Yield',
-            'file1': 'sec_yield.csv',
-            'file2': 'sec_yieldSP.csv',
-            'value_label': 'Yield'
-        }
-    }
+    ```yaml
+    # Example entry in comparison_config.yaml
+    yield:
+      display_name: 'Yield'
+      file1: 'sec_yield.csv'
+      file2: 'sec_yieldSP.csv'
+      value_label: 'Yield'
     ```
 
 3.  **Update Navigation:** Open `templates/base.html` and add a new list item (`<li>`) within the "Comparisons" dropdown section of the navigation bar. Point the link to the new summary page using `url_for`:
