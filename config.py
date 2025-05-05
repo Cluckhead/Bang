@@ -175,6 +175,13 @@ DATE_COLUMN_PATTERNS: list = [
     r"^Effective Date$",  # Exact 'Effective Date'
 ]
 
+# List of regex patterns for detecting benchmark column names
+BENCHMARK_COLUMN_PATTERNS: list = [
+    r"^Benchmark.*$",  # Any column starting with "Benchmark"
+    r"^Bench.*$",      # Columns starting with "Bench" (e.g., Bench Duration)
+    r"^BM.*$",         # Abbreviated benchmark names starting with "BM"
+]
+
 # Pattern for ISIN suffixing when duplicate Security Names are found (used in process_data.py)
 ISIN_SUFFIX_PATTERN: str = "{isin}-{n}"
 
@@ -293,8 +300,9 @@ CODE_COLUMN_PATTERNS = [
 
 # List of regex patterns for identifying benchmark columns
 BENCHMARK_COLUMN_PATTERNS = [
-    r"^Benchmark$",
-    r"^Bench$",
+    r"^Benchmark.*$",  # Any column starting with "Benchmark"
+    r"^Bench.*$",      # Columns starting with "Bench" (e.g., Bench Duration)
+    r"^BM.*$",         # Abbreviated benchmark names starting with "BM"
 ]
 
 # List of regex patterns for identifying scope columns (SS Project - In Scope, etc.)

@@ -24,7 +24,8 @@ import sys  # To get python executable path
 import json
 import threading
 import time
-import datetime
+import re
+from datetime import datetime, timedelta
 
 # --- End imports ---
 
@@ -34,6 +35,58 @@ from utils import get_data_folder_path  # Import the path utility
 
 # Add typing imports for type hints
 from typing import List, Dict, Any
+
+
+def prune_old_logs(log_file_path, hours=24):
+    """
+    Prunes log entries older than the specified hours.
+    
+    Args:
+        log_file_path: Path to the log file
+        hours: Number of hours to keep logs for (default: 24)
+    """
+    if not os.path.exists(log_file_path):
+        return  # No log file to prune yet
+    
+    try:
+        # Get the cutoff time
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+        
+        # Read the current log file
+        with open(log_file_path, 'r') as file:
+            log_lines = file.readlines()
+        
+        # Initialize variables
+        pruned_lines = []
+        log_date_pattern = re.compile(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
+        
+        for line in log_lines:
+            match = log_date_pattern.search(line)
+            if match:
+                try:
+                    # Parse the timestamp in the log entry
+                    log_time_str = match.group(1)
+                    log_time = datetime.strptime(log_time_str, '%Y-%m-%d %H:%M:%S')
+                    
+                    # Keep only entries newer than the cutoff time
+                    if log_time >= cutoff_time:
+                        pruned_lines.append(line)
+                except ValueError:
+                    # If timestamp parsing fails, keep the line
+                    pruned_lines.append(line)
+            else:
+                # If no timestamp is found, keep the line
+                pruned_lines.append(line)
+        
+        # Write back the pruned log file
+        with open(log_file_path, 'w') as file:
+            file.writelines(pruned_lines)
+        
+        pruned_count = len(log_lines) - len(pruned_lines)
+        print(f"Pruned {pruned_count} log entries older than {hours} hours")
+        
+    except Exception as e:
+        print(f"Error pruning logs: {e}")
 
 
 def create_app() -> Flask:
@@ -75,6 +128,10 @@ def create_app() -> Flask:
         )
         # Depending on severity, might want to raise an exception or exit
 
+    # --- Prune old logs before setting up new logging ---
+    log_file_path = os.path.join(app.instance_path, "app.log")
+    prune_old_logs(log_file_path, hours=24)
+    
     # --- Centralized Logging Configuration ---
     # Remove Flask's default handlers
     app.logger.handlers.clear()
@@ -88,7 +145,6 @@ def create_app() -> Flask:
     )
 
     # File Handler (Rotating)
-    log_file_path = os.path.join(app.instance_path, "app.log")
     max_log_size = 1024 * 1024 * 10  # 10 MB
     backup_count = 5
     try:
@@ -98,9 +154,9 @@ def create_app() -> Flask:
         file_handler.setFormatter(log_formatter)
         file_handler.setLevel(logging.DEBUG)  # Log DEBUG and higher to file
         app.logger.addHandler(file_handler)
-        # --- Add file handler to root logger ---
-        logging.getLogger().addHandler(file_handler)
-        logging.getLogger().setLevel(logging.DEBUG)
+        # NOTE: We only add handlers to app.logger, not to the root logger
+        # Adding handlers to both app.logger and root logger causes duplicate log entries
+        # since log messages propagate up through the logger hierarchy
         app.logger.info(f"File logging configured to: {log_file_path} (Level: DEBUG)")
     except Exception as e:
         app.logger.error(
@@ -113,8 +169,7 @@ def create_app() -> Flask:
     # Set console level potentially higher for less noise (e.g., INFO) or keep DEBUG for development
     console_handler.setLevel(logging.DEBUG)
     app.logger.addHandler(console_handler)
-    # --- Add console handler to root logger ---
-    logging.getLogger().addHandler(console_handler)
+    # NOTE: We only add handlers to app.logger, not to the root logger
 
     app.logger.info("Centralized logging configured (File & Console).")
     # --- End Logging Configuration ---
@@ -219,7 +274,7 @@ def create_app() -> Flask:
         """Endpoint to trigger the *preprocessing* batch job.
 
         Instead of spawning a separate Python subprocess, we now call
-        :pyfunc:`run_preprocessing.main` directly, which improves error handling
+        run_preprocessing.main directly, which improves error handling
         and avoids the overhead of launching an external interpreter.
         """
 
@@ -277,9 +332,8 @@ def create_app() -> Flask:
             # Calculate dates at runtime based on relative offsets
             import pandas as pd
             from pandas.tseries.offsets import BDay
-            import datetime
-
-            today = pd.Timestamp(datetime.datetime.now().date())
+            
+            today = pd.Timestamp(datetime.now().date())
             most_recent_bd = (
                 today if today.weekday() < 5 else today - BDay(1)
             )  # fallback: today if weekday, else previous business day
@@ -305,12 +359,12 @@ def create_app() -> Flask:
     def schedule_loop() -> None:
         last_checked = None
         while True:
-            now = datetime.datetime.now()
+            now = datetime.now()
             current_minute = now.replace(second=0, microsecond=0)
             if current_minute != last_checked:
                 last_checked = current_minute
                 for sched in load_schedules():
-                    sched_time = datetime.datetime.strptime(
+                    sched_time = datetime.strptime(
                         sched["schedule_time"], "%H:%M"
                     ).time()
                     if sched_time.hour == now.hour and sched_time.minute == now.minute:
