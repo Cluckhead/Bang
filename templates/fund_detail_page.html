@@ -118,7 +118,7 @@
                 if (this.checked) {
                     currentUrl.searchParams.set('sp_valid', 'true');
                 } else {
-                    currentUrl.searchParams.delete('sp_valid');
+                    currentUrl.searchParams.set('sp_valid', 'false'); // Explicitly set to false
                 }
                 window.location.href = currentUrl.toString(); // Reload page with new query param
             });
