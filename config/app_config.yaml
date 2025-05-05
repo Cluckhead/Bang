@@ -1,0 +1,7 @@
+# Application configuration settings
+# These settings control the behavior of the Simple Data Checker application
+
+# Path settings
+data_folder: "Data"  # Path to data folder (relative to application root)
+
+# Add other global application settings below as needed 

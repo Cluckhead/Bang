@@ -426,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
  * @param {boolean} [opts.complete] - If true, show cleanup button.
  * @param {boolean} [opts.error] - If true, show error style.
  */
-export function updateNavbarStatusBar({ current = 0, total = 0, text = '', complete = false, error = false } = {}) {
+function updateNavbarStatusBar({ current = 0, total = 0, text = '', complete = false, error = false } = {}) {
     const bar = document.getElementById('navbar-status-bar');
     if (!bar) return;
     bar.innerHTML = '';
@@ -490,3 +490,6 @@ export function updateNavbarStatusBar({ current = 0, total = 0, text = '', compl
         bar.innerHTML = '';
     }
 }
+
+// Expose to global scope so inline scripts (non-module) can access it
+window.updateNavbarStatusBar = updateNavbarStatusBar;
