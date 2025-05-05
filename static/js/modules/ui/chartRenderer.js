@@ -380,17 +380,18 @@ function createMetricsTable(
     fundCode
 ) {
     const table = document.createElement('table');
-    table.className = 'table table-sm table-bordered metrics-table w-full mt-4 text-xs'; 
+    table.className = 'mt-4 text-xs text-right'; 
 
     const thead = table.createTHead();
     const headerRow = thead.insertRow();
+    headerRow.className = 'border-b border-gray-300';
+    
     const tbody = table.createTBody();
+    tbody.className = 'divide-y divide-gray-200';
 
     const secondaryAvailable = metadata.secondary_data_available;
     const primaryFundColsMeta = metadata.fund_col_names || [];
     const primaryBenchColMeta = metadata.benchmark_col_name;
-    const secondaryFundColsMeta = metadata.secondary_fund_col_names || [];
-    const secondaryBenchColMeta = metadata.secondary_benchmark_col_name;
     const secondaryPrefix = "S&P ";
 
     if ((!mainMetrics || Object.keys(mainMetrics).length === 0) && 
@@ -399,30 +400,31 @@ function createMetricsTable(
         return null;
     }
 
-    let showSecondaryColumns = false;
-    if (showSecondary && secondaryAvailable) {
-        const allMetricsKeys = Object.keys(mainMetrics || {}).concat(Object.keys(relativeMetrics || {}));
-        showSecondaryColumns = allMetricsKeys.some(key => key.startsWith(secondaryPrefix));
-    }
+    // Headers are now fixed, no S&P columns
+    let headers = ['Field', `Latest (${latestDate})`, 'Change', 'Mean', 'Max', 'Min', 'Z-Score'];
 
-    let headers = ['Type', 'Column', `Latest (${latestDate})`, 'Change', 'Mean', 'Max', 'Min', 'Z-Score'];
-    let secondaryHeaders = ['S&P Latest', 'S&P Change', 'S&P Mean', 'S&P Max', 'S&P Min', 'S&P Z-Score'];
+    // Generate fixed headers
+    const headerHtml = headers.map((h, index) => {
+        const alignClass = (index === 0) ? 'text-left' : 'text-right'; 
+        return `<th class="py-2 px-2 font-medium text-gray-600 uppercase tracking-wider ${alignClass}">${h}</th>`;
+    }).join('');
+    headerRow.innerHTML = headerHtml;
 
-    headerRow.innerHTML = `<th>${headers.join('</th><th>')}</th>` +
-                         (showSecondaryColumns ? `<th class="text-muted">${secondaryHeaders.join('</th><th class="text-muted">')}</th>` : '');
+    // New function to add a single row (primary or secondary)
+    const addMetricRow = (metricsSource, rowType, displayName, baseKey, isSecondary = false) => {
+        const prefix = isSecondary ? secondaryPrefix : '';
+        const fullBaseKey = prefix + baseKey;
 
-    const addPairedRow = (metricsSource, rowType, displayName, baseKey) => {
-        const primaryExists = metricsSource && Object.keys(metricsSource).some(k => k.startsWith(baseKey) && !k.startsWith(secondaryPrefix));
-        const secondaryExists = showSecondaryColumns && metricsSource && Object.keys(metricsSource).some(k => k.startsWith(secondaryPrefix + baseKey));
-
-        if (!primaryExists && !secondaryExists) {
-            console.debug(`[addPairedRow] Skipping row: No primary or secondary data for Type: ${rowType}, Key: ${baseKey}`);
-            return;
+        // Check if data exists for this specific row (primary or secondary)
+        const dataExists = metricsSource && Object.keys(metricsSource).some(k => k.startsWith(fullBaseKey));
+        if (!dataExists) {
+            // console.debug(`[addMetricRow] Skipping row: No data for Type: ${rowType}, Key: ${fullBaseKey}`);
+            return; // Silently skip if no data for this specific metric (e.g., only primary exists, skip secondary attempt)
         }
 
         const row = tbody.insertRow();
-        const zScoreKey = `${baseKey} Change Z-Score`;
-        const zScore = primaryExists ? metricsSource[zScoreKey] : null;
+        const zScoreKey = `${fullBaseKey} Change Z-Score`;
+        const zScore = metricsSource[zScoreKey];
         let zClass = '';
         if (zScore !== null && typeof zScore !== 'undefined' && !isNaN(zScore)) {
             const absZ = Math.abs(zScore);
@@ -431,43 +433,63 @@ function createMetricsTable(
         }
         row.className = zClass;
 
-        row.insertCell().textContent = rowType;
-        row.insertCell().textContent = displayName;
-        row.insertCell().textContent = primaryExists ? formatNumber(metricsSource[`${baseKey} Latest Value`]) : '-';
-        row.insertCell().textContent = primaryExists ? formatNumber(metricsSource[`${baseKey} Change`]) : '-';
-        row.insertCell().textContent = primaryExists ? formatNumber(metricsSource[`${baseKey} Mean`]) : '-';
-        row.insertCell().textContent = primaryExists ? formatNumber(metricsSource[`${baseKey} Max`]) : '-';
-        row.insertCell().textContent = primaryExists ? formatNumber(metricsSource[`${baseKey} Min`]) : '-';
-        row.insertCell().textContent = primaryExists ? formatNumber(metricsSource[zScoreKey]) : '-';
+        // Cell creation helper remains the same
+        const createCell = (text, alignLeft = false) => {
+            const cell = row.insertCell();
+            cell.className = `py-2 px-2 ${alignLeft ? 'text-left' : 'text-right'}`;
+            cell.textContent = text;
+            return cell;
+        };
 
-        if (showSecondaryColumns) {
-            row.insertCell().textContent = secondaryExists ? formatNumber(metricsSource[`${secondaryPrefix}${baseKey} Latest Value`]) : '-';
-            row.insertCell().textContent = secondaryExists ? formatNumber(metricsSource[`${secondaryPrefix}${baseKey} Change`]) : '-';
-            row.insertCell().textContent = secondaryExists ? formatNumber(metricsSource[`${secondaryPrefix}${baseKey} Mean`]) : '-';
-            row.insertCell().textContent = secondaryExists ? formatNumber(metricsSource[`${secondaryPrefix}${baseKey} Max`]) : '-';
-            row.insertCell().textContent = secondaryExists ? formatNumber(metricsSource[`${secondaryPrefix}${baseKey} Min`]) : '-';
-            row.insertCell().textContent = secondaryExists ? formatNumber(metricsSource[`${secondaryPrefix}${baseKey} Change Z-Score`]) : '-';
+        // Field name - add prefix if secondary
+        const fieldDisplayName = isSecondary ? `S&P ${displayName}` : displayName;
+
+        createCell(fieldDisplayName, true); // Field name (left aligned)
+        // Use nullish coalescing for cleaner fallback
+        createCell(formatNumber(metricsSource[`${fullBaseKey} Latest Value`]) ?? '-');
+        createCell(formatNumber(metricsSource[`${fullBaseKey} Change`]) ?? '-');
+        createCell(formatNumber(metricsSource[`${fullBaseKey} Mean`]) ?? '-');
+        createCell(formatNumber(metricsSource[`${fullBaseKey} Max`]) ?? '-');
+        createCell(formatNumber(metricsSource[`${fullBaseKey} Min`]) ?? '-');
+        createCell(formatNumber(metricsSource[zScoreKey]) ?? '-'); // Z-Score
+    };
+    
+    // New function to process a pair (primary + optional secondary)
+    const processMetricPair = (metricsSource, rowType, displayName, baseKey) => {
+        const primaryExists = metricsSource && Object.keys(metricsSource).some(k => k.startsWith(baseKey) && !k.startsWith(secondaryPrefix));
+        const secondaryExists = secondaryAvailable && metricsSource && Object.keys(metricsSource).some(k => k.startsWith(secondaryPrefix + baseKey));
+
+        if (primaryExists) {
+            addMetricRow(metricsSource, rowType, displayName, baseKey, false); // Add primary row
+        }
+        // Add secondary row ONLY if showSecondary toggle is true AND data exists
+        if (showSecondary && secondaryExists) { 
+            addMetricRow(metricsSource, rowType, displayName, baseKey, true); // Add secondary row
         }
     };
 
+    // Call processMetricPair for main benchmark, main fund columns, and relative metrics
     if (mainMetrics && Object.keys(mainMetrics).length > 0) {
         if (primaryBenchColMeta) {
-             addPairedRow(mainMetrics, 'Main', primaryBenchColMeta, primaryBenchColMeta);
+             processMetricPair(mainMetrics, 'Main', primaryBenchColMeta, primaryBenchColMeta);
         }
         primaryFundColsMeta.forEach(fundCol => {
-            addPairedRow(mainMetrics, 'Main', fundCol, fundCol);
+            processMetricPair(mainMetrics, 'Main', fundCol, fundCol);
         });
     }
 
     if (relativeMetrics && Object.keys(relativeMetrics).length > 0) {
-        addPairedRow(relativeMetrics, 'Relative', 'Relative (Port - Bench)', 'Relative');
+        // Process Relative metric pair
+        processMetricPair(relativeMetrics, 'Relative', 'Relative (Port - Bench)', 'Relative');
     }
 
     if (tbody.rows.length === 0) {
         const row = tbody.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = headers.length + (showSecondaryColumns ? secondaryHeaders.length : 0);
+        // Adjust colspan for the fixed number of headers
+        cell.colSpan = headers.length; 
         cell.textContent = 'No relevant metrics found for this fund.';
+        cell.className = 'text-center py-2 px-2';
     }
 
     return table;
