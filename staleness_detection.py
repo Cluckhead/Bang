@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # staleness_detection.py
-# This script analyzes CSV financial data files to detect stale data patterns, particularly
-# looking for securities with repeated placeholder values that indicate stale or missing data.
+# This script analyzes CSV financial data files (typically security-level data with dates as columns)
+# to detect stale data patterns. It specifically looks for securities that have the same
+# placeholder value (e.g., 100) repeated consecutively across multiple dates, indicating
+# potential data issues or missing updates. The script can be run from the command line
+# and allows customization of placeholder values and the consecutive day threshold for staleness.
 
 import os
 import pandas as pd
@@ -24,6 +27,15 @@ def is_placeholder_value(value, placeholder_indicators=[100]):
     """
     if pd.isna(value):
         return True
+
+    # Explicitly exclude 0 as it signifies a closed position, not staleness
+    try:
+        numeric_value = float(value)
+        if abs(numeric_value - 0.0) < 0.00001:
+            return False
+    except (ValueError, TypeError):
+        # If it's not numeric, it can't be 0 in the way we care about
+        pass
 
     # Check against common placeholder values with float comparison
     try:
