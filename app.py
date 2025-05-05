@@ -97,6 +97,34 @@ def create_app() -> Flask:
     )  # instance_relative_config=True allows for instance folder config
     app.logger.info(f"Application root path: {app.root_path}")
 
+    # --- Centralized Logging Configuration for ALL loggers ---
+    import logging
+    from logging.handlers import RotatingFileHandler
+    import os
+    # Set up root logger so all logs from all modules go to file and console
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(logging.DEBUG)
+
+    log_formatter = logging.Formatter(
+        "%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]"
+    )
+
+    log_file_path = os.path.join(app.instance_path, "app.log")
+    file_handler = RotatingFileHandler(
+        log_file_path, maxBytes=10 * 1024 * 1024, backupCount=5
+    )
+    file_handler.setFormatter(log_formatter)
+    file_handler.setLevel(logging.DEBUG)
+    root_logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_formatter)
+    console_handler.setLevel(logging.DEBUG)
+    root_logger.addHandler(console_handler)
+
+    # --- End root logger setup ---
+
     # Basic configuration (can be expanded later, e.g., loading from config file)
     app.config.from_mapping(
         SECRET_KEY="dev",  # Default secret key for development. CHANGE for production!
@@ -129,62 +157,8 @@ def create_app() -> Flask:
         # Depending on severity, might want to raise an exception or exit
 
     # --- Prune old logs before setting up new logging ---
-    log_file_path = os.path.join(app.instance_path, "app.log")
     prune_old_logs(log_file_path, hours=24)
     
-    # --- Centralized Logging Configuration ---
-    # Remove Flask's default handlers
-    app.logger.handlers.clear()
-    app.logger.setLevel(
-        logging.DEBUG
-    )  # Set the app logger level (DEBUG captures everything)
-
-    # Formatter
-    log_formatter = logging.Formatter(
-        "%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]"
-    )
-
-    # File Handler (Rotating)
-    max_log_size = 1024 * 1024 * 10  # 10 MB
-    backup_count = 5
-    try:
-        file_handler = RotatingFileHandler(
-            log_file_path, maxBytes=max_log_size, backupCount=backup_count
-        )
-        file_handler.setFormatter(log_formatter)
-        file_handler.setLevel(logging.DEBUG)  # Log DEBUG and higher to file
-        app.logger.addHandler(file_handler)
-        # NOTE: We only add handlers to app.logger, not to the root logger
-        # Adding handlers to both app.logger and root logger causes duplicate log entries
-        # since log messages propagate up through the logger hierarchy
-        app.logger.info(f"File logging configured to: {log_file_path} (Level: DEBUG)")
-    except Exception as e:
-        app.logger.error(
-            f"Failed to configure file logging to {log_file_path}: {e}", exc_info=True
-        )
-
-    # Console Handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(log_formatter)
-    # Set console level potentially higher for less noise (e.g., INFO) or keep DEBUG for development
-    console_handler.setLevel(logging.DEBUG)
-    app.logger.addHandler(console_handler)
-    # NOTE: We only add handlers to app.logger, not to the root logger
-
-    app.logger.info("Centralized logging configured (File & Console).")
-    # --- End Logging Configuration ---
-
-    # Configure logging (consider moving to a dedicated logging setup function)
-    # Note: BasicConfig should ideally be called only once. If utils.py also calls it,
-    # it might conflict or be ineffective here. A more robust setup is recommended.
-    # logging.basicConfig(level=logging.INFO,
-    #                     format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s')
-    # app.logger.info("Logging configured.") # BasicConfig might be configured in utils already
-
-    # Serve static files (for JS, CSS, etc.)
-    # Note: static_url_path defaults to /static, static_folder defaults to 'static' in root
-    # No need to set app.static_folder = 'static' explicitly unless changing the folder name/path
-
     # --- Register Blueprints ---
     try:
         from views.main_views import main_bp

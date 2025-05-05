@@ -80,6 +80,12 @@ def load_curve_data(data_folder_path: str) -> pd.DataFrame:
     try:
         # Attempt to read the curves.csv file
         df = pd.read_csv(file_path)
+        # Always rename columns right after loading
+        rename_map = {"Currency Code": "Currency", "Daily Value": "Value"}
+        df.rename(columns=rename_map, inplace=True)
+        logger.debug(f"Renamed columns: {rename_map}")
+        logger.debug(f"Columns after renaming: {df.columns.tolist()}")
+        logger.debug(f"First 5 rows after renaming:\n{df.head(5).to_string(index=False)}")
 
         # Verify 'Date' column exists
         if "Date" not in df.columns:
@@ -89,7 +95,7 @@ def load_curve_data(data_folder_path: str) -> pd.DataFrame:
             return pd.DataFrame()
 
         # Ensure Date column is datetime
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df["Date"] = pd.to_datetime(df["Date"], format="%Y-%m-%dT%H:%M:%S", errors="coerce")
         # Drop rows where Date couldn't be parsed
         before_len = len(df)
         df = df.dropna(subset=["Date"])
@@ -111,6 +117,48 @@ def load_curve_data(data_folder_path: str) -> pd.DataFrame:
                     f"Dropped {dropped_values} rows with non-numeric values in {file_path}"
                 )
 
+        # Convert Term to days for sorting and plotting
+        df["TermDays"] = df["Term"].apply(_term_to_days)
+        logger.debug("Applied _term_to_days conversion.")
+
+        # Convert Value to numeric first
+        original_rows = len(df)
+        df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
+        rows_after_numeric = len(df.dropna(subset=["Value"]))
+        if original_rows > rows_after_numeric:
+            logger.warning(
+                f"Dropped {original_rows - rows_after_numeric} rows due to non-numeric 'Value'."
+            )
+        df.dropna(subset=["Value"], inplace=True)
+
+        # Drop rows where term conversion failed
+        original_rows = len(df)
+        rows_after_term = len(df.dropna(subset=["TermDays"]))
+        if original_rows > rows_after_term:
+            logger.warning(
+                f"Dropped {original_rows - rows_after_term} rows due to unparseable 'Term'."
+            )
+        df.dropna(subset=["TermDays"], inplace=True)
+
+        if df.empty:
+            logger.warning("DataFrame is empty after initial processing and dropping NaNs.")
+            return df  # Return empty if all rows were dropped
+
+        # Set index and sort
+        try:
+            df.sort_values(by=["Currency", "Date", "TermDays"], inplace=True)
+            # Use MultiIndex for efficient lookups
+            df.set_index(["Currency", "Date", "Term"], inplace=True)
+            logger.info(f"Curve data processed. Final shape: {df.shape}")
+        except KeyError as e:
+            logger.error(
+                f"Missing expected column for sorting/indexing: {e}. Columns present: {df.columns.tolist()}"
+            )
+            return pd.DataFrame()  # Return empty on structure error
+        except Exception as e:
+            logger.error(f"Unexpected error during sorting/indexing: {e}", exc_info=True)
+            return pd.DataFrame()
+
         return df
 
     except FileNotFoundError:
@@ -127,55 +175,6 @@ def load_curve_data(data_folder_path: str) -> pd.DataFrame:
             f"Unexpected error loading curve data from {file_path}: {e}", exc_info=True
         )
         return pd.DataFrame()
-
-    # Rename columns for consistency if necessary (adjust based on actual CSV)
-    rename_map = {"Currency Code": "Currency", "Daily Value": "Value"}
-    df.rename(columns=rename_map, inplace=True)
-    logger.debug(f"Renamed columns: {rename_map}")
-
-    # Convert Term to days for sorting and plotting
-    df["TermDays"] = df["Term"].apply(_term_to_days)
-    logger.debug("Applied _term_to_days conversion.")
-
-    # Convert Value to numeric first
-    original_rows = len(df)
-    df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
-    rows_after_numeric = len(df.dropna(subset=["Value"]))
-    if original_rows > rows_after_numeric:
-        logger.warning(
-            f"Dropped {original_rows - rows_after_numeric} rows due to non-numeric 'Value'."
-        )
-    df.dropna(subset=["Value"], inplace=True)
-
-    # Drop rows where term conversion failed
-    original_rows = len(df)
-    rows_after_term = len(df.dropna(subset=["TermDays"]))
-    if original_rows > rows_after_term:
-        logger.warning(
-            f"Dropped {original_rows - rows_after_term} rows due to unparseable 'Term'."
-        )
-    df.dropna(subset=["TermDays"], inplace=True)
-
-    if df.empty:
-        logger.warning("DataFrame is empty after initial processing and dropping NaNs.")
-        return df  # Return empty if all rows were dropped
-
-    # Set index and sort
-    try:
-        df.sort_values(by=["Currency", "Date", "TermDays"], inplace=True)
-        # Use MultiIndex for efficient lookups
-        df.set_index(["Currency", "Date", "Term"], inplace=True)
-        logger.info(f"Curve data processed. Final shape: {df.shape}")
-    except KeyError as e:
-        logger.error(
-            f"Missing expected column for sorting/indexing: {e}. Columns present: {df.columns.tolist()}"
-        )
-        return pd.DataFrame()  # Return empty on structure error
-    except Exception as e:
-        logger.error(f"Unexpected error during sorting/indexing: {e}", exc_info=True)
-        return pd.DataFrame()
-
-    return df
 
 
 def get_latest_curve_date(df: pd.DataFrame) -> Optional[pd.Timestamp]:

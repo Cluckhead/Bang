@@ -8,8 +8,6 @@
 
 # Code Structure
 - Speed up security level views, move processing to backend
-
-- Every PY file should be below 500 lines
 - add the 25  tests suggested by Gemini'
 - fix to work with official data
 
@@ -30,6 +28,8 @@
 - add security name
 - Add inspect to the fund page
 - File Override CSV
+- Missing IRS Data - seperate Dashboard for Derivatives
+
 
 
 # Version 3
