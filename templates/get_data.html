@@ -7,10 +7,18 @@
 
     {# --- Display Data File Statuses --- #}
     <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
-        <h4 class="text-xl font-semibold border-b border-neutral-300 mb-3 pb-2">
-            Current Data File Status
-        </h4>
-        <div class="mt-2">
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-neutral-300 cursor-pointer" id="toggle-status-header">
+            <h4 class="text-xl font-semibold">
+                Current Data File Status
+            </h4>
+            <button id="toggle-status-button" class="text-neutral-500 hover:text-neutral-700 focus:outline-none" aria-expanded="false" aria-controls="status-content">
+                <svg id="toggle-status-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform transform rotate-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+                <span class="sr-only">Toggle status details</span>
+            </button>
+        </div>
+        <div id="status-content" class="mt-2 hidden">
             <p class="text-sm text-neutral-500">Data Folder: <code>{{ data_folder }}</code></p>
             {% if data_file_statuses %}
             <table class="w-full text-left text-sm border-collapse">
@@ -444,6 +452,31 @@ document.addEventListener('DOMContentLoaded', function() {
     dateModeRange.addEventListener('change', updateDateRangeVisibility);
     updateDateRangeVisibility(); // Initial state
 
+    // --- Data File Status Toggle Logic ---
+    const toggleStatusHeader = document.getElementById('toggle-status-header');
+    const statusContent = document.getElementById('status-content');
+    const toggleStatusIcon = document.getElementById('toggle-status-icon'); // Get the SVG icon itself
+
+    if (toggleStatusHeader && statusContent && toggleStatusIcon) {
+        toggleStatusHeader.addEventListener('click', function() { // Trigger on header click too
+            const isHidden = statusContent.classList.contains('hidden');
+            const button = document.getElementById('toggle-status-button'); // Get button for aria attribute
+
+            if (isHidden) {
+                statusContent.classList.remove('hidden');
+                toggleStatusIcon.classList.remove('rotate-0');
+                toggleStatusIcon.classList.add('rotate-90'); // Point down when open
+                button.setAttribute('aria-expanded', 'true');
+            } else {
+                statusContent.classList.add('hidden');
+                toggleStatusIcon.classList.remove('rotate-90');
+                toggleStatusIcon.classList.add('rotate-0'); // Point right when closed
+                button.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+    // --- End Data File Status Toggle ---
+
     // --- Function to handle the API call logic ---
     async function handleApiCall(forceOverwriteButton = false) {
         // Clear previous results and errors
@@ -795,7 +828,7 @@ ${result.error || result.message || 'Unknown error'}`;
             auditReportSummary.innerHTML = '';
             auditReportDetails.innerHTML = '';
             try {
-                const resp = await fetch('/get_data/audit');
+                const resp = await fetch('/api/get_data/audit');
                 const data = await resp.json();
 
                 // --- Helper to render audit report elements ---

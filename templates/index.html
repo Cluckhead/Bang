@@ -92,9 +92,10 @@
         {# Other Links Section - Styled as cards #}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
-                <h5 class="text-base font-semibold text-gray-800 mb-1">Get Data via API (Simulated)</h5>
+                <h5 class="text-base font-semibold text-gray-800 mb-1">Get Data via API</h5>
                 <p class="text-sm text-gray-600 mb-3">Select funds and dates to simulate retrieving data from the Rex API.</p>
                 <a href="{{ url_for('api_bp.get_data_page') }}" class="inline-block bg-secondary text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-opacity-90 transition-colors">Go to Get Data Page</a>
+                <a href="{{ url_for('api_bp.get_attribution_data_page') }}" class="inline-block bg-primary text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-opacity-90 transition-colors mt-2">Get Attribution Data</a>
             </div>
 
             <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">

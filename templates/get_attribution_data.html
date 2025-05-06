@@ -1,0 +1,240 @@
+{# Purpose: Attribution Data API page for per-fund attribution data retrieval and file management. #}
+{% extends "base.html" %}
+
+{% block title %}Get Attribution Data{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Attribution File Status Table -->
+    <div class="bg-neutral-100 rounded-lg shadow p-4">
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-neutral-300">
+            <h4 class="text-xl font-semibold">Current Attribution Data File Status</h4>
+        </div>
+        <div>
+            <p class="text-sm text-neutral-500">Data Folder: <code>{{ data_folder }}</code></p>
+            {% if attribution_file_statuses %}
+            <table class="w-full text-left text-sm border-collapse">
+                <thead>
+                    <tr class="border-b border-neutral-300">
+                        <th class="py-2 px-1 font-semibold">Fund</th>
+                        <th class="py-2 px-1 font-semibold">File Name</th>
+                        <th class="py-2 px-1 font-semibold">Latest Data Date</th>
+                        <th class="py-2 px-1 font-semibold">File Last Modified</th>
+                        <th class="py-2 px-1 font-semibold">Row Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for status in attribution_file_statuses %}
+                    <tr class="border-b border-neutral-200 hover:bg-neutral-50">
+                        <td class="py-2 px-1">{{ status.fund }}</td>
+                        <td class="py-2 px-1">{{ status.filename }}</td>
+                        <td class="py-2 px-1">{% if status.exists %}{{ status.latest_date }}{% else %}<span class="text-neutral-500">File Not Found</span>{% endif %}</td>
+                        <td class="py-2 px-1">{% if status.exists %}{{ status.last_modified }}{% else %}<span class="text-neutral-500">N/A</span>{% endif %}</td>
+                        <td class="py-2 px-1">{% if status.exists %}{{ status.row_count }}{% else %}<span class="text-neutral-500">0</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-neutral-500">No attribution file statuses found.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Attribution Data API Form -->
+    <div class="bg-neutral-100 rounded-lg shadow p-4">
+        <h2 class="text-2xl font-bold mb-2">Get Attribution Data</h2>
+        <p class="text-sm mb-4">Select funds and date range to retrieve and process attribution data using the API. Each fund will be processed separately and written to its own file.</p>
+        <form id="get-attribution-data-form">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label for="daysBack" class="block text-sm font-medium text-neutral-700 mb-1">Days Back:</label>
+                    <input type="number" id="daysBack" name="days_back" value="30" required class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm focus:ring-secondary focus:border-secondary sm:text-sm">
+                    <p class="mt-1 text-xs text-neutral-500">Number of days of history to retrieve ending on the End Date.</p>
+                </div>
+                <div>
+                    <label for="endDate" class="block text-sm font-medium text-neutral-700 mb-1">End Date:</label>
+                    <input type="date" id="endDate" name="end_date" value="{{ default_end_date }}" required class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm focus:ring-secondary focus:border-secondary sm:text-sm">
+                    <p class="mt-1 text-xs text-neutral-500">Defaults to the previous business day.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-neutral-700 mb-1">Date Range Mode:</label>
+                    <div class="flex items-center mb-1">
+                        <input id="dateModeQuick" name="date_mode" type="radio" value="quick" checked class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
+                        <label for="dateModeQuick" class="ml-2 block text-sm text-neutral-700">Use Days Back & End Date</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input id="dateModeRange" name="date_mode" type="radio" value="range" class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
+                        <label for="dateModeRange" class="ml-2 block text-sm text-neutral-700">Use Custom Date Range</label>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4" id="custom-date-range-row" style="display: none;">
+                <div>
+                    <label for="startDate" class="block text-sm font-medium text-neutral-700 mb-1">Start Date:</label>
+                    <input type="date" id="startDate" name="start_date" class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm focus:ring-secondary focus:border-secondary sm:text-sm">
+                </div>
+                <div>
+                    <label for="customEndDate" class="block text-sm font-medium text-neutral-700 mb-1">End Date:</label>
+                    <input type="date" id="customEndDate" name="custom_end_date" class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm focus:ring-secondary focus:border-secondary sm:text-sm">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="block text-sm font-medium text-neutral-700 mb-1">Data Write Mode:</label>
+                <div class="flex items-center mb-1">
+                    <input id="writeModeAppend" name="write_mode" type="radio" value="append" checked class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
+                    <label for="writeModeAppend" class="ml-2 block text-sm text-neutral-700">Append (add new data, deduplicate by ISIN, Fund, Date)</label>
+                </div>
+                <div class="flex items-center">
+                    <input id="writeModeRedo" name="write_mode" type="radio" value="redo" class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
+                    <label for="writeModeRedo" class="ml-2 block text-sm text-neutral-700">Redo (overwrite file, all previous data will be lost)</label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="block text-sm font-medium text-neutral-700 mb-1">Select Funds:</label>
+                {% if fund_groups %}
+                <div class="mb-2" style="max-width: 350px;">
+                    <label for="fund-group-select" class="block text-sm font-medium text-neutral-700 mb-1"><strong>Fund Group:</strong></label>
+                    <select id="fund-group-select" class="block w-full border border-neutral-300 rounded-md px-3 py-2 shadow-sm bg-white focus:ring-secondary focus:border-secondary sm:text-sm">
+                        <option value="">-- Select Group --</option>
+                        {% for group, funds in fund_groups.items() %}
+                            <option value="{{ group }}">{{ group }} ({{ funds|length }})</option>
+                        {% endfor %}
+                    </select>
+                    <small class="mt-1 text-xs text-neutral-500">Selecting a group will instantly select all funds in that group. You can then add/remove individual funds as needed.</small>
+                </div>
+                {% endif %}
+                <div class="my-2 space-x-2">
+                     <button type="button" id="select-all-funds" class="px-3 py-1 text-xs rounded-md border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">Select All</button>
+                     <button type="button" id="deselect-all-funds" class="px-3 py-1 text-xs rounded-md border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">Deselect All</button>
+                     <button type="button" id="clear-fund-selection" class="px-3 py-1 text-xs rounded-md border border-danger bg-white text-danger hover:bg-danger-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-danger">Clear</button>
+                </div>
+                <div id="fund-list" class="border border-neutral-300 rounded-md p-3 bg-white" style="max-height: 300px; overflow-y: auto;">
+                    {% for fund in funds %}
+                    <div class="flex items-center mb-1">
+                        <input class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300 rounded fund-checkbox" type="checkbox" value="{{ fund['Fund Code'] }}" id="fund-{{ fund['Fund Code'] }}" name="funds" {% if fund['Picked'] %}checked{% endif %}>
+                        <label class="ml-2 block text-sm text-neutral-700" for="fund-{{ fund['Fund Code'] }}">
+                            {{ fund['Fund Code'] }} (AUM: {{ fund['Total Asset Value USD']|int }})
+                        </label>
+                    </div>
+                    {% else %}
+                    <p class="text-danger">No funds found or FundList.csv could not be loaded correctly.</p>
+                    {% endfor %}
+                </div>
+                <div class="text-danger text-sm mt-1 hidden" id="fund-selection-error">Please select at least one fund.</div>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">Run Attribution API Calls</button>
+            </div>
+        </form>
+    </div>
+    <!-- End Attribution Data API Form -->
+
+    <!-- Status Area (to be filled by JS after submit) -->
+    <div id="status-area" class="mt-4" style="display: none;">
+        <h4 class="text-xl font-semibold mb-2">Processing Status</h4>
+        <!-- Status table will be injected here -->
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Modal logic for redo confirmation
+function showRedoModal(onConfirm) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40';
+    modal.innerHTML = `
+      <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
+        <h3 class="text-lg font-bold mb-2 text-danger">Confirm Overwrite</h3>
+        <p class="mb-4 text-sm text-gray-700">You have selected <strong>Redo</strong> mode. This will <span class='text-danger font-semibold'>overwrite all existing attribution data files for the selected funds</span>. This action cannot be undone.<br><br>Are you sure you want to continue?</p>
+        <div class="flex justify-end space-x-2">
+          <button id="modal-cancel" class="px-4 py-2 rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300">Cancel</button>
+          <button id="modal-confirm" class="px-4 py-2 rounded bg-danger text-white hover:bg-danger-dark">Yes, Overwrite</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('modal-cancel').onclick = () => { document.body.removeChild(modal); };
+    document.getElementById('modal-confirm').onclick = () => { document.body.removeChild(modal); onConfirm(); };
+}
+
+// Form submission logic
+const form = document.getElementById('get-attribution-data-form');
+form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const writeMode = form.write_mode.value;
+    const submitAction = () => runAttributionApiCall();
+    if (writeMode === 'redo') {
+        showRedoModal(submitAction);
+    } else {
+        runAttributionApiCall();
+    }
+});
+
+function runAttributionApiCall() {
+    const formData = new FormData(form);
+    formData.append('query_id', '{{ query_id }}');
+    // Collect checked funds
+    const checkedFunds = Array.from(document.querySelectorAll('.fund-checkbox:checked')).map(cb => cb.value);
+    formData.delete('funds');
+    checkedFunds.forEach(f => formData.append('funds', f));
+    // Hide error
+    document.getElementById('fund-selection-error').classList.add('hidden');
+    if (checkedFunds.length === 0) {
+        document.getElementById('fund-selection-error').classList.remove('hidden');
+        return;
+    }
+    // Show loading
+    const statusArea = document.getElementById('status-area');
+    statusArea.style.display = '';
+    statusArea.innerHTML = '<div class="text-sm text-neutral-700">Processing... Please wait.</div>';
+    fetch("/api/get_attribution_data/run", {
+        method: 'POST',
+        body: formData
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data && data.results) {
+            let html = `<table class='w-full text-left text-sm border-collapse mt-2'><thead><tr class='border-b border-neutral-300'><th class='py-2 px-1'>Fund</th><th class='py-2 px-1'>Status</th><th class='py-2 px-1'>Rows Written</th></tr></thead><tbody>`;
+            data.results.forEach(r => {
+                html += `<tr class='border-b border-neutral-200'><td class='py-2 px-1'>${r.fund}</td><td class='py-2 px-1 ${r.error ? 'text-danger' : 'text-success'}'>${r.status}</td><td class='py-2 px-1'>${r.rows_written}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            statusArea.innerHTML = html;
+        } else {
+            statusArea.innerHTML = '<div class="text-danger">Unexpected error. No results returned.</div>';
+        }
+    })
+    .catch(err => {
+        statusArea.innerHTML = `<div class='text-danger'>Error: ${err}</div>`;
+    });
+}
+
+// Fund group selection logic (copy from get_data.html if needed)
+document.getElementById('fund-group-select')?.addEventListener('change', function() {
+    const group = this.value;
+    if (!group) return;
+    const groupFunds = {{ fund_groups|tojson }}[group] || [];
+    document.querySelectorAll('.fund-checkbox').forEach(cb => {
+        cb.checked = groupFunds.includes(cb.value);
+    });
+});
+// Select/Deselect/Clear buttons
+document.getElementById('select-all-funds')?.addEventListener('click', function() {
+    document.querySelectorAll('.fund-checkbox').forEach(cb => { cb.checked = true; });
+});
+document.getElementById('deselect-all-funds')?.addEventListener('click', function() {
+    document.querySelectorAll('.fund-checkbox').forEach(cb => { cb.checked = false; });
+});
+document.getElementById('clear-fund-selection')?.addEventListener('click', function() {
+    document.querySelectorAll('.fund-checkbox').forEach(cb => { cb.checked = false; });
+});
+// Date range toggle
+form.date_mode.forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.getElementById('custom-date-range-row').style.display = (this.value === 'range') ? '' : 'none';
+    });
+});
+</script>
+{% endblock %} 
