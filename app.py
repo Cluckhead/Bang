@@ -268,7 +268,8 @@ def create_app() -> Flask:
 
             msg = f"Preprocessing completed successfully in {duration_s:0.2f}s."
             app.logger.info(msg)
-            return jsonify({"status": "success", "message": msg}), 200
+            # Include both 'output' (expected by frontend) and 'message' for consistency.
+            return jsonify({"status": "success", "output": msg, "message": msg}), 200
 
         except FileNotFoundError as fnf_err:
             err_msg = f"Preprocessing failed – file not found: {fnf_err}"

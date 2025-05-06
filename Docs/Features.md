@@ -12,6 +12,7 @@
 - [Security Details Page Enhancements](#security-details-page-enhancements)
 - [Watchlist Feature](#watchlist-feature)
 - [Inspect (Contribution Analysis) Feature](#inspect-contribution-analysis-feature)
+- [Attribution Data API (NEW)](#attribution-data-api-new)
 
 ---
 
@@ -54,6 +55,37 @@ The File Audit feature provides a comprehensive, automated review of all key dat
 - Ensures all your data files are aligned and ready for analysis.
 - Quickly identifies subtle misalignments or missing data that could cause downstream errors.
 - Makes it easy to spot and fix issues before running further processing or analysis.
+
+## Attribution Data API (NEW)
+
+The Attribution Data API feature allows users to fetch, update, and manage attribution data for each fund individually, using a dedicated UI and per-fund files. This ensures attribution analytics are always up-to-date and modular.
+
+### Key Capabilities
+- **Per-Fund Attribution Files:**
+  - Each fund's attribution data is stored in a separate file: `att_factors_<FUNDCODE>.csv` (e.g., `att_factors_IG01.csv`).
+  - This replaces the old single-file approach and enables more granular updates and analysis.
+- **Dedicated UI:**
+  - Accessed via the dashboard tile or navigation menu as "Get Attribution Data".
+  - Shows a status table for all attribution files (file name, last modified, row count, latest date).
+  - Users can select funds (with group support), date range, and write mode (append or redo/overwrite).
+  - The form is consistent with the API simulation page, using Tailwind CSS and modern UX patterns.
+- **API Call Logic:**
+  - For each selected fund, the app makes a separate API call (simulated or real) using the QueryID from `QueryMap_Att.csv`.
+  - Results are written to the corresponding `att_factors_<FUNDCODE>.csv` file.
+- **Write Modes:**
+  - **Append:** Adds new data to the file, then deduplicates by ISIN, Fund, and Date (keeping the most recent row).
+  - **Redo (Overwrite):** Replaces the file entirely. A custom modal warns the user before proceeding.
+- **Status Feedback:**
+  - After processing, a dynamic status table shows the result for each fund (success, error, rows written).
+- **Integration:**
+  - All attribution dashboards and analytics now load data from these per-fund files.
+  - If a file is missing, the UI shows "No attribution available." for that fund.
+
+### Why This Matters
+- Enables targeted, efficient updates to attribution data.
+- Reduces risk of accidental data loss or cross-fund contamination.
+- Provides clear, auditable workflow for attribution data management.
+- Fully integrated with the application's fund selection, group filtering, and status reporting features.
 
 ---
 

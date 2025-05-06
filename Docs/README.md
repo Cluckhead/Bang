@@ -28,6 +28,7 @@ This application provides a web interface to load, process, and check financial 
 | **Max/Min Value Breach**         | Checks `sec_*.csv` against thresholds. Dashboard: `/maxmin/dashboard`. Details: `/maxmin/details/<file>/<type>`. |
 | **Watchlist Management**         | Track/add/clear securities via `/watchlist`. Filterable, auditable, modal UI.                                |
 | **Inspect (Contribution Analysis)**      | Analyze top contributors/detractors to metric changes over a date range. Modal UI, supports all analytics. See below for technical details. |
+| **Attribution Data API (NEW)**        | Fetch, update, and manage attribution data per fund. UI for selecting funds, date range, and write mode (append/overwrite). Each fund's data is stored in `att_factors_<FUNDCODE>.csv`. Fully integrated with attribution dashboards. |
 
 ## Fund Group Filtering (Reusable Feature)
 
@@ -192,7 +193,7 @@ The application relies on several external YAML files for configuration, loaded 
 | `data_issues.csv` | Issue tracking log (ID, dates, users, details, resolution, Jira link) |
 | `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P. **Note:** The `L0 Total` column represents the returns for each security/fund/date. |
 | `users.csv` | List of users for issue tracking dropdowns (`Name` column) |
-| `att_factors_<FUNDCODE>.csv` | Attribution data for a specific fund, used by all attribution dashboards. Replaces the single `att_factors.csv` file. | Used by `/attribution/summary`, `/attribution/security`, `/attribution/radar`, `/attribution/charts` |
+| `att_factors_<FUNDCODE>.csv` | Attribution data for a specific fund, used by all attribution dashboards. Managed via the Attribution Data API page. |
 | `sec_YTM.csv`, `sec_YTMSP.csv`, `sec_YTW.csv`, `sec_YTWSP.csv` | Security-level YTM and YTW data (main and S&P overlays), used for new charts on the security details page. |
 
 ### Python Core Modules
@@ -537,3 +538,9 @@ If you add new comparison-related utilities, place them in `generic_comparison_h
   - Resolved a `NameError` ("`original_count` is not defined") by capturing the row-count before filters are applied.
 
 No configuration changes are required; simply pull the latest code, restart the application, and rerun the preprocessing step if needed.
+
+- **Attribution Data API Page (`/api/get_attribution_data`):**
+  - Dedicated UI for fetching and managing attribution data per fund.
+  - Supports fund selection, date range, append/overwrite modes, and status reporting.
+  - Each fund's data is stored in its own file (`att_factors_<FUNDCODE>.csv`).
+  - All attribution dashboards load from these files.

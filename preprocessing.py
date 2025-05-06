@@ -165,6 +165,15 @@ def aggregate_data(
     Group by Security Name, merge Funds, suffix ISIN for duplicates. Returns processed DataFrame.
     """
     current_cols = df.columns.tolist()
+
+    # Ensure required columns exist; create if missing to avoid KeyError
+    for req_col in required_cols:
+        if req_col not in df.columns:
+            logger.warning(
+                f"Required column '{req_col}' missing in {input_path}. Creating empty column to proceed."
+            )
+            df[req_col] = ""
+
     id_cols = [col for col in current_cols if col not in required_cols]
     processed_rows = []
     df["Security Name"] = df["Security Name"].astype(str)
@@ -259,21 +268,24 @@ def process_input_file(
         elif filename.startswith("pre_"):
             # General pre_ file: replace headers, aggregate, save as sec_*.csv
             required_cols = [config.FUNDS_COL, config.SEC_NAME_COL]
-            current_df_cols = df.columns.tolist()
-            last_required_idx = -1
-            for req_col in required_cols:
-                try:
-                    last_required_idx = max(
-                        last_required_idx, current_df_cols.index(req_col)
-                    )
-                except ValueError:
-                    logger.error(
-                        f"Required column '{req_col}' not found in {input_path}. Skipping."
-                    )
-                    return
-            candidate_start_index = last_required_idx + 1
-            candidate_cols = current_df_cols[candidate_start_index:]
-            metadata_cols = current_df_cols[:candidate_start_index]
+            metadata_candidates = [col for col in df.columns if col in config.METADATA_COLS]
+            if metadata_candidates:
+                last_meta_idx = max(df.columns.get_loc(col) for col in metadata_candidates)
+                metadata_cols = df.columns[:last_meta_idx + 1]
+            else:
+                # fallback to old logic if no metadata columns found
+                last_required_idx = -1
+                for req_col in required_cols:
+                    try:
+                        last_required_idx = max(
+                            last_required_idx, df.columns.get_loc(req_col)
+                        )
+                    except KeyError:
+                        logger.error(
+                            f"Required column '{req_col}' not found in {input_path}. Skipping."
+                        )
+                        return
+                metadata_cols = df.columns[:last_required_idx + 1]
             df = replace_headers_with_dates(df, dates, metadata_cols)
             output_df = aggregate_data(df, required_cols, logger, input_path)
             if output_df.empty:
