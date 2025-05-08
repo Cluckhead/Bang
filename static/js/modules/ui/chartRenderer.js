@@ -199,44 +199,47 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
             chartWrapper.id = `chart-wrapper-${chartId}`;
             chartWrapper.style.position = 'relative';
 
-            // --- Add Inspect Button (VANILLA JS, NO BOOTSTRAP) --- 
-            const inspectButton = document.createElement('button');
-            inspectButton.textContent = 'Inspect';
-            inspectButton.className = 'inspect-btn px-3 py-1 rounded-md bg-secondary text-white hover:bg-secondary-dark text-sm mt-2';
-            inspectButton.style.position = 'absolute';
-            inspectButton.style.top = '5px';
-            inspectButton.style.right = '5px';
-            inspectButton.dataset.fund = fundCode;
-            inspectButton.dataset.metric = metricName;
-            // Gather all dates from all charts for this fund
-            let allDates = [];
-            (fundData.charts || []).forEach(chartConfig => {
-                if (Array.isArray(chartConfig.labels)) {
-                    allDates = allDates.concat(chartConfig.labels);
-                }
-            });
-            allDates = Array.from(new Set(allDates)).sort(); // deduplicate and sort
-            inspectButton.dataset.minDate = allDates[0] || '';
-            inspectButton.dataset.maxDate = allDates[allDates.length - 1] || '';
-            // No Bootstrap data-toggle/data-target
-            // No jQuery event handler
-            // Attach click event directly to open the modal
-            inspectButton.addEventListener('click', function(e) {
-                const btn = e.currentTarget;
-                const inspectModal = document.getElementById('inspectModal');
-                const inspectForm = document.getElementById('inspectForm');
-                document.getElementById('inspectFund').value = btn.dataset.fund;
-                document.getElementById('inspectMetric').value = btn.dataset.metric;
-                document.getElementById('inspectStartDate').min = btn.dataset.minDate;
-                document.getElementById('inspectStartDate').max = btn.dataset.maxDate;
-                document.getElementById('inspectEndDate').min = btn.dataset.minDate;
-                document.getElementById('inspectEndDate').max = btn.dataset.maxDate;
-                document.getElementById('inspectStartDate').value = btn.dataset.minDate;
-                document.getElementById('inspectEndDate').value = btn.dataset.maxDate;
-                inspectForm.action = `/metric/${btn.dataset.metric}/inspect`;
-                inspectModal.classList.remove('hidden');
-            });
-            chartWrapper.appendChild(inspectButton);
+            // Conditionally add Inspect button if chartType is not 'relative'
+            if (chartConfig.chart_type !== 'relative') {
+                // --- Add Inspect Button (VANILLA JS, NO BOOTSTRAP) --- 
+                const inspectButton = document.createElement('button');
+                inspectButton.textContent = 'Inspect';
+                inspectButton.className = 'inspect-btn px-3 py-1 rounded-md bg-secondary text-white hover:bg-secondary-dark text-sm mt-2';
+                inspectButton.style.position = 'absolute';
+                inspectButton.style.top = '5px';
+                inspectButton.style.right = '5px';
+                inspectButton.dataset.fund = fundCode;
+                inspectButton.dataset.metric = metricName;
+                // Gather all dates from all charts for this fund
+                let allDates = [];
+                (fundData.charts || []).forEach(chartConfig => {
+                    if (Array.isArray(chartConfig.labels)) {
+                        allDates = allDates.concat(chartConfig.labels);
+                    }
+                });
+                allDates = Array.from(new Set(allDates)).sort(); // deduplicate and sort
+                inspectButton.dataset.minDate = allDates[0] || '';
+                inspectButton.dataset.maxDate = allDates[allDates.length - 1] || '';
+                // No Bootstrap data-toggle/data-target
+                // No jQuery event handler
+                // Attach click event directly to open the modal
+                inspectButton.addEventListener('click', function(e) {
+                    const btn = e.currentTarget;
+                    const inspectModal = document.getElementById('inspectModal');
+                    const inspectForm = document.getElementById('inspectForm');
+                    document.getElementById('inspectFund').value = btn.dataset.fund;
+                    document.getElementById('inspectMetric').value = btn.dataset.metric;
+                    document.getElementById('inspectStartDate').min = btn.dataset.minDate;
+                    document.getElementById('inspectStartDate').max = btn.dataset.maxDate;
+                    document.getElementById('inspectEndDate').min = btn.dataset.minDate;
+                    document.getElementById('inspectEndDate').max = btn.dataset.maxDate;
+                    document.getElementById('inspectStartDate').value = btn.dataset.minDate;
+                    document.getElementById('inspectEndDate').value = btn.dataset.maxDate;
+                    inspectForm.action = `/metric/${btn.dataset.metric}/inspect`;
+                    inspectModal.classList.remove('hidden');
+                });
+                chartWrapper.appendChild(inspectButton);
+            }
 
             // Create Chart Canvas
             const canvas = document.createElement('canvas');

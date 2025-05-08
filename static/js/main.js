@@ -38,34 +38,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to apply state based on class
     const applySidebarState = (isCollapsed) => {
+        const navSectionHeaders = sidebar.querySelectorAll('.nav-section-header');
+        const allNavLinks = sidebar.querySelectorAll('.nav-link');
+
         if (isCollapsed) {
             sidebar.classList.remove('w-[220px]');
-            sidebar.classList.add('w-16');
+            sidebar.classList.add('w-20'); 
             mainContent.classList.remove('ml-[220px]');
-            mainContent.classList.add('ml-16');
+            mainContent.classList.add('ml-20'); 
             if (breadcrumbsContainer) {
                  breadcrumbsContainer.classList.remove('ml-[220px]');
-                 breadcrumbsContainer.classList.add('ml-16');
+                 breadcrumbsContainer.classList.add('ml-20'); 
             }
-            // Hide text elements within the sidebar
+            
+            // Hide text spans within regular links
             sidebar.querySelectorAll('.nav-text').forEach(el => el.classList.add('hidden'));
-            // Adjust padding if necessary when collapsed
-            sidebar.classList.remove('p-4');
-            sidebar.classList.add('p-2'); 
-        } else {
-            sidebar.classList.remove('w-16');
+            // Hide main section headers
+            navSectionHeaders.forEach(el => el.classList.add('hidden'));
+            
+            allNavLinks.forEach(el => {
+                // Check if this link is one of the uppercase header-like links (e.g., "MAX/MIN VALUE BREACH")
+                // These are identified by being text-xs, font-semibold, and uppercase, and often don't have a .nav-text child.
+                if (el.classList.contains('text-xs') && el.classList.contains('font-semibold') && el.classList.contains('uppercase')) {
+                    el.classList.add('hidden'); // Hide these header-like links entirely
+                } else {
+                    // This is a regular link, style it for icon display
+                    el.classList.add('flex', 'items-center', 'justify-center');
+                    el.classList.remove('px-3', 'py-1'); // Remove original padding
+                    el.classList.add('p-2');             // Add new padding for icons
+                }
+            });
+            
+            sidebar.classList.remove('p-4'); // Remove overall sidebar padding for collapsed state
+        } else { // Sidebar is expanded
+            sidebar.classList.remove('w-20'); 
             sidebar.classList.add('w-[220px]');
-            mainContent.classList.remove('ml-16');
+            mainContent.classList.remove('ml-20'); 
             mainContent.classList.add('ml-[220px]');
              if (breadcrumbsContainer) {
-                 breadcrumbsContainer.classList.remove('ml-16');
+                 breadcrumbsContainer.classList.remove('ml-20'); 
                  breadcrumbsContainer.classList.add('ml-[220px]');
              }
-            // Show text elements
+
+            // Show text spans within regular links
             sidebar.querySelectorAll('.nav-text').forEach(el => el.classList.remove('hidden'));
-            // Restore padding
-            sidebar.classList.remove('p-2');
-            sidebar.classList.add('p-4');
+            // Show main section headers
+            navSectionHeaders.forEach(el => el.classList.remove('hidden'));
+
+            allNavLinks.forEach(el => {
+                if (el.classList.contains('text-xs') && el.classList.contains('font-semibold') && el.classList.contains('uppercase')) {
+                    el.classList.remove('hidden'); // Show these header-like links
+                    // Ensure original padding/styles are not mangled if they weren't icon-styled
+                    el.classList.remove('flex', 'items-center', 'justify-center', 'p-2');
+                    el.classList.add('px-3', 'pt-2', 'py-1'); // Assuming this was its typical padding from base.html
+                } else {
+                    // Restore regular link styles
+                    el.classList.remove('flex', 'items-center', 'justify-center');
+                    el.classList.remove('p-2');       // Remove icon padding
+                    el.classList.add('px-3', 'py-1'); // Restore original padding
+                }
+            });
+            sidebar.classList.add('p-4'); // Restore overall sidebar padding
         }
     };
 
