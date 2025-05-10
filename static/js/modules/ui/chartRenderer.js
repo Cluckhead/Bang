@@ -199,9 +199,9 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
             chartWrapper.id = `chart-wrapper-${chartId}`;
             chartWrapper.style.position = 'relative';
 
-            // Conditionally add Inspect button if chartType is not 'relative'
-            if (chartConfig.chart_type !== 'relative') {
-                // --- Add Inspect Button (VANILLA JS, NO BOOTSTRAP) --- 
+            // --- Add Inspect Button (VANILLA JS, NO BOOTSTRAP) ---
+            // Conditionally add the inspect button if the chart type is not 'relative'
+            if (chartType !== 'relative') {
                 const inspectButton = document.createElement('button');
                 inspectButton.textContent = 'Inspect';
                 inspectButton.className = 'inspect-btn px-3 py-1 rounded-md bg-secondary text-white hover:bg-secondary-dark text-sm mt-2';
