@@ -76,6 +76,12 @@ MAXMIN_THRESHOLDS: Dict[str, Dict[str, str]] = load_yaml_config(
     "maxmin_thresholds.yaml"
 )
 
+# --- Metric File Map (Aggregate/Security-level mapping) ---
+# Loads the mapping of each metric to its aggregate and security-level files, display names, and units.
+METRIC_FILE_MAP: Dict[str, Dict[str, str]] = load_yaml_config(
+    os.path.join("config", "metric_file_map.yaml")
+)["metrics"]
+
 # Logging configuration (optional, Flask's default logging can be used)
 LOGGING_CONFIG = {
     "version": 1,

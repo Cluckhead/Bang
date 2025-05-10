@@ -544,3 +544,36 @@ No configuration changes are required; simply pull the latest code, restart the 
   - Supports fund selection, date range, append/overwrite modes, and status reporting.
   - Each fund's data is stored in its own file (`att_factors_<FUNDCODE>.csv`).
   - All attribution dashboards load from these files.
+
+## Metric File Mapping and Fund Metric Details Pages (May 2025)
+
+### Config-Driven Metric Mapping
+- The application now uses a central YAML config (`config/metric_file_map.yaml`) to map each metric to its four key files:
+  - `ts_<Metric>.csv` (aggregate/original)
+  - `sp_ts_<Metric>.csv` (aggregate/S&P)
+  - `sec_<Metric>.csv` (security-level/original)
+  - `sec_<Metric>SP.csv` (security-level/S&P)
+- The config also includes display names and units for each metric, making it easy to add new metrics or update labels.
+
+### Generic Fund Metric Details Page
+- There is now a generic details page for every metric: `/fund/<metric_name>_details/<fund_code>`.
+- This page shows, for the selected date:
+  - The value for the previous day
+  - The value for the selected day
+  - The 1 Day Change (selected - previous)
+- The table is sorted by the absolute value of the 1 Day Change (largest first), making it easy to spot big changes.
+- A single date selector is provided at the top, defaulting to the most recent date.
+- The S&P/original toggle is available for all metrics.
+- The metric page now links directly to these details pages for both original and S&P data for each fund.
+
+### Data File Requirements
+- All security-level files (`sec_*.csv`) must include a `Funds` column for fund-level filtering to work.
+- If this column is missing, the details page will show an error.
+
+### Metric Key Normalization and Routing Robustness
+- **All metric keys in `config/metric_file_map.yaml` must be in snake_case** (lowercase, underscores, no spaces or dashes). Example: `spread_duration`, `ytm`, `duration`.
+- The backend **automatically normalizes metric names from URLs** to snake_case before looking up in the config. This means URLs like `/fund/Spread Duration_details/IG01`, `/fund/spread-duration_details/IG01`, or `/fund/spread_duration_details/IG01` will all work as long as the config key is `spread_duration`.
+- **When adding a new metric:**
+  - Always use a snake_case key in the config.
+  - Set the `display_name` field for the user-facing label in the UI.
+- The `/fund/<metric_name>_details/<fund_code>` route is robust to different metric name formats in the URL, as long as the config key is snake_case.

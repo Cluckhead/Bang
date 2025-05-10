@@ -13,6 +13,7 @@
 - [Watchlist Feature](#watchlist-feature)
 - [Inspect (Contribution Analysis) Feature](#inspect-contribution-analysis-feature)
 - [Attribution Data API (NEW)](#attribution-data-api-new)
+- [Config-Driven Metric Details Pages (May 2025)](#config-driven-metric-details-pages-may-2025)
 
 ---
 
@@ -326,3 +327,30 @@ The Inspect feature provides a powerful, interactive workflow for root-cause ana
 - Handles missing data, flexible date parsing, and robust error handling.
 - Merges security names from `reference.csv` for user-friendly display.
 - Results are rendered in a dedicated results page and also available as JSON for API use.
+
+---
+
+## Config-Driven Metric Details Pages (May 2025)
+
+### Central Metric Mapping
+- The application now uses a YAML config (`config/metric_file_map.yaml`) to map each metric to its four key files:
+  - `ts_<Metric>.csv` (aggregate/original)
+  - `sp_ts_<Metric>.csv` (aggregate/S&P)
+  - `sec_<Metric>.csv` (security-level/original)
+  - `sec_<Metric>SP.csv` (security-level/S&P)
+- This config also provides display names and units, making it easy to add or update metrics.
+
+### Generic Fund Metric Details Page
+- For every metric, there is now a generic details page: `/fund/<metric_name>_details/<fund_code>`.
+- This page shows, for the selected date:
+  - The value for the previous day
+  - The value for the selected day
+  - The 1 Day Change (selected - previous)
+- The table is sorted by the absolute value of the 1 Day Change (largest first), so you can quickly spot the biggest changes.
+- There is a single date selector at the top (defaults to the most recent date).
+- The S&P/original toggle is available for all metrics.
+- The metric page now links directly to these details pages for both original and S&P data for each fund.
+
+### Data File Requirements
+- All security-level files (`sec_*.csv`) must include a `Funds` column for fund-level filtering to work.
+- If this column is missing, the details page will show an error.

@@ -146,15 +146,22 @@ export function renderChartsAndTables(container, payload, showSecondary = true) 
         fundWrapper.className = `fund-wrapper ${zClass}`; // Use a different class for the outer wrapper
         fundWrapper.id = `fund-wrapper-${fundCode}`;
 
-        // Add Duration Details Link (if applicable) - Moved to fund level
-        if (metricName === 'Duration') {
+        // Add Metric Details Link (for all metrics, not just Duration)
+        if (metricName) {
             const linkDiv = document.createElement('div');
             linkDiv.className = 'mb-2 text-end';
+            // Original data link
             const link = document.createElement('a');
-            link.href = `/fund/duration_details/${fundCode}`;
+            link.href = `/fund/${metricName}_details/${fundCode}?sp=false`;
             link.className = 'btn btn-info btn-sm';
-            link.textContent = `View Security Duration Changes for ${fundCode} →`;
+            link.textContent = `View Security ${metricName} Changes for ${fundCode} →`;
             linkDiv.appendChild(link);
+            // S&P data link
+            const spLink = document.createElement('a');
+            spLink.href = `/fund/${metricName}_details/${fundCode}?sp=true`;
+            spLink.className = 'btn btn-secondary btn-sm ml-2';
+            spLink.textContent = `S&P`;
+            linkDiv.appendChild(spLink);
             fundWrapper.appendChild(linkDiv);
         }
 

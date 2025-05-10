@@ -1,0 +1,39 @@
+# Purpose: Maps each metric to its associated files and display metadata for use throughout the app.
+# This enables consistent navigation and data loading for both aggregate and security-level views.
+
+metrics:
+  duration:
+    display_name: "Duration"
+    ts_file: "ts_Duration.csv"
+    sp_ts_file: "sp_ts_Duration.csv"
+    sec_file: "sec_Duration.csv"
+    sec_sp_file: "sec_DurationSP.csv"
+    units: "Years"
+  spread:
+    display_name: "Spread"
+    ts_file: "ts_Spread.csv"
+    sp_ts_file: "sp_ts_Spread.csv"
+    sec_file: "sec_Spread.csv"
+    sec_sp_file: "sec_SpreadSP.csv"
+    units: "bps"
+  ytm:
+    display_name: "Yield to Maturity"
+    ts_file: "ts_YTM.csv"
+    sp_ts_file: "sp_ts_YTM.csv"
+    sec_file: "sec_YTM.csv"
+    sec_sp_file: "sec_YTMSP.csv"
+    units: "%"
+  ytw:
+    display_name: "Yield to Worst"
+    ts_file: "ts_YTW.csv"
+    sp_ts_file: "sp_ts_YTW.csv"
+    sec_file: "sec_YTW.csv"
+    sec_sp_file: "sec_YTWSP.csv"
+    units: "%"
+  spread_duration:
+    display_name: "Spread Duration"
+    ts_file: "ts_SpreadDuration.csv"
+    sp_ts_file: "sp_ts_SpreadDuration.csv"
+    sec_file: "sec_Spread duration.csv"
+    sec_sp_file: "sec_Spread durationSP.csv"
+    units: "Years" 

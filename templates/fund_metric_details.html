@@ -1,0 +1,110 @@
+{#
+    Purpose: Fund Metric Details Page (Generic for any metric).
+    Shows only the selected date, previous date, and 1 Day Change for each security, sorted by abs(change).
+    This template is used by the /fund/<metric_name>_details/<fund_code> route for all metrics.
+#}
+{% extends 'base.html' %}
+
+{% block title %}{{ display_name }} 1-Day Change for {{ fund_code }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h2 class="text-2xl font-semibold font-merriweather mb-2">{{ display_name }} 1-Day Change for Fund: {{ fund_code }}</h2>
+    <p class="text-gray-700 mb-6">Showing 1-day changes for <code>{{ metric_name }}</code> held by <strong>{{ fund_code }}</strong> on the selected date, sorted by the largest absolute change.</p>
+
+    {# --- Single Date Selector and S&P Toggle --- #}
+    <form method="get" class="flex flex-wrap gap-4 items-end mb-6 bg-neutral-50 p-4 rounded shadow-sm">
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-0.5">Date</label>
+            <select name="date" class="h-7 rounded-sm px-1 py-0.5 text-xs border border-gray-300 min-w-[6rem] w-auto focus:outline-none focus:ring-secondary focus:border-secondary">
+                {% for date in all_date_options %}
+                    <option value="{{ date }}" {% if date == selected_date %}selected{% endif %}>{{ date }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="flex items-center space-x-2">
+            <input type="checkbox" id="sp-toggle" name="sp" value="true" {% if use_sp %}checked{% endif %} class="h-4 w-4 rounded border-gray-300 text-secondary focus:ring-secondary">
+            <label for="sp-toggle" class="text-xs text-gray-700 select-none">Show S&amp;P Data</label>
+        </div>
+        <button type="submit" class="px-3 py-1 rounded-md bg-secondary text-white text-xs font-medium hover:bg-opacity-90">Apply</button>
+    </form>
+
+    {% if message %}
+    <div class="bg-warning/10 border border-warning text-warning px-4 py-3 rounded relative mb-4" role="alert">
+        <strong class="font-bold">Warning!</strong>
+        <span class="block sm:inline ml-2">{{ message }}</span>
+    </div>
+    {% endif %}
+
+    {# Data Table Card #}
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-6 hover:shadow-md transition-shadow">
+        {% if securities_data %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 border border-gray-200" id="fund-metric-table">
+                <thead class="bg-gray-50">
+                    <tr>
+                        {# Show static columns first #}
+                        {% for col_name in column_order %}
+                            {% if col_name == id_col_name or col_name == 'Security Name' %}
+                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ col_name }}</th>
+                            {% endif %}
+                        {% endfor %}
+                        {# Show other static columns #}
+                        {% for col_name in column_order %}
+                            {% if col_name not in [id_col_name, 'Security Name', prev_date, selected_date, '1 Day Change'] %}
+                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ col_name }}</th>
+                            {% endif %}
+                        {% endfor %}
+                        {# Show previous date, selected date, and 1 Day Change #}
+                        {% if prev_date %}
+                            <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Prev Day<br>{{ prev_date }}</th>
+                        {% endif %}
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Selected<br>{{ selected_date }}</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">1 Day Change</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200" id="fund-metric-table-body">
+                    {% for row in securities_data %}
+                        <tr>
+                            {% for col_name in column_order %}
+                                {% if col_name == id_col_name %}
+                                    <td class="px-3 py-1.5 whitespace-nowrap text-sm text-left text-blue-600">
+                                        <a href="{{ url_for('security.security_details', metric_name=metric_name, security_id=row[col_name]|urlencode) }}" class="hover:text-blue-800 hover:underline">{{ row[col_name] }}</a>
+                                    </td>
+                                {% elif col_name == 'Security Name' %}
+                                    <td class="px-3 py-1.5 whitespace-nowrap text-sm text-left text-gray-900">{{ row[col_name] }}</td>
+                                {% elif col_name not in [prev_date, selected_date, '1 Day Change'] and col_name != id_col_name and col_name != 'Security Name' %}
+                                    <td class="px-3 py-1.5 whitespace-nowrap text-sm text-left text-gray-700">{{ row[col_name] }}</td>
+                                {% endif %}
+                            {% endfor %}
+                            {% if prev_date %}
+                                <td class="px-3 py-1.5 whitespace-nowrap text-sm text-right text-gray-900">{{ row[prev_date] if row[prev_date] is not none else '' }}</td>
+                            {% endif %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-right text-gray-900">{{ row[selected_date] if row[selected_date] is not none else '' }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-right font-bold {% if row['1 Day Change'] is number %}{% if row['1 Day Change'] > 0 %}text-green-700{% elif row['1 Day Change'] < 0 %}text-red-700{% else %}text-gray-700{% endif %}{% endif %}">
+                                {{ '%.4f'|format(row['1 Day Change']) if row['1 Day Change'] is number else '' }}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% elif not message %}
+         <div class="bg-info/10 border border-info text-info px-4 py-3 rounded relative" role="alert">
+             <strong class="font-bold">Info:</strong>
+            <span class="block sm:inline ml-2">No securities data to display for fund {{ fund_code }}.</span>
+        </div>
+        {% endif %}
+    </div> {# End Card #}
+
+    <div class="mt-6">
+         <a href="{{ url_for('metric.metric_page', metric_name=metric_name) }}" class="inline-flex items-center bg-secondary text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back to {{ display_name }} Metric Page
+        </a>
+    </div>
+</div>
+
+{% endblock %} 

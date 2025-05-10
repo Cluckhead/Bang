@@ -813,3 +813,126 @@ def fund_detail(fund_code):
             message=f"An unexpected error occurred: {e}",
             sp_valid_state=True,
         )  # Default to True on error
+
+
+@fund_bp.route("/<metric_name>_details/<fund_code>")
+def fund_metric_details(metric_name, fund_code):
+    """
+    Renders a page showing security-level 1-day changes for a specific fund and metric.
+    Shows only the selected date, previous date, and 1 Day Change, sorted by abs(change).
+    """
+    import datetime
+    data_folder = current_app.config["DATA_FOLDER"]
+    if not data_folder:
+        current_app.logger.error("DATA_FOLDER is not configured in the application.")
+        return "Internal Server Error: Data folder not configured", 500
+
+    # Normalize metric_name to snake_case for config lookup
+    metric_key = metric_name.replace(' ', '_').replace('-', '_').lower()
+    metric_cfg = config.METRIC_FILE_MAP.get(metric_key)
+    if not metric_cfg:
+        return f"Metric '{metric_name}' not found in config.", 404
+
+    # Determine which file to use (original or S&P)
+    use_sp = request.args.get("sp", "false").lower() == "true"
+    sec_file = metric_cfg["sec_sp_file"] if use_sp else metric_cfg["sec_file"]
+    data_filepath = os.path.join(data_folder, sec_file)
+    current_app.logger.info(f"--- Requesting {metric_name} Details for Fund: {fund_code} --- File: {data_filepath}")
+
+    if not os.path.exists(data_filepath):
+        return f"Error: Data file '{sec_file}' not found.", 404
+
+    # Load header to get columns
+    header_df = pd.read_csv(data_filepath, nrows=0, encoding="utf-8")
+    all_cols = [col.strip() for col in header_df.columns.tolist()]
+    id_col_name = config.ISIN_COL
+    if id_col_name not in all_cols:
+        return f"Error: Required ID column '{id_col_name}' not found in '{sec_file}'.", 500
+
+    # Identify static and date columns
+    date_cols = []
+    static_cols = []
+    for col in all_cols:
+        if col == id_col_name:
+            continue
+        if col == config.SEC_NAME_COL:
+            continue
+        if _is_date_like(col):
+            date_cols.append(col)
+        else:
+            static_cols.append(col)
+
+    # Sort date columns chronologically
+    date_cols_sorted = sorted(date_cols, key=lambda d: pd.to_datetime(d, errors="coerce"))
+    # Default: most recent date
+    selected_date = request.args.get("date")
+    if not selected_date or selected_date not in date_cols_sorted:
+        selected_date = date_cols_sorted[-1] if date_cols_sorted else None
+
+    # Find previous date (if available)
+    prev_date = None
+    if selected_date and selected_date in date_cols_sorted:
+        idx = date_cols_sorted.index(selected_date)
+        if idx > 0:
+            prev_date = date_cols_sorted[idx - 1]
+
+    # Load full data
+    df = pd.read_csv(data_filepath, encoding="utf-8")
+    df.columns = df.columns.str.strip()
+    funds_col = config.FUNDS_COL
+    if funds_col not in static_cols:
+        return f"Error: Required column '{funds_col}' for fund filtering not found.", 500
+
+    # Filter by fund code
+    fund_lists = df[funds_col].apply(parse_fund_list)
+    mask = fund_lists.apply(lambda funds: fund_code in funds)
+    filtered_df = df[mask].copy()
+
+    # Only keep static columns, id, prev_date, selected_date
+    display_cols = [id_col_name]
+    if config.SEC_NAME_COL in filtered_df.columns:
+        display_cols.append(config.SEC_NAME_COL)
+    display_cols += [col for col in static_cols if col in filtered_df.columns and col != config.SEC_NAME_COL]
+    if prev_date:
+        display_cols.append(prev_date)
+    if selected_date:
+        display_cols.append(selected_date)
+
+    # Calculate 1 Day Change (selected - prev)
+    change_col = "1 Day Change"
+    if prev_date and selected_date:
+        filtered_df[change_col] = filtered_df[selected_date] - filtered_df[prev_date]
+    else:
+        filtered_df[change_col] = None
+    display_cols.append(change_col)
+
+    # Sort by abs(1 Day Change) descending
+    filtered_df["_abs_change"] = filtered_df[change_col].abs()
+    filtered_df.sort_values(by="_abs_change", ascending=False, inplace=True, na_position="last")
+    filtered_df.drop(columns=["_abs_change"], inplace=True)
+
+    # Prepare for template
+    securities_data_list = filtered_df[display_cols].to_dict(orient="records")
+    for row in securities_data_list:
+        for key, value in row.items():
+            if pd.isna(value):
+                row[key] = None
+
+    # For the date selector UI
+    all_date_options = date_cols_sorted
+
+    return render_template(
+        "fund_metric_details.html",
+        fund_code=fund_code,
+        metric_name=metric_name,
+        display_name=metric_cfg["display_name"],
+        units=metric_cfg["units"],
+        securities_data=securities_data_list,
+        column_order=display_cols,
+        id_col_name=id_col_name,
+        message=None,
+        all_date_options=all_date_options,
+        selected_date=selected_date,
+        prev_date=prev_date,
+        use_sp=use_sp,
+    )
