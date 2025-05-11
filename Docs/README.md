@@ -218,7 +218,14 @@ The application relies on several external YAML files for configuration, loaded 
 The application includes a preprocessing step, primarily handled by `preprocessing.py` and orchestrated by `run_preprocessing.py`. This step standardizes various input files located in the `Data/` directory, typically those prefixed with `pre_` (e.g., `pre_sec_*.csv`, `pre_w_*.csv`).
 
 Key tasks performed during preprocessing include:
-- **Date Header Replacement:** Replacing generic column headers (like 'D1', 'D2') in weight files (`pre_w_*.csv`) with actual dates, often sourced from `Dates.csv`.
+- **Date Header Replacement:**
+  - The preprocessing step now automatically detects and replaces all columns whose names match a repeating pattern: `<prefix>`, `<prefix>.1`, `<prefix>.2`, ... (for example, `Field`, `Field.1`, `Field.2`, ...). The prefix may differ in each file (e.g., `Field`, `Value`, `D`, etc.), but all columns to be replaced will share the same prefix.
+  - Only these columns are replaced with dates from `Dates.csv`, in order. All other columns (metadata/static columns, whether at the start, end, or in the middle of the file) are left unchanged.
+  - This ensures that extra static columns (such as comments, status, or other metadata) are preserved and not affected by the date header replacement.
+  - **Example:**
+    - Input columns: `ISIN`, `Security Name`, `Field`, `Field.1`, `Field.2`, `Comment`
+    - After preprocessing (with 3 dates in `Dates.csv`): `ISIN`, `Security Name`, `2024-01-01`, `2024-01-02`, `2024-01-03`, `Comment`
+  - This logic is robust to files where the first value in the sequence is just the prefix (e.g., `Field`), followed by numbered columns.
 - **Data Type Conversion:** Ensuring columns have the correct data types (numeric, string, datetime).
 - **Aggregation/Pivoting:** Potentially transforming data formats (e.g., pivoting or melting).
 - **Output Generation:** Saving the processed data into standardized formats (e.g., `w_secs.csv`, `sec_*.csv`).

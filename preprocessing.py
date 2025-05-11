@@ -61,9 +61,9 @@ def replace_headers_with_dates(
     *,
     log: logging.Logger = logger,
 ) -> pd.DataFrame:
-    """Replace repeating data-column headers (e.g., Field.1, Field.2, ...) with actual *date* strings.
+    """Replace repeating data-column headers (e.g., Field, Field.1, Field.2, ...) with actual *date* strings.
 
-    This version detects the repeating columns by regex (e.g., Field.1, Field.2, ...),
+    This version detects the repeating columns by regex (e.g., Field, Field.1, Field.2, ...),
     finds the common prefix, and only replaces those columns with dates. All other columns
     (metadata/static) are left unchanged.
 
@@ -90,22 +90,30 @@ def replace_headers_with_dates(
         log.warning("No date_columns supplied – skipping header replacement.")
         return df
 
-    # --- Find repeating columns matching the pattern <prefix>.<number> ---
+    # --- Find repeating columns matching the pattern <prefix>, <prefix>.1, <prefix>.2, ... ---
     # Build a regex to match columns like 'Field.1', 'Field.2', ...
     pattern = re.compile(r"^(.*)\.(\d+)$")
     prefix_counts = {}
+    prefix_to_cols = {}
     for col in all_cols:
         m = pattern.match(col)
         if m:
             prefix = m.group(1)
             prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
+            prefix_to_cols.setdefault(prefix, []).append(col)
+    # Also check for columns that are just the prefix (e.g., 'Field')
+    for col in all_cols:
+        for prefix in prefix_counts:
+            if col == prefix:
+                prefix_counts[prefix] += 1
+                prefix_to_cols[prefix].insert(0, col)  # Ensure prefix is first
     if not prefix_counts:
-        log.warning("No repeating columns found matching <prefix>.<number> pattern. Skipping header replacement.")
+        log.warning("No repeating columns found matching <prefix> or <prefix>.<number> pattern. Skipping header replacement.")
         return df
     # Use the most common prefix (in case of multiple)
     main_prefix = max(prefix_counts, key=prefix_counts.get)
-    # Find all columns to replace
-    cols_to_replace = [col for col in all_cols if col.startswith(main_prefix + ".") and pattern.match(col)]
+    # Get all columns to replace, in order: prefix, prefix.1, prefix.2, ...
+    cols_to_replace = prefix_to_cols[main_prefix]
     if len(cols_to_replace) != len(date_columns):
         log.warning(
             f"Count mismatch: {len(cols_to_replace)} columns to replace, {len(date_columns)} date columns. Will replace up to the minimum."
