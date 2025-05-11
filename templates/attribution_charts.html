@@ -145,14 +145,20 @@
 {{ super() }}
 {# Chart.js should be loaded from base.html #}
 {# Keep existing JS logic, update Chart.js options for styling #}
+{# Embed JSON data in script tags to avoid inline Jinja in JS context #}
+<script id="bench-data" type="application/json">{{ chart_data_bench_json|safe }}</script>
+<script id="port-data" type="application/json">{{ chart_data_port_json|safe }}</script>
+<script id="abs-toggle-default-data" type="application/json">{{ abs_toggle_default|tojson|safe }}</script>
+
 <script>
+// Client-side chart rendering
 document.addEventListener('DOMContentLoaded', function() {
-    // Parse chart data from backend
-    const chartDataBench = JSON.parse({{ chart_data_bench_json|tojson|safe }});
-    const chartDataPort = JSON.parse({{ chart_data_port_json|tojson|safe }});
+    const chartDataBench = JSON.parse(document.getElementById('bench-data').textContent);
+    const chartDataPort  = JSON.parse(document.getElementById('port-data').textContent);
+    const absToggleDefaultValue = JSON.parse(document.getElementById('abs-toggle-default-data').textContent);
     
     // Initial state
-    let showAbs = document.getElementById('absToggle') ? document.getElementById('absToggle').checked : {{ 'true' if abs_toggle_default else 'false' }};
+    let showAbs = document.getElementById('absToggle') ? document.getElementById('absToggle').checked : absToggleDefaultValue;
     let benchData = chartDataBench;
     let portData = chartDataPort;
     let dateLabels = getDateLabels(benchData);

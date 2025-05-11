@@ -4,14 +4,13 @@
 
 # Prefixes for attribution columns
 prefixes:
-  prod: "L2 Port "
-  bench: "L2 Bench "
-  sp_prod: "RobAtt3_L2 Port "  # Was previously 'SPv3_L2 Port '
-  sp_bench: "RobAtt3_L2 Bench "  # Was previously 'SPv3_L2 Bench '
-  l0_prod: "L0 Port Total Daily "
+  prod: "L2 Port"
+  bench: "L2 Bench"
+  sp_prod: "RobAtt3_L2 Port" 
+  sp_bench: "RobAtt3_L2 Bench"  
+  l0_prod: "L0 Port Total Daily"
   l0_bench: "L0 Bench Total Daily"
-  l0_sp_prod: "RobAtt3_L0 Port Total Daily "
-  l0_sp_bench: "RobAtt3_L0 Bench Total Daily"
+
 
 # List of all L1 and L2 factors (for aggregation and display)
 l1_factors:

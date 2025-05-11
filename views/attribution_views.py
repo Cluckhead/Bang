@@ -44,20 +44,30 @@ ATTR_COLS = config.ATTRIBUTION_COLUMNS_CONFIG
 # Utility: Get available funds from FundList.csv (preferred) or w_secs.csv fallback
 def get_available_funds(data_folder: str) -> list:
     """
-    Returns a sorted list of available fund codes for attribution, using FundList.csv if present, else w_secs.csv.
+    Returns a sorted list of available fund codes by scanning the data_folder for 'att_factors_<FUNDCODE>.csv' files.
     """
-    fund_list_path = os.path.join(data_folder, "FundList.csv")
-    if os.path.exists(fund_list_path):
-        df = pd.read_csv(fund_list_path)
-        if "Fund Code" in df.columns:
-            return sorted(df["Fund Code"].dropna().astype(str).unique())
-    # Fallback: w_secs.csv
-    wsecs_path = os.path.join(data_folder, "w_secs.csv")
-    if os.path.exists(wsecs_path):
-        wsecs = pd.read_csv(wsecs_path)
-        if "Fund" in wsecs.columns:
-            return sorted(wsecs["Fund"].dropna().astype(str).unique())
-    return []
+    # This function scans the specified data directory to find all attribution factor files.
+    # It assumes a naming convention of 'att_factors_FUNDCODE.csv'.
+    # The 'FUNDCODE' part is extracted and returned as a unique, sorted list.
+    # This ensures that the fund dropdown in the UI only shows funds for which data actually exists.
+    fund_codes = set()
+    try:
+        for filename in os.listdir(data_folder):
+            if filename.startswith("att_factors_") and filename.endswith(".csv"):
+                # Extract fund code: "att_factors_" is 12 chars, ".csv" is 4 chars
+                fund_code = filename[12:-4]
+                if fund_code: # Ensure fund_code is not empty
+                    fund_codes.add(fund_code)
+    except FileNotFoundError:
+        # If the data_folder doesn't exist, return an empty list.
+        # This can happen during initial setup or if the configuration is wrong.
+        current_app.logger.warning(f"Data folder not found: {data_folder} when trying to list available funds.")
+        return []
+    except Exception as e:
+        # Log other potential errors during file listing or processing.
+        current_app.logger.error(f"Error scanning for fund files in {data_folder}: {e}")
+        return []
+    return sorted(list(fund_codes))
 
 
 @attribution_bp.route("/summary")
@@ -149,8 +159,6 @@ def attribution_summary() -> Response:
     pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
     l0_bench = ATTR_COLS['prefixes']['l0_bench']
     l0_prod = ATTR_COLS['prefixes']['l0_prod']
-    l0_sp_bench = ATTR_COLS['prefixes']['l0_sp_bench']
-    l0_sp_prod = ATTR_COLS['prefixes']['l0_sp_prod']
 
     # Prepare results: group by Date, Fund, and selected characteristic
     group_cols = ["Date", "Fund"]
@@ -427,8 +435,6 @@ def attribution_charts() -> Response:
     pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
     l0_bench = ATTR_COLS['prefixes']['l0_bench']
     l0_prod = ATTR_COLS['prefixes']['l0_prod']
-    l0_sp_bench = ATTR_COLS['prefixes']['l0_sp_bench']
-    l0_sp_prod = ATTR_COLS['prefixes']['l0_sp_prod']
 
     # Prepare time series data for charts
     chart_data_bench = []
@@ -647,8 +653,6 @@ def attribution_radar() -> Response:
     pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
     l0_bench = ATTR_COLS['prefixes']['l0_bench']
     l0_prod = ATTR_COLS['prefixes']['l0_prod']
-    l0_sp_bench = ATTR_COLS['prefixes']['l0_sp_bench']
-    l0_sp_prod = ATTR_COLS['prefixes']['l0_sp_prod']
 
 
     if selected_level == "L1":
@@ -741,8 +745,6 @@ def attribution_security_page() -> Response:
     pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
     l0_bench = ATTR_COLS['prefixes']['l0_bench']
     l0_prod = ATTR_COLS['prefixes']['l0_prod']
-    l0_sp_bench = ATTR_COLS['prefixes']['l0_sp_bench']
-    l0_sp_prod = ATTR_COLS['prefixes']['l0_sp_prod']
 
 
     data_folder = current_app.config["DATA_FOLDER"]
@@ -761,7 +763,7 @@ def attribution_security_page() -> Response:
             available_types=[],
             selected_type="",
             selected_date="",
-            bench_or_port="bench",
+            bench_or_port="port",
             mtd=False,
             normalize=False,
             no_data_message="No attribution available.",
@@ -789,8 +791,9 @@ def attribution_security_page() -> Response:
         "date", default=prev_bday.strftime("%Y-%m-%d"), type=str
     )
     selected_date = pd.to_datetime(selected_date_str, errors="coerce")
-    # Fund dropdown: default to first fund
-    available_funds = sorted(df["Fund"].dropna().unique())
+    # Fund dropdown: relies on available_funds populated by get_available_funds at the start of the function.
+    # selected_fund is determined from request arguments or defaults to the first in available_funds.
+    # available_funds = sorted(df["Fund"].dropna().unique()) # This line is removed as available_funds is already correctly populated.
     selected_fund = request.args.get(
         "fund", default=available_funds[0] if available_funds else "", type=str
     )
@@ -799,7 +802,7 @@ def attribution_security_page() -> Response:
     selected_type = request.args.get("type", default="", type=str)
     # Bench/Portfolio toggle
     bench_or_port = request.args.get(
-        "bench_or_port", default="bench", type=str
+        "bench_or_port", default="port", type=str
     )  # 'bench' or 'port'
     # MTD toggle
     mtd = request.args.get("mtd", default="off", type=str) == "on"
@@ -892,12 +895,20 @@ def attribution_security_page() -> Response:
     l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
 
     # Residual calculation
-    def calc_residual(row, l0, l1_prefix):
-        l1_sum = sum([row.get(f"{l1_prefix}{f}", 0) for f in l1_factors])
-        return row.get(l0, 0) - l1_sum
+    def calc_residual(row, l0, l1_prefix, weight_col, normalize):
+        """Return residual = L0 - sum(L1 factors). Handles normalization and correct column names."""
+        # Always insert space between prefix and factor names to match CSV headers
+        l1_sum = sum(
+            [norm(row, f"{l1_prefix} {f}", weight_col, normalize) for f in l1_factors]
+        )
+        l0_val = norm(row, l0, weight_col, normalize)
+        return l0_val - l1_sum
 
     # Normalization
-    def norm(row, value_or_col_name, weight_col):
+    def norm(row, value_or_col_name, weight_col, normalize):
+        """
+        Normalizes the value by the weight if requested. Handles weights as percent strings (e.g., '30.00%'), floats (0.3), or numeric strings ('0.3').
+        """
         w_val = row.get(weight_col)  # Get the raw weight value
 
         # Determine the value 'v' to normalize
@@ -906,46 +917,48 @@ def attribution_security_page() -> Response:
         else:  # Assume it's the direct value
             v = value_or_col_name if value_or_col_name is not None else 0
 
-        # Check normalize flag from outer scope
-        if current_app.config.get("ATTRIBUTION_NORMALIZE", False) and w_val is not None:
+        def parse_weight(w):
+            if w is None:
+                return None
+            if isinstance(w, str):
+                w = w.strip()
+                if w.endswith('%'):
+                    try:
+                        return float(w[:-1]) / 100.0
+                    except ValueError:
+                        return None
+                try:
+                    return float(w)
+                except ValueError:
+                    return None
             try:
-                # Attempt to convert weight to float
-                w = float(w_val)
-                # Perform division only if weight is non-zero
-                if w != 0:
-                    return v / w
-            except (ValueError, TypeError):
-                # Handle cases where weight is not a valid number
-                pass  # Keep original value v if weight is invalid
+                return float(w)
+            except Exception:
+                return None
 
-        return v  # Return original or calculated value
+        if normalize:
+            w = parse_weight(w_val)
+            if w is not None and w != 0:
+                return v / w
+        return v
 
     # Prepare table rows
     table_rows = []
     for _, row in df.iterrows():
-        returns = norm(row, l0_col, weight_col)
-        orig_resid = calc_residual(row, l0_col, l1_prefix)
-        sp_resid = calc_residual(row, l0_col, l1_sp_prefix)
-        # Normalize the actual residual values if requested
-        normalized_orig_resid = (
-            norm(row, orig_resid, weight_col)
-            if normalize and weight_col
-            else orig_resid
-        )
-        normalized_sp_resid = (
-            norm(row, sp_resid, weight_col) if normalize and weight_col else sp_resid
-        )
-        resid_diff = (
-            normalized_orig_resid - normalized_sp_resid
-        )  # Use normalized residuals for diff
+        returns = norm(row, l0_col, weight_col, normalize)
+        orig_resid = calc_residual(row, l0_col, l1_prefix, weight_col, normalize)
+        sp_resid = calc_residual(row, l0_col, l1_sp_prefix, weight_col, normalize)
+        resid_diff = orig_resid - sp_resid  # Already normalized (or raw) as per toggle
+        normalized_orig_resid = orig_resid  # keep variable names for template compatibility
+        normalized_sp_resid = sp_resid
         l1_vals = {}
         for l1_name, l2_list in l1_groups.items():
-            # Apply normalization within the sum for L1 values
+            # Always insert a space between prefix and factor name to match CSV headers
             orig_sum = sum(
-                [norm(row, f"{l1_prefix}{l2}", weight_col) for l2 in l2_list]
+                [norm(row, f"{l1_prefix} {l2}", weight_col, normalize) for l2 in l2_list]
             )
             sp_sum = sum(
-                [norm(row, f"{l1_sp_prefix}{l2}", weight_col) for l2 in l2_list]
+                [norm(row, f"{l1_sp_prefix} {l2}", weight_col, normalize) for l2 in l2_list]
             )
             l1_vals[l1_name] = (orig_sum, sp_sum)
         table_rows.append(

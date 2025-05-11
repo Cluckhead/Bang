@@ -11,7 +11,7 @@
 {% block title %}Attribution Radar Charts{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="max-w-none w-full px-8 py-8 mx-auto">
     <h1 class="text-3xl font-bold font-merriweather mb-2">Attribution Radar Charts</h1>
     <p class="text-gray-600 mb-6">Visualize aggregated attribution factors (L1 or L2 + Residual) for Portfolio and Benchmark as radar charts. Use the filters and controls to explore the data.</p>
 
@@ -74,16 +74,16 @@
 
     <!-- Radar Charts Card -->
     <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
-        <div class="grid grid-cols-1 gap-8 items-start">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
             <div class="flex flex-col items-center">
                 <h3 class="text-xl font-semibold mb-4">Portfolio Attribution</h3>
-                <div class="w-full h-[500px]">
+                <div class="w-full h-[800px]">
                     <canvas id="portfolioRadar" class="h-full w-full"></canvas>
                 </div>
             </div>
             <div class="flex flex-col items-center">
                 <h3 class="text-xl font-semibold mb-4">Benchmark Attribution</h3>
-                 <div class="w-full h-[500px]">
+                 <div class="w-full h-[800px]">
                     <canvas id="benchmarkRadar" class="h-full w-full"></canvas>
                  </div>
             </div>

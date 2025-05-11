@@ -380,6 +380,7 @@ Attribution residuals are calculated using the following formulas:
 - `L1 FX Total = L2 FX Carry Daily + L2 FX Change Daily`
 - `L1 Residual = L0 Total - (L1 Rates + L1 Credit + L1 FX)`
 - Perfect attribution is achieved when residual = 0
+- **Absolute Residuals:** When displaying "absolute residuals" (e.g., in the charts or summary views when toggled), the value represents the sum of the absolute values of the individual security-level residuals within the given aggregation group (e.g., for a specific date and characteristic). This provides a true measure of the total magnitude of residuals, rather than taking the absolute of a potentially netted (summed) residual.
 
 ## Adding a New Comparison Type
 

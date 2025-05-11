@@ -48,8 +48,16 @@
                 <div class="flex-grow sm:flex-grow-0 sm:basis-auto">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Benchmark/Portfolio</label>
                     <div class="flex items-center h-8"> {# Align with inputs #}
-                        <input type="checkbox" id="bench_or_port" name="bench_or_port" value="port" {% if bench_or_port == 'port' %}checked{% endif %} onchange="this.value = this.checked ? 'port' : 'bench'; this.form.submit();" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2">
-                        <label for="bench_or_port" class="text-sm text-gray-900">Portfolio</label>
+                        <input type="radio" id="bench_radio" name="bench_or_port" value="bench"
+                            {% if bench_or_port != 'port' %}checked{% endif %}
+                            onchange="this.form.submit();"
+                            class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2">
+                        <label for="bench_radio" class="text-sm text-gray-900 mr-4">Benchmark</label>
+                        <input type="radio" id="port_radio" name="bench_or_port" value="port"
+                            {% if bench_or_port == 'port' %}checked{% endif %}
+                            onchange="this.form.submit();"
+                            class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2">
+                        <label for="port_radio" class="text-sm text-gray-900">Portfolio</label>
                     </div>
                 </div>
                 {# MTD Toggle #}
@@ -90,19 +98,19 @@
                  {# Table Header (Sticky) #}
                 <thead class="bg-gray-50 sticky top-0 z-10">
                     <tr>
-                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Security Name</th>
-                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ISIN</th>
-                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Returns (L0 Total)</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Original Residual</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">S&amp;P Residual</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Residual Diff</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 Rates (Orig)</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 Rates (S&amp;P)</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 Credit (Orig)</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 Credit (S&amp;P)</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 FX (Orig)</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">L1 FX (S&amp;P)</th>
+                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="0">Security Name <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="1">ISIN <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="2">Type <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="3">Returns (L0 Total) <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="4">Original Residual <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="5">S&amp;P Residual <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="6">Residual Diff <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="7">L1 Rates (Orig) <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="8">L1 Rates (S&amp;P) <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="9">L1 Credit (Orig) <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="10">L1 Credit (S&amp;P) <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="11">L1 FX (Orig) <span class="sort-indicator"></span></th>
+                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable" data-col="12">L1 FX (S&amp;P) <span class="sort-indicator"></span></th>
                     </tr>
                 </thead>
                  {# Table Body #}
@@ -199,4 +207,58 @@
         </div>
     {% endif %}
 </div>
+
+<script>
+// Purpose: Adds client-side sorting to the attribution table by clicking on column headers.
+// When a header is clicked, the table is sorted by that column. Clicking again reverses the sort.
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.getElementById('attribution-table');
+    if (!table) return;
+    const headers = table.querySelectorAll('th.sortable');
+    let sortCol = null;
+    let sortDir = 1; // 1 = ascending, -1 = descending
+
+    headers.forEach(function(header, idx) {
+        header.addEventListener('click', function() {
+            const colIdx = parseInt(header.getAttribute('data-col'));
+            if (sortCol === colIdx) {
+                sortDir = -sortDir; // Reverse direction
+            } else {
+                sortCol = colIdx;
+                sortDir = 1;
+            }
+            sortTable(table, colIdx, sortDir);
+            updateIndicators(headers, header, sortDir);
+        });
+    });
+
+    function sortTable(table, col, dir) {
+        const tbody = table.tBodies[0];
+        const rows = Array.from(tbody.rows);
+        rows.sort(function(a, b) {
+            let aText = a.cells[col].innerText.trim();
+            let bText = b.cells[col].innerText.trim();
+            // Try to compare as numbers if possible
+            let aNum = parseFloat(aText.replace(/,/g, ''));
+            let bNum = parseFloat(bText.replace(/,/g, ''));
+            if (!isNaN(aNum) && !isNaN(bNum)) {
+                return dir * (aNum - bNum);
+            }
+            return dir * aText.localeCompare(bText);
+        });
+        rows.forEach(row => tbody.appendChild(row));
+    }
+
+    function updateIndicators(headers, activeHeader, dir) {
+        headers.forEach(h => {
+            const indicator = h.querySelector('.sort-indicator');
+            if (h === activeHeader) {
+                indicator.textContent = dir === 1 ? '▲' : '▼';
+            } else {
+                indicator.textContent = '';
+            }
+        });
+    }
+});
+</script>
 {% endblock %} 
