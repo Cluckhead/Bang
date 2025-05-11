@@ -142,7 +142,7 @@ def attribution_summary() -> Response:
     # Use L1 and L2 groupings from config
     l1_groups = config.ATTRIBUTION_L1_GROUPS
     l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
-    # --- Attribution column prefixes from config ---
+    # Attribution column prefixes from config
     pfx_bench = ATTR_COLS['prefixes']['bench']
     pfx_prod = ATTR_COLS['prefixes']['prod']
     pfx_sp_bench = ATTR_COLS['prefixes']['sp_bench']
@@ -641,7 +641,18 @@ def attribution_radar() -> Response:
     bench_sp = []
     residual_labels = ["Residual"]
 
+    pfx_bench = ATTR_COLS['prefixes']['bench']
+    pfx_prod = ATTR_COLS['prefixes']['prod']
+    pfx_sp_bench = ATTR_COLS['prefixes']['sp_bench']
+    pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
+    l0_bench = ATTR_COLS['prefixes']['l0_bench']
+    l0_prod = ATTR_COLS['prefixes']['l0_prod']
+    l0_sp_bench = ATTR_COLS['prefixes']['l0_sp_bench']
+    l0_sp_prod = ATTR_COLS['prefixes']['l0_sp_prod']
+
+
     if selected_level == "L1":
+        # --- L1 Aggregation ---
         radar_labels = list(l1_groups.keys()) + residual_labels
         # Portfolio
         # Use l1_groups (dict of L1 groupings) as required by sum_l1s_block, not l2_all (which is a flat list)
@@ -722,8 +733,17 @@ def attribution_security_page() -> Response:
     Supports filtering by date, fund, type, bench/portfolio toggle, MTD aggregation, normalization, and pagination.
     Table columns: Security Name (linked), ISIN, Type, Returns (L0 Total), Original Residual, S&P Residual, Residual Diff, L1 values (Orig & S&P)
     """
-    import numpy as np
     from pandas.tseries.offsets import BDay
+
+    pfx_bench = ATTR_COLS['prefixes']['bench']
+    pfx_prod = ATTR_COLS['prefixes']['prod']
+    pfx_sp_bench = ATTR_COLS['prefixes']['sp_bench']
+    pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
+    l0_bench = ATTR_COLS['prefixes']['l0_bench']
+    l0_prod = ATTR_COLS['prefixes']['l0_prod']
+    l0_sp_bench = ATTR_COLS['prefixes']['l0_sp_bench']
+    l0_sp_prod = ATTR_COLS['prefixes']['l0_sp_prod']
+
 
     data_folder = current_app.config["DATA_FOLDER"]
     available_funds = get_available_funds(data_folder)
