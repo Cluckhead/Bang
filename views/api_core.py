@@ -638,6 +638,10 @@ def run_attribution_api_calls():
             if df is None or df.empty:
                 status_results.append({"fund": fund, "status": "No data returned", "rows_written": 0, "error": True})
                 continue
+            # --- ROUNDING LOGIC: Round all float columns to 8 decimals before saving ---
+            float_cols = df.select_dtypes(include=["float", "float64", "float32"]).columns
+            if len(float_cols) > 0:
+                df[float_cols] = df[float_cols].round(8)
             # Write mode
             if write_mode == "redo":
                 df.to_csv(file_path, index=False)
@@ -650,6 +654,10 @@ def run_attribution_api_calls():
                     combined = df
                 # Deduplicate by ISIN+Fund+Date, keep the most recent (lowest in file)
                 deduped = combined.drop_duplicates(subset=["ISIN", "Fund", "Date"], keep="last")
+                # --- ROUNDING LOGIC: Round all float columns to 8 decimals before saving ---
+                float_cols = deduped.select_dtypes(include=["float", "float64", "float32"]).columns
+                if len(float_cols) > 0:
+                    deduped[float_cols] = deduped[float_cols].round(8)
                 deduped.to_csv(file_path, index=False)
                 rows_written = len(deduped) - (len(old_df) if os.path.exists(file_path) else 0)
             status_results.append({"fund": fund, "status": "Success", "rows_written": rows_written, "error": False})

@@ -1,0 +1,50 @@
+# Purpose: Defines all column header prefixes and mappings for attribution data files.
+# This config allows the app to flexibly update column names (e.g., SPv3_ → RobAtt3_) in one place.
+# Update this file whenever the attribution data provider changes header conventions.
+
+# Prefixes for attribution columns
+prefixes:
+  prod: "L2 Port "
+  bench: "L2 Bench "
+  sp_prod: "RobAtt3_L2 Port "  # Was previously 'SPv3_L2 Port '
+  sp_bench: "RobAtt3_L2 Bench "  # Was previously 'SPv3_L2 Bench '
+  l0_prod: "L0 Port Total Daily "
+  l0_bench: "L0 Bench Total Daily"
+  l0_sp_prod: "RobAtt3_L0 Port Total Daily "
+  l0_sp_bench: "RobAtt3_L0 Bench Total Daily"
+
+# List of all L1 and L2 factors (for aggregation and display)
+l1_factors:
+  - "Rates Carry Daily"
+  - "Rates Convexity Daily"
+  - "Rates Curve Daily"
+  - "Rates Duration Daily"
+  - "Rates Roll Daily"
+  - "Credit Spread Change Daily"
+  - "Credit Convexity Daily"
+  - "Credit Carry Daily"
+  - "Credit Defaulted"
+  - "FX Carry Daily"
+  - "FX Change Daily"
+
+l2_groups:
+  Rates:
+    - "Rates Carry Daily"
+    - "Rates Convexity Daily"
+    - "Rates Curve Daily"
+    - "Rates Duration Daily"
+    - "Rates Roll Daily"
+  Credit:
+    - "Credit Spread Change Daily"
+    - "Credit Convexity Daily"
+    - "Credit Carry Daily"
+    - "Credit Defaulted"
+  FX:
+    - "FX Carry Daily"
+    - "FX Change Daily"
+
+# Example usage in code:
+#   config = load_yaml_config('config/attribution_columns.yaml')
+#   prefix = config['prefixes']['sp_prod']
+#   l1_factors = config['l1_factors']
+#   l2_groups = config['l2_groups'] 

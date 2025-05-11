@@ -27,6 +27,7 @@ import os
 from pathlib import Path
 from typing import List, Dict
 from utils import load_yaml_config
+import yaml
 
 # Base directory of the application
 BASE_DIR = Path(__file__).resolve().parent
@@ -316,3 +317,11 @@ SCOPE_COLUMN_PATTERNS = [
     r"SS\s*Project\s*-\s*In\s*Scope",
     r"In\s*Scope",
 ]
+
+# Attribution column header config (prefixes, factors, etc.)
+try:
+    with open('config/attribution_columns.yaml', 'r') as f:
+        ATTRIBUTION_COLUMNS_CONFIG = yaml.safe_load(f)
+except Exception as e:
+    ATTRIBUTION_COLUMNS_CONFIG = None
+    # Optionally log or print error here

@@ -8,6 +8,7 @@ import logging
 from typing import List, Optional
 import config
 from data_utils import read_csv_robustly
+import re
 
 # --- Filename prefix constants (5.1.2) ---
 PRE_PREFIX: str = "pre_"  # Files that require full preprocessing
@@ -56,11 +57,15 @@ def read_and_sort_dates(dates_file_path: str) -> Optional[List[str]]:
 def replace_headers_with_dates(
     df: pd.DataFrame,
     date_columns: List[str],
-    metadata_cols: List[str],
+    metadata_cols: List[str] = None,
     *,
     log: logging.Logger = logger,
 ) -> pd.DataFrame:
-    """Replace placeholder data-column headers with actual *date* strings.
+    """Replace repeating data-column headers (e.g., Field.1, Field.2, ...) with actual *date* strings.
+
+    This version detects the repeating columns by regex (e.g., Field.1, Field.2, ...),
+    finds the common prefix, and only replaces those columns with dates. All other columns
+    (metadata/static) are left unchanged.
 
     Parameters
     ----------
@@ -71,9 +76,7 @@ def replace_headers_with_dates(
         A *sorted* list of date strings (``YYYY-MM-DD``) originating from
         ``Dates.csv``.
     metadata_cols
-        A list of *existing* column names that should be treated as *metadata*
-        (i.e. **not** replaced). All columns *after* this list constitute the
-        *data* columns that will potentially be renamed.
+        (Unused in this version, kept for compatibility.)
     log
         Optional logger to use – defaults to module-level logger.
 
@@ -82,62 +85,37 @@ def replace_headers_with_dates(
     pd.DataFrame
         The dataframe with its columns potentially renamed.
     """
-
-    # ---------------------------------------------------------------------
-    # Determine parts of the header we want to manipulate
-    # ---------------------------------------------------------------------
     all_cols: List[str] = list(df.columns)
-
     if not date_columns:
         log.warning("No date_columns supplied – skipping header replacement.")
         return df
 
-    meta_len: int = len(metadata_cols)
-    if meta_len == 0:
-        log.warning("metadata_cols is empty – treating first column as metadata.")
-        meta_len = 1
-
-    if meta_len > len(all_cols):
-        log.error(
-            "metadata_cols length (%s) exceeds dataframe column count (%s).",
-            meta_len,
-            len(all_cols),
-        )
+    # --- Find repeating columns matching the pattern <prefix>.<number> ---
+    # Build a regex to match columns like 'Field.1', 'Field.2', ...
+    pattern = re.compile(r"^(.*)\.(\d+)$")
+    prefix_counts = {}
+    for col in all_cols:
+        m = pattern.match(col)
+        if m:
+            prefix = m.group(1)
+            prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
+    if not prefix_counts:
+        log.warning("No repeating columns found matching <prefix>.<number> pattern. Skipping header replacement.")
         return df
-
-    # Slice columns into metadata and data sections
-    meta_section: List[str] = all_cols[:meta_len]
-    data_section: List[str] = all_cols[meta_len:]
-
-    if not data_section:
-        log.debug("No data columns after metadata – nothing to replace.")
-        return df
-
-    # ---------------------------------------------------------------------
-    # Handle mismatched counts between dates and data columns
-    # ---------------------------------------------------------------------
-    if len(data_section) != len(date_columns):
+    # Use the most common prefix (in case of multiple)
+    main_prefix = max(prefix_counts, key=prefix_counts.get)
+    # Find all columns to replace
+    cols_to_replace = [col for col in all_cols if col.startswith(main_prefix + ".") and pattern.match(col)]
+    if len(cols_to_replace) != len(date_columns):
         log.warning(
-            "Data/date column count mismatch – data_cols=%s, date_cols=%s. Adjusting to min length.",
-            len(data_section),
-            len(date_columns),
+            f"Count mismatch: {len(cols_to_replace)} columns to replace, {len(date_columns)} date columns. Will replace up to the minimum."
         )
-
-    # Replace up to the minimum length between the two lists
-    replace_count: int = min(len(data_section), len(date_columns))
-    new_data_section: List[str] = (
-        date_columns[:replace_count] + data_section[replace_count:]
-    )
-
-    new_columns: List[str] = meta_section + new_data_section
-
-    if len(new_columns) != len(all_cols):
-        # This should never happen but guard anyway
-        log.error("Internal error constructing new header – column count changed.")
-        return df
-
-    df.columns = new_columns
-    log.info("Replaced %s data column headers with dates.", replace_count)
+    replace_count = min(len(cols_to_replace), len(date_columns))
+    # Map old column names to new date names
+    col_rename_map = {old: date_columns[i] for i, old in enumerate(cols_to_replace[:replace_count])}
+    # Apply renaming
+    df = df.rename(columns=col_rename_map)
+    log.info(f"Replaced {replace_count} column headers with dates using prefix '{main_prefix}'.")
     return df
 
 

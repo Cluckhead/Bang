@@ -38,6 +38,8 @@ import config
 
 attribution_bp = Blueprint("attribution_bp", __name__, url_prefix="/attribution")
 
+# Load attribution column config from YAML (prefixes, factors, etc.)
+ATTR_COLS = config.ATTRIBUTION_COLUMNS_CONFIG
 
 # Utility: Get available funds from FundList.csv (preferred) or w_secs.csv fallback
 def get_available_funds(data_folder: str) -> list:
@@ -140,6 +142,15 @@ def attribution_summary() -> Response:
     # Use L1 and L2 groupings from config
     l1_groups = config.ATTRIBUTION_L1_GROUPS
     l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
+    # --- Attribution column prefixes from config ---
+    pfx_bench = ATTR_COLS['prefixes']['bench']
+    pfx_prod = ATTR_COLS['prefixes']['prod']
+    pfx_sp_bench = ATTR_COLS['prefixes']['sp_bench']
+    pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
+    l0_bench = ATTR_COLS['prefixes']['l0_bench']
+    l0_prod = ATTR_COLS['prefixes']['l0_prod']
+    l0_sp_bench = ATTR_COLS['prefixes']['l0_sp_bench']
+    l0_sp_prod = ATTR_COLS['prefixes']['l0_sp_prod']
 
     # Prepare results: group by Date, Fund, and selected characteristic
     group_cols = ["Date", "Fund"]
@@ -171,25 +182,25 @@ def attribution_summary() -> Response:
         if selected_level == "L0" or not selected_level:
             bench_prod_res = group.apply(
                 lambda row: calc_residual(
-                    row, "L0 Bench Total Daily", "L2 Bench ", l2_all
+                    row, l0_bench, pfx_bench, l2_all
                 ),
                 axis=1,
             )
             bench_sp_res = group.apply(
                 lambda row: calc_residual(
-                    row, "L0 Bench Total Daily", "SPv3_L2 Bench ", l2_all
+                    row, l0_bench, pfx_sp_bench, l2_all
                 ),
                 axis=1,
             )
             port_prod_res = group.apply(
                 lambda row: calc_residual(
-                    row, "L0 Port Total Daily ", "L2 Port ", l2_all
+                    row, l0_prod, pfx_prod, l2_all
                 ),
                 axis=1,
             )
             port_sp_res = group.apply(
                 lambda row: calc_residual(
-                    row, "L0 Port Total Daily ", "SPv3_L2 Port ", l2_all
+                    row, l0_prod, pfx_sp_prod, l2_all
                 ),
                 axis=1,
             )
@@ -224,10 +235,10 @@ def attribution_summary() -> Response:
             portfolio_results.append(row_info_port)
         # L1: Show L1 Rates, Credit, FX (Prod and S&P)
         elif selected_level == "L1":
-            bench_l1_prod = sum_l1s_block(group, "L2 Bench ", l1_groups)
-            bench_l1_sp = sum_l1s_block(group, "SPv3_L2 Bench ", l1_groups)
-            port_l1_prod = sum_l1s_block(group, "L2 Port ", l1_groups)
-            port_l1_sp = sum_l1s_block(group, "SPv3_L2 Port ", l1_groups)
+            bench_l1_prod = sum_l1s_block(group, pfx_bench, l1_groups)
+            bench_l1_sp = sum_l1s_block(group, pfx_sp_bench, l1_groups)
+            port_l1_prod = sum_l1s_block(group, pfx_prod, l1_groups)
+            port_l1_sp = sum_l1s_block(group, pfx_sp_prod, l1_groups)
             row_info_bench = {
                 "Date": date,
                 "Fund": selected_fund,
@@ -255,10 +266,10 @@ def attribution_summary() -> Response:
             portfolio_results.append(row_info_port)
         # L2: Show all L2 values (Prod and S&P) side by side
         elif selected_level == "L2":
-            l2prod = dict(zip(l2_all, sum_l2s_block(group, "L2 Bench ", l2_all)))
-            l2sp = dict(zip(l2_all, sum_l2s_block(group, "SPv3_L2 Bench ", l2_all)))
-            l2prod_port = dict(zip(l2_all, sum_l2s_block(group, "L2 Port ", l2_all)))
-            l2sp_port = dict(zip(l2_all, sum_l2s_block(group, "SPv3_L2 Port ", l2_all)))
+            l2prod = dict(zip(l2_all, sum_l2s_block(group, pfx_bench, l2_all)))
+            l2sp = dict(zip(l2_all, sum_l2s_block(group, pfx_sp_bench, l2_all)))
+            l2prod_port = dict(zip(l2_all, sum_l2s_block(group, pfx_prod, l2_all)))
+            l2sp_port = dict(zip(l2_all, sum_l2s_block(group, pfx_sp_prod, l2_all)))
             row_info_bench = {
                 "Date": date,
                 "Fund": selected_fund,
@@ -409,6 +420,16 @@ def attribution_charts() -> Response:
     if selected_characteristic:
         group_cols.append(selected_characteristic)
 
+    # --- Attribution column prefixes from config (fix for NameError) ---
+    pfx_bench = ATTR_COLS['prefixes']['bench']
+    pfx_prod = ATTR_COLS['prefixes']['prod']
+    pfx_sp_bench = ATTR_COLS['prefixes']['sp_bench']
+    pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
+    l0_bench = ATTR_COLS['prefixes']['l0_bench']
+    l0_prod = ATTR_COLS['prefixes']['l0_prod']
+    l0_sp_bench = ATTR_COLS['prefixes']['l0_sp_bench']
+    l0_sp_prod = ATTR_COLS['prefixes']['l0_sp_prod']
+
     # Prepare time series data for charts
     chart_data_bench = []
     chart_data_port = []
@@ -420,27 +441,27 @@ def attribution_charts() -> Response:
             (date,) = group_keys
             char_val = None
         bench_prod_res = group.apply(
-            lambda row: calc_residual(row, "L0 Bench Total Daily", "L2 Bench ", l2_all),
+            lambda row: calc_residual(row, l0_bench, pfx_bench, l2_all),
             axis=1,
         )
         bench_sp_res = group.apply(
             lambda row: calc_residual(
                 row,
-                "L0 Bench Total Daily",
-                "SPv3_L2 Bench ",
+                l0_bench,
+                pfx_sp_bench,
                 l2_all,
             ),
             axis=1,
         )
         port_prod_res = group.apply(
-            lambda row: calc_residual(row, "L0 Port Total Daily ", "L2 Port ", l2_all),
+            lambda row: calc_residual(row, l0_prod, pfx_prod, l2_all),
             axis=1,
         )
         port_sp_res = group.apply(
             lambda row: calc_residual(
                 row,
-                "L0 Port Total Daily ",
-                "SPv3_L2 Port ",
+                l0_prod,
+                pfx_sp_prod,
                 l2_all,
             ),
             axis=1,
@@ -624,48 +645,48 @@ def attribution_radar() -> Response:
         radar_labels = list(l1_groups.keys()) + residual_labels
         # Portfolio
         # Use l1_groups (dict of L1 groupings) as required by sum_l1s_block, not l2_all (which is a flat list)
-        port_l1_prod = sum_l1s_block(df, "L2 Port ", l1_groups)
-        port_l1_sp = sum_l1s_block(df, "SPv3_L2 Port ", l1_groups)
+        port_l1_prod = sum_l1s_block(df, pfx_prod, l1_groups)
+        port_l1_sp = sum_l1s_block(df, pfx_sp_prod, l1_groups)
         port_resid_prod = compute_residual_block(
-            df, "L0 Port Total Daily ", "L2 Port ", l2_all
+            df, l0_prod, pfx_prod, l2_all
         )
         port_resid_sp = compute_residual_block(
-            df, "L0 Port Total Daily ", "SPv3_L2 Port ", l2_all
+            df, l0_prod, pfx_sp_prod, l2_all
         )
         port_prod = port_l1_prod + [port_resid_prod]
         port_sp = port_l1_sp + [port_resid_sp]
         # Benchmark
-        bench_l1_prod = sum_l1s_block(df, "L2 Bench ", l1_groups)
-        bench_l1_sp = sum_l1s_block(df, "SPv3_L2 Bench ", l1_groups)
+        bench_l1_prod = sum_l1s_block(df, pfx_bench, l1_groups)
+        bench_l1_sp = sum_l1s_block(df, pfx_sp_bench, l1_groups)
         bench_resid_prod = compute_residual_block(
-            df, "L0 Bench Total Daily", "L2 Bench ", l2_all
+            df, l0_bench, pfx_bench, l2_all
         )
         bench_resid_sp = compute_residual_block(
-            df, "L0 Bench Total Daily", "SPv3_L2 Bench ", l2_all
+            df, l0_bench, pfx_sp_bench, l2_all
         )
         bench_prod = bench_l1_prod + [bench_resid_prod]
         bench_sp = bench_l1_sp + [bench_resid_sp]
     else:  # L2 (default)
         radar_labels = l2_all + residual_labels
         # Portfolio
-        port_l2_prod = sum_l2s_block(df, "L2 Port ", l2_all)
-        port_l2_sp = sum_l2s_block(df, "SPv3_L2 Port ", l2_all)
+        port_l2_prod = sum_l2s_block(df, pfx_prod, l2_all)
+        port_l2_sp = sum_l2s_block(df, pfx_sp_prod, l2_all)
         port_resid_prod = compute_residual_block(
-            df, "L0 Port Total Daily ", "L2 Port ", l2_all
+            df, l0_prod, pfx_prod, l2_all
         )
         port_resid_sp = compute_residual_block(
-            df, "L0 Port Total Daily ", "SPv3_L2 Port ", l2_all
+            df, l0_prod, pfx_sp_prod, l2_all
         )
         port_prod = port_l2_prod + [port_resid_prod]
         port_sp = port_l2_sp + [port_resid_sp]
         # Benchmark
-        bench_l2_prod = sum_l2s_block(df, "L2 Bench ", l2_all)
-        bench_l2_sp = sum_l2s_block(df, "SPv3_L2 Bench ", l2_all)
+        bench_l2_prod = sum_l2s_block(df, pfx_bench, l2_all)
+        bench_l2_sp = sum_l2s_block(df, pfx_sp_bench, l2_all)
         bench_resid_prod = compute_residual_block(
-            df, "L0 Bench Total Daily", "L2 Bench ", l2_all
+            df, l0_bench, pfx_bench, l2_all
         )
         bench_resid_sp = compute_residual_block(
-            df, "L0 Bench Total Daily", "SPv3_L2 Bench ", l2_all
+            df, l0_bench, pfx_sp_bench, l2_all
         )
         bench_prod = bench_l2_prod + [bench_resid_prod]
         bench_sp = bench_l2_sp + [bench_resid_sp]
@@ -823,14 +844,14 @@ def attribution_security_page() -> Response:
     # --- Normalization ---
     if bench_or_port == "bench":
         weight_col = "Bench Weight"
-        l0_col = "L0 Bench Total Daily"
-        l1_prefix = "L2 Bench "
-        l1_sp_prefix = "SPv3_L2 Bench "
+        l0_col = l0_bench
+        l1_prefix = pfx_bench
+        l1_sp_prefix = pfx_sp_bench
     else:
         weight_col = "Port Exp Wgt"
-        l0_col = "L0 Port Total Daily "
-        l1_prefix = "L2 Port "
-        l1_sp_prefix = "SPv3_L2 Port "
+        l0_col = l0_prod
+        l1_prefix = pfx_prod
+        l1_sp_prefix = pfx_sp_prod
     # L1 factor names
     l1_factors = [
         "Rates Carry Daily",
