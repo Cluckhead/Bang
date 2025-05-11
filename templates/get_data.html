@@ -573,7 +573,8 @@ document.addEventListener('DOMContentLoaded', function() {
             let done = false;
             let lastProgress = 0;
             async function poll() {
-                const pollResp = await fetch(`/api/job_status/${jobResp.job_id}`);
+                // Use robust URL for polling job status
+                const pollResp = await fetch("{{ url_for('api_bp.job_status', job_id='__JOBID__') }}".replace('__JOBID__', jobResp.job_id));
                 if (!pollResp.ok) {
                     errorMessageDiv.textContent = 'Job not found or error.';
                     errorMessageDiv.style.display = 'block';

@@ -275,20 +275,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         borderColor: spColor,
                         order: 2
                     },
-                    ...(showAbs ? [] : [
+                    ...((showAbs ? [] : [
                         {
-                            label: 'Cum Residual (Prod)',
+                            label: 'Total Residual (Prod)',
                             data: benchLineProd, type: 'line', yAxisID: 'y',
                             borderColor: prodColor, backgroundColor: prodColor + '1A',
                             fill: false, order: 1
                         },
                         {
-                            label: 'Cum Residual (S&P)',
+                            label: 'Total Residual (S&P)',
                             data: benchLineSP, type: 'line', yAxisID: 'y',
                             borderColor: spColor, backgroundColor: spColor + '1A',
                             fill: false, order: 1
                         }
-                    ])
+                    ])),
                 ]
             },
             options: commonOptions
@@ -314,20 +314,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         borderColor: spColor,
                         order: 2
                     },
-                    ...(showAbs ? [] : [
+                    ...((showAbs ? [] : [
                         {
-                            label: 'Cum Residual (Prod)',
+                            label: 'Total Residual (Prod)',
                             data: portLineProd, type: 'line', yAxisID: 'y',
                             borderColor: prodColor, backgroundColor: prodColor + '1A',
                             fill: false, order: 1
                         },
                         {
-                            label: 'Cum Residual (S&P)',
+                            label: 'Total Residual (S&P)',
                             data: portLineSP, type: 'line', yAxisID: 'y',
                             borderColor: spColor, backgroundColor: spColor + '1A',
                             fill: false, order: 1
                         }
-                    ])
+                    ])),
                 ]
             },
             options: commonOptions
