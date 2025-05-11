@@ -51,12 +51,14 @@
             <div>
                 <label for="characteristic-select" class="block text-sm font-medium text-gray-700 mb-1">Group by Characteristic</label>
                 <select class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm" id="characteristic-select" name="characteristic">
+                    <option value="" {% if not selected_characteristic %}selected{% endif %}>None</option>
                     {% for char in available_characteristics %}
                         <option value="{{ char }}" {% if char == selected_characteristic %}selected{% endif %}>{{ char }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div>
+                {% if selected_characteristic %}
                 <label for="characteristic-value-select" class="block text-sm font-medium text-gray-700 mb-1">Filter by {{ selected_characteristic }}</label>
                 <select class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm" id="characteristic-value-select" name="characteristic_value">
                     <option value="" {% if not selected_characteristic_value %}selected{% endif %}>All</option>
@@ -64,6 +66,7 @@
                         <option value="{{ val }}" {% if val == selected_characteristic_value %}selected{% endif %}>{{ val }}</option>
                     {% endfor %}
                 </select>
+                {% endif %}
             </div>
 
             <!-- Date Range Slider -->

@@ -118,13 +118,13 @@ def attribution_summary() -> Response:
 
     # --- Characteristic selection ---
     available_characteristics = static_cols
+    # Only set selected_characteristic if user selects it; otherwise, default to None (no group by)
     selected_characteristic = request.args.get(
-        "characteristic", default="Type", type=str
+        "characteristic", default=None, type=str
     )
-    if selected_characteristic not in available_characteristics:
-        selected_characteristic = (
-            available_characteristics[0] if available_characteristics else None
-        )
+    # If the selected characteristic is not valid, set to None
+    if not selected_characteristic or selected_characteristic not in available_characteristics:
+        selected_characteristic = None
 
     # Join att_factors with w_secs static info
     df = df.merge(wsecs_static, on="ISIN", how="left")
@@ -374,13 +374,13 @@ def attribution_charts() -> Response:
 
     # --- Characteristic selection ---
     available_characteristics = static_cols
+    # Only set selected_characteristic if user selects it; otherwise, default to None (no group by)
     selected_characteristic = request.args.get(
-        "characteristic", default="Type", type=str
+        "characteristic", default=None, type=str
     )
-    if selected_characteristic not in available_characteristics:
-        selected_characteristic = (
-            available_characteristics[0] if available_characteristics else None
-        )
+    # If the selected characteristic is not valid, set to None
+    if not selected_characteristic or selected_characteristic not in available_characteristics:
+        selected_characteristic = None
     selected_characteristic_value = request.args.get(
         "characteristic_value", default="", type=str
     )
@@ -586,13 +586,13 @@ def attribution_radar() -> Response:
 
     # --- Characteristic selection ---
     available_characteristics = static_cols
+    # Only set selected_characteristic if user selects it; otherwise, default to None (no group by)
     selected_characteristic = request.args.get(
-        "characteristic", default="Type", type=str
+        "characteristic", default=None, type=str
     )
-    if selected_characteristic not in available_characteristics:
-        selected_characteristic = (
-            available_characteristics[0] if available_characteristics else None
-        )
+    # If the selected characteristic is not valid, set to None
+    if not selected_characteristic or selected_characteristic not in available_characteristics:
+        selected_characteristic = None
     selected_characteristic_value = request.args.get(
         "characteristic_value", default="", type=str
     )
