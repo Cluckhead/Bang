@@ -289,16 +289,18 @@ def _save_or_merge_data(
 def run_api_calls() -> Response:
     """Start a background API job, return job_id and estimated time."""
     data = request.get_json()
-    # Calculate units for estimate
-    funds = len(data.get('funds', []))
+    funds_len = len(data.get('funds', []))
     if data.get('date_mode') == 'range':
         d0 = pd.to_datetime(data.get('start_date'))
         d1 = pd.to_datetime(data.get('custom_end_date'))
-        dates = (d1 - d0).days + 1
+        dates_val = (d1 - d0).days + 1
     else:
-        dates = int(data.get('days_back', 30)) + 1
-    units = funds * dates
-    est_time = estimate_time(funds, dates)
+        dates_val = int(data.get('days_back', 30)) + 1
+    units_val = funds_len * dates_val
+    est_time = estimate_time(funds_len, dates_val)
+    
+    actual_app = current_app._get_current_object()
+    
     job_id = str(uuid.uuid4())
     with job_manager_lock:
         job_manager[job_id] = {
@@ -308,7 +310,7 @@ def run_api_calls() -> Response:
             'result': None,
             'error': None
         }
-    t = threading.Thread(target=run_api_job, args=(job_id, data), daemon=True)
+    t = threading.Thread(target=run_api_job, args=(actual_app, job_id, data), daemon=True)
     t.start()
     return jsonify({'job_id': job_id, 'est_time': est_time})
 
@@ -664,11 +666,10 @@ def run_scheduled_job(schedule: Dict[str, Any]) -> None:
 
 
 # --- Background job worker ---
-def run_api_job(job_id, params):
+def run_api_job(app, job_id, params):
     """Worker function for API job. Updates job_manager with progress/results. Must run in Flask app context."""
-    from flask import current_app
     # Flask contexts are thread-local; we must push an app context in this thread.
-    with current_app.app_context():
+    with app.app_context():
         with job_manager_lock:
             job = job_manager[job_id]
             job['status'] = 'running'
@@ -687,14 +688,14 @@ def run_api_job(job_id, params):
                 dates = int(params['days_back']) + 1
             units = funds * dates
             # --- Get Query Map ---
-            data_folder = current_app.config.get("DATA_FOLDER", "Data")
+            data_folder = app.config.get("DATA_FOLDER", "Data")
             query_map_path = os.path.join(data_folder, "QueryMap.csv")
             if not os.path.exists(query_map_path):
                 raise FileNotFoundError(f"QueryMap.csv not found at {query_map_path}")
             query_map_df = pd.read_csv(query_map_path)
             if not {"QueryID", "FileName"}.issubset(query_map_df.columns):
                 raise ValueError("QueryMap.csv missing required columns (QueryID, FileName)")
-            # Sort queries: ts_*, pre_*, others (preserve original order)
+            
             def sort_key_with_index(item):
                 index, query = item
                 filename = query.get("FileName", "").lower()
@@ -712,16 +713,17 @@ def run_api_job(job_id, params):
             completed = 0
             all_ts_files_succeeded = True
             overwrite_mode = params.get('write_mode', 'expand') == 'overwrite_all'
-            # Date range for TQS
+            
             if params['date_mode'] == 'range':
                 start_date_tqs_str = params['start_date']
                 end_date_tqs_str = params['custom_end_date']
             else:
-                end_date = pd.to_datetime(params['end_date'])
-                start_date = end_date - pd.Timedelta(days=int(params['days_back']))
-                start_date_tqs_str = start_date.strftime("%Y-%m-%d")
-                end_date_tqs_str = end_date.strftime("%Y-%m-%d")
+                end_date_dt = pd.to_datetime(params['end_date']) # Ensure it's datetime
+                start_date_dt = end_date_dt - pd.Timedelta(days=int(params['days_back']))
+                start_date_tqs_str = start_date_dt.strftime("%Y-%m-%d")
+                end_date_tqs_str = end_date_dt.strftime("%Y-%m-%d")
             selected_funds = params['funds']
+
             for query_info in queries:
                 query_id = query_info.get("QueryID")
                 file_name = query_info.get("FileName")
@@ -729,19 +731,14 @@ def run_api_job(job_id, params):
                     "query_id": query_id,
                     "file_name": file_name,
                     "status": "Pending",
-                    "simulated_rows": None,
-                    "simulated_lines": None,
-                    "actual_rows": None,
-                    "actual_lines": None,
-                    "save_action": "N/A",
-                    "validation_status": "Not Run",
-                    "last_written": None,
+                    "simulated_rows": None, "simulated_lines": None,
+                    "actual_rows": None, "actual_lines": None,
+                    "save_action": "N/A", "validation_status": "Not Run", "last_written": None,
                 }
                 file_type = "other"
-                if file_name and file_name.lower().startswith("ts_"):
-                    file_type = "ts"
-                elif file_name and file_name.lower().startswith("pre_"):
-                    file_type = "pre"
+                if file_name and file_name.lower().startswith("ts_"): file_type = "ts"
+                elif file_name and file_name.lower().startswith("pre_"): file_type = "pre"
+                
                 try:
                     if not query_id or not file_name:
                         summary["status"] = "Skipped (Missing QueryID/FileName)"
@@ -764,24 +761,21 @@ def run_api_job(job_id, params):
                             job_manager[job_id]['progress'] = completed
                             job_manager[job_id]['total'] = total
                         continue
+                    
                     if USE_REAL_TQS_API:
                         df_new = None
                         df_to_save = None
                         force_overwrite = overwrite_mode
                         try:
                             df_new = _fetch_data_for_query(
-                                query_id,
-                                selected_funds,
-                                start_date_tqs_str,
-                                end_date_tqs_str,
+                                query_id, selected_funds, start_date_tqs_str, end_date_tqs_str
                             )
                             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             if df_new is None:
                                 summary["status"] = "Warning - No data returned from API"
                                 summary["validation_status"] = "Skipped (API Returned None)"
                                 summary["last_written"] = now_str
-                                if file_type == "ts":
-                                    all_ts_files_succeeded = False
+                                if file_type == "ts": all_ts_files_succeeded = False
                             elif df_new.empty:
                                 summary["status"] = "Warning - Empty data returned from API"
                                 summary["validation_status"] = "OK (Empty Data)"
@@ -792,6 +786,7 @@ def run_api_job(job_id, params):
                                 summary["actual_rows"] = len(df_new)
                                 df_to_save = df_new
                                 summary["last_written"] = now_str
+                            
                             if df_new is not None:
                                 if file_type == "ts" and not df_new.empty:
                                     date_col_new, fund_col_new = _find_key_columns(
@@ -800,77 +795,48 @@ def run_api_job(job_id, params):
                                     if not date_col_new or not fund_col_new:
                                         raise ValueError(f"Could not find essential date/fund columns in fetched ts_ data for {file_name}.")
                                 df_to_save, summary = _save_or_merge_data(
-                                    df_new,
-                                    output_path,
-                                    file_type,
-                                    force_overwrite,
-                                    summary,
-                                    file_name,
+                                    df_new, output_path, file_type, force_overwrite, summary, file_name
                                 )
                                 if df_to_save is not None:
                                     try:
-                                        df_to_save.to_csv(
-                                            output_path, index=False, header=True
-                                        )
+                                        df_to_save.to_csv(output_path, index=False, header=True)
                                         summary["status"] = "OK - Data Saved"
                                         try:
-                                            with open(
-                                                output_path, "r", encoding="utf-8"
-                                            ) as f:
-                                                summary["actual_lines"] = sum(
-                                                    1 for line in f
-                                                )
+                                            with open(output_path, "r", encoding="utf-8") as f:
+                                                summary["actual_lines"] = sum(1 for line in f)
                                         except Exception:
                                             summary["actual_lines"] = "N/A"
-                                        summary["validation_status"] = (
-                                            _validate_fetched_data(df_to_save, file_name)
-                                        )
+                                        summary["validation_status"] = _validate_fetched_data(df_to_save, file_name)
                                     except Exception as write_err:
-                                        summary["status"] = (
-                                            f"Error - Failed to save file: {write_err}"
-                                        )
+                                        summary["status"] = f"Error - Failed to save file: {write_err}"
                                         summary["validation_status"] = "Failed (Save Error)"
-                                        if file_type == "ts":
-                                            all_ts_files_succeeded = False
+                                        if file_type == "ts": all_ts_files_succeeded = False
                         except Exception as proc_err:
                             summary["status"] = f"Error - Processing failed: {proc_err}"
                             summary["validation_status"] = "Failed (Processing Error)"
-                            summary["last_written"] = datetime.datetime.now().strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            )
-                            if file_type == "ts":
-                                all_ts_files_succeeded = False
-                    else:
-                        # Simulation Mode
+                            summary["last_written"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            if file_type == "ts": all_ts_files_succeeded = False
+                    else: # Simulation Mode
                         simulated_rows = _simulate_and_print_tqs_call(
                             query_id, selected_funds, start_date_tqs_str, end_date_tqs_str
                         )
                         summary["simulated_rows"] = simulated_rows
-                        summary["simulated_lines"] = (
-                            simulated_rows + 1 if simulated_rows > 0 else 0
-                        )
+                        summary["simulated_lines"] = (simulated_rows + 1 if simulated_rows > 0 else 0)
                         summary["status"] = "Simulated OK"
                         summary["save_action"] = "Not Applicable"
                         summary["validation_status"] = "Not Run (Simulated)"
-                        summary["last_written"] = datetime.datetime.now().strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        )
+                        summary["last_written"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 except Exception as outer_err:
                     summary["status"] = f"Outer Processing Error: {outer_err}"
-                    if file_type == "ts":
-                        all_ts_files_succeeded = False
-                    summary["last_written"] = datetime.datetime.now().strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    )
+                    if file_type == "ts": all_ts_files_succeeded = False
+                    summary["last_written"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 results_summary.append(summary)
                 completed += 1
                 with job_manager_lock:
                     job_manager[job_id]['progress'] = completed
                     job_manager[job_id]['total'] = total
-                # Optional: sleep for realism if real API
-                if USE_REAL_TQS_API and completed < total:
-                    time.sleep(3)
-            # At end:
+                if USE_REAL_TQS_API and completed < total: time.sleep(3)
+            
             end = datetime.datetime.now()
             append_times_csv(start, end, funds, dates, units)
             with job_manager_lock:
@@ -880,6 +846,7 @@ def run_api_job(job_id, params):
                     'message': f'Processed {completed}/{total} API calls.',
                 }
         except Exception as e:
+            app.logger.error(f"Error in background job {job_id}: {e}", exc_info=True)
             with job_manager_lock:
                 job_manager[job_id]['status'] = 'error'
                 job_manager[job_id]['error'] = str(e)
