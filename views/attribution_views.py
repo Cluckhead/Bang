@@ -35,11 +35,57 @@ from .attribution_processing import (
 import typing
 from typing import Any, Dict, List, Optional
 import config
+from .security_helpers import load_filter_and_extract
 
 attribution_bp = Blueprint("attribution_bp", __name__, url_prefix="/attribution")
 
 # Load attribution column config from YAML (prefixes, factors, etc.)
 ATTR_COLS = config.ATTRIBUTION_COLUMNS_CONFIG
+
+# ------------------------------------------------------------
+# Helper functions for JSON serialization of pandas/numpy types
+# These are defined at module level so they are available to all
+# views without risk of scope issues.
+# ------------------------------------------------------------
+
+def to_native(val):
+    """Convert numpy/pandas scalar types to native Python types for JSON serialization."""
+    try:
+        import numpy as np  # Local import to avoid mandatory dependency at module load
+        if isinstance(val, (np.generic,)):
+            return val.item()
+    except ImportError:
+        pass  # numpy not installed, ignore
+    if hasattr(val, "item"):
+        return val.item()
+    return val
+
+
+def convert_dict(obj):
+    """Recursively convert dict/list structures to JSON-safe native Python types.
+
+    In addition to converting numpy / pandas scalar types, we also make sure that
+    any NaN or infinite values are replaced with ``None`` so that the resulting
+    JSON is valid (JavaScript's ``JSON.parse`` does **not** accept NaN/Infinity).
+    """
+
+    # Containers – recurse first
+    if isinstance(obj, dict):
+        return {k: convert_dict(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_dict(v) for v in obj]
+
+    # Scalar – convert numpy / pandas scalars to native Python types first
+    native_val = to_native(obj)
+
+    # Replace NaN / ±Inf with None so that ``json.dumps`` emits ``null``
+    import math
+    if isinstance(native_val, (float, int)) and not math.isfinite(native_val):
+        return None
+
+    return native_val
+
+# ------------- END helper functions -------------------------
 
 # Utility: Get available funds from FundList.csv (preferred) or w_secs.csv fallback
 def get_available_funds(data_folder: str) -> list:
@@ -1019,4 +1065,256 @@ def attribution_security_page() -> Response:
         bench_or_port=bench_or_port,
         mtd=mtd,
         normalize=normalize,
+    )
+
+
+@attribution_bp.route("/security/timeseries")
+def security_attribution_timeseries():
+    """
+    Individual Security Attribution Time Series Page.
+    Shows attribution factor values (L1/L2) over time for a single security (ISIN) and fund.
+    - Accepts fund and ISIN as query parameters.
+    - Provides dropdown for L1/L2 factor selection (L1s first, then L2s).
+    - Net/Abs toggle for values.
+    - Shows S&P and Original time series for the selected factor (bar + cumulative line).
+    - Underneath, shows Spread (Orig and S&P) for the same security.
+    - If data is missing for Portfolio or Benchmark, omits the chart.
+    - Links to security details page (Spread).
+    """
+    import pandas as pd
+    from flask import request, render_template, current_app, url_for, redirect
+    import os
+    import json
+
+    data_folder = current_app.config["DATA_FOLDER"]
+    fund = request.args.get("fund", type=str)
+    isin = request.args.get("isin", type=str)
+    factor = request.args.get("factor", default=None, type=str)
+    abs_toggle = request.args.get("abs", default="off", type=str) == "on"
+
+    if not fund or not isin:
+        return "Missing fund or ISIN", 400
+
+    # -----------------------------
+    # 1. Load per-fund attribution file
+    # -----------------------------
+    att_path = os.path.join(data_folder, f"att_factors_{fund}.csv")
+    if not os.path.exists(att_path):
+        return render_template(
+            "attribution_security_timeseries.html",
+            error="Attribution data not found for this fund.",
+            fund=fund,
+            isin=isin,
+            factor=None,
+            abs_toggle=abs_toggle,
+            l1_factors=[],
+            l2_factors=[],
+            chart_bench_json="[]",
+            chart_port_json="[]",
+            spread_data_json="null",
+            link_security_details=None,
+        )
+
+    df = pd.read_csv(att_path)
+    df.columns = df.columns.str.strip()
+    df = df[df["ISIN"] == isin]
+    if df.empty:
+        return render_template(
+            "attribution_security_timeseries.html",
+            error="No attribution data found for this ISIN in the selected fund.",
+            fund=fund,
+            isin=isin,
+            factor=None,
+            abs_toggle=abs_toggle,
+            l1_factors=[],
+            l2_factors=[],
+            chart_bench_json="[]",
+            chart_port_json="[]",
+            spread_data_json="null",
+            link_security_details=None,
+        )
+
+    # Ensure Date is datetime and sort
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df.dropna(subset=["Date"]).sort_values("Date")
+
+    # -----------------------------
+    # 2. Factor selection lists
+    # -----------------------------
+    l1_factors_all = [c for c in df.columns if c.startswith("L1 Bench ")]
+    # Strip prefix to get nice names
+    l1_names = sorted(list({c.replace("L1 Bench ", "") for c in l1_factors_all}))
+    l2_factors_all = [c for c in df.columns if c.startswith("L2 Bench ")]
+    l2_names = sorted(list({c.replace("L2 Bench ", "") for c in l2_factors_all}))
+
+    # Prepare dropdown list with "Residual" first
+    if not factor or factor not in (["Residual"] + l1_names + l2_names):
+        factor = "Residual"
+
+    # -----------------------------
+    # 3. Helper to extract factor values
+    # -----------------------------
+    pfx_bench = ATTR_COLS['prefixes']['bench']  # "L1 Bench" etc.
+    pfx_port = ATTR_COLS['prefixes']['prod']    # "L1 Port"
+    pfx_sp_bench = ATTR_COLS['prefixes']['sp_bench']
+    pfx_sp_port = ATTR_COLS['prefixes']['sp_prod']
+    l0_bench = ATTR_COLS['prefixes']['l0_bench']
+    l0_port = ATTR_COLS['prefixes']['l0_prod']
+
+    l1_group_map = config.ATTRIBUTION_L1_GROUPS  # dict of group->list(l2)
+
+    def get_factor_values(row, category: str, prefix_base: str, prefix_sp: str):
+        """Return (orig, sp) value for chosen factor in given row.
+        category: 'Residual', L1 name, or L2 name."""
+        if category == "Residual":
+            # residual = L0 - sum(all L1 factors)
+            l1_factor_columns = []
+            for l2s in l1_group_map.values():
+                for l2 in l2s:
+                    l1_factor_columns.append(f"{prefix_base} {l2}")
+            l1_sum = sum([row.get(col, 0) for col in l1_factor_columns])
+            l0_val = row.get(l0_bench if prefix_base.startswith("L1 Bench") else l0_port, 0)
+            orig_val = l0_val - l1_sum
+            # SP residual
+            l1_sp_cols = [f"{prefix_sp} {l2}" for l2 in sum(l1_group_map.values(), [])]
+            l1_sp_sum = sum([row.get(col, 0) for col in l1_sp_cols])
+            l0_sp_val = row.get(l0_bench if prefix_sp.startswith("L1 Bench") else l0_port, 0)
+            sp_val = l0_sp_val - l1_sp_sum
+        else:
+            # L1 or L2 value
+            if category in l1_group_map:  # L1
+                l2_list = l1_group_map[category]
+                orig_val = sum([row.get(f"{prefix_base} {l2}", 0) for l2 in l2_list])
+                sp_val = sum([row.get(f"{prefix_sp} {l2}", 0) for l2 in l2_list])
+            else:  # L2 single
+                orig_val = row.get(f"{prefix_base} {category}", 0)
+                sp_val = row.get(f"{prefix_sp} {category}", 0)
+        if abs_toggle:
+            orig_val = abs(orig_val)
+            sp_val = abs(sp_val)
+        return orig_val, sp_val
+
+    # -----------------------------
+    # 4. Build time-series lists
+    # -----------------------------
+    chart_port = []
+    chart_bench = []
+    cum_port_orig = cum_port_sp = 0
+    cum_bench_orig = cum_bench_sp = 0
+
+    for _, row in df.iterrows():
+        port_orig, port_sp = get_factor_values(row, factor, pfx_port, pfx_sp_port)
+        bench_orig, bench_sp = get_factor_values(row, factor, pfx_bench, pfx_sp_bench)
+        date_str = row["Date"].strftime("%Y-%m-%d")
+        cum_port_orig += port_orig
+        cum_port_sp   += port_sp
+        cum_bench_orig += bench_orig
+        cum_bench_sp   += bench_sp
+        chart_port.append({
+            "date": date_str,
+            "orig": port_orig,
+            "sp": port_sp,
+            "cum_orig": cum_port_orig,
+            "cum_sp": cum_port_sp,
+        })
+        chart_bench.append({
+            "date": date_str,
+            "orig": bench_orig,
+            "sp": bench_sp,
+            "cum_orig": cum_bench_orig,
+            "cum_sp": cum_bench_sp,
+        })
+
+    chart_port_json = json.dumps(convert_dict(chart_port), default=str)
+    chart_bench_json = json.dumps(convert_dict(chart_bench), default=str)
+
+    # -----------------------------
+    # 5. Load Spread data (Orig + SP) - REFACTORED
+    # -----------------------------
+    spread_data_json = json.dumps(None) # Default to null if issues occur
+    attribution_dates = [item['date'] for item in chart_port] if chart_port else []
+
+    if attribution_dates and isin: # Proceed if we have dates and an ISIN
+        spread_series_orig, _, _ = load_filter_and_extract(
+            data_folder, "sec_Spread.csv", isin
+        )
+        spread_series_sp, _, _ = load_filter_and_extract(
+            data_folder, "sec_SpreadSP.csv", isin
+        )
+
+        orig_vals_aligned = []
+        if spread_series_orig is not None and not spread_series_orig.empty:
+            # Ensure series index is datetime for reindexing if it's not already
+            if not isinstance(spread_series_orig.index, pd.DatetimeIndex):
+                try:
+                    spread_series_orig.index = pd.to_datetime(spread_series_orig.index)
+                except Exception as e:
+                    current_app.logger.warning(f"Failed to convert spread_series_orig index to DatetimeIndex: {e}")
+                    spread_series_orig = None # Invalidate if conversion fails
+            
+            if spread_series_orig is not None: # Check again after potential invalidation
+                # Convert attribution_dates (strings) to Timestamps for reindexing if necessary
+                reindex_dates = pd.to_datetime(attribution_dates, errors='coerce')
+                # Filter out NaT from reindex_dates if any conversion failed
+                valid_reindex_dates = reindex_dates[~pd.isna(reindex_dates)]
+                if not valid_reindex_dates.empty:
+                    reindexed_orig = spread_series_orig.reindex(valid_reindex_dates, fill_value=None)
+                    orig_vals_aligned = [to_native(val) for val in reindexed_orig.tolist()]
+                else:
+                    orig_vals_aligned = [None] * len(attribution_dates)
+            else:
+                 orig_vals_aligned = [None] * len(attribution_dates)
+        else:
+            orig_vals_aligned = [None] * len(attribution_dates)
+
+        sp_vals_aligned = []
+        if spread_series_sp is not None and not spread_series_sp.empty:
+            if not isinstance(spread_series_sp.index, pd.DatetimeIndex):
+                try:
+                    spread_series_sp.index = pd.to_datetime(spread_series_sp.index)
+                except Exception as e:
+                    current_app.logger.warning(f"Failed to convert spread_series_sp index to DatetimeIndex: {e}")
+                    spread_series_sp = None
+            
+            if spread_series_sp is not None:
+                reindex_dates = pd.to_datetime(attribution_dates, errors='coerce')
+                valid_reindex_dates = reindex_dates[~pd.isna(reindex_dates)]
+                if not valid_reindex_dates.empty:
+                    reindexed_sp = spread_series_sp.reindex(valid_reindex_dates, fill_value=None)
+                    sp_vals_aligned = [to_native(val) for val in reindexed_sp.tolist()]
+                else:
+                    sp_vals_aligned = [None] * len(attribution_dates)
+            else:
+                sp_vals_aligned = [None] * len(attribution_dates)
+        else:
+            sp_vals_aligned = [None] * len(attribution_dates)
+        
+        # Ensure the dates in spread_data_json are the string dates from attribution_dates
+        spread_data = {
+            "dates": attribution_dates, # Use the original string dates for JSON
+            "orig": orig_vals_aligned,
+            "sp": sp_vals_aligned if sp_vals_aligned else None # Ensure SP is null if no data
+        }
+        spread_data_json = json.dumps(convert_dict(spread_data), default=str)
+    else:
+        current_app.logger.warning(f"Spread data not loaded for {isin}: No attribution dates or ISIN missing.")
+
+    # -----------------------------
+    # 6. Link to security details page
+    # -----------------------------
+    link_security_details = url_for('security.security_details', metric_name='Spread', security_id=isin)
+
+    return render_template(
+        "attribution_security_timeseries.html",
+        fund=fund,
+        isin=isin,
+        factor=factor,
+        abs_toggle=abs_toggle,
+        l1_factors=l1_names,
+        l2_factors=l2_names,
+        chart_port_json=chart_port_json,
+        chart_bench_json=chart_bench_json,
+        spread_data_json=spread_data_json,
+        link_security_details=link_security_details,
+        error=None,
     )

@@ -28,7 +28,8 @@ This application provides a web interface to load, process, and check financial 
 | **Max/Min Value Breach**         | Checks `sec_*.csv` against thresholds. Dashboard: `/maxmin/dashboard`. Details: `/maxmin/details/<file>/<type>`. |
 | **Watchlist Management**         | Track/add/clear securities via `/watchlist`. Filterable, auditable, modal UI.                                |
 | **Inspect (Contribution Analysis)**      | Analyze top contributors/detractors to metric changes over a date range. Modal UI, supports all analytics. See below for technical details. |
-| **Attribution Data API (NEW)**        | Fetch, update, and manage attribution data per fund. UI for selecting funds, date range, and write mode (append/overwrite). Each fund's data is stored in `att_factors_<FUNDCODE>.csv`. Fully integrated with attribution dashboards. |
+| **Attribution Data API**        | Fetch, update, and manage attribution data per fund. UI for selecting funds, date range, and write mode (append/overwrite). Each fund's data is stored in `att_factors_<FUNDCODE>.csv`. Fully integrated with attribution dashboards. |
+| **Individual Security Attribution Time Series** | Visualize L1/L2 attribution factors over time for a single security (Portfolio & Benchmark, S&P & Original). Includes spread chart. Route: `/attribution/security/timeseries`. Linked from `/attribution/security`. |
 
 ## Fund Group Filtering (Reusable Feature)
 
@@ -120,6 +121,9 @@ graph TD
     Q[maxmin_dashboard.html]
     R[maxmin_details.html]
     S[watchlist_page.html]
+    T[attribution_security_page.html]
+    U[attribution_security_timeseries.html]
+    V[attribution_charts.html]
 ```
 
 ### Static Files
@@ -193,8 +197,9 @@ The application relies on several external YAML files for configuration, loaded 
 | `data_issues.csv` | Issue tracking log (ID, dates, users, details, resolution, Jira link) |
 | `att_factors.csv` | Attribution data with L0, L2 factors for Production and S&P. **Note:** The `L0 Total` column represents the returns for each security/fund/date. |
 | `users.csv` | List of users for issue tracking dropdowns (`Name` column) |
-| `att_factors_<FUNDCODE>.csv` | Attribution data for a specific fund, used by all attribution dashboards. Managed via the Attribution Data API page. |
+| `att_factors_<FUNDCODE>.csv` | Attribution data for a specific fund, used by all attribution dashboards. Managed via the Attribution Data API page. Also used for the Individual Security Attribution Time Series page. |
 | `sec_YTM.csv`, `sec_YTMSP.csv`, `sec_YTW.csv`, `sec_YTWSP.csv` | Security-level YTM and YTW data (main and S&P overlays), used for new charts on the security details page. |
+| `sec_Spread.csv`, `sec_SpreadSP.csv` | Security-level Spread data (main and S&P overlays), used for Spread charts on various pages including Individual Security Attribution Time Series. |
 
 ### Python Core Modules
 
@@ -331,7 +336,7 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 | `weight_views.py` | Weight checking | `/weights/check` |
 | `curve_views.py` | Yield curve checking | `/curve/summary`, `/curve/details/<currency>` |
 | `issue_views.py` | Issue tracking | `/issues`, `/issues/close` |
-| `attribution_views.py` | Attribution analysis | `/attribution` |
+| `attribution_views.py` | Attribution analysis | `/attribution` (summary), `/attribution/security` (per security summary), `/attribution/security/timeseries` (single security time series), `/attribution/charts` (factor charts) |
 | `maxmin_views.py` | Max/Min value breach checking | `/maxmin/dashboard`, `/maxmin/details/<file_name>/<breach_type>` |
 | `watchlist_views.py` | **Watchlist management: add, clear, and audit securities of interest. Uses CSV storage and pandas for data.** | `/watchlist` |
 
@@ -358,6 +363,9 @@ This approach ensures all logs are consistent, easy to find, and follow a standa
 | `maxmin_dashboard.html` | Max/Min breach summary | Cards summarizing breaches per file |
 | `maxmin_details.html` | Max/Min breach details | Table listing breaching securities |
 | `watchlist_page.html` | **Watchlist UI: Add/clear modal, filterable/scrollable security list, autofill prevention, user/reason tracking.** | Add to Watchlist modal, filter/search, audit trail |
+| `attribution_security_page.html` | Attribution by Security summary | Table of securities with L0/L1/L2 factors, links to time series view. |
+| `attribution_security_timeseries.html` | Individual Security Attribution Time Series | Charts for a single security's L1/L2 factors over time (Portfolio/Benchmark, Original/S&P) and its Spread. |
+| `attribution_charts.html` | Attribution Factor Charts | Detailed charts for selected L1/L2 factors across funds. |
 
 ### JavaScript Files (`static/js/`)
 
@@ -585,3 +593,47 @@ No configuration changes are required; simply pull the latest code, restart the 
   - Always use a snake_case key in the config.
   - Set the `display_name` field for the user-facing label in the UI.
 - The `/fund/<metric_name>_details/<fund_code>` route is robust to different metric name formats in the URL, as long as the config key is snake_case.
+
+## Individual Security Attribution Time Series (NEW)
+
+This feature provides a detailed time-series view of attribution factors for a single security, allowing for in-depth analysis of its performance attribution over time.
+
+### Key Capabilities
+
+- **Access & Navigation:**
+  - Navigated to from the `/attribution/security` page by clicking on an ISIN.
+  - Directly accessible via the URL: `/attribution/security/timeseries?fund=<FUND_CODE>&isin=<ISIN>`.
+  - Query parameters `fund` and `isin` are required. An optional `factor` parameter can pre-select an attribution factor.
+
+- **Data Display & Controls:**
+  - **Fund and ISIN:** Read-only display of the currently selected fund and ISIN.
+  - **Factor Selection:** Dropdown to select specific L1 or L2 attribution factors. L1 factors are listed first, followed by a separator, then L2 factors.
+  - **Net/Abs Toggle:** Allows users to switch the attribution factor chart between displaying net values or absolute values.
+  - **Link to Security Details:** A direct link to the main security details page (`/security/details/Spread/<isin>`) for the selected ISIN, defaulting to the "Spread" metric view.
+
+- **Charts:**
+  1.  **Attribution Factor Chart:**
+      - Displays the selected L1 or L2 factor's values over time for the chosen security.
+      - Shows data for both **Portfolio** and **Benchmark** if available.
+      - Includes both **Original** and **S&P** data series for each (Portfolio/Benchmark).
+      - Visualized as a daily bar chart with an overlaid cumulative line chart.
+      - Conditional display: If the security is not present in Portfolio or Benchmark, the respective part of the chart is omitted or a message is shown.
+  2.  **Spread Chart:**
+      - Displays the **Spread (Original)** and **Spread (S&P)** for the same security over the same time period.
+      - Visualized as a line chart.
+      - Conditional display: If spread data is missing for Original or S&P, the respective line is omitted or a message is shown.
+
+- **Data Sources:**
+  - **Attribution Factors:** Loaded from the per-fund files: `Data/att_factors_<FUNDCODE>.csv`.
+  - **Spread Data:** Loaded from `Data/sec_Spread.csv` (Original) and `Data/sec_SpreadSP.csv` (S&P).
+
+- **Styling & UI:**
+  - Follows the Tailwind CSS style of `attribution_charts.html` for a consistent look and feel.
+  - Chart rendering is handled by Chart.js.
+
+### Why This Matters
+
+- Provides a granular view of how individual securities contribute to (or detract from) portfolio performance based on various attribution factors over time.
+- Allows for direct comparison of a security's attribution in the Portfolio versus the Benchmark, and across Original and S&P data contexts.
+- Integrates spread data for the security, offering a correlated view of its market pricing characteristic alongside its attribution performance.
+- Facilitates deeper investigation into attribution outliers or trends identified at a higher level (e.g., from the `/attribution/security` summary page).

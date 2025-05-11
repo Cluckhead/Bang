@@ -1,0 +1,194 @@
+{#
+    File: templates/attribution_security_timeseries.html
+    Purpose: This template renders the time series attribution page for a single security within a specific fund.
+    It allows users to visualize attribution factor values (both Level 1 and Level 2) over a period,
+    comparing 'Original' data against 'S&P' data where available.
+    Key features include:
+    - Selection of Fund and ISIN (displayed as read-only).
+    - Dropdown to choose the specific attribution factor (L1/L2).
+    - A toggle for viewing Net or Absolute factor values.
+    - Two main charts:
+        1. Attribution Factor Chart: Displays the selected factor's daily values (bar) and
+           cumulative values (line) for both 'Original' and 'S&P' data series.
+        2. Spread Chart: Shows the spread between 'Original' and 'S&P' data over time.
+    - A link to a more detailed security page (focusing on spread).
+    - Graceful handling of missing data by displaying informative messages.
+    The template relies on context variables such as `fund`, `isin`, `factor`, `abs_toggle`,
+    `l1_factors`, `l2_factors`, `chart_data`, and `spread_data` passed from the backend.
+#}
+{% extends "base.html" %}
+
+{% block title %}Security Attribution Time Series{% endblock %}
+
+{% block content %}
+<div class="p-4">
+    <h1 class="text-2xl font-bold mb-2">Security Attribution Time Series</h1>
+    <p class="text-gray-600 text-sm mb-4">View attribution factor values over time for a single security and fund. Compare S&P and Original data, and view Spread below.</p>
+    {% if error %}
+        <div class="bg-red-100 text-red-800 rounded px-3 py-2 mb-4">{{ error }}</div>
+    {% endif %}
+    <div class="flex flex-wrap gap-4 items-end mb-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Fund</label>
+            <input type="text" value="{{ fund }}" readonly class="bg-gray-100 rounded px-2 py-1 text-sm border border-gray-300">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">ISIN</label>
+            <input type="text" value="{{ isin }}" readonly class="bg-gray-100 rounded px-2 py-1 text-sm border border-gray-300">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Attribution Factor</label>
+            <form method="get" class="inline">
+                <input type="hidden" name="fund" value="{{ fund }}">
+                <input type="hidden" name="isin" value="{{ isin }}">
+                <select name="factor" class="h-7 rounded px-2 text-sm border border-gray-300 min-w-[10rem]" onchange="this.form.submit()">
+                    <option value="Residual" {% if factor=='Residual' %}selected{% endif %}>Residual</option>
+                    {% for f in l1_factors %}
+                        <option value="{{ f }}" {% if f == factor %}selected{% endif %}>{{ f }}</option>
+                    {% endfor %}
+                    {% if l2_factors %}
+                        <option disabled>──────────</option>
+                        {% for f in l2_factors %}
+                            <option value="{{ f }}" {% if f == factor %}selected{% endif %}>{{ f }}</option>
+                        {% endfor %}
+                    {% endif %}
+                </select>
+            </form>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Net/Abs Toggle</label>
+            <form method="get" class="inline">
+                <input type="hidden" name="fund" value="{{ fund }}">
+                <input type="hidden" name="isin" value="{{ isin }}">
+                <input type="hidden" name="factor" value="{{ factor }}">
+                <input type="checkbox" name="abs" value="on" id="absToggle" {% if abs_toggle %}checked{% endif %} onchange="this.form.submit()">
+                <label for="absToggle" class="ml-1 text-sm">Show Absolute Values</label>
+            </form>
+        </div>
+        <div>
+            <a href="{{ link_security_details }}" class="inline-block bg-primary text-white px-3 py-1 rounded text-sm font-medium hover:bg-opacity-90 transition-colors mt-6">View Security Details (Spread)</a>
+        </div>
+    </div>
+    {# --- Attribution Factor Charts --- #}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 class="text-base font-semibold text-gray-800 mb-2">Portfolio – {{ factor }}</h3>
+            <div class="relative h-80"><canvas id="portChart"></canvas></div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 class="text-base font-semibold text-gray-800 mb-2">Benchmark – {{ factor }}</h3>
+            <div class="relative h-80"><canvas id="benchChart"></canvas></div>
+        </div>
+    </div>
+    {# --- Spread Chart --- #}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6 p-4">
+        <h3 class="text-base font-semibold text-gray-800 mb-2">Spread (Orig &amp; S&amp;P)</h3>
+        {% if spread_data and spread_data.dates %}
+            <div class="relative h-80">
+                <canvas id="spreadChart"></canvas>
+            </div>
+        {% else %}
+            <div class="text-red-600">Spread data not found for this security.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script id="bench-data" type="application/json">{{ chart_bench_json|safe }}</script>
+<script id="port-data" type="application/json">{{ chart_port_json|safe }}</script>
+<script id="spread-data" type="application/json">{{ spread_data_json|safe }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+
+document.addEventListener('DOMContentLoaded', function() {
+    const portData = JSON.parse(document.getElementById('port-data').textContent);
+    const benchData = JSON.parse(document.getElementById('bench-data').textContent);
+    const spreadData = JSON.parse(document.getElementById('spread-data').textContent);
+
+    function buildDatasets(data){
+        const datasets=[
+            {label:'Original',data:data.map(d=>d.orig),backgroundColor:'#1F77B4AA',borderColor:'#1F77B4',type:'bar',order:2},
+            {label:'Cumulative',data:data.map(d=>d.cum_orig),borderColor:'#1F77B4',backgroundColor:'#1F77B41A',type:'line',fill:false,order:1}
+        ];
+        if(data && data.length > 0 && data[0].sp !== null){ // Check data and data[0] exists
+            datasets.push({label:'S&P',data:data.map(d=>d.sp),backgroundColor:'#FF7F0EAA',borderColor:'#FF7F0E',type:'bar',order:2});
+            datasets.push({label:'Cumulative S&P',data:data.map(d=>d.cum_sp),borderColor:'#FF7F0E',backgroundColor:'#FF7F0E1A',type:'line',fill:false,order:1});
+        }
+        return datasets;
+    }
+
+    // Portfolio chart
+    if(portData && portData.length){
+        new Chart(document.getElementById('portChart').getContext('2d'),{
+            type:'bar',
+            data:{labels:portData.map(d=>d.date),datasets:buildDatasets(portData)},
+            options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                plugins:{
+                    legend:{position:'top'},
+                    title:{display:false},
+                    tooltip:{mode:'index',intersect:false}
+                }, // <<< COMMA ADDED HERE
+                scales:{
+                    x:{ticks:{font:{size:10}}},
+                    y:{beginAtZero:true,ticks:{font:{size:10}}}
+                }
+            }
+        });
+    }
+
+    // Benchmark chart
+    if(benchData && benchData.length){
+        new Chart(document.getElementById('benchChart').getContext('2d'),{
+            type:'bar',
+            data:{labels:benchData.map(d=>d.date),datasets:buildDatasets(benchData)},
+            options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                plugins:{
+                    legend:{position:'top'},
+                    title:{display:false},
+                    tooltip:{mode:'index',intersect:false}
+                }, // <<< COMMA ADDED HERE
+                scales:{
+                    x:{ticks:{font:{size:10}}},
+                    y:{beginAtZero:true,ticks:{font:{size:10}}}
+                }
+            }
+        });
+    }
+
+    // Spread Chart
+    const spreadCanvas = document.getElementById('spreadChart'); // Get the element first
+    if(spreadCanvas && spreadData && spreadData.dates && spreadData.dates.length > 0){ // Check element and data
+        const spreadCtx = spreadCanvas.getContext('2d'); // Now use the existing element
+        const datasets=[
+            {label:'Spread (Orig)',data:spreadData.orig,borderColor:'#1F77B4',backgroundColor:'#1F77B41A',type:'line',fill:false}
+        ];
+        if(spreadData.sp){
+            datasets.push({label:'Spread (S&P)',data:spreadData.sp,borderColor:'#FF7F0E',backgroundColor:'#FF7F0E1A',type:'line',fill:false});
+        }
+        new Chart(spreadCtx,{
+            type:'line',
+            data:{labels:spreadData.dates,datasets},
+            options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                plugins:{
+                    legend:{position:'top'},
+                    title:{display:false},
+                    tooltip:{mode:'index',intersect:false}
+                }, // <<< COMMA ADDED HERE
+                scales:{
+                    x:{ticks:{font:{size:10}}},
+                    y:{beginAtZero:false,ticks:{font:{size:10}}}
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %} 

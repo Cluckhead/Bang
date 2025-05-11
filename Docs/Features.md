@@ -14,6 +14,7 @@
 - [Inspect (Contribution Analysis) Feature](#inspect-contribution-analysis-feature)
 - [Attribution Data API (NEW)](#attribution-data-api-new)
 - [Config-Driven Metric Details Pages (May 2025)](#config-driven-metric-details-pages-may-2025)
+- [Individual Security Attribution Time Series (NEW)](#individual-security-attribution-time-series-new)
 
 ---
 
@@ -354,3 +355,55 @@ The Inspect feature provides a powerful, interactive workflow for root-cause ana
 ### Data File Requirements
 - All security-level files (`sec_*.csv`) must include a `Funds` column for fund-level filtering to work.
 - If this column is missing, the details page will show an error.
+
+## Individual Security Attribution Time Series (NEW)
+
+This feature provides a detailed, interactive time-series visualization of attribution factors (L1/L2) for a single security. It allows for side-by-side comparison of Portfolio and Benchmark data, as well as Original and S&P data sources, for both attribution factors and security spread.
+
+### Access and Navigation
+
+-   **URL:** Accessible at `/attribution/security/timeseries`.
+-   **Entry Point:** Navigated to from the `/attribution/security` page (Attribution by Security Summary) by clicking on an ISIN in the table.
+-   **Query Parameters:** Requires `fund` (fund code) and `isin` (security ISIN) as query parameters. An optional `factor` parameter can be used to pre-select an attribution factor on page load.
+    -   Example: `/attribution/security/timeseries?fund=IG01&isin=XS1234567890&factor=L1%20Rates%20Total`
+
+### Key UI Elements and Functionality
+
+-   **Fund and ISIN Display:** Read-only fields showing the selected Fund and ISIN.
+-   **Net/Abs Toggle:** A toggle switch to view attribution factor values as either Net or Absolute.
+-   **Factor Filtering Dropdown:**
+    -   Allows users to select a specific L1 or L2 attribution factor to visualize.
+    -   L1 factors are listed first, followed by a visual separator, then L2 factors.
+-   **Link to Security Details:** A direct link to the main security details page (`/security/details/<metric_name>/<security_id>`), defaulting to the "Spread" metric for the selected ISIN.
+    -   Example link: `/security/details/Spread/XS1234567890`
+
+### Charts
+
+1.  **Attribution Factor Chart:**
+    -   **Content:** Displays daily values and a cumulative line for the selected attribution factor.
+    -   **Breakdowns:** Shows data for both **Portfolio** and **Benchmark**.
+    -   **Data Sources:** For each of Portfolio and Benchmark, it visualizes both **Original** data and **S&P** data.
+    -   **Chart Type:** Daily values are presented as a bar chart, and cumulative values as a line chart, overlaid.
+    -   **Conditional Display:** If a security is not present in the Portfolio or Benchmark for the selected fund, or if data is missing for S&P/Original, the relevant chart components are omitted, or a "data not found" message is displayed.
+
+2.  **Spread Chart:**
+    -   **Content:** Displays the time series of the security's Spread.
+    -   **Data Sources:** Shows both **Original Spread** (from `sec_Spread.csv`) and **S&P Spread** (from `sec_SpreadSP.csv`).
+    -   **Chart Type:** Line chart.
+    -   **Conditional Display:** If spread data (Original or S&P) is missing for the security, the corresponding line is omitted, or a "data not found" message is shown.
+
+### Data Sources
+
+-   **Attribution Factors:** Per-fund attribution files (`Data/att_factors_<FUNDCODE>.csv`). The ISIN is used to filter data for the specific security.
+-   **Spread Data:** Security-level spread files: `Data/sec_Spread.csv` (for Original) and `Data/sec_SpreadSP.csv` (for S&P).
+
+### Styling
+
+-   The page adopts the Tailwind CSS styling consistent with other modern pages in the application, particularly resembling `templates/attribution_charts.html`.
+
+### Use Cases
+
+-   Deep dive into the attribution drivers for a specific security over time.
+-   Compare a security's factor attribution in the portfolio versus its benchmark.
+-   Analyze differences between Original and S&P calculated attribution and spread data for a security.
+-   Investigate securities flagged on the `/attribution/security` summary page.

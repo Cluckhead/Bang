@@ -118,12 +118,13 @@
                     {% for row in rows %}
                     <tr class="hover:bg-gray-50">
                         <td class="px-4 py-2 whitespace-nowrap text-gray-900 font-medium">
-                             {# Styled Link #}
-                            <a href="{{ url_for('security.security_details', metric_name='Attribution', security_id=row['ISIN']|urlencode) }}" class="text-primary hover:text-primary-dark hover:underline">
-                                {{ row['Security Name'] }}
+                            {{ row['Security Name'] }}
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-gray-500">
+                            <a href="{{ url_for('attribution_bp.security_attribution_timeseries', fund=selected_fund, isin=row['ISIN']) }}" class="text-primary hover:text-primary-dark hover:underline">
+                                {{ row['ISIN'] }}
                             </a>
                         </td>
-                        <td class="px-4 py-2 whitespace-nowrap text-gray-500">{{ row['ISIN'] }}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-gray-500">{{ row['Type'] }}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['Returns']|round(3) }}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">{{ row['Original Residual']|round(3) }}</td>
