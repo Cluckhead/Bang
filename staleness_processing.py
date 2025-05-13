@@ -96,7 +96,8 @@ def get_stale_securities_details(
     """
     Get detailed information about stale securities in a specific file.
     Flags a security as stale if the last N (threshold_days) non-null values are identical (within float tolerance),
-    looking back from the most recent date columns. NaN/nulls are skipped and not included in the count.
+    looking back from the most recent date columns. NaN/nulls are skipped.
+    Sequences of zeros are NOT considered stale.
     """
     file_path = os.path.join(data_folder, filename)
     stale_securities = []
@@ -156,32 +157,72 @@ def get_stale_securities_details(
                 and str(v).strip().lower() not in {"n/a", "na", "", "null", "none"}
             ]
             if len(non_null_values) >= threshold_days:
+                # last_n contains the last 'threshold_days' non-null values, in their original chronological order.
                 last_n = list(reversed(non_null_values[:threshold_days]))
-                ref_value = last_n[0]
-                all_equal = all(
-                    (
-                        not pd.isna(val)
-                        and not pd.isna(ref_value)
-                        and abs(float(val) - float(ref_value)) < FLOAT_TOLERANCE
-                    )
-                    for val in last_n
-                )
+                
+                if not last_n: # Should not happen if threshold_days > 0 and len >= threshold
+                    continue
+
+                ref_value = last_n[0] # The first value in the sequence of potentially identical values
+
+                is_ref_numeric = False
+                numeric_ref_val = 0.0
+                try:
+                    numeric_ref_val = float(ref_value)
+                    is_ref_numeric = True
+                except (ValueError, TypeError):
+                    pass # ref_value is not numeric
+
+                all_equal = True
+                for val_item in last_n:
+                    is_item_numeric = False
+                    numeric_item_val = 0.0
+                    try:
+                        numeric_item_val = float(val_item)
+                        is_item_numeric = True
+                    except (ValueError, TypeError):
+                        pass
+                    
+                    if is_ref_numeric and is_item_numeric:
+                        if abs(numeric_item_val - numeric_ref_val) >= FLOAT_TOLERANCE:
+                            all_equal = False
+                            break
+                    elif not is_ref_numeric and not is_item_numeric:
+                        if str(val_item) != str(ref_value):
+                            all_equal = False
+                            break
+                    else: # Mixed types (numeric vs non-numeric)
+                        all_equal = False
+                        break
+                
                 if all_equal:
-                    stale_securities.append(
-                        {
-                            "id": security_id,
-                            "metric_name": metric_name,
-                            "static_info": static_info,
-                            "last_update": date_columns[-threshold_days],
-                            "days_stale": threshold_days,
-                            "stale_type": "last_n_identical",
-                            "consecutive_placeholders": threshold_days,
-                        }
-                    )
+                    is_repeating_zero = False
+                    if is_ref_numeric and abs(numeric_ref_val) < FLOAT_TOLERANCE:
+                        is_repeating_zero = True
+                    
+                    if is_repeating_zero:
+                        logger.debug(
+                            f"Security {security_id} in {filename} has a sequence of zeros ({last_n}); not marking as stale."
+                        )
+                    else:
+                        stale_type_detail = "last_n_identical_non_zero_numeric" if is_ref_numeric else "last_n_identical_non_numeric"
+                        logger.info(
+                            f"Security {security_id} in {filename} marked as stale. Type: {stale_type_detail}. Repeating value: '{ref_value}', sequence: {last_n}."
+                        )
+                        stale_securities.append(
+                            {
+                                "id": security_id,
+                                "metric_name": metric_name,
+                                "static_info": static_info,
+                                "last_update": date_columns[-threshold_days], # First date of the stale sequence
+                                "days_stale": threshold_days, # Length of the stale sequence
+                                "stale_type": stale_type_detail,
+                                "repeating_value": ref_value # Actual repeating value
+                            }
+                        )
         logger.info(
-            f"[{filename} - Details] Found {len(stale_securities)} stale securities."
+            f"[{filename} - Details] Found {len(stale_securities)} stale securities (excluding sequences of zeros)."
         )
     except Exception as e:
         logger.error(f"Error analyzing file {filename}: {e}", exc_info=True)
-        raise
     return stale_securities, latest_date, total_count
