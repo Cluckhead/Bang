@@ -468,12 +468,17 @@ def security_details(metric_name, security_id):
         issues_df = load_issues(data_folder)
         if not issues_df.empty:
             # Filter to issues for this security
-            security_issues = issues_df[
-                (issues_df["SecurityID"] == decoded_security_id)
-                & (issues_df["Status"] == "Open")
-            ]
-            if not security_issues.empty:
-                open_issues = security_issues.to_dict("records")
+            # Ensure 'SecurityID' column exists before trying to filter
+            if "SecurityID" in issues_df.columns:
+                security_issues = issues_df[
+                    (issues_df["SecurityID"] == decoded_security_id)
+                    & (issues_df["Status"] == "Open")
+                ]
+                if not security_issues.empty:
+                    open_issues = security_issues.to_dict("records")
+            else:
+                current_app.logger.warning("Column 'SecurityID' not found in issues_df. Cannot filter issues.")
+
     except Exception as e:
         current_app.logger.error(f"Error checking data issues: {e}", exc_info=True)
 
@@ -486,7 +491,12 @@ def security_details(metric_name, security_id):
     # --- Load Data for Each Chart Section ---
 
     # 1. Primary Metric (passed in URL) + Price
-    metric_filename = f"sec_{metric_name}.csv"
+    # Correctly construct metric_filename
+    if metric_name.startswith("sec_"):
+        metric_filename = f"{metric_name}.csv"
+    else:
+        metric_filename = f"sec_{metric_name}.csv"
+    
     price_filename = "sec_Price.csv"
     # Use the decoded ID for filtering, call imported helper
     metric_series, metric_dates, metric_static = load_filter_and_extract(
