@@ -20,6 +20,7 @@ from flask import request  # Import request
 import math
 import json
 import config
+import re # Add import for regex
 
 # Import necessary functions/constants from other modules
 from config import (
@@ -408,6 +409,13 @@ def security_details(metric_name, security_id):
         f"--- Requesting Security Details: Metric='{metric_name}', Decoded ID='{decoded_security_id}' ---"
     )
 
+    # Clean the decoded_security_id to get a base ISIN (remove trailing -<number> if present)
+    # This cleaned ID is for reference.csv, exclusions, issues, and holdings data
+    cleaned_isin_for_static_data = re.sub(r"-\\d+$", "", decoded_security_id)
+    current_app.logger.info(
+        f"Cleaned ISIN for static data lookup: '{cleaned_isin_for_static_data}'"
+    )
+
     data_folder = current_app.config["DATA_FOLDER"]
     all_dates = set()
     chart_data = {}  # Dictionary to hold data for JSON output
@@ -421,7 +429,8 @@ def security_details(metric_name, security_id):
         try:
             ref_df = pd.read_csv(reference_path, dtype=str)
             reference_columns = ref_df.columns.tolist()
-            ref_row = ref_df[ref_df[config.ISIN_COL] == decoded_security_id]
+            # Use cleaned_isin_for_static_data for lookup
+            ref_row = ref_df[ref_df[config.ISIN_COL] == cleaned_isin_for_static_data]
             if not ref_row.empty:
                 reference_row = ref_row.iloc[0].to_dict()
             else:
@@ -439,7 +448,7 @@ def security_details(metric_name, security_id):
         exclusions_df = load_exclusions(os.path.join(data_folder, "exclusions.csv"))
         if exclusions_df is not None and not exclusions_df.empty:
             security_exclusions = exclusions_df[
-                exclusions_df["SecurityID"] == decoded_security_id
+                exclusions_df["SecurityID"] == cleaned_isin_for_static_data # Use cleaned ID
             ]
             if not security_exclusions.empty:
                 active_exclusions = security_exclusions[
@@ -471,7 +480,7 @@ def security_details(metric_name, security_id):
             # Ensure 'SecurityID' column exists before trying to filter
             if "SecurityID" in issues_df.columns:
                 security_issues = issues_df[
-                    (issues_df["SecurityID"] == decoded_security_id)
+                    (issues_df["SecurityID"] == cleaned_isin_for_static_data) # Use cleaned ID
                     & (issues_df["Status"] == "Open")
                 ]
                 if not security_issues.empty:
@@ -621,7 +630,7 @@ def security_details(metric_name, security_id):
     chart_dates = chart_data["labels"] if "labels" in chart_data else None
     if chart_dates:
         holdings_data, _, holdings_error = get_holdings_for_security(
-            decoded_security_id, chart_dates, data_folder
+            cleaned_isin_for_static_data, chart_dates, data_folder # Use cleaned ID
         )
         if holdings_error:
             current_app.logger.warning(

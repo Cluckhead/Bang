@@ -117,19 +117,6 @@
                 </div>
             </div>
             <div class="mb-3">
-                <label class="block text-sm font-medium text-neutral-700 mb-1">Data Write Mode:</label>
-                <div class="flex items-center mb-1">
-                    <input id="writeModeExpand" name="write_mode" type="radio" value="expand" checked
-                           class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
-                    <label for="writeModeExpand" class="ml-2 block text-sm text-neutral-700">Expand (append new data, overwrite overlaps)</label>
-                </div>
-                <div class="flex items-center">
-                    <input id="writeModeOverwrite" name="write_mode" type="radio" value="overwrite_all"
-                           class="h-4 w-4 text-secondary focus:ring-secondary border-neutral-300">
-                    <label for="writeModeOverwrite" class="ml-2 block text-sm text-neutral-700">Run and Overwrite All (start every file from scratch)</label>
-                </div>
-            </div>
-            <div class="mb-3">
                 <label class="block text-sm font-medium text-neutral-700 mb-1">Select Funds:</label>
                 <!-- Fund Group Dropdown -->
                 {% if fund_groups %}
@@ -437,8 +424,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const customDateRangeRow = document.getElementById('custom-date-range-row');
     const startDateInput = document.getElementById('startDate');
     const customEndDateInput = document.getElementById('customEndDate');
-    const writeModeExpand = document.getElementById('writeModeExpand');
-    const writeModeOverwrite = document.getElementById('writeModeOverwrite');
 
     // Show/hide custom date range row based on radio selection
     function updateDateRangeVisibility() {
@@ -526,8 +511,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Write mode - determine based on which radio is checked OR if overwrite button was clicked
         let writeMode = 'expand'; // Default
         if (forceOverwriteButton) {
-            writeMode = 'overwrite_all';
-        } else if (writeModeOverwrite.checked) {
             writeMode = 'overwrite_all';
         }
 

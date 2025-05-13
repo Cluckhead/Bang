@@ -193,9 +193,9 @@ def aggregate_data(
                     original_isin = new_row_series[isin_col_name]
                     new_isin = suffix_isin(original_isin, i + 1)
                     new_row_series[isin_col_name] = new_isin
-                    logger.debug(
-                        f"Suffixed ISIN for duplicate Security Name '{sec_name}'. Original: '{original_isin}', New: '{new_isin}'"
-                    )
+                    #logger.debug(
+                    #    f"Suffixed ISIN for duplicate Security Name '{sec_name}'. Original: '{original_isin}', New: '{new_isin}'"
+                    #)
                 else:
                     logger.warning(
                         f"Found {num_versions} distinct data versions for Security Name '{sec_name}' but column '{isin_col_name}' not found. Cannot apply suffix to ISIN."
