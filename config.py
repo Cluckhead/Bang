@@ -42,6 +42,7 @@ ID_COLUMN = "ISIN"
 
 # Define the filename for the exclusions list
 EXCLUSIONS_FILE = "exclusions.csv"
+W_SECS_FILENAME = "w_secs.csv"  # Filename for security weights/holdings
 
 # Define a list of distinct colors for chart lines
 # Add more colors if you expect more fund columns
@@ -325,3 +326,19 @@ try:
 except Exception as e:
     ATTRIBUTION_COLUMNS_CONFIG = None
     # Optionally log or print error here
+
+# Default column order for the main securities summary table
+SECURITIES_SUMMARY_COLUMNS_ORDER = [
+    ISIN_COL,  # Primary Identifier
+    SEC_NAME_COL, # Security Name
+    TYPE_COL,  # e.g., Corp, Govt
+    CURRENCY_COL, # e.g., USD, EUR
+    # Add other commonly available static columns from your reference/security files if desired
+    # For example: 'Country', 'Sector', 'Maturity Date'
+    'Latest Value',
+    'Change',
+    'Change Z-Score',
+    'Mean',
+    'Max',
+    'Min'
+]
