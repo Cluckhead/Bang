@@ -1,5 +1,7 @@
-# Purpose: This file contains configuration variables and constants for the Simple Data Checker application.
-# It centralizes settings, file paths, color palettes, and standard column names for use throughout the codebase.
+# Purpose: This file defines configuration variables for the Simple Data Checker application.
+# It centralizes settings like file paths, feature configurations (e.g., comparisons, thresholds),
+# and visual parameters (e.g., chart colors) to make them easily adjustable
+# without modifying the core application code.
 
 # Standard column name constants
 FUNDS_COL = "Funds"

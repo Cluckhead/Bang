@@ -1,5 +1,5 @@
 # issue_processing.py
-# Purpose: Handles loading, adding, and updating data issues stored in a specified data folder (data_folder_path) rather than a hardcoded path.
+# Purpose: This file handles loading, adding, and updating data issues. It uses a dynamic data_folder_path to locate 'data_issues.csv' and 'FundList.csv', ensuring flexibility in data storage locations.
 
 import pandas as pd
 import os

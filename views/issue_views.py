@@ -23,7 +23,8 @@ issue_bp = Blueprint("issue_bp", __name__, template_folder="templates")
 # Function to load users from CSV
 def load_users() -> List[str]:
     """Loads the list of users from users.csv."""
-    users_file = os.path.join("Data", "users.csv")
+    data_folder = current_app.config["DATA_FOLDER"] # Get DATA_FOLDER from app config
+    users_file = os.path.join(data_folder, "users.csv") # Use data_folder
     if os.path.exists(users_file):
         try:
             users_df = pd.read_csv(users_file)
