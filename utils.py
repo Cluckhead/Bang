@@ -241,21 +241,57 @@ def load_weights_and_held_status(
 ) -> pd.Series:
     """
     Loads security weights from a wide-format weights file and returns a Series indicating held status (is_held) for each security.
-    Uses melt_wide_data for robust wide-to-long conversion.
+    Logic:
+    1. Melt wide-format *w_secs.csv* to long format.
+    2. Convert *Value* column to numeric (robustly, replacing zeros/invalids with NaN if configured).
+    3. For each security (identified by *id_col_override*), look at the **latest date** in the data and mark *is_held* **True** only if the weight on that latest date is > 0.  This fixes the previous behaviour that flagged a security as held if it had **ever** been held in the file, even if the current/latest weight is 0.
+    Returns an empty Series on error.
     """
-    weights_path = os.path.join(data_folder, weights_filename)
-    df = read_csv_robustly(weights_path)
-    if df is None or df.empty:
+    logger = logging.getLogger(__name__)
+    try:
+        weights_path = os.path.join(data_folder, weights_filename)
+        df = read_csv_robustly(weights_path)
+        if df is None or df.empty:
+            logger.warning("Weights file could not be read or is empty: %s", weights_path)
+            return pd.Series(dtype=bool)
+
+        # Identify id column and melt to long format
+        id_vars = [id_col_override] if id_col_override in df.columns else [df.columns[0]]
+        df_long = melt_wide_data(df, id_vars=id_vars)
+        if df_long is None or df_long.empty:
+            logger.warning("Weights file could not be melted into long format or is empty after melt: %s", weights_path)
+            return pd.Series(dtype=bool)
+
+        # Convert Value to numeric robustly (with optional zero→NaN replacement)
+        from data_utils import convert_to_numeric_robustly
+
+        df_long["NumericVal"] = convert_to_numeric_robustly(df_long["Value"])
+
+        # Ensure Date column is datetime
+        if not pd.api.types.is_datetime64_any_dtype(df_long["Date"]):
+            df_long["Date"] = pd.to_datetime(df_long["Date"], errors="coerce")
+
+        # Drop rows without a valid date
+        df_long = df_long.dropna(subset=["Date"])
+        if df_long.empty:
+            logger.warning("All rows in weights data lacked valid dates. Returning empty Series.")
+            return pd.Series(dtype=bool)
+
+        # Sort so that the latest date per security is last
+        df_long.sort_values(by=[id_vars[0], "Date"], inplace=True)
+
+        # Get the latest row per security using groupby tail(1)
+        latest_rows = df_long.groupby(id_vars[0], as_index=False).tail(1)
+
+        # Determine held status: weight > 0
+        latest_rows["is_held"] = latest_rows["NumericVal"] > 0
+
+        held_status = latest_rows.set_index(id_vars[0])["is_held"]
+        return held_status
+
+    except Exception as e:
+        logger.error("Error computing held status from weights file: %s", e, exc_info=True)
         return pd.Series(dtype=bool)
-    # Identify id columns and use melt_wide_data
-    id_vars = [id_col_override] if id_col_override in df.columns else [df.columns[0]]
-    df_long = melt_wide_data(df, id_vars=id_vars)
-    if df_long is None or df_long.empty:
-        return pd.Series(dtype=bool)
-    # Determine held status: is_held if Value is numeric and > 0
-    df_long["is_held"] = pd.to_numeric(df_long["Value"], errors="coerce") > 0
-    held_status = df_long.groupby(id_vars[0])["is_held"].any()
-    return held_status
 
 
 def replace_nan_with_none(obj: Any) -> Any:
