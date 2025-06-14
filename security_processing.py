@@ -103,7 +103,16 @@ def load_and_process_security_data(
         required = ["id"]
         found = identify_columns(all_cols, patterns, required)
         essential_id_cols = [found["id"]] if found["id"] else []
-        static_cols = [found["static"]] if found["static"] else []
+        # Collect *all* static columns that match STATIC_COLUMN_PATTERNS (not just the first)
+        static_cols = []
+        for regex in config.STATIC_COLUMN_PATTERNS:
+            for col in all_cols:
+                if re.search(regex, col, re.IGNORECASE):
+                    if col not in static_cols and col not in essential_id_cols:
+                        static_cols.append(col)
+        # If nothing matched, fall back to the single column identified (for backward-compatibility)
+        if not static_cols and found["static"]:
+            static_cols = [found["static"]]
         # Find all date columns for wide format
         date_cols = find_all_date_columns(all_cols, config.DATE_COLUMN_PATTERNS)
         if not essential_id_cols:

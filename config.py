@@ -300,6 +300,7 @@ STATIC_COLUMN_PATTERNS = [
     r"^Type$",
     r"^Currency$",
     r"^CCY$",
+    r"^Security Name$",
     r"^Security Sub Type$",
     r"^Country Of Risk$",
     r"^Rating$",
