@@ -1,10 +1,9 @@
 """
-This module defines the Flask Blueprint for handling security exclusion management.
-It provides routes to view the current exclusion list and add new securities
-to the list.
-
-Major update: The available securities list for exclusions is now loaded from reference.csv
-and includes ISIN, Security Name, CCY, Security Sub Type, and Country Of Risk for client-side filtering.
+# Purpose: This module defines the Flask Blueprint for handling security exclusion management.
+# It provides routes to view the current exclusion list and add new securities to the list.
+# It uses a dynamic data_folder_path to locate 'exclusions.csv', 'reference.csv', and 'users.csv'.
+# Major update: The available securities list for exclusions is now loaded from reference.csv
+# and includes ISIN, Security Name, CCY, Security Sub Type, and Country Of Risk for client-side filtering.
 """
 
 import os

@@ -32,6 +32,7 @@ from datetime import datetime, timedelta
 # Import configurations and utilities
 from config import COLOR_PALETTE  # Import other needed configs
 from utils import get_data_folder_path  # Import the path utility
+from navigation_config import NAV_MENU
 
 # Add typing imports for type hints
 from typing import List, Dict, Any
@@ -355,6 +356,11 @@ def create_app() -> Flask:
     threading.Thread(target=schedule_loop, daemon=True).start()
     app.logger.info("Started manual schedule loop thread")
     # --- End manual scheduling ---
+
+    # Add this context processor after app creation (inside create_app or after app = Flask(...))
+    @app.context_processor
+    def inject_nav_menu():
+        return {'NAV_MENU': NAV_MENU}
 
     return app
 

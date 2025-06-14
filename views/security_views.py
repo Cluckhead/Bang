@@ -37,7 +37,7 @@ from utils import load_exclusions  # Import DataFrame-based load_exclusions from
 from utils import replace_nan_with_none
 
 # Add import for fund group utility
-from utils import load_fund_groups, parse_fund_list
+from utils import load_fund_groups, parse_fund_list, load_weights_and_held_status # Added load_weights_and_held_status
 
 # Import get_holdings_for_security for fund holdings tile
 from views.comparison_helpers import get_holdings_for_security
@@ -209,148 +209,140 @@ def securities_page():
         # Sort filter options dictionary by key for consistent display order
         final_filter_options = dict(sorted(filter_options.items()))
 
-        # --- Fund-group dict & active exclusions (prepare inputs for filter helper) ---
-        fund_groups_dict = load_fund_groups(data_folder)
+        # --- Load Fund Groups for the dropdown ---
+        # This should be done early to populate the dropdown regardless of filtering
+        all_fund_groups_dict = load_fund_groups(data_folder)
+        current_app.logger.info(f"Loaded all fund groups: {all_fund_groups_dict.keys()}")
+
+        # --- Apply Fund Group Filter (if selected) based on w_secs.csv ---
+        if selected_fund_group and selected_fund_group in all_fund_groups_dict:
+            current_app.logger.info(f"Applying fund group filter for: {selected_fund_group}")
+            funds_in_selected_group = set(all_fund_groups_dict[selected_fund_group])
+            
+            # Load w_secs.csv to get holdings data
+            # Using a simplified way to get relevant ISINs for the group.
+            # For a more robust solution, consider date alignment and summing weights.
+            w_secs_path = os.path.join(data_folder, config.W_SECS_FILENAME)
+            if os.path.exists(w_secs_path):
+                try:
+                    df_w_secs = pd.read_csv(w_secs_path, low_memory=False)
+                    # Ensure 'Fund Code' or similar exists. Assuming config.CODE_COL refers to fund code in w_secs
+                    fund_col_in_w_secs = config.CODE_COL 
+                    if fund_col_in_w_secs not in df_w_secs.columns:
+                        # Try a common alternative if config.CODE_COL is not 'Fund Code'
+                        if 'Fund Code' in df_w_secs.columns:
+                            fund_col_in_w_secs = 'Fund Code'
+                        else: # Add more fallbacks if necessary
+                            current_app.logger.warning(f"'{config.CODE_COL}' or 'Fund Code' not found in {config.W_SECS_FILENAME}. Cannot filter by fund group holdings.")
+                            df_w_secs = pd.DataFrame() # Empty df if no fund column
+
+                    if not df_w_secs.empty:
+                        # Filter w_secs for funds in the selected group
+                        df_w_secs_group = df_w_secs[df_w_secs[fund_col_in_w_secs].isin(funds_in_selected_group)]
+                        
+                        # Get unique ISINs held by these funds
+                        # Assuming config.ISIN_COL is the ISIN column in w_secs
+                        if config.ISIN_COL in df_w_secs_group.columns:
+                            securities_in_group_held = set(df_w_secs_group[config.ISIN_COL].unique())
+                            current_app.logger.info(f"Found {len(securities_in_group_held)} unique securities for group '{selected_fund_group}'.")
+                            
+                            # Filter the main combined_metrics_df
+                            combined_metrics_df = combined_metrics_df[combined_metrics_df[id_col_name].isin(securities_in_group_held)]
+                            current_app.logger.info(f"Shape of combined_metrics_df after fund group pre-filter: {combined_metrics_df.shape}")
+                        else:
+                            current_app.logger.warning(f"'{config.ISIN_COL}' not found in {config.W_SECS_FILENAME}. Cannot filter by fund group holdings.")
+                except Exception as e:
+                    current_app.logger.error(f"Error processing {config.W_SECS_FILENAME} for fund group filter: {e}")
+            else:
+                current_app.logger.warning(f"{config.W_SECS_FILENAME} not found. Cannot filter by fund group.")
+        
+        # --- Active exclusions ---
         active_exclusion_ids = get_active_exclusions(data_folder)
 
-        # --- Apply all filters via helper ------------------------------------------------
-        current_app.logger.info("Applying filters via helper...")
-        # Use imported apply_security_filters
-        combined_metrics_df = apply_security_filters(
-            df=combined_metrics_df,
+        # --- Apply other filters (search, static, min=0) via helper ---
+        # Note: The fund group filtering is now done above.
+        # The apply_security_filters helper might still have its own fund group logic;
+        # for this view, it might be redundant or could be disabled if it conflicts.
+        # For now, we pass None as selected_fund_group to the helper if already filtered.
+        
+        combined_metrics_df_after_main_filters = apply_security_filters(
+            df=combined_metrics_df.copy(), # Pass a copy
             id_col_name=id_col_name,
             search_term=search_term,
-            fund_groups_dict=fund_groups_dict,
-            selected_fund_group=selected_fund_group,
+            fund_groups_dict=all_fund_groups_dict, # Pass all groups for other potential uses
+            selected_fund_group=None, # Crucial: Indicate that primary group filtering is done
             active_exclusion_ids=active_exclusion_ids,
             active_filters=active_filters,
             exclude_min_zero=exclude_min_zero,
         )
+        current_app.logger.info(f"Shape of combined_metrics_df after all filters helper: {combined_metrics_df_after_main_filters.shape}")
 
-        # --- Prepare Fund-group options for UI (only groups with securities after filtering) ---
-        all_funds_in_data: set[str] = set()
-        if config.FUNDS_COL in combined_metrics_df.columns:
-            for x in combined_metrics_df[config.FUNDS_COL].dropna():
-                all_funds_in_data.update(parse_fund_list(x))
-        else:
-            fund_col_candidates = [
-                col
-                for col in ["Fund", "Fund Code", config.CODE_COL]
-                if col in combined_metrics_df.columns
-            ]
-            if fund_col_candidates:
-                fund_col = fund_col_candidates[0]
-                all_funds_in_data = set(combined_metrics_df[fund_col].unique())
 
-        filtered_fund_groups = {
-            g: [f for f in funds if f in all_funds_in_data]
-            for g, funds in fund_groups_dict.items()
-        }
-        filtered_fund_groups = {
-            g: funds for g, funds in filtered_fund_groups.items() if funds
-        }
+        # --- Prepare Fund-group options for UI (based on ALL_FUND_GROUPS_DICT initially) ---
+        # This ensures all groups are always shown in dropdown, and selection is maintained
+        # The actual filtering of securities is handled by the logic above and apply_security_filters
+        ui_fund_groups = all_fund_groups_dict
 
-        # --- Apply Sorting via helper ---
-        current_app.logger.info("Applying sorting via helper...")
+
+        # --- Sorting ---
         # Use imported apply_security_sorting
-        combined_metrics_df, sort_by, sort_order = apply_security_sorting(
-            df=combined_metrics_df,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            id_col_name=id_col_name,
+        # ... (sorting logic using combined_metrics_df_after_main_filters)
+        sorted_df, current_sort_by, current_sort_order = apply_security_sorting(
+            combined_metrics_df_after_main_filters, sort_by, sort_order, id_col_name
         )
-        current_app.logger.info(f"Sorted by '{sort_by}', {sort_order}.")
 
-        # --- Pagination via helper ---
+
+        # --- Pagination ---
         # Use imported paginate_security_data
-        paginated_df, pagination_context = paginate_security_data(
-            df=combined_metrics_df,
-            page=page,
-            per_page=config.SECURITIES_PER_PAGE,
+        # ... (pagination logic using sorted_df)
+        paginated_data, pagination_context = paginate_security_data(
+            sorted_df, page, config.SECURITIES_PER_PAGE
         )
 
-        current_app.logger.info(
-            f"Pagination: Total items={pagination_context['total_items']}, Total pages={pagination_context['total_pages']}, Current page={pagination_context['page']}, Per page={pagination_context['per_page']}"
-        )
-
-        # --- Prepare Data for Template ---
-        securities_data_list = paginated_df.round(3).to_dict(orient="records")
-        # Replace NaN with None for JSON compatibility / template rendering
-        for row in securities_data_list:
-            for key, value in row.items():
-                if pd.isna(value):
-                    row[key] = None
-
-        # Define column order (ID first, then Static, then Metrics)
-        # Ensure ISIN (id_col_name) is not in ordered_static_cols
-        ordered_static_cols = sorted(
-            [
-                col
-                for col in static_cols
-                if col in paginated_df.columns and col != id_col_name
-            ]
-        )
-        metric_cols_ordered = [
-            "Latest Value",
-            "Change",
-            "Change Z-Score",
-            "Mean",
-            "Max",
-            "Min",
-        ]
-        # Ensure only existing columns are included and ID col is first
-        final_col_order = (
-            [id_col_name]
-            + [col for col in ordered_static_cols if col in paginated_df.columns]
-            + [col for col in metric_cols_ordered if col in paginated_df.columns]
-        )
-
-        # Ensure all original columns are considered if they aren't static or metric
-        # Make sure not to add id_col_name again
-        other_cols = [col for col in paginated_df.columns if col not in final_col_order]
-        final_col_order.extend(other_cols)  # Add any remaining columns
-
-        current_app.logger.info(f"Final column order for display: {final_col_order}")
-
-        # Extend pagination context with URL factory
+        # Update pagination_context with url_for_page
         pagination_context["url_for_page"] = lambda p: url_for(
             "security.securities_page",
             page=p,
             search_term=search_term,
-            sort_by=sort_by,
-            sort_order=sort_order,
+            sort_by=current_sort_by,
+            sort_order=current_sort_order,
+            fund_group=selected_fund_group, # ensure fund_group is in pagination
+            exclude_min_zero="true" if exclude_min_zero else "false",
             **{f"filter_{k}": v for k, v in active_filters.items()},
         )
+        
+        # --- Final Data Preparation ---
+        # ... (column order, final data conversion)
+        # ... (Make sure 'final_data_list' is derived from 'paginated_data')
 
-        # --- Handle Empty DataFrame After Filtering ---
-        if combined_metrics_df.empty:
-            current_app.logger.warning(
-                "No data matches the specified filters after applying helper."
-            )
-            message_parts = [
-                "No securities found matching the current criteria.",
-            ]
-            if search_term:
-                message_parts.append(f"Search term: '{search_term}'.")
-            if active_filters:
-                message_parts.append(f"Active filters: {active_filters}.")
+        # Ensure column_order is defined, e.g. from config or dynamically
+        column_order = config.SECURITIES_SUMMARY_COLUMNS_ORDER
+        
+        # Ensure all columns in column_order exist, add missing ones with empty strings
+        for col in column_order:
+            if col not in paginated_data.columns:
+                paginated_data[col] = '' # or np.nan if you prefer
 
-            return render_template(
-                "securities_page.html",
-                message=" ".join(message_parts),
-                securities_data=[],
-                filter_options=final_filter_options,
-                column_order=[],
-                id_col_name=id_col_name,
-                search_term=search_term,
-                active_filters=active_filters,
-                pagination=None,
-                current_sort_by=sort_by,
-                current_sort_order=sort_order,
-                exclude_min_zero=exclude_min_zero,
-                fund_groups=filtered_fund_groups,
-                selected_fund_group=selected_fund_group,
-            )
+        final_data_list = paginated_data[column_order].to_dict(orient="records")
+        final_data_list = replace_nan_with_none(final_data_list)
+
+
+        current_app.logger.info(f"Rendering securities_page.html with {len(final_data_list)} securities.")
+        return render_template(
+            "securities_page.html",
+            securities_data=final_data_list,
+            pagination=pagination_context,
+            filter_options=final_filter_options, # Use the options collected before any filtering
+            active_filters=active_filters,
+            search_term=search_term,
+            id_col_name=id_col_name,
+            current_sort_by=current_sort_by,
+            current_sort_order=current_sort_order,
+            column_order=column_order,
+            exclude_min_zero=exclude_min_zero,
+            fund_groups=ui_fund_groups, # Pass the fund groups for the dropdown
+            selected_fund_group=selected_fund_group # Pass the selected group to maintain dropdown state
+        )
 
     except Exception as e:
         current_app.logger.error(
@@ -368,30 +360,12 @@ def securities_page():
             active_filters=active_filters,
             exclude_min_zero=exclude_min_zero,
             fund_groups=(
-                filtered_fund_groups if "filtered_fund_groups" in locals() else {}
+                ui_fund_groups if "ui_fund_groups" in locals() else {}
             ),
             selected_fund_group=(
                 selected_fund_group if "selected_fund_group" in locals() else None
             ),
         )
-
-    # --- Render Template ---
-    return render_template(
-        "securities_page.html",
-        securities_data=securities_data_list,
-        filter_options=final_filter_options,
-        column_order=final_col_order,
-        id_col_name=id_col_name,
-        search_term=search_term,
-        active_filters=active_filters,  # Pass active filters for form state
-        pagination=pagination_context,  # Pass pagination object
-        current_sort_by=sort_by,
-        current_sort_order=sort_order,
-        message=None,  # Clear any previous error message if successful
-        exclude_min_zero=exclude_min_zero,  # Pass toggle state to template
-        fund_groups=filtered_fund_groups,  # Pass available groups for UI
-        selected_fund_group=selected_fund_group,  # Pass selected group for UI
-    )
 
 
 @security_bp.route("/security/details/<metric_name>/<path:security_id>")
