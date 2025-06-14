@@ -13,6 +13,7 @@ import pandas as pd
 import math
 import logging
 import os  # Added for path joining
+import re  # Added for cleaning hyphenated ISINs
 from flask import (
     Blueprint,
     render_template,
@@ -797,9 +798,11 @@ def details(comparison_type, security_id):
     # === Step 7: Load holdings data for overlay ==============================
     holdings_data = {}
     holdings_error = None
-    if chart_dates:  # Only try to get holdings if we have dates from Dates.csv
+    if chart_dates:
+        # Clean ID for holdings lookup: strip trailing hyphen-number (e.g., "XS1234-1" -> "XS1234")
+        cleaned_isin_for_holdings = re.sub(r"-\d+$", "", decoded_security_id)
         holdings_data, _, holdings_error = get_holdings_for_security(
-            decoded_security_id, chart_dates, data_folder
+            cleaned_isin_for_holdings, chart_dates, data_folder
         )
         if holdings_error:
             flash(f"Note: Could not display fund holdings. {holdings_error}", "warning")

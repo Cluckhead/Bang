@@ -411,10 +411,45 @@ def security_details(metric_name, security_id):
 
     # Clean the decoded_security_id to get a base ISIN (remove trailing -<number> if present)
     # This cleaned ID is for reference.csv, exclusions, issues, and holdings data
-    cleaned_isin_for_static_data = re.sub(r"-\\d+$", "", decoded_security_id)
+    cleaned_isin_for_static_data = re.sub(r"-\d+$", "", decoded_security_id)
     current_app.logger.info(
         f"Cleaned ISIN for static data lookup: '{cleaned_isin_for_static_data}'"
     )
+
+    # --- Identify Alternate (Hyphenated / Non-Hyphenated) Versions of This ISIN ---
+    alternate_versions = []  # List of dicts: {id, name, url}
+    try:
+        base_isin_pattern = re.compile(rf"^{re.escape(cleaned_isin_for_static_data)}(?:-\d+)?$")
+        alt_candidates = []
+        # Prefer reference.csv if loaded; fallback to w_secs.csv if reference missing.
+        if 'ref_df' in locals() and not ref_df.empty:
+            alt_candidates = ref_df[config.ISIN_COL].dropna().astype(str).unique().tolist()
+        else:
+            w_secs_path = os.path.join(current_app.config["DATA_FOLDER"], "w_secs.csv")
+            if os.path.exists(w_secs_path):
+                try:
+                    w_df = pd.read_csv(w_secs_path, usecols=[config.ISIN_COL])
+                    alt_candidates = w_df[config.ISIN_COL].dropna().astype(str).unique().tolist()
+                except Exception as e:
+                    current_app.logger.warning(f"Could not load w_secs.csv for alternate ISIN lookup: {e}")
+
+        for candidate in alt_candidates:
+            if candidate == decoded_security_id:
+                continue  # Skip current
+            if base_isin_pattern.match(candidate):
+                alt_name = None
+                if 'ref_df' in locals() and not ref_df.empty and 'Security Name' in ref_df.columns:
+                    name_row = ref_df[ref_df[config.ISIN_COL] == candidate]
+                    if not name_row.empty and pd.notna(name_row.iloc[0].get('Security Name')):
+                        alt_name = name_row.iloc[0]['Security Name']
+
+                alt_url = url_for("security.security_details", metric_name=metric_name, security_id=candidate)
+                alternate_versions.append({"id": candidate, "name": alt_name, "url": alt_url})
+
+        if alternate_versions:
+            current_app.logger.info(f"Found alternate ISIN versions for {decoded_security_id}: {[a['id'] for a in alternate_versions]}")
+    except Exception as e:
+        current_app.logger.warning(f"Error searching for alternate ISIN versions for {decoded_security_id}: {e}")
 
     data_folder = current_app.config["DATA_FOLDER"]
     all_dates = set()
@@ -798,6 +833,7 @@ def security_details(metric_name, security_id):
         bloomberg_yas_url=bloomberg_yas_url,
         holdings_data=holdings_data,
         chart_dates=chart_dates,
+        alternate_versions=alternate_versions,
     )
 
 

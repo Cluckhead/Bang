@@ -52,6 +52,22 @@ Purpose: Renders the security details page, showing all static info (from refere
         </div>
       {% endif %}
 
+      {# Alternate hyphenated/non-hyphenated versions #}
+      {% if alternate_versions and alternate_versions|length > 0 %}
+        <div class="mt-4">
+          <h5 class="text-base font-semibold text-gray-700 mb-1">Other Versions</h5>
+          <ul class="text-sm text-secondary space-y-1">
+            {% for alt in alternate_versions %}
+              <li>
+                <a href="{{ alt.url }}" class="hover:text-primary underline">
+                  {{ alt.id }}{% if alt.name %} – {{ alt.name }}{% endif %}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
       <div class="flex gap-2 mb-2">
         <button type="button" id="open-raise-issue-modal" class="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 transition-colors">Raise Data Issue</button>
         <button type="button" id="open-add-exclusion-modal" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors">Add Exclusion</button>
