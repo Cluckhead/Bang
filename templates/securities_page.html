@@ -110,7 +110,16 @@ main.js:29 DOM fully loaded and parsed
                     {% for row in securities_data %}
                         {% set z_score = row['Change Z-Score'] %}
                         {% set abs_z_score = z_score|abs if z_score is not none else 0 %}
-                        {% set row_class = 'bg-red-100 text-red-800' if abs_z_score >= 3 else ('bg-orange-100 text-orange-800' if abs_z_score >= 2 else '') %}
+                        {# Do not highlight treasuries (latest spread within ±10) #}
+                        {% set within_treasury_range = (row['Latest Value'] is number) and (row['Latest Value'] >= -10) and (row['Latest Value'] <= 10) %}
+                        {% set row_class = '' %}
+                        {% if not within_treasury_range %}
+                            {% if abs_z_score >= 3 %}
+                                {% set row_class = 'bg-red-100 text-red-800' %}
+                            {% elif abs_z_score >= 2 %}
+                                {% set row_class = 'bg-orange-100 text-orange-800' %}
+                            {% endif %}
+                        {% endif %}
                         <tr class="hover:bg-gray-100 transition-colors {{ row_class }}">
                             {% for col_name in column_order %}
                                 <td class="px-4 py-2 text-sm text-gray-700 border-b border-gray-100">

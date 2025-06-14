@@ -816,3 +816,47 @@ def static_files(filename):
     return send_from_directory(
         os.path.join(security_bp.root_path, "..", "static"), filename
     )
+
+@security_bp.route('/mark_good', methods=['POST'])
+def mark_good():
+    """API endpoint to mark a specific (ISIN, Metric, Date) tuple as cleared/"good".
+    Stores the override in Data/good_points.csv so that subsequent loads ignore that value.
+    Expects JSON: { "isin": "XS...", "metric": "Spread", "date": "YYYY-MM-DD" }
+    Returns HTTP 204 on success.
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        isin = data.get('isin')
+        metric = data.get('metric')
+        date_str = data.get('date')
+        if not all([isin, metric, date_str]):
+            return ("Missing fields", 400)
+        # Validate date
+        try:
+            date_val = pd.to_datetime(date_str).date()
+        except Exception:
+            return ("Invalid date", 400)
+        data_folder = current_app.config.get('DATA_FOLDER')
+        if not data_folder:
+            return ("Server not configured", 500)
+        good_path = os.path.join(data_folder, 'good_points.csv')
+        # Load or create
+        cols = ['ISIN', 'Metric', 'Date']
+        if os.path.exists(good_path):
+            good_df = pd.read_csv(good_path)
+        else:
+            good_df = pd.DataFrame(columns=cols)
+        # Prevent duplicates
+        dup_mask = (
+            (good_df['ISIN'] == isin) &
+            (good_df['Metric'].str.lower() == metric.lower()) &
+            (good_df['Date'] == date_val.isoformat())
+        ) if not good_df.empty else pd.Series(False)
+        if not dup_mask.any():
+            good_df.loc[len(good_df)] = [isin, metric, date_val.isoformat()]
+            good_df.to_csv(good_path, index=False)
+        current_app.logger.info(f"Marked good point: {isin} {metric} {date_val}")
+        return ('', 204)
+    except Exception as e:
+        current_app.logger.error(f"/mark_good error: {e}", exc_info=True)
+        return ("Server Error", 500)

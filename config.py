@@ -336,16 +336,18 @@ except Exception as e:
 
 # Default column order for the main securities summary table
 SECURITIES_SUMMARY_COLUMNS_ORDER = [
-    ISIN_COL,  # Primary Identifier
-    SEC_NAME_COL, # Security Name
-    TYPE_COL,  # e.g., Corp, Govt
-    CURRENCY_COL, # e.g., USD, EUR
-    # Add other commonly available static columns from your reference/security files if desired
-    # For example: 'Country', 'Sector', 'Maturity Date'
+    ISIN_COL,
+    SEC_NAME_COL,
+    TYPE_COL,
+    CURRENCY_COL,
     'Latest Value',
     'Change',
+    'Max |Δ| (bps)',  # NEW – biggest daily move over full history
+    '% Days >| 50 bps|',  # NEW – % of days with abs(move) > threshold
     'Change Z-Score',
     'Mean',
     'Max',
     'Min'
 ]
+
+LARGE_MOVE_THRESHOLD_BPS: int = 50  # Threshold (in basis points) for flagging large daily spread moves

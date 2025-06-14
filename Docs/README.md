@@ -637,3 +637,12 @@ This feature provides a detailed time-series view of attribution factors for a s
 - Allows for direct comparison of a security's attribution in the Portfolio versus the Benchmark, and across Original and S&P data contexts.
 - Integrates spread data for the security, offering a correlated view of its market pricing characteristic alongside its attribution performance.
 - Facilitates deeper investigation into attribution outliers or trends identified at a higher level (e.g., from the `/attribution/security` summary page).
+
+### June 2025 Quality-of-Life Fixes
+
+* **Zero weights treated as blanks** – During CSV ingestion every `0` is now converted to *blank/NaN*.  This prevents zeros from skewing chart axes and correlation statistics.
+* **`is_held` flag now uses *latest* weight** – A security is only considered *held* if its weight on the **most-recent date** in `w_secs.csv` is > 0.  (Previously any historical holding set the flag.)
+* **Static column capture widened** – All columns matching `STATIC_COLUMN_PATTERNS` are retained; this restores missing fields such as **Security Name** (and still keeps "Currency", "Type", etc.).
+  *Pattern list updated in `config.py`.*
+
+No config changes required; just pull & restart.

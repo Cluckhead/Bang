@@ -384,7 +384,7 @@ document.addEventListener('DOMContentLoaded', function() {
         spreadDatasets.push(chartData.sp_spread_dataset);
     }
     if (spreadDatasets.length > 0) {
-        new Chart(spreadCtx, {
+        const spreadChart = new Chart(spreadCtx, {
             type: 'line',
             data: { labels: chartData.labels, datasets: spreadDatasets },
             options: {
@@ -392,6 +392,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Spread Value' } } },
                 plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
             }
+        });
+
+        // --- Quick "Mark Good" interaction ---
+        spreadCtx.canvas.addEventListener('click', function(evt){
+            const points = spreadChart.getElementsAtEventForMode(evt, 'nearest', {intersect:true}, false);
+            if(!points.length) return;
+            const idx = points[0].index;
+            const dateClicked = chartData.labels[idx];
+            if(!confirm(`Mark ${dateClicked} as good?`)) return;
+            fetch('{{ url_for("security.mark_good") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    isin: '{{ security_id }}',
+                    metric: 'Spread',
+                    date: dateClicked
+                })
+            }).then(resp => { if(resp.ok){ location.reload(); } });
         });
     } else {
         document.getElementById('spread-chart-container').innerHTML = '<p class="text-info">Spread data not available for this security.</p>';

@@ -198,6 +198,29 @@ def load_and_process_security_data(
                 f"{log_prefix}Failed to set index using ['Date', '{id_col_name}']. Error: {e}. Columns: {df_long.columns.tolist()}"
             )
             return pd.DataFrame(), []
+        # --- Apply Cleared Points Overrides (good_points.csv) ---
+        try:
+            good_points_path = os.path.join(data_folder_path, 'good_points.csv')
+            if os.path.exists(good_points_path):
+                good_df = pd.read_csv(good_points_path, parse_dates=['Date'])
+                # Derive metric name from filename (e.g., sec_Spread.csv → Spread)
+                metric_name_match = re.sub(r'^sec_|SP|sp_', '', filename, flags=re.IGNORECASE)
+                metric_name_match = os.path.splitext(metric_name_match)[0]
+                if {'ISIN', 'Metric', 'Date'}.issubset(good_df.columns):
+                    metric_filter = good_df['Metric'].str.lower() == metric_name_match.lower()
+                    df_metric = good_df[metric_filter]
+                    if not df_metric.empty:
+                        # Iterate and null out matching points
+                        for _, gp_row in df_metric.iterrows():
+                            date_val = pd.to_datetime(gp_row['Date'], errors='coerce')
+                            isin_val = gp_row['ISIN']
+                            if pd.isna(date_val) or not isin_val:
+                                continue
+                            if (date_val, isin_val) in df_long.index:
+                                df_long.loc[(date_val, isin_val), 'Value'] = np.nan
+                        logger.info(f"{log_prefix}Applied {len(df_metric)} cleared good points from overrides.")
+        except Exception as gp_e:
+            logger.error(f"{log_prefix}Failed applying good_points.csv overrides: {gp_e}")
         # Identify static columns *excluding* essential ID cols to return
         final_static_cols = [col for col in static_cols if col in df_long.columns]
         logger.info(
@@ -385,6 +408,30 @@ def calculate_security_latest_metrics(
                     sec_metrics["Change"] = np.nan
                     sec_metrics["Change Z-Score"] = np.nan
 
+                # --- New volatility based metrics ---
+                # Maximum absolute daily change (basis points)
+                max_abs_change = (
+                    value_change_hist.abs().max()
+                    if value_change_hist.notna().any()
+                    else np.nan
+                )
+                sec_metrics["Max |Δ| (bps)"] = max_abs_change
+
+                # Percentage of days with an absolute change greater than threshold
+                large_move_mask = (
+                    value_change_hist.abs() > config.LARGE_MOVE_THRESHOLD_BPS
+                )
+                if large_move_mask.any():
+                    pct_large_moves = large_move_mask.mean() * 100  # percentage
+                else:
+                    pct_large_moves = 0.0 if value_change_hist.notna().any() else np.nan
+                sec_metrics["% Days >| 50 bps|"] = pct_large_moves
+
+                # Flag Treasury-like securities (spread always between −10 and +10)
+                sec_metrics["_is_treasury"] = (
+                    value_hist.abs().max() <= 10 if value_hist.notna().any() else False
+                )
+
                 # Add the security ID itself for setting the index later
                 sec_metrics[id_level_name] = sec_id
 
@@ -416,7 +463,16 @@ def calculate_security_latest_metrics(
             # Fallback or error? Let's return as is for now, index might be RangeIndex.
 
         # Reorder columns to have static columns first, then calculated metrics
-        metric_cols = ["Latest Value", "Change", "Mean", "Max", "Min", "Change Z-Score"]
+        metric_cols = [
+            "Latest Value",
+            "Change",
+            "Max |Δ| (bps)",
+            "% Days >| 50 bps|",
+            "Mean",
+            "Max",
+            "Min",
+            "Change Z-Score",
+        ]
         # Get static cols that are actually present in the final df columns (excluding the ID index)
         present_static_cols = [
             col for col in static_cols if col in latest_metrics_df.columns
