@@ -4,6 +4,7 @@
 import logging
 from typing import Optional, Any, List, Dict, Callable
 import pandas as pd
+import numpy as np
 import re
 
 logger = logging.getLogger(__name__)
@@ -129,13 +130,44 @@ def identify_columns(
     return result
 
 
-def convert_to_numeric_robustly(series: pd.Series) -> pd.Series:
+def replace_zeros_with_nan(series: pd.Series) -> pd.Series:
     """
-    Converts a pandas Series to numeric, coercing errors to NaN. Logs the number of values coerced to NaN.
+    Replaces all zeros in a numeric pandas Series with NaN.
+    This is used to prevent zeros from causing issues in charts and correlation calculations.
+    Args:
+        series (pd.Series): Numeric series that may contain zeros.
+    Returns:
+        pd.Series: Series with zeros replaced by NaN.
+    """
+    # Only process numeric series
+    if not pd.api.types.is_numeric_dtype(series):
+        logger.debug("replace_zeros_with_nan: Series is not numeric, returning unchanged.")
+        return series
+    
+    # Count zeros being replaced
+    zero_count = (series == 0).sum()
+    
+    # Replace zeros with NaN
+    result = series.replace(0, np.nan)
+    
+    if zero_count > 0:
+        logger.info(f"replace_zeros_with_nan: Replaced {zero_count} zeros with NaN to prevent chart and correlation issues.")
+    else:
+        logger.debug("replace_zeros_with_nan: No zeros found to replace.")
+    
+    return result
+
+
+def convert_to_numeric_robustly(series: pd.Series, replace_zeros: bool = True) -> pd.Series:
+    """
+    Converts a pandas Series to numeric, coercing errors to NaN. 
+    Optionally replaces zeros with NaN to prevent issues in charts and correlation calculations.
+    Logs the number of values coerced to NaN and zeros replaced.
     Args:
         series (pd.Series): Series to convert to numeric.
+        replace_zeros (bool): Whether to replace zeros with NaN after conversion. Default is True.
     Returns:
-        pd.Series: Series of numeric values (dtype float), with NaN for unparseable values.
+        pd.Series: Series of numeric values (dtype float), with NaN for unparseable values and optionally zeros.
     """
     numeric = pd.to_numeric(series, errors="coerce")
     coerced_nans = numeric.isna().sum() - series.isna().sum()
@@ -147,6 +179,11 @@ def convert_to_numeric_robustly(series: pd.Series) -> pd.Series:
         logger.info(
             f"convert_to_numeric_robustly: All {len(series)} values converted to numeric."
         )
+    
+    # Replace zeros with NaN if requested
+    if replace_zeros:
+        numeric = replace_zeros_with_nan(numeric)
+    
     return numeric
 
 

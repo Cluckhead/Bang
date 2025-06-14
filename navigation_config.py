@@ -1,68 +1,68 @@
 # Purpose: Central configuration for the sidebar navigation menu.
 # This file defines the NAV_MENU dictionary used to render the sidebar in base.html.
+#
+# Navigation is organized by user workflow and logical groupings:
+# - Dashboard & Overview: Main entry points and time-series analysis
+# - Security Analysis: Security-level views and comparisons  
+# - Fund & Portfolio Analysis: Fund-specific views and portfolio checks
+# - Attribution Analysis: All attribution-related functionality
+# - Data Quality & Monitoring: Data validation and monitoring tools
+# - Data Management: Workflow management (watchlist, issues, exclusions)
+# - Data APIs & Tools: Data fetching and simulation tools
+#
+# Note: Some detail pages (like Attribution Time Series) are accessible through
+# summary pages rather than direct navigation links.
 
 NAV_MENU = [
     {
-        "section": "Data Quality & Audit",
+        "section": "Dashboard & Overview",
         "items": [
             {
-                "label": "Data Consistency Audit",
-                "endpoint": "api_bp.get_data_page",
-                "params": {}
-            },
-            {
-                "label": "Staleness Detection",
-                "endpoint": "staleness_bp.dashboard",
-                "params": {}
-            },
-            {
-                "label": "Max/Min Value Breach",
-                "endpoint": "maxmin_bp.dashboard",
-                "params": {},
-                "subitems": [
-                    {
-                        "label": "Yields",
-                        "endpoint": "maxmin_bp.dashboard",
-                        "params": {"group_name": "Yields"}
-                    },
-                    {
-                        "label": "Spreads",
-                        "endpoint": "maxmin_bp.dashboard",
-                        "params": {"group_name": "Spreads"}
-                    }
-                ]
-            }
-        ]
-    },
-    {
-        "section": "Data Analysis & Comparison",
-        "items": [
-            {
-                "label": "Time Series Dashboard",
+                "label": "Main Dashboard",
                 "endpoint": "main.index",
                 "params": {}
             },
             {
-                "label": "Security-Level Analysis",
+                "label": "Time Series Metrics",
                 "is_header": True
             },
             {
-                "label": "Securities Spread Check",
+                "label": "Duration Analysis",
+                "endpoint": "metric.metric_page",
+                "params": {"metric_name": "duration"}
+            },
+            {
+                "label": "Spread Analysis", 
+                "endpoint": "metric.metric_page",
+                "params": {"metric_name": "spread"}
+            },
+            {
+                "label": "YTM Analysis",
+                "endpoint": "metric.metric_page",
+                "params": {"metric_name": "ytm"}
+            },
+            {
+                "label": "YTW Analysis",
+                "endpoint": "metric.metric_page",
+                "params": {"metric_name": "ytw"}
+            },
+            {
+                "label": "Spread Duration Analysis",
+                "endpoint": "metric.metric_page",
+                "params": {"metric_name": "spread_duration"}
+            }
+        ]
+    },
+    {
+        "section": "Security Analysis",
+        "items": [
+            {
+                "label": "Securities Overview",
                 "endpoint": "security.securities_page",
                 "params": {}
             },
             {
-                "label": "Weight Check",
-                "endpoint": "weight.weight_check",
-                "params": {}
-            },
-            {
-                "label": "Yield Curve Check",
-                "endpoint": "curve_bp.curve_summary",
-                "params": {}
-            },
-            {
-                "label": "Generic Data Comparison",
+                "label": "Security Comparisons",
                 "is_header": True
             },
             {
@@ -93,18 +93,43 @@ NAV_MENU = [
         ]
     },
     {
-        "section": "Portfolio & Attribution",
+        "section": "Fund & Portfolio Analysis",
         "items": [
             {
-                "label": "Attribution Residuals (Summary)",
+                "label": "Fund Selection",
+                "endpoint": "main.index",
+                "params": {}
+            },
+            {
+                "label": "Portfolio Checks",
+                "is_header": True
+            },
+            {
+                "label": "Weight Check",
+                "endpoint": "weight.weight_check",
+                "params": {}
+            },
+            {
+                "label": "Yield Curve Analysis",
+                "endpoint": "curve_bp.curve_summary",
+                "params": {}
+            }
+        ]
+    },
+    {
+        "section": "Attribution Analysis",
+        "items": [
+            {
+                "label": "Attribution Summary",
                 "endpoint": "attribution_bp.attribution_summary",
                 "params": {}
             },
             {
-                "label": "Attribution Security-Level",
+                "label": "Attribution by Security",
                 "endpoint": "attribution_bp.attribution_security_page",
                 "params": {}
             },
+
             {
                 "label": "Attribution Radar",
                 "endpoint": "attribution_bp.attribution_radar",
@@ -118,7 +143,44 @@ NAV_MENU = [
         ]
     },
     {
-        "section": "Issue & Workflow Management",
+        "section": "Data Quality & Monitoring",
+        "items": [
+            {
+                "label": "Data Consistency Audit",
+                "endpoint": "api_bp.get_data_page",
+                "params": {}
+            },
+            {
+                "label": "Staleness Detection",
+                "endpoint": "staleness_bp.dashboard",
+                "params": {}
+            },
+            {
+                "label": "Max/Min Breach Monitoring",
+                "endpoint": "maxmin_bp.dashboard",
+                "params": {},
+                "subitems": [
+                    {
+                        "label": "All Breaches",
+                        "endpoint": "maxmin_bp.dashboard",
+                        "params": {}
+                    },
+                    {
+                        "label": "Yields",
+                        "endpoint": "maxmin_bp.dashboard",
+                        "params": {"group_name": "Yields"}
+                    },
+                    {
+                        "label": "Spreads",
+                        "endpoint": "maxmin_bp.dashboard",
+                        "params": {"group_name": "Spreads"}
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "section": "Data Management",
         "items": [
             {
                 "label": "Watchlist",
@@ -126,13 +188,28 @@ NAV_MENU = [
                 "params": {}
             },
             {
-                "label": "Track Issues",
+                "label": "Issue Tracking",
                 "endpoint": "issue_bp.manage_issues",
                 "params": {}
             },
             {
-                "label": "Exclusions",
+                "label": "Security Exclusions",
                 "endpoint": "exclusion_bp.manage_exclusions",
+                "params": {}
+            }
+        ]
+    },
+    {
+        "section": "Data APIs & Tools",
+        "items": [
+            {
+                "label": "Data API Simulation",
+                "endpoint": "api_bp.get_data_page",
+                "params": {}
+            },
+            {
+                "label": "Attribution Data API",
+                "endpoint": "api_bp.get_attribution_data_page",
                 "params": {}
             }
         ]

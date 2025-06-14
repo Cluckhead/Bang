@@ -233,7 +233,7 @@ def _aggregate_by_date_code(
     if not numeric_cols and numeric_hint_cols:
         for col in numeric_hint_cols:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
+                df[col] = convert_to_numeric_robustly(df[col])
         numeric_cols = df.select_dtypes(include="number").columns.tolist()
 
     # Build aggregation dictionary

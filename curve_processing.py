@@ -105,9 +105,10 @@ def load_curve_data(data_folder_path: str) -> pd.DataFrame:
                 f"Dropped {dropped_dates} rows with unparseable dates in {file_path}"
             )
 
-        # Ensure Value column is numeric
+        # Ensure Value column is numeric and replace zeros with NaN
         if "Value" in df.columns:
-            df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
+            from data_utils import convert_to_numeric_robustly
+            df["Value"] = convert_to_numeric_robustly(df["Value"])
             # Drop rows where Value couldn't be converted to numeric
             before_len = len(df)
             df = df.dropna(subset=["Value"])
@@ -121,15 +122,7 @@ def load_curve_data(data_folder_path: str) -> pd.DataFrame:
         df["TermDays"] = df["Term"].apply(_term_to_days)
         logger.debug("Applied _term_to_days conversion.")
 
-        # Convert Value to numeric first
-        original_rows = len(df)
-        df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
-        rows_after_numeric = len(df.dropna(subset=["Value"]))
-        if original_rows > rows_after_numeric:
-            logger.warning(
-                f"Dropped {original_rows - rows_after_numeric} rows due to non-numeric 'Value'."
-            )
-        df.dropna(subset=["Value"], inplace=True)
+        # Value already converted to numeric and zeros replaced above
 
         # Drop rows where term conversion failed
         original_rows = len(df)

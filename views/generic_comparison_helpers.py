@@ -69,9 +69,10 @@ def calculate_generic_comparison_stats(merged_df, static_data, id_col):
         if not pd.api.types.is_datetime64_any_dtype(group["Date"]):
             group["Date"] = pd.to_datetime(group["Date"], errors="coerce")
 
-        # Ensure Value columns are numeric
-        group["Value_Orig"] = pd.to_numeric(group["Value_Orig"], errors="coerce")
-        group["Value_New"] = pd.to_numeric(group["Value_New"], errors="coerce")
+        # Ensure Value columns are numeric and replace zeros with NaN
+        from data_utils import convert_to_numeric_robustly
+        group["Value_Orig"] = convert_to_numeric_robustly(group["Value_Orig"])
+        group["Value_New"] = convert_to_numeric_robustly(group["Value_New"])
 
         # Filter for overall date range (where at least one value exists)
         group_valid_overall = group.dropna(
@@ -559,7 +560,8 @@ def _apply_summary_sorting(
 
     try:
         if pd.api.types.is_numeric_dtype(df[sort_by]):
-            df[sort_by] = pd.to_numeric(df[sort_by], errors="coerce")
+            from data_utils import convert_to_numeric_robustly
+            df[sort_by] = convert_to_numeric_robustly(df[sort_by])
             sorted_df = df.sort_values(
                 by=sort_by, ascending=ascending, na_position="last"
             )

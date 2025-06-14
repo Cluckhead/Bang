@@ -111,9 +111,10 @@ def calculate_generic_comparison_stats(merged_df, static_data, id_col):
         if not pd.api.types.is_datetime64_any_dtype(group["Date"]):
             group["Date"] = pd.to_datetime(group["Date"], errors="coerce")
 
-        # Ensure Value columns are numeric
-        group["Value_Orig"] = pd.to_numeric(group["Value_Orig"], errors="coerce")
-        group["Value_New"] = pd.to_numeric(group["Value_New"], errors="coerce")
+        # Ensure Value columns are numeric and replace zeros with NaN
+        from data_utils import convert_to_numeric_robustly
+        group["Value_Orig"] = convert_to_numeric_robustly(group["Value_Orig"])
+        group["Value_New"] = convert_to_numeric_robustly(group["Value_New"])
 
         # Filter for overall date range (where at least one value exists)
         group_valid_overall = group.dropna(

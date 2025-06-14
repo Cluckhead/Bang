@@ -166,6 +166,10 @@ STALENESS_PLACEHOLDERS: list = [100]
 # Default threshold (in days) for staleness detection
 STALENESS_THRESHOLD_DAYS: int = 5
 
+# --- Data Processing Configuration ---
+# Controls whether zeros in CSV data should be replaced with NaN to prevent chart and correlation issues
+REPLACE_ZEROS_WITH_NAN: bool = True
+
 # Number of securities to display per page in security views
 SECURITIES_PER_PAGE: int = 50
 
