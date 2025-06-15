@@ -615,7 +615,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     // --- Event Listener for the "Run and Overwrite Data" button ---
     runOverwriteButton.addEventListener('click', function() {
-        handleApiCall(true); // Force overwrite
+        // Add confirmation dialog for destructive action
+        if (confirm('Are you sure you want to overwrite existing data? This action cannot be undone.')) {
+            handleApiCall(true); // Force overwrite
+        }
     });
 
     // Add event listener for the Rerun buttons using event delegation

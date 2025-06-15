@@ -385,6 +385,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     plugins: {
                         legend: { position: 'top' },
                         tooltip: { mode: 'index', intersect: false }
+                    },
+                    onHover: (event, activeElements) => {
+                        event.native.target.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
                     }
                 }
             });

@@ -165,7 +165,7 @@ def metric_page(metric_name):
                 current_app.logger.error(
                     f"Error: Primary data file not found: {primary_filepath} (Filter: {filter_sp_valid}, Group: {selected_fund_group})"
                 )
-                error_message = f"Error: Data file for metric '{metric_name}' (expected: '{primary_filename}') not found."
+                error_message = f"<strong>Missing Data File!</strong><br/>The required data file '<code>{primary_filename}</code>' is not found in the Data directory.<br/>Full path expected: <code>{primary_filepath}</code><br/>Please ensure the file exists before accessing this page."
                 # Render template with error message and filter state
                 return (
                     render_template(

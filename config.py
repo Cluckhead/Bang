@@ -140,6 +140,11 @@ LOGGING_CONFIG = {
 # Define allowed data sources for issue tracking and related features
 DATA_SOURCES = ["S&P", "Production", "Pi", "IVP", "Benchmark", "BANG Bug", "Rimes"]
 
+# --- JIRA Configuration ---
+# Base URL for JIRA issues - used to convert issue keys like PROJ-123 into full URLs
+# Change this to match your organization's JIRA instance
+JIRA_BASE_URL = "https://jira.example.com/browse/"
+
 # --- Yield Curve Processing Thresholds ---
 # Threshold for detecting large non-monotonic drops in curve values (e.g., -0.5 means a drop > 0.5 is flagged)
 CURVE_MONOTONICITY_DROP_THRESHOLD = -0.5
