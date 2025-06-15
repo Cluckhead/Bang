@@ -108,7 +108,7 @@
     <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-6 hover:shadow-md transition-shadow">
         <h3 class="text-xl font-semibold font-merriweather mb-3">Benchmark {{ selected_level }} Attribution</h3>
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
+            <table id="benchmark-attribution-table" class="min-w-full divide-y divide-gray-200 border border-gray-200 sortable">
                 <thead class="bg-gray-50">
                     <tr>
                         <th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Date</th>
@@ -198,7 +198,7 @@
     <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
          <h3 class="text-xl font-semibold font-merriweather mb-3">Portfolio {{ selected_level }} Attribution</h3>
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
+            <table id="portfolio-attribution-table" class="min-w-full divide-y divide-gray-200 border border-gray-200 sortable">
                 <thead class="bg-gray-50">
                     <tr>
                         <th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Date</th>
@@ -346,6 +346,20 @@ sliderEndEl.addEventListener('input', updateSliderLabelsAndInput);
 document.getElementById('fund-select').addEventListener('change', () => { document.getElementById('filter-form').submit(); });
 document.getElementById('characteristic-select').addEventListener('change', () => { document.getElementById('filter-form').submit(); });
 document.getElementById('characteristic-value-select').addEventListener('change', () => { document.getElementById('filter-form').submit(); });
+
+// Initialize table sorting for attribution tables
+document.addEventListener('DOMContentLoaded', function() {
+    // Import and initialize tableSorter
+    import('/static/js/main.js').then(module => {
+        // Since the tables have complex headers with rowspan and colspan,
+        // we need to make sure the tableSorter can handle them
+        // The initTableSorter function should be available from the main module
+        if (module.initTableSorter) {
+            module.initTableSorter('benchmark-attribution-table');
+            module.initTableSorter('portfolio-attribution-table');
+        }
+    });
+});
 
 // Add CSS for slider thumb styling in base.html or style.css if needed
 // Example (might need adjustments in style.css or <style> block):

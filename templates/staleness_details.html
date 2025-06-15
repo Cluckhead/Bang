@@ -19,7 +19,7 @@
     <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden">
         {% if stale_securities %}
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <table id="staleness-details-table" class="min-w-full divide-y divide-gray-200 text-sm sortable">
                 <thead class="bg-gray-50">
                     <tr class="sticky top-0 z-10 bg-gray-50">
                         <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ id_column }}</th>
@@ -64,4 +64,14 @@
 
 {% block scripts %}
 {{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Import and initialize tableSorter for the staleness details table
+    import('/static/js/main.js').then(module => {
+        if (module.initTableSorter) {
+            module.initTableSorter('staleness-details-table');
+        }
+    });
+});
+</script>
 {% endblock %} 

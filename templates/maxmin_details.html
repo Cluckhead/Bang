@@ -57,7 +57,7 @@
         {# Overflow container for responsive table #}
         <div class="overflow-x-auto">
             {# Styled Table #}
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <table id="maxmin-details-table" class="min-w-full divide-y divide-gray-200 text-sm sortable">
                 <thead class="bg-gray-50">
                     <tr>
                         {# Styled Header Cells #}
@@ -103,4 +103,18 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Import and initialize tableSorter for the max/min details table
+    import('/static/js/main.js').then(module => {
+        if (module.initTableSorter) {
+            module.initTableSorter('maxmin-details-table');
+        }
+    });
+});
+</script>
 {% endblock %} 
