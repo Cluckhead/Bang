@@ -13,7 +13,7 @@ main.js:29 DOM fully loaded and parsed
 {% block content %}
 {% if message %}
 <div class="bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-3 rounded mb-4 flex items-center justify-between">
-    <span>{{ message }}</span>
+    <span>{{ message|safe }}</span>
     <button type="button" class="text-2xl leading-none hover:text-yellow-900">&times;</button>
 </div>
 {% endif %}

@@ -37,7 +37,7 @@
             <h2 class="text-2xl font-semibold font-merriweather-sans text-gray-700 mb-3">Latest Change Z-Score Summary</h2>
             {# Table Styling (4.2.5) - Added wrapper and table classes #}
             <div class="overflow-x-auto bg-white rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)]">
-                <table class="w-full text-left border-collapse">
+                <table id="zscore-summary-table" class="w-full text-left border-collapse sortable">
                     <thead class="border-b border-gray-300 bg-gray-50">
                         <tr>
                             {# Header Styling #}
@@ -109,4 +109,14 @@
 
 {% block scripts %}
 {# Add any page-specific scripts here if needed in the future #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Import and initialize tableSorter for the Z-Score Summary table
+    import('/static/js/main.js').then(module => {
+        if (module.initTableSorter) {
+            module.initTableSorter('zscore-summary-table');
+        }
+    });
+});
+</script>
 {% endblock %} 

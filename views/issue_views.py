@@ -14,10 +14,48 @@ import issue_processing  # Use the new module
 import pandas as pd
 from datetime import datetime
 import os  # Added to check for users.csv
-from config import DATA_SOURCES  # Import from config.py
+from config import DATA_SOURCES, JIRA_BASE_URL  # Import from config.py
 from typing import List
+import re  # Added for regex pattern matching
 
 issue_bp = Blueprint("issue_bp", __name__, template_folder="templates")
+
+
+def process_jira_link(jira_link: str) -> tuple:
+    """
+    Process a Jira link to ensure it's a full URL.
+    
+    Args:
+        jira_link: Either a full URL or just an issue key (e.g., PROJ-123)
+        
+    Returns:
+        tuple: (full_url, display_text) - The full URL and text to display
+    """
+    if not jira_link:
+        return None, None
+        
+    # Trim whitespace
+    jira_link = jira_link.strip()
+    
+    # Check if it's already a full URL (starts with http:// or https://)
+    if jira_link.startswith(('http://', 'https://')):
+        # Extract the issue key from the URL for display
+        # Common patterns: /browse/PROJ-123 or /issues/PROJ-123
+        match = re.search(r'/(?:browse|issues)/([A-Z]+-\d+)', jira_link)
+        if match:
+            display_text = match.group(1)
+        else:
+            display_text = "Link"
+        return jira_link, display_text
+    else:
+        # Assume it's just an issue key like PROJ-123
+        # Validate it matches the pattern (letters-numbers)
+        if re.match(r'^[A-Z]+-\d+$', jira_link, re.IGNORECASE):
+            full_url = JIRA_BASE_URL + jira_link
+            return full_url, jira_link
+        else:
+            # If it doesn't match the pattern, return as-is
+            return jira_link, jira_link
 
 
 # Function to load users from CSV
@@ -124,6 +162,20 @@ def manage_issues():
         .sort_values(by="DateClosed", ascending=False)
         .to_dict("records")
     )
+    
+    # Process Jira links for open issues
+    for issue in open_issues:
+        if issue.get("JiraLink"):
+            issue["JiraURL"], issue["JiraDisplay"] = process_jira_link(issue["JiraLink"])
+        else:
+            issue["JiraURL"], issue["JiraDisplay"] = None, None
+            
+    # Process Jira links for closed issues
+    for issue in closed_issues:
+        if issue.get("JiraLink"):
+            issue["JiraURL"], issue["JiraDisplay"] = process_jira_link(issue["JiraLink"])
+        else:
+            issue["JiraURL"], issue["JiraDisplay"] = None, None
 
     return render_template(
         "issues_page.html",

@@ -258,7 +258,70 @@
 {# Relying on server-side generation and simple form submission for filters/sorting/pagination #}
 {# Kept the toggle switch JS for immediate feedback #}
 <script>
-    // No additional complex JS needed for basic functionality based on this template structure.
-    // The show_sold toggle already submits the form via its onchange attribute.
+    // Track when filters are "dirty" (changed but not applied)
+    document.addEventListener('DOMContentLoaded', function() {
+        const filterForm = document.getElementById('filter-form');
+        if (!filterForm) return;
+        
+        const applyButton = filterForm.querySelector('button[type="submit"]');
+        if (!applyButton) return;
+        
+        // Store original button classes and text
+        const originalClasses = applyButton.className;
+        const originalText = applyButton.textContent;
+        const dirtyClasses = 'px-3 py-1.5 bg-warning text-white text-xs font-medium rounded-md shadow-sm hover:bg-warning-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-warning transition duration-150 ease-in-out animate-pulse';
+        
+        // Get all form inputs (selects and checkboxes, but not hidden inputs)
+        const formInputs = filterForm.querySelectorAll('select:not([type="hidden"]), input[type="checkbox"]');
+        
+        // Store initial values
+        const initialValues = {};
+        formInputs.forEach(input => {
+            if (input.type === 'checkbox') {
+                initialValues[input.name] = input.checked;
+            } else {
+                initialValues[input.name] = input.value;
+            }
+        });
+        
+        // Function to check if form is dirty
+        function checkIfDirty() {
+            let isDirty = false;
+            formInputs.forEach(input => {
+                if (input.type === 'checkbox') {
+                    if (input.checked !== initialValues[input.name]) {
+                        isDirty = true;
+                    }
+                } else {
+                    if (input.value !== initialValues[input.name]) {
+                        isDirty = true;
+                    }
+                }
+            });
+            
+            // Update button appearance
+            if (isDirty) {
+                applyButton.className = dirtyClasses;
+                applyButton.textContent = 'Apply Changes';
+            } else {
+                applyButton.className = originalClasses;
+                applyButton.textContent = originalText;
+            }
+        }
+        
+        // Add change event listeners to all inputs
+        formInputs.forEach(input => {
+            input.addEventListener('change', checkIfDirty);
+        });
+        
+        // Special handling for the Show Sold toggle since it auto-submits
+        const showSoldToggle = document.getElementById('showSoldToggle');
+        if (showSoldToggle) {
+            // Remove the auto-submit behavior
+            showSoldToggle.removeAttribute('onchange');
+            // Add it to the change tracking
+            showSoldToggle.addEventListener('change', checkIfDirty);
+        }
+    });
 </script>
 {% endblock %} 

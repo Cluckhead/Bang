@@ -120,7 +120,7 @@ def securities_page(metric_name: str = "Spread"):
         )
         return render_template(
             "securities_page.html",
-            message=f"Error: Required data file '{metric_filename}' not found.",
+            message=f"<strong>Missing Data File!</strong> The required data file '<code>{metric_filename}</code>' is not found in the Data directory. Please ensure the file exists before accessing this page.",
             securities_data=[],
             pagination=None,
             metric_name=metric_name,
