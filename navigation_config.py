@@ -57,9 +57,14 @@ NAV_MENU = [
         "section": "Security Analysis",
         "items": [
             {
-                "label": "Securities Overview",
+                "label": "Securities – Spread",
                 "endpoint": "security.securities_page",
                 "params": {}
+            },
+            {
+                "label": "Securities – Duration",
+                "endpoint": "security.securities_page",
+                "params": {"metric_name": "Duration"}
             },
             {
                 "label": "Security Comparisons",

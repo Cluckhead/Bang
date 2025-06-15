@@ -6,6 +6,9 @@
 - [Generic Data Comparison](#generic-data-comparison)
 - [Data Staleness Detection](#data-staleness-detection)
 - [Security-Level Analysis: Min=0 Exclusion Toggle](#security-level-analysis-min0-exclusion-toggle)
+- [Security-Level Analysis: Volatility Metrics & 'Mark Good' (NEW)](#security-level-analysis-volatility-metrics--mark-good-new)
+- [Security-Level Analysis: Duration Data Check (NEW)](#security-level-analysis-duration-data-check-new)
+- [Security Data Override Modal (NEW)](#security-data-override-modal-new)
 - [Security-Level Analysis](#security-level-analysis)
 - [Views and Functionality](#views-and-functionality)
 - [Technical Details](#technical-details)
@@ -183,6 +186,89 @@ This feature monitors and identifies stale or missing data in security and curve
 - The toggle state is preserved across filter and sort actions.
 - Add the static data to the security details page
 - **Date parsing is fully flexible:** Security-level data now supports `YYYY-MM-DD`, `DD/MM/YYYY`, and ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), with pandas fallback for any others.
+
+---
+
+## Security-Level Analysis: Volatility Metrics & 'Mark Good' (NEW)
+
+To help analysts focus on genuinely suspect data the application now provides **two volatility-based columns** on the *Securities summary* table and a **one-click "Mark Good" mechanism** in the security details view.
+
+### 1. Volatility Screening Columns
+
+| Column | Meaning | Config |
+|--------|---------|--------|
+| **Max \|Δ\| (bps)** | Largest *absolute* day-on-day move seen over the full history.| n/a (calculated on load) |
+| **% Days >| 50 bps |** | Share of trading days whose absolute move exceeded the **danger threshold** (default 50 bps). | Threshold set in `config.LARGE_MOVE_THRESHOLD_BPS`. |
+
+These metrics flag "noisy" series where Z-scores may be suppressed by extended flat periods.
+
+*Rows whose **latest spread** is between −10 bps and +10 bps (typically Treasuries) are automatically excluded from orange/red highlight so the grid concentrates on credit issues.*
+
+### 2. One-Click "Mark Good" Dismiss
+
+When a spike or dip is deemed legitimate you can remove it from future checks in **two clicks**:
+
+1. Open the security's details page (via its ISIN link) → the main *Spread* chart appears.
+2. Hover the offending point and **left-click** → confirm the browser prompt.
+
+The app sends a POST to `/security/mark_good` and appends the trio `(ISIN, Metric, Date)` to `Data/good_points.csv`.  On reload the value is treated as *blank* and ignored in all stats, colours and Z-scores.
+
+There is no need to restart the server; the override is applied the next time the file is loaded.
+
+---
+
+## Security-Level Analysis: Duration Data Check (NEW)
+
+With the **metric-aware** security summary page you can now perform the same anomaly checks on **Duration** that previously existed only for Spread.
+
+### Access
+
+* **Route** – `/security/summary/Duration`
+* **Navigation** – Sidebar → *Security Analysis* → *Securities – Duration*
+
+### What's Included
+
+* All the filters, sorting, pagination and **fund-group dropdown** present in the Spread view.
+* The two **volatility columns** (*Max |Δ|* and *% Days >| 50 bps |*) and the **Min = 0 exclusion toggle*.
+* The one-click **"Mark Good"** dismiss now works for **every metric**; a click on any point of the primary chart (Duration here) writes `(ISIN, "Duration", Date)` to `Data/good_points.csv`.
+
+### How It Works
+
+Internally the `/security/summary` route is now parameterised.  If no metric is supplied it defaults to *Spread*; pass any metric key (capitalised) and the view loads `sec_<Metric>.csv` dynamically.
+
+```text
+Spread   → /security/summary            → sec_Spread.csv
+Duration → /security/summary/Duration   → sec_Duration.csv
+```
+
+This design means future metrics (e.g. *YTM*) can be enabled instantly by linking to `/security/summary/YTM` – no extra backend code needed.
+
+---
+
+## Security Data Override Modal (NEW)
+
+This feature allows analysts to quickly correct or overwrite any value in the raw `sec_*` or `sec_*SP` security-level CSVs **without touching the files directly**.
+
+### Quick Facts
+* **Access:** In the Security Details page (`/security/details/<metric>/<ISIN>`) press the new **Edit&nbsp;Data** button (beside *Raise Issue* / *Add Exclusion*).
+* **What you can change:** Any metric contained in a `sec_*` file, plus its S&P variant (`sec_*SP`).
+* **Workflow:**
+  1. **Step 1 – Pick Field & Dates**  
+     A compact modal asks for the field (Spread, Duration, …, SpreadSP, etc.) and the date range.  The date inputs default to *exactly* the first and last dates presently shown on the chart, making "whole-range" edits a one-click job.
+  2. **Step 2 – Review & Edit**  
+     A second modal lists every date in the range with its existing value.  Type directly into the *New&nbsp;Value* column to overwrite.  Leave a cell blank to keep the original.
+  3. **Export CSV**  
+     Click **Export** to download a fully-formed CSV named `override_<Field>_<ISIN>_<timestamp>.csv` containing rows: `Field, ISIN, Date, Value`.  Hand this straight to the upstream data team or drop it into the loader – no re-formatting required.
+
+### Under the Hood
+* **Live Data Fetch:** The modal pulls existing values through `/security/get_field_data`, re-using the same loader pipeline that powers all analytics to guarantee consistency.
+* **YAML Alias Map:** A simple `config/field_aliases.yaml` translates friendly field names to underlying DB/file names (identity mapping today – ready for future mismatches).
+* **No Database Writes:** The feature is intentionally read-only; it prepares the override file but doesn't mutate production data, ensuring a safe audit trail.
+
+### Why This Matters
+* **Speed:** Fix a handful of bad points in seconds, without Excel gymnastics or risking raw file edits.
+* **Accuracy:** Uses the exact values the app sees, avoiding off-by-one row errors.
+* **Auditability:** The generated file is self-describing and timestamped, perfect for ticket attachments or SFTP upload workflows.
 
 ---
 

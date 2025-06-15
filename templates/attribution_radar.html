@@ -60,14 +60,23 @@
 
         <!-- Date Range Slider -->
         <div class="mt-6">
-            <label for="date-range-slider-container" class="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
-            <div id="date-range-slider-container" class="relative h-5">
-                 <input type="range" class="absolute w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb-secondary" id="date-range-slider" min="0" max="0" value="0" step="1">
-                 <input type="range" class="absolute w-full h-2 bg-transparent rounded-lg appearance-none cursor-pointer slider-thumb-secondary" id="date-range-slider-end" min="0" max="0" value="0" step="1">
+            <label class="block text-sm font-medium text-gray-700 mb-3">Date Range</label>
+            <div class="relative h-10 px-3">
+                <!-- Background track -->
+                <div class="absolute top-1/2 w-full h-2 bg-gray-300 rounded-full transform -translate-y-1/2"></div>
+                
+                <!-- Selected range highlight -->
+                <div id="date-range-slider-track" class="absolute top-1/2 h-2 bg-secondary rounded-full transform -translate-y-1/2 pointer-events-none transition-all duration-150"></div>
+
+                <!-- Start (left) handle -->
+                <input type="range" class="dual-range-slider dual-range-start absolute w-full h-2 bg-transparent appearance-none cursor-pointer" id="date-range-slider" min="0" max="0" value="0" step="1">
+
+                <!-- End (right) handle -->
+                <input type="range" class="dual-range-slider dual-range-end absolute w-full h-2 bg-transparent appearance-none cursor-pointer" id="date-range-slider-end" min="0" max="0" value="0" step="1">
             </div>
-            <div class="flex justify-between text-xs text-gray-500 mt-1">
-                <span id="start-date-label"></span>
-                <span id="end-date-label"></span>
+            <div class="flex justify-between text-sm text-gray-700 mt-2">
+                <span id="start-date-label" class="font-semibold"></span>
+                <span id="end-date-label" class="font-semibold"></span>
             </div>
         </div>
     </div>
@@ -96,7 +105,71 @@
 {% block scripts %}
 {{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+/* Custom dual-range slider styles */
+.dual-range-slider {
+    pointer-events: none;
+}
+
+.dual-range-slider::-webkit-slider-thumb {
+    appearance: none;
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+    background: #1F7A8C;
+    border: 3px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    pointer-events: all;
+    transition: all 0.15s ease;
+}
+
+.dual-range-slider::-webkit-slider-thumb:hover {
+    background: #1a6b7a;
+    transform: scale(1.1);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.dual-range-slider::-moz-range-thumb {
+    appearance: none;
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+    background: #1F7A8C;
+    border: 3px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    pointer-events: all;
+    transition: all 0.15s ease;
+}
+
+.dual-range-slider::-moz-range-thumb:hover {
+    background: #1a6b7a;
+    transform: scale(1.1);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.dual-range-slider::-webkit-slider-track {
+    background: transparent;
+    height: 8px;
+}
+
+.dual-range-slider::-moz-range-track {
+    background: transparent;
+    height: 8px;
+}
+
+.dual-range-start {
+    z-index: 1;
+}
+
+.dual-range-end {
+    z-index: 2;
+}
+</style>
 <script>
+// @ts-nocheck
+
 // Parse radar data from backend
 const radarData = JSON.parse({{ radar_data_json|tojson|safe }});
 
@@ -134,6 +207,7 @@ const startDateLabel = document.getElementById('start-date-label');
 const endDateLabel = document.getElementById('end-date-label');
 const startDateInput = document.getElementById('start_date');
 const endDateInput = document.getElementById('end_date');
+const sliderTrack = document.getElementById('date-range-slider-track');
 
 sliderStartEl.max = allDates.length - 1;
 sliderEndEl.max = allDates.length - 1;
@@ -154,6 +228,14 @@ function updateSliderLabelsAndInput() {
     endDateLabel.textContent = allDates[endIdx].toISOString().slice(0, 10);
     startDateInput.value = allDates[startIdx].toISOString().slice(0, 10);
     endDateInput.value = allDates[endIdx].toISOString().slice(0, 10);
+
+    // Update highlighted track bar
+    const percentStart = (startIdx / (allDates.length - 1)) * 100;
+    const percentEnd = (endIdx / (allDates.length - 1)) * 100;
+    if (sliderTrack) {
+        sliderTrack.style.left = percentStart + '%';
+        sliderTrack.style.width = (percentEnd - percentStart) + '%';
+    }
 }
 
 updateSliderLabelsAndInput();
@@ -169,6 +251,27 @@ function handleSliderInput() {
 
 sliderStartEl.addEventListener('input', handleSliderInput);
 sliderEndEl.addEventListener('input', handleSliderInput);
+
+// Handle z-index for proper slider interaction
+sliderStartEl.addEventListener('mousedown', function() {
+    sliderStartEl.style.zIndex = '3';
+    sliderEndEl.style.zIndex = '2';
+});
+
+sliderEndEl.addEventListener('mousedown', function() {
+    sliderEndEl.style.zIndex = '3';
+    sliderStartEl.style.zIndex = '2';
+});
+
+sliderStartEl.addEventListener('touchstart', function() {
+    sliderStartEl.style.zIndex = '3';
+    sliderEndEl.style.zIndex = '2';
+});
+
+sliderEndEl.addEventListener('touchstart', function() {
+    sliderEndEl.style.zIndex = '3';
+    sliderStartEl.style.zIndex = '2';
+});
 
 // Render Radar Chart
 function renderRadarChart(canvasId, labels, prodData, spData, title) {

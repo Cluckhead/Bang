@@ -9,6 +9,7 @@ from flask import (
     send_from_directory,
     url_for,
     current_app,
+    send_file,
 )
 import os
 import pandas as pd
@@ -21,6 +22,9 @@ import math
 import json
 import config
 import re # Add import for regex
+import io  # For CSV export
+import csv  # For CSV writing
+import yaml  # For field alias mapping
 
 # Import necessary functions/constants from other modules
 from config import (
@@ -60,7 +64,8 @@ security_bp = Blueprint("security", __name__, url_prefix="/security")
 
 
 @security_bp.route("/summary")
-def securities_page():
+@security_bp.route("/summary/<metric_name>")
+def securities_page(metric_name: str = "Spread"):
     """Renders a page summarizing potential issues in security-level data, with server-side pagination, filtering, and sorting.
     Adds support for filtering by fund group (from FundGroups.csv)."""
     current_app.logger.info("\n--- Starting Security Data Processing (Paginated) ---")
@@ -102,50 +107,55 @@ def securities_page():
     )
 
     # --- Load Base Data ---
-    spread_filename = "sec_Spread.csv"
-    # Construct absolute path
-    data_filepath = os.path.join(data_folder, spread_filename)
+    # Dynamically build the filename for the requested metric (e.g. Duration →
+    # 'sec_Duration.csv').  Capitalise the first letter to match the existing
+    # naming convention.
+    metric_proper = metric_name[:1].upper() + metric_name[1:]
+    metric_filename = f"sec_{metric_proper}.csv"
     filter_options = {}  # To store all possible options for filter dropdowns
 
-    if not os.path.exists(data_filepath):
+    if not os.path.exists(os.path.join(data_folder, metric_filename)):
         current_app.logger.error(
-            f"Error: The required file '{spread_filename}' not found."
+            f"Error: The required file '{metric_filename}' not found."
         )
         return render_template(
             "securities_page.html",
-            message=f"Error: Required data file '{spread_filename}' not found.",
+            message=f"Error: Required data file '{metric_filename}' not found.",
             securities_data=[],
             pagination=None,
+            metric_name=metric_name,
         )
 
     try:
-        current_app.logger.info(f"Loading and processing file: {spread_filename}")
+        current_app.logger.info(f"Loading and processing file: {metric_filename}")
         # Pass the absolute data folder path
         df_long, static_cols = load_and_process_security_data(
-            spread_filename, data_folder
+            metric_filename, data_folder
         )
 
         if df_long is None or df_long.empty:
             current_app.logger.warning(
-                f"Skipping {spread_filename} due to load/process errors or empty data."
+                f"Skipping {metric_filename} due to load/process errors or empty data."
             )
             return render_template(
                 "securities_page.html",
-                message=f"Error loading or processing '{spread_filename}'.",
+                message=f"Error loading or processing '{metric_filename}'.",
                 securities_data=[],
                 pagination=None,
+                metric_name=metric_name,
             )
 
         current_app.logger.info("Calculating latest metrics...")
         combined_metrics_df = calculate_security_latest_metrics(df_long, static_cols)
 
         if combined_metrics_df.empty:
-            current_app.logger.warning(f"No metrics calculated for {spread_filename}.")
+            current_app.logger.warning(f"No metrics calculated for {metric_filename}.")
             return render_template(
                 "securities_page.html",
-                message=f"Could not calculate metrics from '{spread_filename}'.",
+                message=f"Could not calculate metrics from '{metric_filename}'.",
                 securities_data=[],
                 pagination=None,
+                metric_name=metric_name,
             )
 
         # Define ID column name
@@ -173,13 +183,14 @@ def securities_page():
                 id_col_name = old_id_col
             else:
                 current_app.logger.error(
-                    f"Error: Cannot find a usable ID column ('{id_col_name}' or fallback '{old_id_col}') in {spread_filename}."
+                    f"Error: Cannot find a usable ID column ('{id_col_name}' or fallback '{old_id_col}') in {metric_filename}."
                 )
                 return render_template(
                     "securities_page.html",
-                    message=f"Error: Cannot identify securities in {spread_filename}.",
+                    message=f"Error: Cannot identify securities in {metric_filename}.",
                     securities_data=[],
                     pagination=None,
+                    metric_name=metric_name,
                 )
 
         # Store the original unfiltered dataframe's columns
@@ -299,17 +310,23 @@ def securities_page():
             sorted_df, page, config.SECURITIES_PER_PAGE
         )
 
-        # Update pagination_context with url_for_page
-        pagination_context["url_for_page"] = lambda p: url_for(
-            "security.securities_page",
-            page=p,
-            search_term=search_term,
-            sort_by=current_sort_by,
-            sort_order=current_sort_order,
-            fund_group=selected_fund_group, # ensure fund_group is in pagination
-            exclude_min_zero="true" if exclude_min_zero else "false",
-            **{f"filter_{k}": v for k, v in active_filters.items()},
-        )
+        # Helper to retain the *metric_name* in page links *unless* we're on
+        # the default (Spread) route to keep URLs clean.
+        def _url_for_page(p: int) -> str:
+            base_args = {
+                "page": p,
+                "search_term": search_term,
+                "sort_by": current_sort_by,
+                "sort_order": current_sort_order,
+                "fund_group": selected_fund_group,
+                "exclude_min_zero": "true" if exclude_min_zero else "false",
+                **{f"filter_{k}": v for k, v in active_filters.items()},
+            }
+            if metric_name and metric_name.lower() != "spread":
+                return url_for("security.securities_page", metric_name=metric_name, **base_args)
+            return url_for("security.securities_page", **base_args)
+
+        pagination_context["url_for_page"] = _url_for_page
         
         # --- Final Data Preparation ---
         # ... (column order, final data conversion)
@@ -341,7 +358,8 @@ def securities_page():
             column_order=column_order,
             exclude_min_zero=exclude_min_zero,
             fund_groups=ui_fund_groups, # Pass the fund groups for the dropdown
-            selected_fund_group=selected_fund_group # Pass the selected group to maintain dropdown state
+            selected_fund_group=selected_fund_group, # Pass the selected group to maintain dropdown state
+            metric_name=metric_name,
         )
 
     except Exception as e:
@@ -365,6 +383,7 @@ def securities_page():
             selected_fund_group=(
                 selected_fund_group if "selected_fund_group" in locals() else None
             ),
+            metric_name=metric_name,
         )
 
 
@@ -860,3 +879,101 @@ def mark_good():
     except Exception as e:
         current_app.logger.error(f"/mark_good error: {e}", exc_info=True)
         return ("Server Error", 500)
+
+# --------------------- Field Data Override Routes ---------------------
+@security_bp.route('/get_field_data')
+def get_field_data():
+    """Return existing values for a given ISIN, field, and date range as JSON for the Edit-Data modal."""
+    isin = request.args.get('isin')
+    field = request.args.get('field')
+    start = request.args.get('start')
+    end = request.args.get('end')
+    if not (isin and field and start and end):
+        return jsonify({'error': 'Missing parameters'}), 400
+    try:
+        start_dt = pd.to_datetime(start)
+        end_dt = pd.to_datetime(end)
+    except Exception:
+        return jsonify({'error': 'Invalid date format'}), 400
+
+    # Map UI field → underlying file field (via YAML)
+    alias_path = os.path.join(current_app.root_path, 'config', 'field_aliases.yaml')
+    field_map = {}
+    if os.path.exists(alias_path):
+        try:
+            with open(alias_path, 'r', encoding='utf-8') as f:
+                field_map = yaml.safe_load(f) or {}
+        except Exception:
+            pass  # Ignore and fall back to identity
+    db_field = field_map.get(field, field)  # Identity fallback
+
+    # Determine filename (supports SP version)
+    sp_suffix = 'SP' if db_field.lower().endswith('sp') else ''
+    base_field_name = db_field[:-2] if sp_suffix else db_field
+    metric_filename = f"sec_{db_field}.csv"  # e.g. sec_Spread.csv or sec_SpreadSP.csv
+
+    data_folder = current_app.config['DATA_FOLDER']
+    file_path = os.path.join(data_folder, metric_filename)
+    if not os.path.exists(file_path):
+        return jsonify([])  # Return empty if no file found
+
+    # Re-use existing loader for consistency
+    df_long, _ = load_and_process_security_data(metric_filename, data_folder)
+    if df_long.empty:
+        return jsonify([])
+
+    # Convert index to columns for simpler filtering (avoids unsorted index slice errors)
+    df_reset = df_long.reset_index()
+
+    # Determine ID column present
+    id_col = config.ISIN_COL if config.ISIN_COL in df_reset.columns else df_reset.columns[1]
+
+    # Apply filters
+    mask = (
+        (df_reset[id_col] == isin) &
+        (df_reset['Date'] >= start_dt) &
+        (df_reset['Date'] <= end_dt)
+    )
+    df_filtered = df_reset.loc[mask, ['Date', 'Value']].sort_values('Date')
+
+    if df_filtered.empty:
+        return jsonify([])
+
+    result = df_filtered.to_dict(orient='records')
+    # Convert Timestamp to str
+    for row in result:
+        if isinstance(row['Date'], (pd.Timestamp, datetime)):
+            row['Date'] = row['Date'].strftime('%Y-%m-%d')
+    return jsonify(result)
+
+
+@security_bp.route('/export_field_data', methods=['POST'])
+def export_field_data():
+    """Receive modified data and return CSV for user download."""
+    data = request.get_json(force=True)
+    required_keys = {'isin', 'field', 'data'}
+    if not data or not required_keys.issubset(data.keys()):
+        return jsonify({'error': 'Invalid payload'}), 400
+
+    isin = data['isin']
+    field = data['field']
+    rows = data['data']  # list of dicts with Date and Value
+
+    # Prepare CSV content: Field, ISIN, Date, Value
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Field', 'ISIN', 'Date', 'Value'])
+    for row in rows:
+        date_str = row.get('Date')
+        val = row.get('Value')
+        writer.writerow([field, isin, date_str, val])
+
+    csv_bytes = io.BytesIO(output.getvalue().encode('utf-8'))
+    filename = f"override_{field}_{isin}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+    csv_bytes.seek(0)
+    return send_file(
+        csv_bytes,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=filename,
+    )

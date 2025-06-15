@@ -15,7 +15,7 @@ This application provides a web interface to load, process, and check financial 
 | Feature                     | Description / Key Routes / Notes                                                                                  |
 |-----------------------------|------------------------------------------------------------------------------------------------------------------|
 | **Time-Series Metric Analysis** | Load `ts_*.csv`, view changes, Z-scores, charts. Route: `/metric/<metric_name>`. S&P toggles for valid/comparison data. |
-| **Security-Level Analysis**      | Load `sec_*.csv`, view changes/Z-scores, charts for YTM/YTW/Duration/Spread. Routes: `/security/summary`, `/security/details/<metric_name>/<security_id>`. |
+| **Security-Level Analysis**      | Load `sec_*.csv`, view changes/Z-scores, charts for YTM/YTW/Duration/Spread. Routes: `/security/summary`, `/security/details/<metric_name>/<security_id>`. Summary pages are now **metric-aware**:<br/>• Spread (default): `/security/summary`<br/>• Duration: `/security/summary/Duration`<br/>Detail route (all metrics): `/security/details/<metric_name>/<security_id>`. "Mark Good" works for every metric. |
 | **Generic Data Comparison**      | Compare pairs of security datasets (e.g., Spread vs SpreadSP). Configurable via `comparison_config.yaml`. Routes: `/compare/<type>/summary`, `/compare/<type>/details/<security_id>`. Fund holdings table included. |
 | **Fund-Specific Views**          | `/fund/<fund_code>` (overview), `/fund/duration_details/<fund_code>` (duration details).                      |
 | **Security Exclusions**          | Manage via `/exclusions` (`Data/exclusions.csv`).                                                            |
@@ -27,6 +27,7 @@ This application provides a web interface to load, process, and check financial 
 | **Special Character Handling**   | Security IDs URL-encoded/decoded, primarily for URL routing (e.g., in `/security/details/<path:security_id>`). |
 | **Max/Min Value Breach**         | Checks `sec_*.csv` against thresholds. Dashboard: `/maxmin/dashboard`. Details: `/maxmin/details/<file>/<type>`. |
 | **Watchlist Management**         | Track/add/clear securities via `/watchlist`. Filterable, auditable, modal UI.                                |
+| **Security Data Override**       | On `/security/details/<metric>/<isn>` click **Edit Data** to adjust any value in `sec_*` or `sec_*SP` files. Pick field & date-range, review existing values in-modal, overwrite inline, then **Export** – a ready-to-upload CSV (`override_<Field>_<ISIN>_<timestamp>.csv`). |
 | **Inspect (Contribution Analysis)**      | Analyze top contributors/detractors to metric changes over a date range. Modal UI, supports all analytics. See below for technical details. |
 | **Attribution Data API**        | Fetch, update, and manage attribution data per fund. UI for selecting funds, date range, and write mode (append/overwrite). Each fund's data is stored in `att_factors_<FUNDCODE>.csv`. Fully integrated with attribution dashboards. |
 | **Individual Security Attribution Time Series** | Visualize L1/L2 attribution factors over time for a single security (Portfolio & Benchmark, S&P & Original). Includes spread chart. Route: `/attribution/security/timeseries`. Linked from `/attribution/security`. |
@@ -638,7 +639,6 @@ This feature provides a detailed time-series view of attribution factors for a s
 - Integrates spread data for the security, offering a correlated view of its market pricing characteristic alongside its attribution performance.
 - Facilitates deeper investigation into attribution outliers or trends identified at a higher level (e.g., from the `/attribution/security` summary page).
 
-### June 2025 Quality-of-Life Fixes
 
 * **Zero weights treated as blanks** – During CSV ingestion every `0` is now converted to *blank/NaN*.  This prevents zeros from skewing chart axes and correlation statistics.
 * **`is_held` flag now uses *latest* weight** – A security is only considered *held* if its weight on the **most-recent date** in `w_secs.csv` is > 0.  (Previously any historical holding set the flag.)
@@ -646,3 +646,11 @@ This feature provides a detailed time-series view of attribution factors for a s
   *Pattern list updated in `config.py`.*
 
 No config changes required; just pull & restart.
+
+
+* **Volatility screening columns** – The Securities summary table now shows two extra metrics for each security:
+  * **Max |Δ| (bps)** – the largest absolute *day-on-day* change across the entire date range.
+  * **% Days >| 50 bps |** – percentage of trading days whose absolute change exceeded the danger threshold (configurable via `config.LARGE_MOVE_THRESHOLD_BPS`, default 50 bps).
+  These columns help surface the wobbliest securities even when Z-scores are muted by a flat history.
+* **Treasury rows never highlighted** – Securities whose latest spread sits in the range −10 … +10 bps (typically Treasuries) are excluded from the orange/red row-highlight logic so the grid focuses on credit anomalies.
+* **One-click "Mark Good" dismiss** – On the Security-details *Spread* chart you can now left-click any data point and confirm the prompt to mark it as *Good*.  The (ISIN, Metric, Date) triple is written to `Data/good_points.csv`; on subsequent page loads the point is silently ignored in all summary statistics, highlights and Z-score calculations.  Use this to clear legitimate quirks with **two clicks** and keep the dashboard clean.

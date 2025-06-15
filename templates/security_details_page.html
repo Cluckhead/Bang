@@ -71,6 +71,7 @@ Purpose: Renders the security details page, showing all static info (from refere
       <div class="flex gap-2 mb-2">
         <button type="button" id="open-raise-issue-modal" class="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 transition-colors">Raise Data Issue</button>
         <button type="button" id="open-add-exclusion-modal" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors">Add Exclusion</button>
+        <button type="button" id="open-edit-data-modal-step1" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors">Edit Data</button>
       </div>
     </div>
   </div>
@@ -258,6 +259,70 @@ Purpose: Renders the security details page, showing all static info (from refere
     </form>
   </div>
 </div>
+
+<!-- Edit Data – Step 1 Modal (select field & date range) -->
+<div id="edit-data-modal-step1" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 hidden">
+  <div class="bg-white rounded-lg shadow-lg w-full max-w-md mx-4 p-6 relative">
+    <button type="button" id="close-edit-data-modal-step1" class="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl">&times;</button>
+    <h5 class="text-lg font-semibold mb-4">Select Field & Date Range</h5>
+    <form id="edit-data-step1-form" class="space-y-4">
+      <div>
+        <label for="edit-field-name" class="block text-sm font-medium text-gray-700">Field:</label>
+        <select id="edit-field-name" required class="block w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-secondary focus:border-secondary">
+          <option value="" disabled selected>Select Field</option>
+          <option value="Spread">Spread</option>
+          <option value="Duration">Duration</option>
+          <option value="Spread Duration">Spread Duration</option>
+          <option value="YTM">YTM</option>
+          <option value="YTW">YTW</option>
+          <option value="SpreadSP">Spread (SP)</option>
+          <option value="DurationSP">Duration (SP)</option>
+          <option value="Spread DurationSP">Spread Duration (SP)</option>
+          <option value="YTMSP">YTM (SP)</option>
+          <option value="YTWSP">YTW (SP)</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label for="edit-start-date" class="block text-sm font-medium text-gray-700">Start Date:</label>
+          <input type="date" id="edit-start-date" required class="block w-full border border-gray-300 rounded px-3 py-2">
+        </div>
+        <div>
+          <label for="edit-end-date" class="block text-sm font-medium text-gray-700">End Date:</label>
+          <input type="date" id="edit-end-date" required class="block w-full border border-gray-300 rounded px-3 py-2">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" id="cancel-edit-data-modal-step1" class="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Cancel</button>
+        <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Next</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Data – Step 2 Modal (overwrite values) -->
+<div id="edit-data-modal-step2" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 hidden">
+  <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl mx-4 p-6 relative">
+    <button type="button" id="close-edit-data-modal-step2" class="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl">&times;</button>
+    <h5 class="text-lg font-semibold mb-2">Overwrite Data for <span id="summary-field"></span> (<span id="summary-range"></span>)</h5>
+    <div class="overflow-y-auto max-h-96 border border-gray-200 rounded mb-4">
+      <table class="min-w-full text-sm" id="edit-data-table">
+        <thead>
+          <tr class="bg-gray-100 text-left">
+            <th class="px-3 py-2">Date</th>
+            <th class="px-3 py-2">Existing Value</th>
+            <th class="px-3 py-2">New Value</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="flex justify-end gap-2">
+      <button type="button" id="cancel-edit-data-modal-step2" class="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Back</button>
+      <button type="button" id="export-edit-data" class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700">Export CSV</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -287,11 +352,13 @@ function setupModal(openBtnId, modalId, closeBtnId, cancelBtnId) {
 }
 setupModal('open-raise-issue-modal', 'raise-issue-modal', 'close-raise-issue-modal', 'cancel-raise-issue-modal');
 setupModal('open-add-exclusion-modal', 'add-exclusion-modal', 'close-add-exclusion-modal', 'cancel-add-exclusion-modal');
+setupModal('open-edit-data-modal-step1', 'edit-data-modal-step1', 'close-edit-data-modal-step1', 'cancel-edit-data-modal-step1');
 
 document.addEventListener('DOMContentLoaded', function() {
     // Restore full Chart.js rendering logic
     const chartDataElement = document.getElementById('chartJsonData');
     const chartData = JSON.parse(chartDataElement.textContent);
+    window.chartData = chartData; // expose globally for other handlers
 
     // --- Render Primary Chart (Metric + Price) ---
     const primaryCtx = document.getElementById('primarySecurityChart').getContext('2d');
@@ -300,7 +367,7 @@ document.addEventListener('DOMContentLoaded', function() {
             dataset.data && dataset.data.some(value => value !== null)
         );
         if (hasPrimaryData) {
-            new Chart(primaryCtx, {
+            const primaryChart = new Chart(primaryCtx, {
                 type: 'line',
                 data: {
                     labels: chartData.labels,
@@ -320,6 +387,24 @@ document.addEventListener('DOMContentLoaded', function() {
                         tooltip: { mode: 'index', intersect: false }
                     }
                 }
+            });
+
+            // --- Quick "Mark Good" interaction (works for ANY metric) ---
+            primaryCtx.canvas.addEventListener('click', function(evt){
+                const points = primaryChart.getElementsAtEventForMode(evt, 'nearest', {intersect:true}, false);
+                if(!points.length) return;
+                const idx = points[0].index;
+                const dateClicked = chartData.labels[idx];
+                if(!confirm(`Mark ${dateClicked} as good for {{ metric_name }}?`)) return;
+                fetch('{{ url_for("security.mark_good") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        isin: '{{ security_id }}',
+                        metric: '{{ metric_name }}',
+                        date: dateClicked
+                    })
+                }).then(resp => { if(resp.ok){ location.reload(); } });
             });
         } else {
             document.getElementById('primary-chart-container').innerHTML = '<p class="text-info">No primary data available for this security.</p>';
@@ -393,24 +478,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
             }
         });
-
-        // --- Quick "Mark Good" interaction ---
-        spreadCtx.canvas.addEventListener('click', function(evt){
-            const points = spreadChart.getElementsAtEventForMode(evt, 'nearest', {intersect:true}, false);
-            if(!points.length) return;
-            const idx = points[0].index;
-            const dateClicked = chartData.labels[idx];
-            if(!confirm(`Mark ${dateClicked} as good?`)) return;
-            fetch('{{ url_for("security.mark_good") }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    isin: '{{ security_id }}',
-                    metric: 'Spread',
-                    date: dateClicked
-                })
-            }).then(resp => { if(resp.ok){ location.reload(); } });
-        });
     } else {
         document.getElementById('spread-chart-container').innerHTML = '<p class="text-info">Spread data not available for this security.</p>';
     }
@@ -460,6 +527,88 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         document.getElementById('ytw-chart-container').innerHTML = '<p class="text-info">YTW data not available for this security.</p>';
     }
+});
+
+// ---------------- Edit Data Logic ----------------
+const step1Form = document.getElementById('edit-data-step1-form');
+const modalStep1 = document.getElementById('edit-data-modal-step1');
+const modalStep2 = document.getElementById('edit-data-modal-step2');
+const tableBody = document.querySelector('#edit-data-table tbody');
+const summaryFieldEl = document.getElementById('summary-field');
+const summaryRangeEl = document.getElementById('summary-range');
+
+function openStep2() { modalStep1.classList.add('hidden'); modalStep2.classList.remove('hidden'); }
+function backToStep1() { modalStep2.classList.add('hidden'); modalStep1.classList.remove('hidden'); }
+document.getElementById('cancel-edit-data-modal-step2').addEventListener('click', backToStep1);
+document.getElementById('close-edit-data-modal-step2').addEventListener('click', () => modalStep2.classList.add('hidden'));
+
+step1Form.addEventListener('submit', function(e){
+  e.preventDefault();
+  const field = document.getElementById('edit-field-name').value;
+  const start = document.getElementById('edit-start-date').value;
+  const end = document.getElementById('edit-end-date').value;
+  if(!field || !start || !end) return;
+  summaryFieldEl.textContent = field;
+  summaryRangeEl.textContent = `${start} → ${end}`;
+  // Fetch existing data via AJAX
+  fetch(`${"{{ url_for('security.get_field_data') }}"}?isin={{ security_id }}&field=${encodeURIComponent(field)}&start=${start}&end=${end}`)
+    .then(resp => resp.json())
+    .then(data => {
+       tableBody.innerHTML = '';
+       data.forEach(row => {
+         const tr = document.createElement('tr');
+         tr.innerHTML = `
+           <td class="px-3 py-1 border-b">${row.Date}</td>
+           <td class="px-3 py-1 border-b text-right">${row.Value === null ? '' : row.Value}</td>
+           <td class="px-3 py-1 border-b"><input type="number" step="any" class="w-full border border-gray-300 rounded px-2 py-1" value="${row.Value === null ? '' : row.Value}"></td>
+         `;
+         tableBody.appendChild(tr);
+       });
+       openStep2();
+    });
+});
+
+document.getElementById('export-edit-data').addEventListener('click', function(){
+  const rows = Array.from(tableBody.querySelectorAll('tr')).map(tr => {
+    return {
+      Date: tr.children[0].textContent.trim(),
+      Value: tr.children[2].querySelector('input').value.trim()
+    };
+  }).filter(r => r.Value !== '');
+  const payload = {
+    isin: '{{ security_id }}',
+    field: summaryFieldEl.textContent,
+    data: rows
+  };
+  fetch('{{ url_for("security.export_field_data") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(resp => resp.blob())
+  .then(blob => {
+     const url = window.URL.createObjectURL(blob);
+     const a = document.createElement('a');
+     const filename = `override_${payload.field}_${payload.isin}_${Date.now()}.csv`;
+     a.href = url;
+     a.download = filename;
+     document.body.appendChild(a);
+     a.click();
+     a.remove();
+     window.URL.revokeObjectURL(url);
+     alert('CSV downloaded.');
+     modalStep2.classList.add('hidden');
+  });
+});
+
+document.getElementById('open-edit-data-modal-step1').addEventListener('click', () => {
+  if(window.chartData && window.chartData.labels && window.chartData.labels.length){
+    const labels = window.chartData.labels;
+    // Ensure YYYY-MM-DD format for date input (strip any time component)
+    const fmt = (d) => (typeof d === 'string' ? d.substring(0,10) : d);
+    document.getElementById('edit-start-date').value = fmt(labels[0]);
+    document.getElementById('edit-end-date').value = fmt(labels[labels.length - 1]);
+  }
 });
 </script>
 {{ super() }}
