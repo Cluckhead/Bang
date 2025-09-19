@@ -9,6 +9,8 @@
 {% block title %}{{ dashboard_title or 'Max/Min Value Breach Dashboard' }}{% endblock %}
 
 {% block content %}
+{% set template_key = 'maxmin_dashboard' %}
+{% include "_help_link.html" %}
 <div class="p-4"> {# Replaced container mt-4 #}
     <h2 class="text-3xl font-bold font-heading mb-2">{{ dashboard_title or 'Max/Min Value Breach Dashboard' }}</h2>
     <p class="text-base text-gray-700 mb-4">Overview of securities breaching configured maximum or minimum value thresholds.</p>

@@ -1,7 +1,7 @@
 # Purpose: Test curve_processing.load_curve_data and check_curve_inconsistencies for correct preprocessing and anomaly detection.
 
 import pandas as pd
-from curve_processing import load_curve_data, check_curve_inconsistencies, _term_to_days
+from data_processing.curve_processing import load_curve_data, check_curve_inconsistencies, _term_to_days
 
 
 def _write_sample_curves_csv(tmp_path):
@@ -36,7 +36,7 @@ def test_load_curve_data_structure(tmp_path):
 def test_check_curve_inconsistencies_detects_jump(monkeypatch):
     """Create a small DataFrame with a clear jump between terms and ensure the summary flags it."""
 
-    import curve_processing as cp
+    from data_processing import curve_processing as cp
 
     # Temporarily lower the STD multiplier to make it easier to flag our crafted anomaly
     monkeypatch.setattr(cp, "CURVE_ANOMALY_STD_MULTIPLIER", 0)

@@ -1,0 +1,362 @@
+{
+  "ticket_processing": {
+    "ticket_creation": true,
+    "ticket_id": "TICKET-001",
+    "ticket_loading": true,
+    "ticket_count": 1,
+    "ticket_assignment": true,
+    "ticket_clearing": true,
+    "suppression_working": true
+  },
+  "mock_scenarios": {
+    "total_tickets_generated": 6,
+    "staleness_tickets": 2,
+    "maxmin_tickets": 2,
+    "zscore_tickets": 2,
+    "ticket_details": [
+      {
+        "TicketID": "TICKET-001",
+        "EventHash": "277cff93002d3387f56453337283c300",
+        "GenerationDate": "2025-06-29",
+        "SourceCheck": "Staleness",
+        "EntityID": "XS1234567890",
+        "Details": "sec_Spread.csv: Stale for 7 days",
+        "Status": "Unallocated",
+        "AssignedTo": NaN,
+        "AssignedDate": "NaT",
+        "ClearedBy": NaN,
+        "ClearedDate": "NaT",
+        "ClearanceReason": NaN
+      },
+      {
+        "TicketID": "TICKET-002",
+        "EventHash": "b07ad2988da25d3999a04c18a15ed8ca",
+        "GenerationDate": "2025-06-29",
+        "SourceCheck": "Staleness",
+        "EntityID": "XS0987654321",
+        "Details": "sec_Spread.csv: Stale for 10 days",
+        "Status": "Unallocated",
+        "AssignedTo": NaN,
+        "AssignedDate": "NaT",
+        "ClearedBy": NaN,
+        "ClearedDate": "NaT",
+        "ClearanceReason": NaN
+      },
+      {
+        "TicketID": "TICKET-003",
+        "EventHash": "674d10b32474285d20899e7efb3f5fcd",
+        "GenerationDate": "2025-06-29",
+        "SourceCheck": "MaxMin",
+        "EntityID": "XS1111111111",
+        "Details": "sec_YTM.csv: Value 15.5 > threshold 10.0",
+        "Status": "Unallocated",
+        "AssignedTo": NaN,
+        "AssignedDate": "NaT",
+        "ClearedBy": NaN,
+        "ClearedDate": "NaT",
+        "ClearanceReason": NaN
+      },
+      {
+        "TicketID": "TICKET-004",
+        "EventHash": "8aa45c75ca5bfbe5879a73f2e1cd0c2a",
+        "GenerationDate": "2025-06-29",
+        "SourceCheck": "MaxMin",
+        "EntityID": "XS2222222222",
+        "Details": "sec_YTM.csv: Value -2.0 < threshold 0.0",
+        "Status": "Unallocated",
+        "AssignedTo": NaN,
+        "AssignedDate": "NaT",
+        "ClearedBy": NaN,
+        "ClearedDate": "NaT",
+        "ClearanceReason": NaN
+      },
+      {
+        "TicketID": "TICKET-005",
+        "EventHash": "6781a94bf6e2b32f0ab5628a88ced18f",
+        "GenerationDate": "2025-06-29",
+        "SourceCheck": "ZScore",
+        "EntityID": "TEST_FUND",
+        "Details": "TestMetric Original: Z-Score = 4.50",
+        "Status": "Unallocated",
+        "AssignedTo": NaN,
+        "AssignedDate": "NaT",
+        "ClearedBy": NaN,
+        "ClearedDate": "NaT",
+        "ClearanceReason": NaN
+      },
+      {
+        "TicketID": "TICKET-006",
+        "EventHash": "e060c2749368b98708e345fb6bc73b14",
+        "GenerationDate": "2025-06-29",
+        "SourceCheck": "ZScore",
+        "EntityID": "TEST_FUND",
+        "Details": "TestMetric S&P: Z-Score = -3.80",
+        "Status": "Unallocated",
+        "AssignedTo": NaN,
+        "AssignedDate": "NaT",
+        "ClearedBy": NaN,
+        "ClearedDate": "NaT",
+        "ClearanceReason": NaN
+      }
+    ]
+  },
+  "real_data_analysis": {
+    "available_files": {
+      "staleness_files": [
+        "sec_duration.csv",
+        "sec_durationSP.csv",
+        "sec_Price.csv",
+        "sec_Spread duration.csv",
+        "sec_Spread durationSP.csv",
+        "sec_Spread.csv",
+        "sec_SpreadSP.csv",
+        "sec_YTM.csv",
+        "sec_YTMSP.csv",
+        "sec_YTM_2.csv",
+        "sec_YTW.csv",
+        "sec_YTWSP.csv"
+      ],
+      "maxmin_files": [
+        "sec_Spread.csv",
+        "sec_SpreadSP.csv",
+        "sec_YTM.csv",
+        "sec_YTMSP.csv",
+        "sec_YTW.csv",
+        "sec_YTWSP.csv"
+      ],
+      "metric_files": [
+        "ts_Duration.csv",
+        "ts_Spread Duration.csv",
+        "ts_Spread.csv",
+        "ts_YTW.csv"
+      ]
+    },
+    "staleness_analysis": {
+      "total_stale_securities": 1,
+      "files_checked": [
+        "sec_duration.csv",
+        "sec_durationSP.csv",
+        "sec_Price.csv",
+        "sec_Spread duration.csv",
+        "sec_Spread durationSP.csv",
+        "sec_Spread.csv",
+        "sec_SpreadSP.csv",
+        "sec_YTM.csv",
+        "sec_YTMSP.csv",
+        "sec_YTM_2.csv",
+        "sec_YTW.csv",
+        "sec_YTWSP.csv"
+      ],
+      "summary": {
+        "sec_duration.csv": {
+          "metric_name": "sec_duration",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_durationSP.csv": {
+          "metric_name": "sec_durationSP",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_Price.csv": {
+          "metric_name": "sec_Price",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_Spread duration.csv": {
+          "metric_name": "sec_Spread duration",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 1,
+          "stale_percentage": 0.3
+        },
+        "sec_Spread durationSP.csv": {
+          "metric_name": "sec_Spread durationSP",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_Spread.csv": {
+          "metric_name": "sec_Spread",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_SpreadSP.csv": {
+          "metric_name": "sec_SpreadSP",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_YTM.csv": {
+          "metric_name": "sec_YTM",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_YTMSP.csv": {
+          "metric_name": "sec_YTMSP",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_YTM_2.csv": {
+          "metric_name": "sec_YTM_2",
+          "latest_date": "02/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_YTW.csv": {
+          "metric_name": "sec_YTW",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        },
+        "sec_YTWSP.csv": {
+          "metric_name": "sec_YTWSP",
+          "latest_date": "30/03/2025",
+          "total_count": 373,
+          "stale_count": 0,
+          "stale_percentage": 0.0
+        }
+      }
+    },
+    "maxmin_analysis": {
+      "total_breaches": 0,
+      "files_checked": [
+        "sec_Spread.csv",
+        "sec_SpreadSP.csv",
+        "sec_YTM.csv",
+        "sec_YTMSP.csv",
+        "sec_YTW.csv",
+        "sec_YTWSP.csv"
+      ],
+      "summary": {
+        "sec_Spread.csv": {
+          "filename": "sec_Spread.csv",
+          "display_name": "Spread",
+          "total_count": 374,
+          "max_breach_count": 894,
+          "min_breach_count": 0,
+          "max_threshold": 1000,
+          "min_threshold": -50,
+          "has_error": false
+        },
+        "sec_SpreadSP.csv": {
+          "filename": "sec_SpreadSP.csv",
+          "display_name": "Spread (S&P)",
+          "total_count": 374,
+          "max_breach_count": 2284,
+          "min_breach_count": 0,
+          "max_threshold": 1000,
+          "min_threshold": -50,
+          "has_error": false
+        },
+        "sec_YTM.csv": {
+          "filename": "sec_YTM.csv",
+          "display_name": "YTM",
+          "total_count": 374,
+          "max_breach_count": 0,
+          "min_breach_count": 0,
+          "max_threshold": 100,
+          "min_threshold": 0,
+          "has_error": false
+        },
+        "sec_YTMSP.csv": {
+          "filename": "sec_YTMSP.csv",
+          "display_name": "YTM (S&P)",
+          "total_count": 374,
+          "max_breach_count": 0,
+          "min_breach_count": 0,
+          "max_threshold": 100,
+          "min_threshold": 0,
+          "has_error": false
+        },
+        "sec_YTW.csv": {
+          "filename": "sec_YTW.csv",
+          "display_name": "YTW",
+          "total_count": 374,
+          "max_breach_count": 0,
+          "min_breach_count": 0,
+          "max_threshold": 100,
+          "min_threshold": 0,
+          "has_error": false
+        },
+        "sec_YTWSP.csv": {
+          "filename": "sec_YTWSP.csv",
+          "display_name": "YTW (S&P)",
+          "total_count": 374,
+          "max_breach_count": 0,
+          "min_breach_count": 0,
+          "max_threshold": 100,
+          "min_threshold": 0,
+          "has_error": false
+        }
+      }
+    },
+    "zscore_analysis": {
+      "total_extreme_zscores": 0,
+      "metrics_processed": {
+        "duration": {
+          "fund_count": 4,
+          "extreme_zscores": 0
+        },
+        "spread": {
+          "fund_count": 4,
+          "extreme_zscores": 0
+        },
+        "ytw": {
+          "fund_count": 4,
+          "extreme_zscores": 0
+        }
+      }
+    }
+  },
+  "integration_test": {
+    "tickets_before": 0,
+    "tickets_after": 0,
+    "tickets_generated": 0,
+    "total_tickets": 1,
+    "ticket_breakdown": {
+      "unallocated": 0,
+      "assigned": 0,
+      "cleared": 1
+    },
+    "recent_tickets": [
+      {
+        "TicketID": "TICKET-001",
+        "EventHash": "3c30b725d50dc0958906effa92d878cb",
+        "GenerationDate": "2025-06-29",
+        "SourceCheck": "Test",
+        "EntityID": "TEST001",
+        "Details": "Test ticket for validation",
+        "Status": "Cleared",
+        "AssignedTo": "Test User",
+        "AssignedDate": "2025-06-29",
+        "ClearedBy": "Test User",
+        "ClearedDate": "2025-06-29",
+        "ClearanceReason": "Test clearance"
+      }
+    ]
+  },
+  "dashboard_integration": {
+    "reported_unallocated_count": 0,
+    "actual_unallocated_count": 0,
+    "count_matches": true,
+    "tickets_file_exists": true,
+    "cleared_file_exists": true
+  }
+}

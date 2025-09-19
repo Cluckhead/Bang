@@ -1,7 +1,7 @@
 # Purpose: Test the _term_to_days helper in curve_processing for correct conversions and edge-case handling.
 
 import pytest
-from curve_processing import _term_to_days
+from data_processing.curve_processing import _term_to_days
 
 
 @pytest.mark.parametrize(

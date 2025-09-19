@@ -8,6 +8,8 @@
 {% block title %}Fund Details: {{ fund_code }}{% endblock %}
 
 {% block content %}
+{% set template_key = 'fund_detail_page' %}
+{% include "_help_link.html" %}
 <div class="p-4"> {# Replaced container mt-4 #}
     <h1 class="text-2xl font-bold font-heading mb-4">Fund Details: {{ fund_code }}</h1>
 

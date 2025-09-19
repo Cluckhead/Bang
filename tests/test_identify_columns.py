@@ -7,7 +7,7 @@ import logging
 
 import pytest
 
-from data_utils import identify_columns
+from core.data_utils import identify_columns
 
 
 # -----------------------------------------------------------------------------

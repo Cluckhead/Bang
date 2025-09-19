@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Issue {{ issue.IssueID }}{% endblock %}
+{% block content %}
+{% set template_key = 'issue_detail_page' %}
+{% include "_help_link.html" %}
+<div class="p-4 space-y-6">
+  <a href="{{ url_for('issue_bp.manage_issues') }}" class="text-sm text-primary hover:underline">&larr; Back to Issues List</a>
+  <h2 class="text-2xl font-bold">Issue {{ issue.IssueID }}</h2>
+
+  <!-- Issue Metadata -->
+  <div class="bg-white rounded-lg shadow border p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <p><span class="font-medium">Raised:</span> {{ issue.DateRaised }}</p>
+      <p><span class="font-medium">Raised By:</span> {{ issue.RaisedBy }}</p>
+      <p><span class="font-medium">Issue Date:</span> {{ issue.IssueDate }}</p>
+      <p><span class="font-medium">Status:</span> {{ issue.Status }}</p>
+      <p><span class="font-medium">Fund:</span> {{ issue.FundImpacted }}</p>
+    </div>
+    <div>
+      <p><span class="font-medium">Data Source:</span> {{ issue.DataSource }}</p>
+      <p><span class="font-medium">Go-live Scope:</span> {{ issue.InScopeForGoLive }}</p>
+      <p><span class="font-medium">Jira:</span>
+        {% if jira_url %}<a href="{{ jira_url }}" class="text-primary hover:underline" target="_blank">{{ jira_display }}</a>{% else %}N/A{% endif %}
+      </p>
+    </div>
+    <div class="md:col-span-2">
+      <p class="font-medium mb-1">Description:</p>
+      <p class="whitespace-pre-wrap">{{ issue.Description }}</p>
+    </div>
+  </div>
+
+  <!-- Comments Timeline -->
+  <div class="bg-white rounded-lg shadow border p-4">
+    <h3 class="text-lg font-semibold mb-3">Comments</h3>
+    {% if comments %}
+      <ul class="space-y-3">
+        {% for c in comments|sort(attribute='timestamp') %}
+          <li class="border-l-2 border-primary pl-3">
+            <p class="text-sm text-gray-600"><span class="font-medium">{{ c.user }}</span> – {{ c.timestamp }}</p>
+            <p class="whitespace-pre-wrap">{{ c.comment }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-gray-500 italic">No comments yet.</p>
+    {% endif %}
+
+    <!-- Add Comment Form -->
+    <form method="POST" class="mt-4 space-y-3">
+      <input type="hidden" name="action" value="add_comment">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="comment_user">User</label>
+        <select id="comment_user" name="comment_user" required class="block w-52 border border-gray-300 rounded px-2 py-1">
+          <option value="" disabled selected>Select</option>
+          {% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="comment_text">Comment</label>
+        <textarea id="comment_text" name="comment_text" rows="3" required class="block w-full border border-gray-300 rounded px-2 py-1"></textarea>
+      </div>
+      <button type="submit" class="px-4 py-2 bg-primary text-white rounded">Add Comment</button>
+    </form>
+  </div>
+
+  {% if issue.Status != 'Closed' %}
+  <!-- Close Issue -->
+  <div class="bg-white rounded-lg shadow border p-4">
+    <h3 class="text-lg font-semibold mb-3">Close Issue</h3>
+    <form method="POST" class="space-y-3">
+      <input type="hidden" name="action" value="close_issue">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="closed_by">Closed By</label>
+        <select id="closed_by" name="closed_by" required class="block w-52 border border-gray-300 rounded px-2 py-1">
+          <option value="" disabled selected>Select</option>
+          {% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="resolution_comment">Resolution Comment</label>
+        <textarea id="resolution_comment" name="resolution_comment" rows="3" required class="block w-full border border-gray-300 rounded px-2 py-1"></textarea>
+      </div>
+      <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded">Mark Closed</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %} 

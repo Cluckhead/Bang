@@ -1,6 +1,6 @@
 # Purpose: Validate data_loader._find_columns_for_file correctly detects date, code, benchmark, and value columns.
 
-from data_loader import _find_columns_for_file
+from core.data_loader import _find_columns_for_file
 
 
 def test_find_columns_for_file_basic():

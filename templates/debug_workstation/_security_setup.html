@@ -1,0 +1,78 @@
+<!-- Security Setup & Analytics Panel Component -->
+<div class="bg-white rounded-lg shadow-lg p-6 panel-transition min-h-96">
+  <h2 class="text-lg font-semibold text-gray-900 mb-4">Security Setup & Analytics</h2>
+
+  <!-- Compact Security Selection -->
+  <form id="security-loader-form" class="space-y-3">
+    <div>
+      <label class="block text-sm font-medium mb-2">Security Selection</label>
+      <div class="relative">
+        <input 
+          type="text" 
+          id="security-search-input"
+          placeholder="Search securities (ISIN, Name, Currency)..."
+          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          autocomplete="off"
+        >
+        <div id="security-search-results" class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50 hidden">
+          <!-- Search results will be populated here -->
+        </div>
+        <input type="hidden" id="selected-security-isin" value="">
+      </div>
+      
+      <!-- Compact Fallback dropdown -->
+      <select id="security-select" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2 hidden">
+        <option value="">Select a security...</option>
+        {% for security in securities %}
+        <option value="{{ security.ISIN }}" 
+                data-name="{{ security['Security Name'] }}"
+                data-currency="{{ security.get('Position Currency', '') }}"
+                data-subtype="{{ security.get('Security Sub Type', '') }}">
+          {{ security.ISIN }} - {{ security['Security Name'][:30] }}{% if security['Security Name']|length > 30 %}...{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium mb-1">Valuation Date</label>
+        <input type="date" id="valuation-date" 
+               class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+               value="{{ default_date }}">
+      </div>
+      <div class="flex items-end">
+        <button type="button" id="load-security-btn" 
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors">
+          Load Security
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Security Info Display -->
+  <div id="security-info" class="mt-4 p-3 bg-gray-50 rounded-lg hidden">
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <div>
+        <span class="font-medium text-gray-700">ISIN:</span>
+        <span id="info-isin" class="ml-1 font-mono">-</span>
+      </div>
+      <div>
+        <span class="font-medium text-gray-700">Currency:</span>
+        <span id="info-currency" class="ml-1">-</span>
+      </div>
+      <div class="col-span-2">
+        <span class="font-medium text-gray-700">Name:</span>
+        <span id="info-name" class="ml-1">-</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics Comparison Section -->
+  <div id="analytics-comparison" class="mt-4 hidden">
+    <h3 class="text-md font-medium text-gray-900 mb-3">Analytics Comparison</h3>
+    <div id="analytics-results" class="space-y-2">
+      <!-- Results will be populated here -->
+    </div>
+  </div>
+</div>

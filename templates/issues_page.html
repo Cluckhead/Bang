@@ -15,6 +15,8 @@
 {% block title %}Track Data Issues{% endblock %}
 
 {% block content %}
+{% set template_key = 'issues_page' %}
+{% include "_help_link.html" %}
 <div class="p-4"> {# Replaced container mt-4 #}
     <h2 class="text-2xl font-bold font-heading mb-4">Track Data Issues</h2> {# Adjusted heading style/margin #}
     {# Removed hr #}
@@ -144,7 +146,7 @@
                             {% for issue in open_issues %}
                                 <tr class="hover:bg-gray-50">
                                     {# Styled Data Cells #}
-                                    <td class="px-4 py-2 whitespace-nowrap font-medium text-gray-900">{{ issue.IssueID }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap font-medium text-primary hover:underline"><a href="{{ url_for('issue_bp.issue_detail', issue_id=issue.IssueID) }}">{{ issue.IssueID }}</a></td>
                                     <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.DateRaised.strftime('%Y-%m-%d') if issue.DateRaised else 'N/A' }}</td>
                                     <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.RaisedBy }}</td>
                                     <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ issue.IssueDate.strftime('%Y-%m-%d') if issue.IssueDate else 'N/A' }}</td>

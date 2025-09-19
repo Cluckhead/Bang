@@ -3,6 +3,8 @@
 {% block title %}Stale Data Details: {{ filename }}{% endblock %}
 
 {% block content %}
+{% set template_key = 'staleness_details' %}
+{% include "_help_link.html" %}
 <div class="p-4">
     <div class="flex justify-between items-center mb-4">
         <h1 class="text-2xl font-bold font-heading">Stale Data Details</h1>

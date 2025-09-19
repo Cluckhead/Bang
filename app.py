@@ -6,14 +6,14 @@
 # - Ensuring necessary folders (like the instance folder) exist.
 # - Determining and configuring the absolute data folder path using `utils.get_data_folder_path`.
 # - Centralizing logging configuration (File and Console handlers).
-# - Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`, `comparison_bp`, `duration_comparison_bp`, `spread_duration_comparison_bp`, `api_bp`, `weight_bp`) from the `views`
+# - Registering Blueprints (`main_bp`, `metric_bp`, `security_bp`, `fund_bp`, `exclusion_bp`, `comparison_bp`, `duration_comparison_bp`, `spread_duration_comparison_bp`, `api_bp`, `weight_bp`, `krd_bp`) from the `views`
 #   directory, which contain the application\'s routes and view logic.
 # - Providing a conditional block (`if __name__ == '__main__':`) to run the development server
 #   when the script is executed directly.
 # This modular structure using factories and blueprints makes the application more organized and scalable.
 
 # This file contains the main Flask application factory.
-from flask import Flask, render_template, Blueprint, jsonify, Response
+from flask import Flask, render_template, Blueprint, jsonify, Response, send_from_directory
 import os
 import logging
 from logging.handlers import RotatingFileHandler  # Import handler
@@ -30,15 +30,16 @@ from datetime import datetime, timedelta
 # --- End imports ---
 
 # Import configurations and utilities
-from config import COLOR_PALETTE  # Import other needed configs
-from utils import get_data_folder_path  # Import the path utility
-from navigation_config import NAV_MENU
+from core.config import COLOR_PALETTE  # Import other needed configs
+from core.utils import get_data_folder_path  # Import the path utility
+from core.navigation_config import NAV_MENU
+from core.io_lock import install_pandas_file_locks
 
 # Add typing imports for type hints
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Union
 
 
-def prune_old_logs(log_file_path, hours=24):
+def prune_old_logs(log_file_path: str, hours: int = 24) -> None:
     """
     Prunes log entries older than the specified hours.
     
@@ -98,6 +99,14 @@ def create_app() -> Flask:
     )  # instance_relative_config=True allows for instance folder config
     app.logger.info(f"Application root path: {app.root_path}")
 
+    # Install global file-locked CSV I/O to reduce race conditions
+    try:
+        install_pandas_file_locks()
+        # It is safe and idempotent; logs once.
+    except Exception as e:
+        # Do not block app startup if locking fails; just log
+        print(f"Warning: failed to install pandas file locks: {e}")
+
     # --- Centralized Logging Configuration for ALL loggers ---
     import logging
     from logging.handlers import RotatingFileHandler
@@ -121,10 +130,26 @@ def create_app() -> Flask:
 
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(log_formatter)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.WARNING)  # Reduced from DEBUG to WARNING to minimize console noise
     root_logger.addHandler(console_handler)
 
     # --- End root logger setup ---
+
+    # Reduce noise from file locking; align with project's logging pattern
+    logging.getLogger("filelock").setLevel(logging.WARNING)
+    logging.getLogger("io_lock").setLevel(logging.WARNING)
+
+    # --- Suppress numpy/pandas division warnings for comparison calculations ---
+    # These warnings are expected during correlation and Z-score calculations when dealing with
+    # stale data or zero variance, and the code already handles the results properly (NaN, infinity checks)
+    import numpy as np
+    import warnings
+    
+    np.seterr(divide='ignore', invalid='ignore')
+    warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid value encountered.*')
+    warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*divide by zero encountered.*')
+    app.logger.info("Configured numpy to suppress division by zero warnings for comparison calculations")
+    # --- End warning suppression ---
 
     # Basic configuration (can be expanded later, e.g., loading from config file)
     app.config.from_mapping(
@@ -133,7 +158,7 @@ def create_app() -> Flask:
     )
 
     # Load configuration from config.py (e.g., COLOR_PALETTE)
-    app.config.from_object("config")
+    app.config.from_object("core.config")
     app.logger.info("Loaded configuration from config.py")
 
     # --- Determine and set the Data Folder Path ---
@@ -141,6 +166,11 @@ def create_app() -> Flask:
     # This ensures consistency whether the path in config.py is relative or absolute
     absolute_data_path = get_data_folder_path(app_root_path=app.root_path)
     app.config["DATA_FOLDER"] = absolute_data_path
+    
+    # Update config.py's DATA_FOLDER so other modules can use it
+    from core import config
+    config.DATA_FOLDER = absolute_data_path
+    
     app.logger.info(f"Data folder path set to: {app.config['DATA_FOLDER']}")
     # --- End Data Folder Path Setup ---
 
@@ -160,6 +190,14 @@ def create_app() -> Flask:
     # --- Prune old logs before setting up new logging ---
     prune_old_logs(log_file_path, hours=24)
     
+    # --- Set up API timing logging ---
+    from core.utils import setup_timing_logger, prune_timing_logs, is_api_timing_enabled, time_api_calls
+    
+    if is_api_timing_enabled():
+        setup_timing_logger(app)
+        prune_timing_logs(app)  # Clean up old timing logs
+        app.logger.info("API timing logging enabled")
+    
     # --- Register Blueprints ---
     try:
         from views.main_views import main_bp
@@ -177,6 +215,14 @@ def create_app() -> Flask:
         from views.maxmin_views import maxmin_bp
         from views.watchlist_views import watchlist_bp
         from views.inspect_views import inspect_bp
+        from views.file_delivery_views import file_delivery_bp
+        from views.ticket_views import ticket_bp
+        from views.krd_views import krd_bp
+        from views.search_views import search_bp
+        from views.price_matching_views import price_matching_bp
+        from views.settings_views import settings_bp
+        from views.bond_calc_views import bond_calc_bp
+        from views.synth_analytics_api import synth_analytics_bp
     except ImportError as imp_err:
         app.logger.error(f"Blueprint import failed: {imp_err}", exc_info=True)
         raise
@@ -202,6 +248,14 @@ def create_app() -> Flask:
         app.register_blueprint(maxmin_bp)
         app.register_blueprint(watchlist_bp)
         app.register_blueprint(inspect_bp)
+        app.register_blueprint(file_delivery_bp)
+        app.register_blueprint(ticket_bp)
+        app.register_blueprint(krd_bp)
+        app.register_blueprint(search_bp)
+        app.register_blueprint(price_matching_bp)
+        app.register_blueprint(settings_bp)
+        app.register_blueprint(bond_calc_bp)
+        app.register_blueprint(synth_analytics_bp)
         print("Registered watchlist_bp in create_app")
     except Exception as reg_err:
         app.logger.error(f"Blueprint registration failed: {reg_err}", exc_info=True)
@@ -237,6 +291,24 @@ def create_app() -> Flask:
     app.logger.info(
         f"- {watchlist_bp.name} (prefix: {watchlist_bp.url_prefix})"
     )  # Log registration for Watchlist
+    app.logger.info(
+        f"- {file_delivery_bp.name} (prefix: {file_delivery_bp.url_prefix})"
+    )  # Log registration for file delivery monitor
+    app.logger.info(
+        f"- {ticket_bp.name} (prefix: {ticket_bp.url_prefix})"
+    )  # Log registration for ticket management
+    app.logger.info(
+        f"- {krd_bp.name} (prefix: {krd_bp.url_prefix})"
+    )  # Log registration for krd
+    app.logger.info(
+        f"- {search_bp.name} (prefix: {search_bp.url_prefix})"
+    )  # Log registration for search
+    app.logger.info(
+        f"- {price_matching_bp.name} (prefix: {price_matching_bp.url_prefix})"
+    )  # Log registration for price matching
+    app.logger.info(
+        f"- {settings_bp.name} (prefix: {settings_bp.url_prefix})"
+    )  # Log registration for settings
 
     # Add a simple test route to confirm app creation (optional)
     @app.route("/hello")
@@ -245,31 +317,40 @@ def create_app() -> Flask:
 
     # --- Add the new cleanup route ---
     @app.route("/run-cleanup", methods=["POST"])
+    @time_api_calls
     def run_cleanup() -> Response:
         """Endpoint to trigger the *preprocessing* batch job.
 
         Instead of spawning a separate Python subprocess, we now call
         run_preprocessing.main directly, which improves error handling
         and avoids the overhead of launching an external interpreter.
+        After preprocessing, run_all_checks.py is launched as a background subprocess
+        to calculate dashboard KPIs without blocking the UI.
         """
 
         try:
-            from run_preprocessing import (
+            from tools.run_preprocessing import (
                 main as run_preprocessing_main,
             )  # Local import to avoid circular deps
 
             start_time = time.perf_counter()
 
-            # Execute the preprocessing pipeline synchronously.  For long-running
-            # jobs consider dispatching to a background thread/queue – but for
-            # now synchronous execution keeps things simple and deterministic.
+            # Execute the preprocessing pipeline synchronously.
             run_preprocessing_main()
 
             duration_s = time.perf_counter() - start_time
 
-            msg = f"Preprocessing completed successfully in {duration_s:0.2f}s."
+            # --- Launch KPI calculation as a background process ---
+            kpi_script = os.path.join(os.path.dirname(__file__), "run_all_checks.py")
+            python_exe = sys.executable
+            try:
+                subprocess.Popen([python_exe, kpi_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                app.logger.info(f"Started KPI calculation (run_all_checks.py) as background process.")
+            except Exception as kpi_exc:
+                app.logger.error(f"Failed to start KPI calculation: {kpi_exc}", exc_info=True)
+
+            msg = f"Preprocessing completed successfully in {duration_s:0.2f}s. KPI calculation started in background."
             app.logger.info(msg)
-            # Include both 'output' (expected by frontend) and 'message' for consistency.
             return jsonify({"status": "success", "output": msg, "message": msg}), 200
 
         except FileNotFoundError as fnf_err:
@@ -357,10 +438,45 @@ def create_app() -> Flask:
     app.logger.info("Started manual schedule loop thread")
     # --- End manual scheduling ---
 
+    # Serve the favicon using the Bang.jpg logo
+    @app.route('/favicon.ico')
+    def favicon() -> Response:
+        """Return the Bang logo as the site favicon."""
+        return send_from_directory(os.path.join(app.root_path, 'static', 'images'),
+                                   'Bang.jpg', mimetype='image/jpeg')
+
     # Add this context processor after app creation (inside create_app or after app = Flask(...))
     @app.context_processor
-    def inject_nav_menu():
+    def inject_nav_menu() -> Dict[str, Any]:
         return {'NAV_MENU': NAV_MENU}
+
+    # Inject helper for looking up per-template help URLs from settings.yaml
+    @app.context_processor
+    def inject_help_link_helper() -> Dict[str, Any]:
+        from typing import Optional
+        try:
+            # Local import to avoid circulars at module import time
+            from core.settings_loader import load_settings  # type: ignore
+        except Exception:
+            load_settings = None  # type: ignore
+
+        def help_url_for(template_key: str) -> str:
+            """Return configured help URL for a given template key, or empty string if none."""
+            try:
+                if load_settings is None:
+                    return ""
+                settings_dict = load_settings()
+                if not isinstance(settings_dict, dict):
+                    return ""
+                mapping = settings_dict.get('template_help_urls') or {}
+                if isinstance(mapping, dict):
+                    url = mapping.get(template_key)
+                    return url or ""
+                return ""
+            except Exception:
+                return ""
+
+        return {"help_url_for": help_url_for}
 
     return app
 

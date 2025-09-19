@@ -9,6 +9,8 @@
 {% block title %}Yield Curve Check Summary{% endblock %}
 
 {% block content %}
+{% set template_key = 'curve_summary' %}
+{% include "_help_link.html" %}
 <div class="p-4"> {# Replaced container mt-4 #}
     <h2 class="text-2xl font-bold font-heading mb-2">Yield Curve Check Summary</h2>
     <p class="text-lg text-gray-700 mb-1">Summary of potential inconsistencies found in the yield curve data for the latest available date: <strong class="font-semibold">{{ latest_date }}</strong>.</p>

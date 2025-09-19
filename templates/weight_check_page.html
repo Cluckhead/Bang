@@ -8,6 +8,8 @@
 {% block title %}Weight Check (100% Target){% endblock %}
 
 {% block content %}
+{% set template_key = 'weight_check_page' %}
+{% include "_help_link.html" %}
 <div class="container mx-auto px-4 py-8">
     <h2 class="text-3xl font-bold font-merriweather mb-4">Weight Check (100% Target)</h2>
     <p class="mb-6 text-gray-700">The following tables show weights from <code>{{ fund_filename }}</code> and <code>{{ bench_filename }}</code>. Cells highlighted in <span class="text-red-600 font-semibold">red</span> indicate weights that are not exactly 100.00%.</p>

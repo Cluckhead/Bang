@@ -36,28 +36,22 @@ from .generic_comparison_helpers import (
     _apply_summary_sorting,
     _paginate_summary_data,
 )
-import config
-from config import GENERIC_COMPARISON_STATS_KEYS
+from core import config
+from core.config import GENERIC_COMPARISON_STATS_KEYS
 from typing import Optional, List, Tuple, Dict
 
 # Import shared utilities and processing functions
-try:
-    from utils import (
-        load_weights_and_held_status,
-        parse_fund_list,
-        load_fund_groups,
-    )  # Import parse_fund_list for fund filter logic
-    from security_processing import (
-        load_and_process_security_data,
-    )  # Keep using this standard loader
-    from config import COMPARISON_CONFIG, COLOR_PALETTE
-    from preprocessing import read_and_sort_dates
-except ImportError as e:
-    logging.error(f"Error importing modules in generic_comparison_views: {e}")
-    from ..utils import load_weights_and_held_status, parse_fund_list
-    from ..security_processing import load_and_process_security_data
-    from ..config import COMPARISON_CONFIG, COLOR_PALETTE
-    from ..preprocessing import read_and_sort_dates
+from core.utils import (
+    load_weights_and_held_status,
+    parse_fund_list,
+    load_fund_groups,
+    filter_business_dates,
+)  # Import parse_fund_list for fund filter logic
+from analytics.security_processing import (
+    load_and_process_security_data,
+)  # Keep using this standard loader
+from core.config import COMPARISON_CONFIG, COLOR_PALETTE
+from data_processing.preprocessing import read_and_sort_dates
 
 # Define the Blueprint
 generic_comparison_bp = Blueprint(
@@ -102,6 +96,15 @@ def calculate_generic_comparison_stats(merged_df, static_data, id_col):
     log.info(
         f"Calculating generic comparison statistics using ID column: '{id_col}'..."
     )
+    # Pre-convert value columns once to prevent per-security logging spam
+    from core.data_utils import convert_to_numeric_robustly
+    merged_df = merged_df.copy()
+    merged_df["Value_Orig"] = convert_to_numeric_robustly(
+        merged_df["Value_Orig"], log=False
+    )
+    merged_df["Value_New"] = convert_to_numeric_robustly(
+        merged_df["Value_New"], log=False
+    )
     stats_list = []
 
     for sec_id, group in merged_df.groupby(id_col):
@@ -110,11 +113,6 @@ def calculate_generic_comparison_stats(merged_df, static_data, id_col):
         # Ensure Date column is datetime
         if not pd.api.types.is_datetime64_any_dtype(group["Date"]):
             group["Date"] = pd.to_datetime(group["Date"], errors="coerce")
-
-        # Ensure Value columns are numeric and replace zeros with NaN
-        from data_utils import convert_to_numeric_robustly
-        group["Value_Orig"] = convert_to_numeric_robustly(group["Value_Orig"])
-        group["Value_New"] = convert_to_numeric_robustly(group["Value_New"])
 
         # Filter for overall date range (where at least one value exists)
         group_valid_overall = group.dropna(
@@ -208,14 +206,10 @@ def calculate_generic_comparison_stats(merged_df, static_data, id_col):
                 )
             else:
                 sec_stats["Change_Correlation"] = None
-                log.debug(
-                    f"Cannot calculate Change_Correlation for {sec_id}. Need >= 2 valid change pairs, found {len(valid_changes)}."
-                )
+                # Too verbose to log per security when insufficient change pairs; skip detailed debug.
         else:
             sec_stats["Change_Correlation"] = None
-            log.debug(
-                f"Cannot calculate Change_Correlation for {sec_id}. Need >= 1 valid comparison point to calculate diffs, found {len(valid_comparison)}."
-            )
+            # Skip verbose debug for each security lacking comparison points.
 
         # 5. Difference Statistics (use valid_comparison df)
         if not valid_comparison.empty:
@@ -615,6 +609,8 @@ def details(comparison_type, security_id):
     # === Step 3: Load full date list for chart axis ==========================
     dates_file_path = os.path.join(data_folder, "Dates.csv")
     full_date_list = read_and_sort_dates(dates_file_path) or []
+    # Filter to business days and exclude UK bank holidays
+    full_date_list = filter_business_dates(full_date_list, data_folder)
     if not full_date_list:
         log.warning(
             f"Could not load Dates.csv from {dates_file_path}. Chart x-axis may be incomplete."

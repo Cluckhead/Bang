@@ -1,7 +1,7 @@
 # Purpose: Validate melt_wide_data converts wide security data to long format with proper Date parsing.
 
 import pandas as pd
-from data_utils import melt_wide_data
+from core.data_utils import melt_wide_data
 
 
 def test_melt_wide_data_success():

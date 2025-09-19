@@ -9,10 +9,10 @@ import pandas as pd
 import math
 import logging
 import os
-import config
+from core import config
 
-from utils import load_weights_and_held_status, parse_fund_list
-from security_processing import load_and_process_security_data
+from core.utils import load_weights_and_held_status, parse_fund_list
+from analytics.security_processing import load_and_process_security_data
 
 
 def load_generic_comparison_data(

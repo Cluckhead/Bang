@@ -1,0 +1,96 @@
+{
+  "source": "C:\\Users\\cluck\\Downloads\\bond_calc1.xlsx",
+  "output_dir": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs",
+  "sheets": [
+    {
+      "sheet": "Instructions",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Instructions.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Instructions.formulas.csv"
+    },
+    {
+      "sheet": "Input_Parameters",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Input_Parameters.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Input_Parameters.formulas.csv"
+    },
+    {
+      "sheet": "Assumptions",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Assumptions.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Assumptions.formulas.csv"
+    },
+    {
+      "sheet": "Cashflows",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Cashflows.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Cashflows.formulas.csv"
+    },
+    {
+      "sheet": "Yield_Curve",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Yield_Curve.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Yield_Curve.formulas.csv"
+    },
+    {
+      "sheet": "YTM_Calculations",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\YTM_Calculations.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\YTM_Calculations.formulas.csv"
+    },
+    {
+      "sheet": "ZSpread_Calculations",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\ZSpread_Calculations.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\ZSpread_Calculations.formulas.csv"
+    },
+    {
+      "sheet": "OAS_Calculation",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\OAS_Calculation.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\OAS_Calculation.formulas.csv"
+    },
+    {
+      "sheet": "OAS_Components",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\OAS_Components.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\OAS_Components.formulas.csv"
+    },
+    {
+      "sheet": "Volatility_Impact",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Volatility_Impact.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Volatility_Impact.formulas.csv"
+    },
+    {
+      "sheet": "Effective_Duration",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Effective_Duration.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Effective_Duration.formulas.csv"
+    },
+    {
+      "sheet": "Key_Rate_Durations",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Key_Rate_Durations.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Key_Rate_Durations.formulas.csv"
+    },
+    {
+      "sheet": "Convexity",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Convexity.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Convexity.formulas.csv"
+    },
+    {
+      "sheet": "Duration_Summary",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Duration_Summary.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Duration_Summary.formulas.csv"
+    },
+    {
+      "sheet": "Summary_Comparison",
+      "state": "visible",
+      "values_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Summary_Comparison.values.csv",
+      "formulas_csv": "C:\\Users\\cluck\\Downloads\\bond_calc1_csvs\\Summary_Comparison.formulas.csv"
+    }
+  ]
+}

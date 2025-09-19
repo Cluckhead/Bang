@@ -1,7 +1,7 @@
 # Purpose: Test data_audit.run_data_consistency_audit detects mismatched date ranges across ts_ files.
 
 import pandas as pd
-from data_audit import run_data_consistency_audit
+from data_processing.data_audit import run_data_consistency_audit
 
 
 def _write_ts(tmp_path, fname, dates):

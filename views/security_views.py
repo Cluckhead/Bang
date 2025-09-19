@@ -20,31 +20,36 @@ from datetime import datetime
 from flask import request  # Import request
 import math
 import json
-import config
+from core import config
 import re # Add import for regex
 import io  # For CSV export
 import csv  # For CSV writing
 import yaml  # For field alias mapping
+from typing import List
 
 # Import necessary functions/constants from other modules
-from config import (
+from core.config import (
     COLOR_PALETTE,
     STATIC_INFO_GROUPS,
+    DATA_SOURCES,
 )  # Keep palette and STATIC_INFO_GROUPS
-from security_processing import (
-    load_and_process_security_data,
-    calculate_security_latest_metrics,
+# Import processing helpers (now includes cached metrics function)
+from analytics.security_processing import (
+    load_and_process_security_data,  # kept for other routes if needed
+    calculate_security_latest_metrics,  # kept for other use-cases
+    get_latest_metrics_cached,  # NEW – cached latest metrics
 )
 
 # Import the exclusion loading function
-from utils import load_exclusions  # Import DataFrame-based load_exclusions from utils
-from utils import replace_nan_with_none
+from core.utils import load_exclusions  # Import DataFrame-based load_exclusions from utils
+from core.utils import replace_nan_with_none
 
 # Add import for fund group utility
-from utils import load_fund_groups, parse_fund_list, load_weights_and_held_status # Added load_weights_and_held_status
+from core.utils import load_fund_groups, parse_fund_list, load_weights_and_held_status # Added load_weights_and_held_status
 
 # Import get_holdings_for_security for fund holdings tile
 from views.comparison_helpers import get_holdings_for_security
+from core.utils import filter_business_dates
 
 # Import get_active_exclusions, apply_security_filters, apply_security_sorting, paginate_security_data, load_filter_and_extract from security_helpers
 from views.security_helpers import (
@@ -127,32 +132,20 @@ def securities_page(metric_name: str = "Spread"):
         )
 
     try:
-        current_app.logger.info(f"Loading and processing file: {metric_filename}")
-        # Pass the absolute data folder path
-        df_long, static_cols = load_and_process_security_data(
+        current_app.logger.info(f"Loading and processing (cached) file: {metric_filename}")
+
+        # Use in-memory cache to avoid re-processing on every sort/filter
+        combined_metrics_df, static_cols = get_latest_metrics_cached(
             metric_filename, data_folder
         )
 
-        if df_long is None or df_long.empty:
+        if combined_metrics_df is None or combined_metrics_df.empty:
             current_app.logger.warning(
                 f"Skipping {metric_filename} due to load/process errors or empty data."
             )
             return render_template(
                 "securities_page.html",
                 message=f"Error loading or processing '{metric_filename}'.",
-                securities_data=[],
-                pagination=None,
-                metric_name=metric_name,
-            )
-
-        current_app.logger.info("Calculating latest metrics...")
-        combined_metrics_df = calculate_security_latest_metrics(df_long, static_cols)
-
-        if combined_metrics_df.empty:
-            current_app.logger.warning(f"No metrics calculated for {metric_filename}.")
-            return render_template(
-                "securities_page.html",
-                message=f"Could not calculate metrics from '{metric_filename}'.",
                 securities_data=[],
                 pagination=None,
                 metric_name=metric_name,
@@ -387,7 +380,7 @@ def securities_page(metric_name: str = "Spread"):
         )
 
 
-@security_bp.route("/security/details/<metric_name>/<path:security_id>")
+@security_bp.route("/details/<metric_name>/<path:security_id>")
 def security_details(metric_name, security_id):
     """
     Renders a detail page for a specific security, showing historical charts
@@ -445,6 +438,22 @@ def security_details(metric_name, security_id):
         current_app.logger.warning(f"Error searching for alternate ISIN versions for {decoded_security_id}: {e}")
 
     data_folder = current_app.config["DATA_FOLDER"]
+
+    # --- Load Users for Dropdowns ---
+    users = []
+    try:
+        users_file = os.path.join(data_folder, "users.csv")
+        if os.path.exists(users_file):
+            users_df = pd.read_csv(users_file)
+            if "Name" in users_df.columns:
+                users = users_df["Name"].dropna().tolist()
+            else:
+                current_app.logger.warning("'Name' column not found in users.csv. Users dropdown will be empty.")
+        else:
+            current_app.logger.warning("users.csv not found in Data folder. Users dropdown will be empty.")
+    except Exception as e:
+        current_app.logger.error(f"Error loading users from users.csv: {e}", exc_info=True)
+
     all_dates = set()
     chart_data = {}  # Dictionary to hold data for JSON output
     static_info = {}  # To store static info for the security
@@ -457,8 +466,9 @@ def security_details(metric_name, security_id):
         try:
             ref_df = pd.read_csv(reference_path, dtype=str)
             reference_columns = ref_df.columns.tolist()
-            # Use cleaned_isin_for_static_data for lookup
-            ref_row = ref_df[ref_df[config.ISIN_COL] == cleaned_isin_for_static_data]
+            # Robust equality: ignore leading/trailing whitespace and case
+            isin_col_series = ref_df[config.ISIN_COL].astype(str).str.strip()
+            ref_row = ref_df[isin_col_series.str.upper() == cleaned_isin_for_static_data.strip().upper()]
             if not ref_row.empty:
                 reference_row = ref_row.iloc[0].to_dict()
             else:
@@ -500,7 +510,7 @@ def security_details(metric_name, security_id):
     # --- NEW: Check for open data issues ---
     open_issues = []
     try:
-        from issue_processing import load_issues
+        from analytics.issue_processing import load_issues
 
         issues_df = load_issues(data_folder)
         if not issues_df.empty:
@@ -628,29 +638,44 @@ def security_details(metric_name, security_id):
             "No dates found across any datasets. Cannot generate chart labels."
         )
         # Render template with error message or indication of no data
+        # Prepare static_groups even in the early-return scenario
+        early_static_groups = []
+        if reference_row:
+            used_keys_tmp = set()
+            for group_name_tmp, col_list_tmp in STATIC_INFO_GROUPS:
+                grp_dict_tmp = {k: reference_row[k] for k in col_list_tmp if k in reference_row}
+                used_keys_tmp.update(grp_dict_tmp.keys())
+                early_static_groups.append((group_name_tmp, grp_dict_tmp))
+            others_tmp = {k: reference_row[k] for k in reference_row if k not in used_keys_tmp}
+            early_static_groups.append(("Other Details", others_tmp))
+
         return render_template(
             "security_details_page.html",
             security_id=decoded_security_id,
             metric_name=metric_name,
             chart_data_json="{}",  # Empty JSON
             latest_date="N/A",
-            static_info=static_info,  # Show static info if any was found
+            static_info=static_info,
             message="No historical data found for this security.",
             holdings_data=None,
             chart_dates=None,
-            # Add missing variables for error case
-            static_groups=[],
-            reference_missing=True,
+            static_groups=early_static_groups,
+            reference_missing=(reference_row is None),
             is_excluded=is_excluded,
             exclusion_comment=exclusion_info,
             open_issues=open_issues,
             bloomberg_yas_url=bloomberg_yas_url,
+            users=users,
+            data_sources=DATA_SOURCES,
         )
 
-    # Sort dates and format as strings for labels
+    # Sort dates and format as strings for labels, then filter to business days
     sorted_dates = sorted(list(all_dates))
+    sorted_dates_str = [d.strftime("%Y-%m-%d") for d in sorted_dates]
+    # Exclude weekends and UK bank holidays
+    sorted_dates_str = filter_business_dates(sorted_dates_str, data_folder)
     # Use .strftime for consistent formatting
-    chart_data["labels"] = [d.strftime("%Y-%m-%d") for d in sorted_dates]
+    chart_data["labels"] = sorted_dates_str
     latest_date_str = chart_data["labels"][-1] if chart_data["labels"] else "N/A"
 
     # --- Fund Holdings Over Time (Based on Chart Dates) ---
@@ -691,7 +716,7 @@ def security_details(metric_name, security_id):
 
         # Merge with the full date range, using pd.NA for missing numeric values
         merged_df = pd.merge(
-            pd.DataFrame({"Date": sorted_dates}),
+            pd.DataFrame({"Date": pd.to_datetime(chart_data["labels"])}),
             df_series.reset_index(),
             on="Date",
             how="left",
@@ -789,6 +814,67 @@ def security_details(metric_name, security_id):
         sp_ytw_series, "SP YTW", COLOR_PALETTE[11]
     )
 
+    # --- KRD Bar Chart (latest date) ---
+    krd_labels: List[str] = []
+    krd_dataset = None
+    krdsp_dataset = None
+
+    try:
+        # Helper to load latest row for the given ISIN
+        def _latest_row(path: str):
+            if not os.path.exists(path):
+                return None, []
+            df = pd.read_csv(path)
+            df = df[df["ISIN"] == cleaned_isin_for_static_data]
+            if df.empty:
+                return None, []
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+            latest = df.loc[df["Date"].idxmax()]
+            tenor_cols = [c for c in df.columns if c not in ["ISIN", "Date", "Funds"]]
+            return latest, tenor_cols
+
+        latest_orig, tenors_orig = _latest_row(os.path.join(data_folder, "KRD.csv"))
+        if latest_orig is not None and tenors_orig:
+            krd_labels = tenors_orig
+            krd_values = (
+                latest_orig[tenors_orig]
+                .astype(float)
+                .replace({np.nan: None})
+                .tolist()
+            )
+            krd_dataset = {
+                "label": "KRD",
+                "data": krd_values,
+                "backgroundColor": COLOR_PALETTE[0],
+                "borderColor": COLOR_PALETTE[0],
+            }
+
+        latest_sp, tenors_sp = _latest_row(os.path.join(data_folder, "KRDSP.csv"))
+        if latest_sp is not None and tenors_sp:
+            # If original missing, adopt SP labels
+            if not krd_labels:
+                krd_labels = tenors_sp
+            krdsp_values = (
+                latest_sp[tenors_sp]
+                .astype(float)
+                .replace({np.nan: None})
+                .tolist()
+            )
+            krdsp_dataset = {
+                "label": "KRD SP",
+                "data": krdsp_values,
+                "backgroundColor": COLOR_PALETTE[1],
+                "borderColor": COLOR_PALETTE[1],
+            }
+    except Exception as exc:
+        current_app.logger.warning(
+            f"KRD bar chart build failed for {decoded_security_id}: {exc}"
+        )
+
+    chart_data["krd_labels"] = krd_labels
+    chart_data["krd_dataset"] = krd_dataset
+    chart_data["krdsp_dataset"] = krdsp_dataset
+
     # Convert the entire chart_data dictionary to JSON safely
     chart_data_json = json.dumps(
         chart_data, default=replace_nan_with_none, indent=4
@@ -827,6 +913,314 @@ def security_details(metric_name, security_id):
         holdings_data=holdings_data,
         chart_dates=chart_dates,
         alternate_versions=alternate_versions,
+        users=users,
+        data_sources=DATA_SOURCES,
+    )
+
+
+@security_bp.route("/spreads/<path:security_id>")
+def security_spreads(security_id):
+    """
+    Display all spread types for a security in a unified view.
+    Dynamically loads spread files based on YAML configuration.
+    Enhanced to include additional spreads from all_other_spreads.csv and price data.
+    """
+    # Decode the security_id to handle potential URL encoding
+    decoded_security_id = unquote(security_id)
+    current_app.logger.info(f"--- Requesting Spread Analysis for ID='{decoded_security_id}' ---")
+    
+    data_folder = current_app.config["DATA_FOLDER"]
+    
+    # Load spread files configuration
+    from core.settings_loader import get_spread_files
+    spread_configs = get_spread_files()
+    
+    if not spread_configs:
+        # Fallback to default configuration
+        spread_configs = [
+            {'file': 'sec_Spread.csv', 'label': 'Original Spread', 'color': '#1f77b4'},
+            {'file': 'synth_sec_ZSpread.csv', 'label': 'Z-Spread', 'color': '#2ca02c'},
+            {'file': 'synth_sec_GSpread.csv', 'label': 'G-Spread', 'color': '#d62728'}
+        ]
+    
+    # Load reference data for security info
+    security_info = {}
+    ref_path = os.path.join(data_folder, "reference.csv")
+    if os.path.exists(ref_path):
+        try:
+            ref_df = pd.read_csv(ref_path)
+            # Clean the ISIN for lookup
+            cleaned_isin = re.sub(r"-\d+$", "", decoded_security_id)
+            ref_row = ref_df[ref_df[config.ISIN_COL] == cleaned_isin]
+            if not ref_row.empty:
+                security_info = {
+                    'security_name': ref_row.iloc[0].get('Security Name', 'N/A'),
+                    'security_type': ref_row.iloc[0].get('Security Sub Type', 'N/A'),
+                    'currency': ref_row.iloc[0].get('Position Currency', ref_row.iloc[0].get('CCY', 'N/A'))
+                }
+        except Exception as e:
+            current_app.logger.error(f"Error loading reference data: {e}")
+    
+    # Initialize spread data structure
+    all_dates = set()
+    spread_series = {}
+    
+    try:
+        # First pass: collect all unique dates across all spread files
+        for config_item in spread_configs:
+            file_path = os.path.join(data_folder, config_item['file'])
+            if os.path.exists(file_path):
+                try:
+                    df = pd.read_csv(file_path)
+                    # Get date columns
+                    date_cols = [col for col in df.columns if col not in 
+                               ['ISIN', 'Security Name', 'Funds', 'Type', 'Callable', 'Currency']]
+                    all_dates.update(date_cols)
+                except Exception as e:
+                    current_app.logger.warning(f"Could not read {config_item['file']} for date collection: {e}")
+
+        # Build filtered business-day date list once
+        all_dates_sorted = sorted(list(all_dates))
+        filtered_dates_str = filter_business_dates(all_dates_sorted, data_folder)
+
+        # Second pass: load spread data for the specific security
+        for config_item in spread_configs:
+            file_path = os.path.join(data_folder, config_item['file'])
+            series_key = config_item['label']
+            
+            if os.path.exists(file_path):
+                try:
+                    df = pd.read_csv(file_path)
+                    row = df[df[config.ISIN_COL] == decoded_security_id]
+                    
+                    # If not found and ISIN has a hyphenated suffix, try without suffix
+                    if row.empty and '-' in decoded_security_id:
+                        base_isin = decoded_security_id.split('-')[0]
+                        row = df[df[config.ISIN_COL] == base_isin]
+                        if not row.empty:
+                            current_app.logger.info(f"Found {series_key} data using base ISIN {base_isin} for {decoded_security_id}")
+                    
+                    if not row.empty:
+                        # Extract values for all dates
+                        values = []
+                        for date in filtered_dates_str:
+                            if date in row.columns:
+                                value = row.iloc[0].get(date)
+                                values.append(float(value) if pd.notna(value) else None)
+                            else:
+                                values.append(None)
+                        
+                        spread_series[series_key] = {
+                            'values': list(values),  # Ensure it's a Python list
+                            'color': config_item.get('color', '#000000'),
+                            'description': config_item.get('description', ''),
+                            'file': config_item['file']
+                        }
+                    else:
+                        current_app.logger.warning(f"No data found for {decoded_security_id} in {config_item['file']}")
+                        spread_series[series_key] = {
+                            'values': list([None] * len(filtered_dates_str)),  # Ensure it's a Python list
+                            'color': config_item.get('color', '#000000'),
+                            'description': config_item.get('description', ''),
+                            'file': config_item['file'],
+                            'no_data': True
+                        }
+                except Exception as e:
+                    current_app.logger.error(f"Error loading {config_item['file']}: {e}")
+                    spread_series[series_key] = {
+                        'values': list([None] * len(filtered_dates_str)),  # Ensure it's a Python list
+                        'color': config_item.get('color', '#000000'),
+                        'description': config_item.get('description', ''),
+                        'file': config_item['file'],
+                        'error': str(e)
+                    }
+            else:
+                current_app.logger.info(f"File not found: {config_item['file']}")
+                spread_series[series_key] = {
+                    'values': list([None] * len(filtered_dates_str)),  # Ensure it's a Python list
+                    'color': config_item.get('color', '#000000'),
+                    'description': config_item.get('description', ''),
+                    'file': config_item['file'],
+                    'not_found': True
+                }
+    
+    except Exception as e:
+        current_app.logger.error(f"Error loading spread data: {e}", exc_info=True)
+    
+    # Load additional spread data from all_other_spreads.csv
+    additional_spreads = {}
+    additional_spread_headers = []
+    all_other_spreads_path = os.path.join(data_folder, "All_other_spreads.csv")
+    if os.path.exists(all_other_spreads_path):
+        try:
+            other_df = pd.read_csv(all_other_spreads_path)
+            current_app.logger.info(f"Loading additional spreads from {all_other_spreads_path}")
+            
+            # Get dynamic spread headers (everything except Date, ISIN, Fund Code)
+            spread_columns = [col for col in other_df.columns if col not in ['Date', 'ISIN', 'Fund Code']]
+            additional_spread_headers = spread_columns
+            
+            # Filter for this ISIN  
+            isin_data = other_df[other_df['ISIN'] == decoded_security_id]
+            if isin_data.empty and '-' in decoded_security_id:
+                base_isin = decoded_security_id.split('-')[0]
+                isin_data = other_df[other_df['ISIN'] == base_isin]
+                
+            if not isin_data.empty:
+                # Convert dates to standard format and collect all dates
+                isin_data = isin_data.copy()  # Create explicit copy
+                # Try ISO 8601 first, then fallback to dayfirst
+                try:
+                    isin_data.loc[:, 'Date'] = pd.to_datetime(isin_data['Date'], errors='raise')
+                except Exception:
+                    isin_data.loc[:, 'Date'] = pd.to_datetime(isin_data['Date'], errors='coerce', dayfirst=True)
+                isin_data = isin_data.dropna(subset=['Date'])
+                
+                # For each spread type, aggregate data by date (taking median for duplicates)
+                colors = ['#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#ff9896', '#c5b0d5']
+                additional_spread_disabled = {}
+                for i, spread_col in enumerate(spread_columns):
+                    if spread_col in isin_data.columns:
+                        # Group by date and take mean for multiple entries on same date
+                        date_values = isin_data.groupby('Date')[spread_col].mean().reset_index()
+                        # Create series aligned with main dates
+                        values = []
+                        has_any_value = False
+                        for date_str in filtered_dates_str:
+                            try:
+                                target_date = pd.to_datetime(date_str, errors='coerce')
+                                matching_row = date_values[date_values['Date'] == target_date]
+                                if not matching_row.empty:
+                                    val = matching_row.iloc[0][spread_col]
+                                    if pd.notna(val):
+                                        has_any_value = True
+                                    values.append(float(val) if pd.notna(val) else None)
+                                else:
+                                    values.append(None)
+                            except:
+                                values.append(None)
+                        additional_spreads[spread_col] = {
+                            'values': list(values),  # Ensure it's a Python list
+                            'color': colors[i % len(colors)],
+                            'description': f'Additional spread data from all_other_spreads.csv',
+                            'file': 'All_other_spreads.csv'
+                        }
+                        additional_spread_disabled[spread_col] = not has_any_value
+                    else:
+                        # If column not present, mark as disabled
+                        additional_spreads[spread_col] = {
+                            'values': [None] * len(filtered_dates_str),
+                            'color': colors[i % len(colors)],
+                            'description': f'Additional spread data from all_other_spreads.csv',
+                            'file': 'All_other_spreads.csv'
+                        }
+                        additional_spread_disabled[spread_col] = True
+                # Pass disabled info to template
+                additional_spreads['__disabled'] = additional_spread_disabled
+        except Exception as e:
+            current_app.logger.error(f"Error loading additional spreads: {e}")
+    
+    # Load price data from sec_Price.csv
+    price_data = {}
+    price_path = os.path.join(data_folder, "sec_Price.csv")
+    if os.path.exists(price_path):
+        try:
+            price_df = pd.read_csv(price_path)
+            price_row = price_df[price_df[config.ISIN_COL] == decoded_security_id]
+            
+            # If not found and ISIN has a hyphenated suffix, try without suffix
+            if price_row.empty and '-' in decoded_security_id:
+                base_isin = decoded_security_id.split('-')[0]
+                price_row = price_df[price_df[config.ISIN_COL] == base_isin]
+                
+            if not price_row.empty:
+                # Get date columns (exclude metadata columns)
+                price_date_cols = [col for col in price_df.columns if col not in 
+                                 ['ISIN', 'Security Name', 'Funds', 'Type', 'Callable', 'Currency']]
+                
+                price_values = []
+                for date in filtered_dates_str:
+                    if date in price_date_cols:
+                        value = price_row.iloc[0].get(date)
+                        price_values.append(float(value) if pd.notna(value) else None)
+                    else:
+                        price_values.append(None)
+                
+                # Ensure price_values is a proper Python list, not pandas object
+                price_data = {
+                    'values': list(price_values),  # Explicit conversion to list
+                    'color': '#ff1744',
+                    'description': 'Security price data',
+                    'file': 'sec_Price.csv'
+                }
+                
+        except Exception as e:
+            current_app.logger.error(f"Error loading price data: {e}")
+    
+    # Calculate intelligent baseline spread (ignore 0s, use median of available non-zero spreads)
+    smart_baseline = None
+    if spread_series:
+        try:
+            # Collect all non-zero, non-null values across all selected spread types
+            all_values = []
+            for series_name, series_data in spread_series.items():
+                if 'values' in series_data:
+                    for val in series_data['values']:
+                        if val is not None and val != 0:
+                            all_values.append(val)
+            
+            if all_values:
+                # Use median as it's more robust than mean for spread data
+                smart_baseline = np.median(all_values)
+                current_app.logger.info(f"Calculated smart baseline spread: {smart_baseline:.2f} bps")
+        except Exception as e:
+            current_app.logger.error(f"Error calculating smart baseline: {e}")
+    
+    # Get available funds for attribution links
+    # Only include funds that have attribution for this ISIN
+    available_funds = []
+    try:
+        for filename in os.listdir(data_folder):
+            if filename.startswith("att_factors_") and filename.endswith(".csv"):
+                fund_code = filename[12:-4]
+                att_path = os.path.join(data_folder, filename)
+                try:
+                    att_df = pd.read_csv(att_path, usecols=["ISIN"])
+                    # Clean ISINs for comparison
+                    isin_list = att_df["ISIN"].astype(str).unique()
+                    if decoded_security_id in isin_list:
+                        available_funds.append(fund_code)
+                    elif '-' in decoded_security_id:
+                        base_isin = decoded_security_id.split('-')[0]
+                        if base_isin in isin_list:
+                            available_funds.append(fund_code)
+                except Exception as e:
+                    current_app.logger.warning(f"Error reading {filename} for ISIN check: {e}")
+    except Exception as e:
+        current_app.logger.error(f"Error scanning for attribution files: {e}")
+    
+    # Sort dates for consistent display and filter to business days
+    sorted_dates = sorted(list(all_dates))
+    # Handle case where dates might already be strings (column names) or datetime objects
+    sorted_dates_str = []
+    for d in sorted_dates:
+        if isinstance(d, str):
+            sorted_dates_str.append(d)
+        else:
+            sorted_dates_str.append(d.strftime("%Y-%m-%d"))
+    sorted_dates_str = filter_business_dates(sorted_dates_str, data_folder)
+    
+    return render_template(
+        "security_spreads_page.html",
+        security_id=decoded_security_id,
+        dates=sorted_dates_str,
+        spread_series=spread_series,
+        additional_spreads=additional_spreads,
+        additional_spread_headers=additional_spread_headers,
+        price_data=price_data,
+        smart_baseline=smart_baseline,
+        available_funds=available_funds,
+        **security_info
     )
 
 

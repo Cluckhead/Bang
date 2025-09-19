@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}Government Bond Yield Curve Analysis{% endblock %}
+
+{% block content %}
+{% set template_key = 'govt_yield_curve' %}
+{% include "_help_link.html" %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Government Bond Yield Curve Analysis</h1>
+        
+        <div class="mb-6">
+            <p class="text-gray-600 mb-4">
+                This page displays government bond yields plotted against the yield curve to analyze whether government securities 
+                are trading near or on their respective currency yield curves.
+            </p>
+            <p class="text-sm text-gray-500">
+                Government securities found: <span class="font-semibold">{{ govt_securities_count }}</span>
+            </p>
+        </div>
+
+        <!-- Controls -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div>
+                <label for="currency-select" class="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                <select id="currency-select" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    {% for currency in available_currencies %}
+                    <option value="{{ currency }}" {% if currency == 'USD' %}selected{% endif %}>{{ currency }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label for="date-select" class="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <select id="date-select" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    {% for date in available_dates %}
+                    <option value="{{ date }}" {% if date == latest_date %}selected{% endif %}>{{ date }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label for="country-select" class="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                <select id="country-select" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    {# Options will be populated dynamically #}
+                </select>
+            </div>
+        </div>
+
+        <!-- Update Button -->
+        <div class="mb-6">
+            <button id="update-chart" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-200">
+                Update Chart
+            </button>
+            <span id="loading-indicator" class="ml-2 text-gray-500 hidden">Loading...</span>
+        </div>
+
+        <!-- Chart Container -->
+        <div class="mb-6">
+            <div id="yield-curve-chart" style="height: 600px;" class="border border-gray-200 rounded-lg"></div>
+        </div>
+
+        <!-- Legend and Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">Chart Legend</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center">
+                        <div class="w-4 h-0.5 bg-blue-500 mr-2"></div>
+                        <span>Yield Curve</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                        <span>Government Bond YTMs (clickable)</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                        <span>Other (SP) Securities (clickable)</span>
+                    </div>
+                </div>
+                <div class="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                    <strong>💡 Tip:</strong> Click on any bond point to view detailed security information.
+                </div>
+            </div>
+            
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">Analysis</h3>
+                <div id="analysis-summary" class="text-sm text-gray-600">
+                    Select currency and date to view analysis.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include Plotly.js -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<script>
+// Country map injected from Flask (contains array of countries for each currency)
+const countryMap = JSON.parse('{{ country_map|tojson|safe }}');
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Populate country options for given currency
+    function populateCountryOptions(currency){
+        const options = countryMap[currency] || ['All Countries'];
+        countrySelect.innerHTML='';
+        options.forEach(ct=>{
+            const opt=document.createElement('option');
+            opt.value=ct;
+            opt.textContent=ct;
+            countrySelect.appendChild(opt);
+        });
+    }
+
+    const currencySelect = document.getElementById('currency-select');
+    const dateSelect = document.getElementById('date-select');
+    const countrySelect = document.getElementById('country-select');
+    const updateButton = document.getElementById('update-chart');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const analysisSummary = document.getElementById('analysis-summary');
+    
+    // Function to update chart
+    function updateChart() {
+        const currency = currencySelect.value;
+        const date = dateSelect.value;
+        const country = countrySelect.value;
+        
+        // Show loading indicator
+        loadingIndicator.classList.remove('hidden');
+        updateButton.disabled = true;
+        
+        // Fetch data
+        fetch(`/curve/api/govt_yield_curve_data?currency=${currency}&date=${date}&country=${encodeURIComponent(country)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Filter out bonds with YTM = 0 (bonds without positions)
+                const filteredGovtBonds = data.govt_bonds.filter(d => d.YTM !== 0);
+                
+                plotYieldCurve(data, filteredGovtBonds);
+                updateAnalysis(data, filteredGovtBonds);
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+                analysisSummary.innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+            })
+            .finally(() => {
+                loadingIndicator.classList.add('hidden');
+                updateButton.disabled = false;
+            });
+    }
+    
+    // Function to plot yield curve
+    function plotYieldCurve(data, filteredGovtBonds) {
+        const curveData = data.curve_data;
+        
+        // Prepare curve trace
+        const curveTrace = {
+            x: curveData.map(d => d.Months / 12),
+            y: curveData.map(d => d.Yield),
+            mode: 'lines+markers',
+            type: 'scatter',
+            name: `${data.currency} Yield Curve`,
+            line: { color: '#3B82F6', width: 2 },
+            marker: { size: 6 }
+        };
+        
+        // Prepare government bonds trace
+        const bondsTrace = {
+            x: filteredGovtBonds.map(d => d.Months_To_Maturity / 12),
+            y: filteredGovtBonds.map(d => d.YTM),
+            mode: 'markers',
+            type: 'scatter',
+            name: 'Government Bonds',
+            marker: { 
+                color: '#EF4444', 
+                size: 8,
+                symbol: 'circle'
+            },
+            text: filteredGovtBonds.map(d => `${d.Security_Name}<br>ISIN: ${d.ISIN}<br>YTM: ${d.YTM.toFixed(3)}%<br>Maturity: ${(d.Months_To_Maturity/12).toFixed(2)} years`),
+            hovertemplate: '%{text}<extra></extra>'
+        };
+        
+        // Prepare SP bonds trace (if any)
+        const spBonds = data.sp_bonds || [];
+        const filteredSpBonds = spBonds.filter(d => d.YTM !== 0);
+        const spTrace = {
+            x: filteredSpBonds.map(d => d.Months_To_Maturity / 12),
+            y: filteredSpBonds.map(d => d.YTM),
+            mode: 'markers',
+            type: 'scatter',
+            name: 'SP Bonds',
+            marker: {
+                color: '#10B981',
+                size: 7,
+                symbol: 'diamond'
+            },
+            text: filteredSpBonds.map(d => `${d.Security_Name}<br>ISIN: ${d.ISIN}<br>YTM: ${d.YTM.toFixed(3)}%<br>Maturity: ${(d.Months_To_Maturity/12).toFixed(2)} years`),
+            hovertemplate: '%{text}<extra></extra>'
+        };
+        
+        const layout = {
+            title: {
+                text: `Government Bond Yields vs ${data.currency} Yield Curve (${data.date})`,
+                font: { size: 16 }
+            },
+            xaxis: {
+                title: 'Time to Maturity (Years)',
+                gridcolor: '#E5E7EB'
+            },
+            yaxis: {
+                title: 'Yield (%)',
+                gridcolor: '#E5E7EB'
+            },
+            plot_bgcolor: '#FAFAFA',
+            paper_bgcolor: 'white',
+            font: { family: 'Arial, sans-serif' },
+            legend: {
+                x: 0.02,
+                y: 0.98,
+                bgcolor: 'rgba(255,255,255,0.8)'
+            },
+            margin: { l: 60, r: 20, t: 60, b: 60 }
+        };
+        
+        const config = {
+            responsive: true,
+            displayModeBar: false,
+            scrollZoom: false,
+            doubleClick: 'reset',
+            displaylogo: false
+        };
+        
+        const traces = [curveTrace, bondsTrace];
+        if (filteredSpBonds.length > 0) traces.push(spTrace);
+        Plotly.newPlot('yield-curve-chart', traces, layout, config);
+        
+        // Add hover event to show pointer cursor on bond points
+        document.getElementById('yield-curve-chart').on('plotly_hover', function(data) {
+            if (data.points && data.points.length > 0) {
+                const point = data.points[0];
+                if (point.data.name === 'Government Bonds' || point.data.name === 'SP Bonds') {
+                    document.getElementById('yield-curve-chart').style.cursor = 'pointer';
+                }
+            }
+        });
+        
+        document.getElementById('yield-curve-chart').on('plotly_unhover', function(data) {
+            document.getElementById('yield-curve-chart').style.cursor = 'default';
+        });
+        
+        // Add click event handler for navigation to security details
+        document.getElementById('yield-curve-chart').on('plotly_click', function(data) {
+            if (data.points && data.points.length > 0) {
+                const point = data.points[0];
+                
+                // Check if it's a bond point (not the curve line)
+                if (point.data.name === 'Government Bonds' || point.data.name === 'SP Bonds') {
+                    const pointIndex = point.pointIndex;
+                    let bondData;
+                    
+                    if (point.data.name === 'Government Bonds') {
+                        bondData = filteredGovtBonds[pointIndex];
+                    } else {
+                        bondData = filteredSpBonds[pointIndex];
+                    }
+                    
+                    if (bondData && bondData.ISIN) {
+                        // Construct URL for security details page
+                        // Use YTM as the metric since we're on the yield curve page
+                        const metric = point.data.name === 'SP Bonds' ? 'YTMSP' : 'YTM';
+                        const securityDetailsUrl = `/security/details/${metric}/${encodeURIComponent(bondData.ISIN)}`;
+                        
+                        // Navigate to security details page
+                        window.open(securityDetailsUrl, '_blank');
+                    }
+                }
+            }
+        });
+    }
+    
+    // Function to update analysis summary
+    function updateAnalysis(data, filteredGovtBonds) {
+        const curveData = data.curve_data;
+        
+        if (filteredGovtBonds.length === 0) {
+            analysisSummary.innerHTML = `No government bonds with valid yields found for ${data.currency} on ${data.date}.`;
+            return;
+        }
+        
+        // Calculate some basic statistics
+        const avgYTM = filteredGovtBonds.reduce((sum, bond) => sum + bond.YTM, 0) / filteredGovtBonds.length;
+        const minYTM = Math.min(...filteredGovtBonds.map(bond => bond.YTM));
+        const maxYTM = Math.max(...filteredGovtBonds.map(bond => bond.YTM));
+        
+        // Find bonds that are close to the curve (within 0.1% tolerance)
+        let bondsNearCurve = 0;
+        const tolerance = 0.1;
+        
+        filteredGovtBonds.forEach(bond => {
+            // Find the closest curve point
+            const closestCurvePoint = curveData.reduce((closest, point) => {
+                const currentDistance = Math.abs(point.Months - bond.Months_To_Maturity);
+                const closestDistance = Math.abs(closest.Months - bond.Months_To_Maturity);
+                return currentDistance < closestDistance ? point : closest;
+            });
+            
+            if (Math.abs(bond.YTM - closestCurvePoint.Yield) <= tolerance) {
+                bondsNearCurve++;
+            }
+        });
+        
+        analysisSummary.innerHTML = `
+            <div class="space-y-1">
+                <div><strong>Bonds analyzed:</strong> ${filteredGovtBonds.length} in ${data.currency}</div>
+                <div><strong>YTM range:</strong> ${minYTM.toFixed(3)}% - ${maxYTM.toFixed(3)}%</div>
+                <div><strong>Average YTM:</strong> ${avgYTM.toFixed(3)}%</div>
+                <div><strong>Near curve:</strong> ${bondsNearCurve} bonds (±${tolerance}%)</div>
+            </div>
+        `;
+    }
+    
+    // Event listeners
+    updateButton.addEventListener('click', updateChart);
+    
+    // Auto-update on dropdown changes
+    currencySelect.addEventListener('change', updateChart);
+    dateSelect.addEventListener('change', updateChart);
+    countrySelect.addEventListener('change', updateChart);
+    
+    // Initialise country dropdown and initial chart load
+    populateCountryOptions(currencySelect.value);
+    updateChart();
+
+    // Refresh countries when currency changes
+    currencySelect.addEventListener('change', ()=>{
+        populateCountryOptions(currencySelect.value);
+        updateChart();
+    });
+});
+</script>
+{% endblock %} 

@@ -15,6 +15,7 @@ import threading
 import uuid
 import csv
 from collections import defaultdict
+from core import config  # Import the central configuration to access the DATA_FOLDER path
 
 # Import from our local modules
 from views.api_core import (
@@ -26,15 +27,18 @@ from views.api_core import (
 )
 
 # Import the validation function from data_validation
-from data_validation import validate_data
-from utils import load_fund_groups
+from data_processing.data_validation import validate_data
+from core.utils import load_fund_groups, time_api_calls
 
 # --- In-memory job manager (job_id -> job dict) ---
 job_manager = {}
 job_manager_lock = threading.Lock()
 
 # --- Times.csv helpers ---
-TIMES_CSV = os.path.join('Data', 'Times.csv')
+# Use the data folder specified in the central configuration. This respects
+# any environment variable overrides or YAML configuration that changes the
+# data directory.
+TIMES_CSV = os.path.join(config.DATA_FOLDER, 'Times.csv')
 TIMES_HEADER = ['start_time', 'end_time', 'total_seconds', 'funds', 'dates', 'units', 'run_total_seconds', 'run_total_units']
 
 def append_times_csv(start, end, funds, dates, units):
@@ -52,6 +56,9 @@ def append_times_csv(start, end, funds, dates, units):
     run_total_seconds += total_seconds
     run_total_units += units
     # Append new row
+    # Ensure the data directory exists before attempting to write
+    os.makedirs(os.path.dirname(TIMES_CSV), exist_ok=True)
+
     write_header = not os.path.exists(TIMES_CSV)
     with open(TIMES_CSV, 'a', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=TIMES_HEADER)
@@ -286,6 +293,7 @@ def _save_or_merge_data(
 
 
 @api_bp.route("/run_api_calls", methods=["POST"])
+@time_api_calls
 def run_api_calls() -> Response:
     """Start a background API job, return job_id and estimated time."""
     data = request.get_json()
@@ -315,7 +323,8 @@ def run_api_calls() -> Response:
     return jsonify({'job_id': job_id, 'est_time': est_time})
 
 
-@api_bp.route("/api/job_status/<job_id>", methods=["GET"])
+@api_bp.route("/job_status/<job_id>", methods=["GET"])
+@time_api_calls
 def job_status(job_id):
     """Return progress and result for a job."""
     with job_manager_lock:
@@ -333,6 +342,7 @@ def job_status(job_id):
 
 
 @api_bp.route("/rerun-api-call", methods=["POST"])
+@time_api_calls
 def rerun_api_call() -> Response:
     """Handles the request to rerun a single API call (real or simulated)."""
     try:
@@ -368,7 +378,7 @@ def rerun_api_call() -> Response:
         end_date_tqs_str = end_date.strftime("%Y-%m-%d")
 
         # --- Find FileName from QueryMap ---
-        data_folder = current_app.config.get("DATA_FOLDER", "Data")
+        data_folder = current_app.config["DATA_FOLDER"]
         query_map_path = os.path.join(data_folder, "QueryMap.csv")
         if not os.path.exists(query_map_path):
             return (
@@ -573,11 +583,13 @@ def save_schedules(schedules: List[Any]) -> None:
 
 
 @api_bp.route("/schedules", methods=["GET"])
+@time_api_calls
 def list_schedules() -> Response:
     return jsonify(load_schedules())
 
 
 @api_bp.route("/schedules", methods=["POST"])
+@time_api_calls
 def add_schedule() -> Tuple[Response, int]:
     data = request.get_json() or {}
     schedule_time = data.get("schedule_time")
@@ -610,7 +622,7 @@ def add_schedule() -> Tuple[Response, int]:
                 400,
             )
     # --- Fund group detection: if funds match a group exactly, save the group name ---
-    data_folder = current_app.config.get("DATA_FOLDER", "Data")
+    data_folder = current_app.config["DATA_FOLDER"]
     fund_groups = load_fund_groups(data_folder)
     matched_group = None
     for group_name, group_funds in fund_groups.items():
@@ -638,6 +650,7 @@ def add_schedule() -> Tuple[Response, int]:
 
 
 @api_bp.route("/schedules/<int:schedule_id>", methods=["DELETE"])
+@time_api_calls
 def delete_schedule(schedule_id: int) -> Tuple[str, int]:
     schedules = load_schedules()
     new_list = [s for s in schedules if s["id"] != schedule_id]
@@ -654,7 +667,7 @@ def run_scheduled_job(schedule: Dict[str, Any]) -> None:
             "write_mode": schedule["write_mode"],
         }
         # --- Resolve funds from group if present ---
-        data_folder = current_app.config.get("DATA_FOLDER", "Data")
+        data_folder = current_app.config["DATA_FOLDER"]
         if "fund_group" in schedule:
             fund_groups = load_fund_groups(data_folder)
             funds = fund_groups.get(schedule["fund_group"], [])
@@ -688,7 +701,7 @@ def run_api_job(app, job_id, params):
                 dates = int(params['days_back']) + 1
             units = funds * dates
             # --- Get Query Map ---
-            data_folder = app.config.get("DATA_FOLDER", "Data")
+            data_folder = app.config["DATA_FOLDER"]
             query_map_path = os.path.join(data_folder, "QueryMap.csv")
             if not os.path.exists(query_map_path):
                 raise FileNotFoundError(f"QueryMap.csv not found at {query_map_path}")

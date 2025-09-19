@@ -3,6 +3,8 @@
 {% block title %}Manage Security Exclusions{% endblock %}
 
 {% block content %}
+{% set template_key = 'exclusions_page' %}
+{% include "_help_link.html" %}
 {#
     Purpose: Exclusions management page.
     Allows users to view, add, and remove security exclusions.
@@ -42,7 +44,7 @@
                                 <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Distressed</th>
                                 <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Added</th>
                                 <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Date</th>
-                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comment</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
                                 <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Added By</th>
                                 <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                             </tr>
@@ -54,9 +56,10 @@
                                     <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ exclusion['Is Distressed'] if 'Is Distressed' in exclusion else '' }}</td>
                                     <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else 'N/A' }}</td>
                                     <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ exclusion.EndDate.strftime('%Y-%m-%d') if exclusion.EndDate else '' }}</td>
-                                    <td class="px-4 py-2 text-gray-700 max-w-xs break-words">{{ exclusion.Comment }}</td>
+                                    <td class="px-4 py-2 text-gray-700 max-w-xs break-words">{{ exclusion.Reason }}</td>
                                     <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ exclusion.User if exclusion.User is defined else '' }}</td>
                                     <td class="px-4 py-2 whitespace-nowrap">
+                                        <a href="{{ url_for('exclusion_bp.edit_exclusion', security_id=exclusion.SecurityID, add_date=exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else '') }}" class="px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out mr-1">Edit</a>
                                         <form method="POST" action="{{ url_for('exclusion_bp.remove_exclusion_route') }}" style="display: inline;">
                                             <input type="hidden" name="security_id" value="{{ exclusion.SecurityID }}">
                                             <input type="hidden" name="add_date" value="{{ exclusion.AddDate.strftime('%Y-%m-%d') if exclusion.AddDate else '' }}">
@@ -78,49 +81,20 @@
             <h4 class="text-lg font-semibold text-gray-800 mb-4">Add New Exclusion</h4>
             <form method="POST" action="{{ url_for('exclusion_bp.manage_exclusions') }}" class="space-y-4">
                 <div>
-                     <label class="block text-xs font-medium text-gray-500 mb-1">Filter Securities By:</label>
-                     <div class="grid grid-cols-3 gap-2">
-                        <div>
-                            <select id="filter-ccy" class="block w-full pl-2 pr-8 py-1 text-xs border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
-                                <option value="">CCY: All</option>
-                                {% set ccy_options = available_securities | map(attribute='CCY') | unique | list | sort %}
-                                {% for ccy in ccy_options %}
-                                    <option value="{{ ccy }}">{{ ccy }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div>
-                            <select id="filter-subtype" class="block w-full pl-2 pr-8 py-1 text-xs border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
-                                <option value="">Type: All</option>
-                                {% set subtype_options = available_securities | map(attribute='Security Sub Type') | unique | list | sort %}
-                                {% for subtype in subtype_options %}
-                                    <option value="{{ subtype }}">{{ subtype }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div>
-                            <select id="filter-country" class="block w-full pl-2 pr-8 py-1 text-xs border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
-                                <option value="">Country: All</option>
-                                {% set country_options = available_securities | map(attribute='Country Of Risk') | unique | list | sort %}
-                                {% for country in country_options %}
-                                    <option value="{{ country }}">{{ country }}</option>
-                                {% endfor %}
-                            </select>
+                    <label for="security-search-input" class="block text-sm font-medium text-gray-700">Search & Select Security:</label>
+                    <div class="relative">
+                        <input type="text" id="security-search-input" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-secondary focus:border-secondary" placeholder="Search securities (ISIN, Name, Currency)..." autocomplete="off">
+                        <!-- Search Results Dropdown -->
+                        <div id="exclusion-search-results" class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-y-auto z-50 hidden">
+                            <!-- Search results will be populated here -->
                         </div>
                     </div>
-                </div>
-
-                <div>
-                    <label for="security-search-input" class="block text-sm font-medium text-gray-700">Search & Select Security:</label>
-                    <input type="text" id="security-search-input" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-secondary focus:border-secondary mb-2" placeholder="Type ISIN or Name to filter...">
-                    <select class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="security-select" name="security_id" required>
-                        <option value="" disabled selected>Select a Security</option>
-                        {% for sec in available_securities %}
-                            <option value="{{ sec.ISIN }}" data-ccy="{{ sec.CCY }}" data-subtype="{{ sec['Security Sub Type'] }}" data-country="{{ sec['Country Of Risk'] }}" data-distressed="{{ sec['Is Distressed'] if 'Is Distressed' in sec else '' }}">
-                                {{ sec.ISIN }} - {{ sec['Security Name'] }}{% if sec['Is Distressed'] == 'TRUE' %} (Distressed){% endif %}
-                            </option>
-                        {% endfor %}
-                    </select>
+                    <!-- Hidden field to store selected security ID -->
+                    <input type="hidden" id="selected-security-id" name="security_id" required>
+                    <div id="selected-security-display" class="mt-2 p-2 bg-gray-50 rounded-md text-sm hidden">
+                        <span class="font-medium">Selected:</span> <span id="selected-security-text"></span>
+                        <button type="button" id="clear-selection" class="ml-2 text-red-600 hover:text-red-800">Clear</button>
+                    </div>
                 </div>
                 
                 <div>
@@ -137,8 +111,8 @@
                     </select>
                 </div>
                 <div>
-                    <label for="comment" class="block text-sm font-medium text-gray-700">Comment (Required):</label>
-                    <textarea class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="comment" name="comment" rows="4" required></textarea>
+                    <label for="reason" class="block text-sm font-medium text-gray-700">Reason (Required):</label>
+                    <textarea class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" id="reason" name="reason" rows="4" required></textarea>
                 </div>
                 
                 <div>
@@ -156,52 +130,148 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('security-search-input');
-    const select = document.getElementById('security-select');
-    const filterCCY = document.getElementById('filter-ccy');
-    const filterSubtype = document.getElementById('filter-subtype');
-    const filterCountry = document.getElementById('filter-country');
-
-    const allOptions = Array.from(select.options).filter(opt => opt.value !== "");
-
-    function applyFilters() {
-        const search = searchInput.value.trim().toLowerCase();
-        const ccy = filterCCY.value;
-        const subtype = filterSubtype.value;
-        const country = filterCountry.value;
-        let visibleCount = 0;
-        let firstVisibleValue = null;
-
-        allOptions.forEach(opt => {
-            let show = true;
-            if (ccy && opt.getAttribute('data-ccy') !== ccy) show = false;
-            if (show && subtype && opt.getAttribute('data-subtype') !== subtype) show = false;
-            if (show && country && opt.getAttribute('data-country') !== country) show = false;
-            if (show && search) {
-                const text = opt.textContent.toLowerCase();
-                if (!text.includes(search)) show = false;
+    const searchResults = document.getElementById('exclusion-search-results');
+    const selectedSecurityId = document.getElementById('selected-security-id');
+    const selectedSecurityDisplay = document.getElementById('selected-security-display');
+    const selectedSecurityText = document.getElementById('selected-security-text');
+    const clearSelectionBtn = document.getElementById('clear-selection');
+    let searchTimeout;
+    
+    if (searchInput && searchResults) {
+        searchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            
+            // Clear previous timeout
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
             }
             
-            opt.style.display = show ? '' : 'none';
-            if (show) {
-                visibleCount++;
-                if (firstVisibleValue === null) {
-                    firstVisibleValue = opt.value;
-                }
+            // Hide results if query is too short
+            if (query.length < 2) {
+                searchResults.classList.add('hidden');
+                return;
+            }
+            
+            // Debounce search requests
+            searchTimeout = setTimeout(() => {
+                performExclusionSearch(query);
+            }, 300);
+        });
+        
+        // Hide results when clicking outside
+        document.addEventListener('click', function(event) {
+            if (!searchInput.contains(event.target) && !searchResults.contains(event.target)) {
+                searchResults.classList.add('hidden');
             }
         });
-
-        const selectedOption = select.options[select.selectedIndex];
-        if (visibleCount === 0 || (selectedOption && selectedOption.style.display === 'none')) {
-            select.value = "";
-        }
+        
+        // Handle keyboard navigation
+        searchInput.addEventListener('keydown', function(event) {
+            const items = searchResults.querySelectorAll('.search-result-item');
+            const activeItem = searchResults.querySelector('.search-result-item.active');
+            let activeIndex = -1;
+            
+            if (activeItem) {
+                activeIndex = Array.from(items).indexOf(activeItem);
+            }
+            
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                if (activeIndex < items.length - 1) {
+                    if (activeItem) activeItem.classList.remove('active');
+                    items[activeIndex + 1].classList.add('active');
+                }
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                if (activeIndex > 0) {
+                    if (activeItem) activeItem.classList.remove('active');
+                    items[activeIndex - 1].classList.add('active');
+                }
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                if (activeItem) {
+                    activeItem.click();
+                }
+            } else if (event.key === 'Escape') {
+                searchResults.classList.add('hidden');
+            }
+        });
+        
+        // Clear selection handler
+        clearSelectionBtn.addEventListener('click', function() {
+            selectedSecurityId.value = '';
+            selectedSecurityDisplay.classList.add('hidden');
+            searchInput.value = '';
+            searchResults.classList.add('hidden');
+        });
     }
-
-    searchInput.addEventListener('input', applyFilters);
-    filterCCY.addEventListener('change', applyFilters);
-    filterSubtype.addEventListener('change', applyFilters);
-    filterCountry.addEventListener('change', applyFilters);
-
-    applyFilters();
+    
+    function performExclusionSearch(query) {
+        fetch('/api/search-securities', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query: query })
+        })
+        .then(response => response.json())
+        .then(data => {
+            displayExclusionSearchResults(data.results || []);
+        })
+        .catch(error => {
+            console.error('Search error:', error);
+            searchResults.classList.add('hidden');
+        });
+    }
+    
+    function displayExclusionSearchResults(results) {
+        if (results.length === 0) {
+            searchResults.innerHTML = '<div class="px-4 py-2 text-gray-500">No securities found</div>';
+            searchResults.classList.remove('hidden');
+            return;
+        }
+        
+        const html = results.map(result => `
+            <div class="search-result-item px-4 py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors" 
+                 onclick="selectSecurity('${result.isin}', '${result.security_name}', '${result.currency}')"
+                 data-isin="${result.isin}">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-900">${result.security_name}</div>
+                        <div class="text-sm text-gray-600">
+                            <span class="font-mono bg-gray-100 px-1 rounded">${result.isin}</span>
+                            <span class="ml-2">${result.currency}</span>
+                            ${result.ticker ? `<span class="ml-2 text-blue-600">${result.ticker}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        ${result.security_sub_type || ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        searchResults.innerHTML = html;
+        searchResults.classList.remove('hidden');
+    }
+    
+    // Global function to select security
+    window.selectSecurity = function(isin, name, currency) {
+        selectedSecurityId.value = isin;
+        selectedSecurityText.textContent = `${name} (${isin}) - ${currency}`;
+        selectedSecurityDisplay.classList.remove('hidden');
+        searchResults.classList.add('hidden');
+        searchInput.value = '';
+    };
+    
+    // Set default end date to 1 month from now
+    const endDateInput = document.getElementById('end_date');
+    if (endDateInput) {
+        const today = new Date();
+        const oneMonthFromNow = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        const formattedDate = oneMonthFromNow.toISOString().split('T')[0];
+        endDateInput.value = formattedDate;
+    }
 });
 </script>
 {% endblock %} 

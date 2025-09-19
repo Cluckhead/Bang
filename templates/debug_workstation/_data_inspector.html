@@ -1,0 +1,100 @@
+<!-- Raw Data Inspector Panel Component -->
+<div class="bg-white rounded-lg shadow-lg p-6 panel-transition min-h-96">
+  <h2 class="text-lg font-semibold text-gray-900 mb-4">Raw Data Inspector</h2>
+  
+  <!-- Data Tabs -->
+  <div class="border-b border-gray-200 mb-4">
+    <nav class="-mb-px flex space-x-8">
+      <button class="data-tab py-2 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600" 
+              data-tab="market">
+        Market Data
+      </button>
+      <button class="data-tab py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700" 
+              data-tab="calculations">
+        Calculations
+      </button>
+      <button class="data-tab py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700" 
+              data-tab="vendor">
+        Vendor Analytics
+      </button>
+    </nav>
+  </div>
+  
+  <!-- Market Data Tab -->
+  <div id="market-data-tab" class="data-tab-content">
+    <div class="space-y-3">
+      <div class="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <span class="font-medium text-gray-700">Clean Price:</span>
+          <span id="market-clean-price" class="ml-2 font-mono">-</span>
+        </div>
+        <div>
+          <span class="font-medium text-gray-700">Accrued Interest:</span>
+          <span id="market-accrued" class="ml-2 font-mono">-</span>
+        </div>
+        <div>
+          <span class="font-medium text-gray-700">Dirty Price:</span>
+          <span id="market-dirty-price" class="ml-2 font-mono">-</span>
+        </div>
+        <div>
+          <span class="font-medium text-gray-700">Coupon Rate:</span>
+          <span id="market-coupon-rate" class="ml-2 font-mono">-</span>
+        </div>
+      </div>
+      
+      <!-- Raw Data Table -->
+      <div class="overflow-x-auto">
+        <table id="market-data-table" class="min-w-full text-xs border border-gray-300">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-2 py-1 border-b text-left">Field</th>
+              <th class="px-2 py-1 border-b text-left">Value</th>
+              <th class="px-2 py-1 border-b text-left">Source</th>
+            </tr>
+          </thead>
+          <tbody id="market-data-tbody">
+            <!-- Market data will be populated here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Calculations Tab -->
+  <div id="calculations-data-tab" class="data-tab-content hidden">
+    <div class="overflow-x-auto">
+      <table id="calculations-table" class="min-w-full text-xs border border-gray-300">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-2 py-1 border-b text-left">Metric</th>
+            <th class="px-2 py-1 border-b text-right">Our Value</th>
+            <th class="px-2 py-1 border-b text-right">Vendor Value</th>
+            <th class="px-2 py-1 border-b text-right">Difference</th>
+          </tr>
+        </thead>
+        <tbody id="calculations-tbody">
+          <!-- Calculation results will be populated here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Vendor Analytics Tab -->
+  <div id="vendor-data-tab" class="data-tab-content hidden">
+    <div class="overflow-x-auto">
+      <table id="vendor-table" class="min-w-full text-xs border border-gray-300">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-2 py-1 border-b text-left">Analytic</th>
+            <th class="px-2 py-1 border-b text-right">Value</th>
+            <th class="px-2 py-1 border-b text-left">Units</th>
+            <th class="px-2 py-1 border-b text-left">Source</th>
+          </tr>
+        </thead>
+        <tbody id="vendor-tbody">
+          <!-- Vendor analytics will be populated here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

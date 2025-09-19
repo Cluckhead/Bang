@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ metric_name }} Check{% endblock %}
+{% block title %}{{ metric_display_name }} Check{% endblock %}
 
 {# Pass initial state to JS via meta tags or data attributes if needed,
    or preferably include in the chartData JSON #}
@@ -8,10 +8,12 @@
 <meta name="secondary-data-available" content="{{ secondary_data_initially_available | lower }}">
 
 {% block content %}
+{% set template_key = 'metric_page_js' %}
+{% include "_help_link.html" %}
 <div class="space-y-6">
     {# Header #}
     <div>
-        <h1 class="text-3xl font-bold font-merriweather-sans text-gray-800 mb-1">{{ metric_name }} Check</h1>
+        <h1 class="text-3xl font-bold font-merriweather-sans text-gray-800 mb-1">{{ metric_display_name }} Check</h1>
         <p class="text-sm text-gray-500">Latest Data Date: <strong class="font-semibold">{{ latest_date }}</strong></p>
     </div>
 
@@ -77,6 +79,7 @@
     {# Data for JavaScript #}
     <script type="application/json" id="chartData">
         {{ charts_data_json | safe }}
+        {# Labels in payload are business days only (weekends and UK bank holidays removed) #}
     </script>
 
     {# Area for JS to render charts and tables (4.3.1, 4.3.2) #}

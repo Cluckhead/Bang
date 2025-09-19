@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import math
 
-from data_loader import load_simple_csv  # Re-use existing helper
+from core.data_loader import load_simple_csv  # Re-use existing helper
 
 # Re-declare make_json_safe locally to avoid circular imports with metric_views.py
 

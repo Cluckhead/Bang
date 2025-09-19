@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+
+{% block title %}File Delivery Monitor{% endblock %}
+
+{% block content %}
+{% set template_key = 'file_delivery_dashboard' %}
+{% include "_help_link.html" %}
+<div class="p-4">
+    <h1 class="text-2xl font-bold font-heading mb-1">File Delivery Monitor</h1>
+    <p class="text-sm text-gray-600 mb-4">Latest status of configured file deliveries. Click a row for 30-day history.</p>
+
+    <div class="overflow-x-auto bg-white shadow-sm rounded-lg border border-gray-200">
+        <table class="min-w-full text-sm divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left font-semibold">File Group</th>
+                    <th class="px-4 py-2 text-left font-semibold">Latest File</th>
+                    <th class="px-4 py-2 text-right font-semibold">Rows</th>
+                    <th class="px-4 py-2 text-right font-semibold">Δ Rows</th>
+                    <th class="px-4 py-2 text-center font-semibold">Headers Changed?</th>
+                    <th class="px-4 py-2 text-right font-semibold">Completeness %</th>
+                    <th class="px-4 py-2 text-right font-semibold">Δ Complete %</th>
+                    <th class="px-4 py-2 text-center font-semibold">History</th>
+                    <th class="px-4 py-2 text-center font-semibold">Columns</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for item in summary_data %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 whitespace-nowrap">{{ item.display_name }}</td>
+                    <td class="px-4 py-2 whitespace-nowrap">{{ item.latest_file or '-' }}</td>
+                    <td class="px-4 py-2 text-right">{{ item.latest_rows or '-' }}</td>
+                    <td class="px-4 py-2 text-right {% if item.delta_rows and item.delta_rows != 0 %}text-secondary-700{% endif %}">
+                        {% if item.delta_rows is not none %}{{ item.delta_rows }}{% else %}-{% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if item.header_changed %}
+                            <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-danger-100 text-danger-800">Yes</span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-success-100 text-success-800">No</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-right">{{ item.completeness_pct }}%</td>
+                    <td class="px-4 py-2 text-right {% if item.delta_completeness and item.delta_completeness != 0 %}text-secondary-700{% endif %}">
+                        {% if item.delta_completeness is not none %}{{ item.delta_completeness }}%{% else %}-{% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if item.status == 'missing' %}
+                            —
+                        {% else %}
+                            <button data-monitor="{{ item.monitor }}" class="history-btn inline-flex items-center px-2 py-1 text-xs font-medium bg-primary text-white rounded hover:bg-primary-dark">View</button>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if item.status == 'missing' %}
+                            —
+                        {% else %}
+                            <button data-monitor="{{ item.monitor }}" class="columns-btn inline-flex items-center px-2 py-1 text-xs font-medium bg-secondary text-white rounded hover:bg-secondary-dark">Columns</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal placeholder -->
+<div id="historyModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+    <div class="bg-white rounded-lg shadow-lg w-full max-w-3xl">
+        <div class="px-4 py-2 border-b flex justify-between items-center">
+            <h3 class="font-semibold" id="modalTitle">History</h3>
+            <button id="closeModal" class="text-gray-600 hover:text-gray-800">&times;</button>
+        </div>
+        <div class="p-4" id="modalBody">
+            <canvas id="historyChart" width="600" height="300"></canvas>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.querySelectorAll('.history-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const monitor = btn.getAttribute('data-monitor');
+            fetch(`/filedelivery/history/${monitor}`)
+                .then(r => r.json())
+                .then(json => {
+                    if(json.status === 'ok') {
+                        openModal(monitor, json.data);
+                    } else {
+                        alert('No history data');
+                    }
+                })
+                .catch(err => alert(err));
+        });
+    });
+
+    const modal = document.getElementById('historyModal');
+    function closeModal() {
+        // Destroy chart before hiding modal to prevent memory leaks
+        if(window.historyChart && typeof window.historyChart.destroy === 'function') {
+            window.historyChart.destroy();
+            window.historyChart = null;
+        }
+        modal.classList.add('hidden');
+    }
+
+    document.getElementById('closeModal').addEventListener('click', closeModal);
+    
+    // Close modal when clicking outside of it
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+
+    function openModal(monitor, data) {
+        modal.classList.remove('hidden');
+        document.getElementById('modalTitle').innerText = monitor + ' – 30 day history';
+        
+        // Delay chart creation to ensure modal is fully rendered
+        setTimeout(() => {
+            const ctx = document.getElementById('historyChart').getContext('2d');
+            const labels = data.map(d => d.processed_ts);
+            const rows = data.map(d => Number(d.rows));
+            const completeness = data.map(d => Number(d.completeness_pct));
+            if(window.historyChart && typeof window.historyChart.destroy === 'function') {
+                window.historyChart.destroy();
+            }
+            window.historyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Rows',
+                        data: rows,
+                        borderColor: '#2563EB',
+                        tension: 0.1,
+                        yAxisID: 'y',
+                    }, {
+                        label: 'Completeness %',
+                        data: completeness,
+                        borderColor: '#22C55E',
+                        tension: 0.1,
+                        yAxisID: 'y1',
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { color: '#333333' } },
+                        tooltip: { 
+                            mode: 'index', 
+                            intersect: false,
+                            backgroundColor: '#FFFFFF',
+                            titleColor: '#333333',
+                            bodyColor: '#333333',
+                            borderColor: '#E34A33',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            display: true, 
+                            title: { display: true, text: 'Processed', color: '#666666' },
+                            ticks: { color: '#666666' },
+                            grid: { color: '#E5E5E5' }
+                        },
+                        y: { 
+                            display: true, 
+                            title: { display: true, text: 'Rows', color: '#666666' },
+                            ticks: { color: '#666666' },
+                            grid: { color: '#E5E5E5' }
+                        },
+                        y1: { 
+                            display: true, 
+                            position: 'right', 
+                            title: { display: true, text: 'Completeness %', color: '#666666' }, 
+                            min: 0, 
+                            max: 100,
+                            ticks: { color: '#666666' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }, 100);
+    }
+
+    // Columns button
+    document.querySelectorAll('.columns-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const monitor = btn.getAttribute('data-monitor');
+            fetch(`/filedelivery/columns/${monitor}`)
+                .then(r => r.json())
+                .then(json => {
+                    if(json.status === 'ok') {
+                        openColumnsModal(monitor, json.data);
+                    } else {
+                        alert('No column data');
+                    }
+                })
+                .catch(err => alert(err));
+        });
+    });
+
+    function openColumnsModal(monitor, rows) {
+        modal.classList.remove('hidden');
+        document.getElementById('modalTitle').innerText = monitor + ' – Column Completeness Δ';
+        const body = document.getElementById('modalBody');
+        // build table
+        let html = `<div class=\"overflow-y-auto max-h-96\"><table class=\"min-w-full text-xs\"><thead><tr><th class=\"px-2 py-1 text-left\">Column</th><th class=\"px-2 py-1 text-right\">Latest %</th><th class=\"px-2 py-1 text-right\">Prev %</th><th class=\"px-2 py-1 text-right\">Identical %</th></tr></thead><tbody>`;
+        rows.forEach(r => {
+            const highlight = r.delta !== null && Math.abs(r.delta) >= 5;
+            const latestClass = highlight ? 'text-danger-700 font-semibold' : '';
+            html += `<tr><td class=\"px-2 py-1 break-all\">${r.column}</td><td class=\"px-2 py-1 text-right ${latestClass}\">${r.latest ?? '-'}%</td><td class=\"px-2 py-1 text-right\">${r.prev ?? '-'}%</td><td class=\"px-2 py-1 text-right\">${r.identical_pct ?? '-'}%</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        body.innerHTML = html;
+    }
+</script>
+{% endblock %} 

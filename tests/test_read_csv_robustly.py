@@ -4,7 +4,7 @@
 import pandas as pd
 import pytest
 
-from data_utils import read_csv_robustly
+from core.data_utils import read_csv_robustly
 
 
 def test_read_csv_robustly_happy_path(tmp_path):

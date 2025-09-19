@@ -23,16 +23,16 @@ import pandas as pd
 import numpy as np
 import traceback
 import math
-import config
+from core import config
 
 # Import necessary functions/constants from other modules
-from config import COLOR_PALETTE
+from core.config import COLOR_PALETTE
 
 # Make sure load_and_process_data and other loaders can handle security-level data if needed
-from data_loader import load_and_process_data, LoadResult, load_simple_csv
-from metric_calculator import calculate_latest_metrics
-from preprocessing import read_and_sort_dates
-from utils import get_data_folder_path, load_fund_groups
+from core.data_loader import load_and_process_data, LoadResult, load_simple_csv
+from analytics.metric_calculator import calculate_latest_metrics
+from data_processing.preprocessing import read_and_sort_dates
+from core.utils import get_data_folder_path, load_fund_groups, filter_business_dates
 
 # Define the blueprint for metric routes, using '/metric' as the URL prefix
 metric_bp = Blueprint("metric", __name__, url_prefix="/metric")
@@ -63,8 +63,18 @@ def make_json_safe(obj):
 def metric_page(metric_name):
     """Renders the detailed page (`metric_page_js.html`) for a specific metric. X-axis always uses Dates.csv.
     Adds support for filtering by fund group (from FundGroups.csv)."""
-    primary_filename = f"ts_{metric_name}.csv"
-    secondary_filename = f"sp_{primary_filename}"
+    
+    # Get metric config from the mapping
+    metric_key = metric_name.replace(' ', '_').replace('-', '_').lower()
+    metric_cfg = config.METRIC_FILE_MAP.get(metric_key)
+    if not metric_cfg:
+        current_app.logger.error(f"Metric '{metric_name}' not found in config mapping.")
+        return f"Metric '{metric_name}' not found in config.", 404
+    
+    # Use the config mapping to get the correct file names
+    primary_filename = metric_cfg["ts_file"]
+    secondary_filename = metric_cfg["sp_ts_file"]
+    
     fund_code = "N/A"  # Default for logging fallback in case of early error
     latest_date_overall = pd.Timestamp.min  # Initialize
     error_message = None  # Initialize error message
@@ -171,6 +181,7 @@ def metric_page(metric_name):
                     render_template(
                         "metric_page_js.html",
                         metric_name=metric_name,
+                        metric_display_name=metric_cfg["display_name"],  # Pass the display name from config
                         charts_data_json="{}",  # Empty data
                         latest_date="N/A",
                         missing_funds=pd.DataFrame(),  # Empty dataframe
@@ -205,6 +216,7 @@ def metric_page(metric_name):
                     render_template(
                         "metric_page_js.html",
                         metric_name=metric_name,
+                        metric_display_name=metric_cfg["display_name"],  # Pass the display name from config
                         charts_data_json="{}",
                         latest_date="N/A",
                         missing_funds=pd.DataFrame(),
@@ -227,6 +239,7 @@ def metric_page(metric_name):
                 render_template(
                     "metric_page_js.html",
                     metric_name=metric_name,
+                    metric_display_name=metric_cfg["display_name"],  # Pass the display name from config
                     charts_data_json="{}",
                     latest_date="N/A",
                     missing_funds=pd.DataFrame(),
@@ -252,6 +265,7 @@ def metric_page(metric_name):
                 render_template(
                     "metric_page_js.html",
                     metric_name=metric_name,
+                    metric_display_name=metric_cfg["display_name"],  # Pass the display name from config
                     charts_data_json="{}",
                     latest_date="N/A",
                     missing_funds=pd.DataFrame(),
@@ -266,14 +280,18 @@ def metric_page(metric_name):
 
         # --- Calculate Latest Date Overall ---
         try:
-            # Combine indices only from non-empty DataFrames that exist
-            combined_index = pd.concat([df.index for df in all_dfs_for_meta])
-            latest_date_overall = combined_index.get_level_values(0).max()
-            latest_date_str = (
-                latest_date_overall.strftime("%Y-%m-%d")
-                if pd.notna(latest_date_overall)
-                else "N/A"
-            )
+            # Combine DataFrames to get overall latest date - fix for MultiIndex concatenation error
+            if all_dfs_for_meta:
+                combined_df = pd.concat(all_dfs_for_meta, ignore_index=False)
+                latest_date_overall = combined_df.index.get_level_values(0).max()
+                latest_date_str = (
+                    latest_date_overall.strftime("%Y-%m-%d")
+                    if pd.notna(latest_date_overall)
+                    else "N/A"
+                )
+            else:
+                latest_date_overall = pd.Timestamp.min
+                latest_date_str = "N/A"
         except Exception as idx_err:
             current_app.logger.error(
                 f"Error combining indices or getting latest date for {metric_name}: {idx_err}"
@@ -360,6 +378,7 @@ def metric_page(metric_name):
             return render_template(
                 "metric_page_js.html",
                 metric_name=metric_name,
+                metric_display_name=metric_cfg["display_name"],  # Pass the display name from config
                 charts_data_json=jsonify(json_payload).get_data(as_text=True),
                 latest_date=(
                     latest_date_overall.strftime("%d/%m/%Y")
@@ -432,16 +451,16 @@ def metric_page(metric_name):
         data_folder = current_app.config["DATA_FOLDER"]
         dates_file_path = os.path.join(data_folder, "Dates.csv")
         full_date_list = read_and_sort_dates(dates_file_path) or []
-        full_date_list_dt = pd.to_datetime(
-            full_date_list, errors="coerce"
-        ).dropna()  # Convert to datetime for reindexing
+        # Filter to business days (Mon-Fri) and exclude UK bank holidays from holidays.csv
+        full_date_list = filter_business_dates(full_date_list, data_folder)
+        full_date_list_dt = pd.to_datetime(full_date_list, errors="coerce").dropna()
 
         for fund_code in fund_codes_in_metrics:
             fund_latest_metrics_row = latest_metrics.loc[fund_code]
             is_missing_latest = fund_code in missing_latest.index
             fund_charts = []  # Initialize list to hold chart configs for this fund
 
-            primary_labels = full_date_list  # Use original string dates for labels
+            primary_labels = full_date_list  # Already filtered business dates
             primary_dt_index = full_date_list_dt  # Use datetime for reindexing
             fund_hist_primary = None
             relative_primary_hist = None
@@ -702,7 +721,7 @@ def metric_page(metric_name):
                 main_chart_config = {
                     "chart_type": "main",
                     "title": f"{fund_code} - {metric_name}",
-                    "labels": primary_labels,
+                    "labels": primary_labels,  # Business-day filtered
                     "datasets": main_datasets,  # Already JSON safe from above
                     "latest_metrics": make_json_safe(
                         fund_latest_metrics_row.to_dict()
@@ -759,6 +778,7 @@ def metric_page(metric_name):
         return render_template(
             "metric_page_js.html",
             metric_name=metric_name,
+            metric_display_name=metric_cfg["display_name"],  # Pass the display name from config
             charts_data_json=jsonify(json_payload).get_data(
                 as_text=True
             ),  # jsonify handles final conversion
@@ -800,6 +820,7 @@ def metric_page(metric_name):
             render_template(
                 "metric_page_js.html",
                 metric_name=metric_name,
+                metric_display_name=metric_name.replace('_', ' ').title(),  # Fallback display name
                 charts_data_json="{}",
                 latest_date="N/A",
                 missing_funds=pd.DataFrame(),
@@ -834,6 +855,7 @@ def metric_page(metric_name):
             render_template(
                 "metric_page_js.html",
                 metric_name=metric_name,
+                metric_display_name=metric_name.replace('_', ' ').title(),  # Fallback display name
                 charts_data_json="{}",
                 latest_date="N/A",
                 missing_funds=pd.DataFrame(),

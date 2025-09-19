@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+{% block title %}KRD vs Duration Historical Chart - {{ isin }}{% endblock %}
+
+{% block content %}
+{% set template_key = 'krd_historical_chart' %}
+{% include "_help_link.html" %}
+<div class="p-4">
+  <div class="mb-4">
+    <nav class="flex items-center space-x-2 text-sm text-gray-600">
+      <a href="{{ url_for('krd_bp.krd_comparison', sp='1' if sp else '0') }}" class="hover:text-primary">KRD Comparison</a>
+      <span>›</span>
+      <span class="font-medium">{{ isin }}</span>
+    </nav>
+  </div>
+
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div class="mb-6">
+      <div class="flex justify-between items-start mb-4">
+        <div>
+          <h2 class="text-2xl font-bold font-heading mb-2">KRD vs Duration Historical Analysis</h2>
+          <div class="text-gray-600">
+            <p class="mb-1"><strong>ISIN:</strong> <a href="{{ url_for('security.security_details', metric_name='Duration', security_id=isin) }}" class="text-primary hover:underline">{{ isin }}</a></p>
+            <p class="mb-1"><strong>Security:</strong> {{ security_name }}</p>
+            <p class="text-sm text-gray-500">Chart shows historical KRD sum vs Duration values</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <label class="flex items-center space-x-2">
+            <input type="checkbox" id="spToggle" class="h-4 w-4 text-primary border-gray-300 rounded" checked>
+            <span class="text-sm font-medium text-gray-700">Show S&P Overlay</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-6">
+      <canvas id="krdHistoricalChart" width="800" height="400"></canvas>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div class="bg-blue-50 p-3 rounded">
+        <div class="flex items-center">
+          <div class="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+          <span class="font-medium">Portfolio KRD Sum</span>
+        </div>
+        <p class="text-gray-600 text-xs mt-1">Sum of all Key Rate Durations (Portfolio)</p>
+      </div>
+      <div class="bg-green-50 p-3 rounded">
+        <div class="flex items-center">
+          <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+          <span class="font-medium">Portfolio Duration</span>
+        </div>
+        <p class="text-gray-600 text-xs mt-1">Security effective duration (Portfolio)</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    window.portfolioData = {{ portfolio_data | tojson | safe }};
+    window.spData = {{ sp_data | tojson | safe }};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('krdHistoricalChart').getContext('2d');
+    const portfolioData = window.portfolioData;
+    const spData = window.spData;
+    
+    // Process data for Chart.js
+    const portfolioLabels = portfolioData.map(row => row.Date);
+    const portfolioKrdSums = portfolioData.map(row => row.bucket_sum);
+    const portfolioDurations = portfolioData.map(row => row.duration);
+    
+    const spLabels = spData.map(row => row.Date);
+    const spKrdSums = spData.map(row => row.bucket_sum);
+    const spDurations = spData.map(row => row.duration);
+    
+    // Create datasets
+    const datasets = [
+        {
+            label: 'Portfolio KRD Sum',
+            data: portfolioKrdSums,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.1,
+            pointRadius: 2,
+            spanGaps: true
+        },
+        {
+            label: 'Portfolio Duration',
+            data: portfolioDurations,
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            tension: 0.1,
+            pointRadius: 2,
+            spanGaps: true
+        },
+        {
+            label: 'S&P KRD Sum',
+            data: spKrdSums,
+            borderColor: 'rgb(147, 51, 234)',
+            backgroundColor: 'rgba(147, 51, 234, 0.1)',
+            tension: 0.1,
+            pointRadius: 2,
+            borderDash: [5, 5],
+            spanGaps: true
+        },
+        {
+            label: 'S&P Duration',
+            data: spDurations,
+            borderColor: 'rgb(245, 101, 101)',
+            backgroundColor: 'rgba(245, 101, 101, 0.1)',
+            tension: 0.1,
+            pointRadius: 2,
+            borderDash: [5, 5],
+            spanGaps: true
+        }
+    ];
+    
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: portfolioLabels, // Use portfolio labels as primary
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'KRD vs Duration Analysis - {{ isin }}',
+                    font: {
+                        size: 16
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y.toFixed(4);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    },
+                    ticks: {
+                        maxTicksLimit: 10
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'KRD Sum / Duration'
+                    },
+                    grid: {
+                        drawOnChartArea: true
+                    }
+                }
+            }
+        }
+    });
+    
+    // Toggle S&P data visibility
+    document.getElementById('spToggle').addEventListener('change', function() {
+        const showSP = this.checked;
+        
+        // Toggle S&P datasets (indices 2 and 3)
+        chart.data.datasets[2].hidden = !showSP;
+        chart.data.datasets[3].hidden = !showSP;
+        chart.update();
+    });
+});
+</script>
+{% endblock %} 

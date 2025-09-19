@@ -1,0 +1,927 @@
+{% extends "base.html" %}
+
+{% block title %}Application Settings{% endblock %}
+
+{% block content %}
+{% set template_key = 'settings_page' %}
+{% include "_help_link.html" %}
+<div class="max-w-7xl mx-auto space-y-6">
+    <!-- Header with Save Button -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
+        <div>
+            <h1 class="text-3xl font-bold font-merriweather-sans text-gray-900 tracking-tight">Application Settings</h1>
+            <p class="mt-1 text-sm text-gray-600">Configure application behavior, data sources, and UI mappings.</p>
+        </div>
+        <button id="save-settings-btn" type="button" class="inline-flex items-center justify-center px-5 py-2.5 bg-primary text-white rounded-lg shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+            <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Save Settings
+        </button>
+    </div>
+
+    <!-- Alert Messages -->
+    <div id="alert-container" class="fixed top-[90px] right-6 z-50 space-y-3"></div>
+
+    <!-- Tabs -->
+    <div class="mt-2">
+        <div role="tablist" aria-label="Settings Tabs" class="border-b border-gray-200 -mb-px flex flex-wrap gap-2">
+            <button type="button" id="tab-btn-general" data-tab="general" class="tab-btn inline-flex items-center px-4 py-2 text-sm font-medium border-b-2 border-primary text-primary">
+                General
+            </button>
+            <button type="button" id="tab-btn-data" data-tab="data" class="tab-btn inline-flex items-center px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300">
+                Data
+            </button>
+            <button type="button" id="tab-btn-attribution" data-tab="attribution" class="tab-btn inline-flex items-center px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300">
+                Attribution
+            </button>
+            <button type="button" id="tab-btn-parsing" data-tab="parsing" class="tab-btn inline-flex items-center px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300">
+                Parsing
+            </button>
+            <button type="button" id="tab-btn-comparison" data-tab="comparison" class="tab-btn inline-flex items-center px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300">
+                Comparison
+            </button>
+            <button type="button" id="tab-btn-thresholds" data-tab="thresholds" class="tab-btn inline-flex items-center px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300">
+                Thresholds
+            </button>
+            <button type="button" id="tab-btn-changes" data-tab="changes" class="tab-btn inline-flex items-center px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300">
+                Changes
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Form -->
+    <form id="settings-form" class="space-y-6">
+        <!-- TAB: GENERAL -->
+        <section data-tab-panel="general" class="tab-panel space-y-5">
+        <!-- Help Pages Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('template-help')">
+                <div class="flex items-center">
+                    <svg id="template-help-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Confluence Help Links (per template)</h2>
+                </div>
+                <span class="text-xs text-gray-500">Optional</span>
+            </div>
+            <div id="template-help-content" class="space-y-4 px-4 py-4">
+                <p class="text-sm text-gray-600">Add a Confluence URL for each page template. A "Help" link will appear on those pages.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for tmpl in template_names %}
+                    <div class="border border-gray-200 rounded-lg p-3 bg-white">
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Template</label>
+                        <div class="text-sm font-medium text-gray-800 mb-2">{{ tmpl }}.html</div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Help URL</label>
+                        <input type="url" name="template_help_urls.{{ tmpl }}" value="{{ settings.template_help_urls.get(tmpl) or '' }}"
+                               placeholder="https://your-confluence-space/page"
+                               class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <!-- App Config Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('app-config')">
+                <div class="flex items-center">
+                    <svg id="app-config-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Application Configuration</h2>
+                </div>
+            </div>
+            <div id="app-config-content" class="space-y-4 px-4 py-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Data Folder Path</label>
+                        <input type="text" name="app_config.data_folder" value="{{ settings.app_config.data_folder }}" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        <p class="text-xs text-gray-500 mt-1">Path to the data folder</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Timing Log Retention (hours)</label>
+                        <input type="number" name="app_config.api_timing_log_retention_hours" value="{{ settings.app_config.api_timing_log_retention_hours }}" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        <p class="text-xs text-gray-500 mt-1">Hours to retain timing logs</p>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" name="app_config.api_timing_enabled" id="api-timing-enabled" 
+                           {% if settings.app_config.api_timing_enabled %}checked{% endif %}
+                           class="h-4 w-4 text-secondary focus:ring-secondary border-gray-300 rounded">
+                    <label for="api-timing-enabled" class="ml-2 block text-sm text-gray-700">Enable API Timing Logging</label>
+                </div>
+            </div>
+        </div>
+        </section>
+
+        <!-- TAB: DATA -->
+        <section data-tab-panel="data" class="tab-panel space-y-5 hidden">
+        <!-- Spread Files Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('spread-files')">
+                <div class="flex items-center">
+                    <svg id="spread-files-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Spread Files Configuration</h2>
+                </div>
+                <span class="text-xs text-gray-500">Timeseries and security mappings</span>
+            </div>
+            <div id="spread-files-content" class="space-y-4 px-4 py-4">
+                <div id="spread-files-list" class="space-y-3">
+                    {% for file in settings.spread_files.spread_files %}
+                    <div class="spread-file-item border border-gray-200 rounded-lg p-3 bg-white" data-index="{{ loop.index0 }}">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">File Name</label>
+                                <input type="text" name="spread_files.spread_files[{{ loop.index0 }}].file" value="{{ file.file }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Label</label>
+                                <input type="text" name="spread_files.spread_files[{{ loop.index0 }}].label" value="{{ file.label }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Color</label>
+                                <input type="color" name="spread_files.spread_files[{{ loop.index0 }}].color" value="{{ file.color }}" 
+                                       class="h-9 w-full border border-gray-300 rounded-md">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Description</label>
+                                <input type="text" name="spread_files.spread_files[{{ loop.index0 }}].description" value="{{ file.description }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                        </div>
+                        <button type="button" onclick="removeSpreadFile(this.dataset.index)" data-index="{{ loop.index0 }}" class="mt-2 text-xs text-red-600 hover:text-red-800">Remove</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" onclick="addSpreadFile()" class="mt-2 inline-flex items-center px-3 py-1.5 text-sm bg-secondary text-white rounded-md hover:bg-secondary-dark">
+                    Add Spread File
+                </button>
+            </div>
+        </div>
+ 
+        <!-- Metric File Map Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('metric-map')">
+                <div class="flex items-center">
+                    <svg id="metric-map-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Metric File Mappings</h2>
+                </div>
+            </div>
+            <div id="metric-map-content" class="space-y-4 px-4 py-4">
+                {% for metric_key, metric in settings.metric_file_map.metrics.items() %}
+                <div class="border border-gray-200 rounded-lg p-3 bg-white">
+                    <h3 class="font-medium text-gray-900 mb-2">{{ metric.display_name }}</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Display Name</label>
+                            <input type="text" name="metric_file_map.metrics.{{ metric_key }}.display_name" value="{{ metric.display_name }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">TS File</label>
+                            <input type="text" name="metric_file_map.metrics.{{ metric_key }}.ts_file" value="{{ metric.ts_file }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">SP TS File</label>
+                            <input type="text" name="metric_file_map.metrics.{{ metric_key }}.sp_ts_file" value="{{ metric.sp_ts_file }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Sec File</label>
+                            <input type="text" name="metric_file_map.metrics.{{ metric_key }}.sec_file" value="{{ metric.sec_file }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Sec SP File</label>
+                            <input type="text" name="metric_file_map.metrics.{{ metric_key }}.sec_sp_file" value="{{ metric.sec_sp_file }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Units</label>
+                            <input type="text" name="metric_file_map.metrics.{{ metric_key }}.units" value="{{ metric.units }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- File Delivery Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('file-delivery')">
+                <div class="flex items-center">
+                    <svg id="file-delivery-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">File Delivery Monitors</h2>
+                </div>
+            </div>
+            <div id="file-delivery-content" class="space-y-4 px-4 py-4">
+                <div id="file-delivery-list" class="space-y-3">
+                    {% for monitor_key, monitor in settings.file_delivery.monitors.items() %}
+                    <div class="file-delivery-item border border-gray-200 rounded-lg p-3 bg-white" data-key="{{ monitor_key }}">
+                        <h4 class="font-medium text-gray-900 mb-2">{{ monitor_key }}</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Directory</label>
+                                <input type="text" name="file_delivery.monitors.{{ monitor_key }}.directory" value="{{ monitor.directory }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Pattern</label>
+                                <input type="text" name="file_delivery.monitors.{{ monitor_key }}.pattern" value="{{ monitor.pattern }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Display Name</label>
+                                <input type="text" name="file_delivery.monitors.{{ monitor_key }}.display_name" value="{{ monitor.display_name }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">ID Column</label>
+                                <input type="text" name="file_delivery.monitors.{{ monitor_key }}.id_column" value="{{ monitor.id_column }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                        </div>
+                        <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Date Regex</label>
+                                <input type="text" name="file_delivery.monitors.{{ monitor_key }}.date_parse.regex" value="{{ monitor.date_parse.regex }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md font-mono focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Date Format</label>
+                                <input type="text" name="file_delivery.monitors.{{ monitor_key }}.date_parse.format" value="{{ monitor.date_parse.format }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md font-mono focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                        </div>
+                        <button type="button" onclick="removeFileDelivery('{{ monitor_key }}')" class="mt-2 text-xs text-red-600 hover:text-red-800">Remove Monitor</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" onclick="showAddFileDeliveryModal()" class="mt-2 inline-flex items-center px-3 py-1.5 text-sm bg-secondary text-white rounded-md hover:bg-secondary-dark">
+                    Add File Delivery Monitor
+                </button>
+            </div>
+        </div>
+        </section>
+
+        <!-- TAB: THRESHOLDS -->
+        <section data-tab-panel="thresholds" class="tab-panel space-y-5 hidden">
+        <!-- MaxMin Thresholds Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('maxmin')">
+                <div class="flex items-center">
+                    <svg id="maxmin-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Max/Min Thresholds</h2>
+                </div>
+            </div>
+            <div id="maxmin-content" class="space-y-4 px-4 py-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for file_key, threshold in settings.maxmin_thresholds.items() %}
+                    <div class="border border-gray-200 rounded-lg p-3 bg-white">
+                        <h4 class="font-medium text-gray-900 mb-2">{{ threshold.display_name }} ({{ file_key }})</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Min</label>
+                                <input type="number" name="maxmin_thresholds.{{ file_key }}.min" value="{{ threshold.min }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Max</label>
+                                <input type="number" name="maxmin_thresholds.{{ file_key }}.max" value="{{ threshold.max }}" 
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" onclick="showAddThresholdModal()" class="mt-2 inline-flex items-center px-3 py-1.5 text-sm bg-secondary text-white rounded-md hover:bg-secondary-dark">
+                    Add Threshold
+                </button>
+            </div>
+        </div>
+        </section>
+
+        <!-- TAB: ATTRIBUTION -->
+        <section data-tab-panel="attribution" class="tab-panel space-y-5 hidden">
+        <!-- Attribution Columns Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('attribution')">
+                <div class="flex items-center">
+                    <svg id="attribution-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Attribution Configuration</h2>
+                </div>
+            </div>
+            <div id="attribution-content" class="space-y-4 px-4 py-4">
+                <div class="border border-gray-200 rounded-lg p-3 bg-white">
+                    <h4 class="font-medium text-gray-900 mb-2">Column Prefixes</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {% for prefix_key, prefix_value in settings.attribution_columns.prefixes.items() %}
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">{{ prefix_key }}</label>
+                            <input type="text" name="attribution_columns.prefixes.{{ prefix_key }}" value="{{ prefix_value }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="border border-gray-200 rounded-lg p-3 bg-white">
+                    <h4 class="font-medium text-gray-900 mb-2">L1 Factors</h4>
+                    <div id="l1-factors-list" class="space-y-2">
+                        {% for factor in settings.attribution_columns.l1_factors %}
+                        <div class="flex items-center justify-between">
+                            <input type="text" name="attribution_columns.l1_factors[]" value="{{ factor }}" 
+                                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                            <button type="button" onclick="removeL1Factor(this)" class="ml-2 text-xs text-red-600 hover:text-red-800">Remove</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" onclick="addL1Factor()" class="mt-2 inline-flex items-center px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                        Add L1 Factor
+                    </button>
+                </div>
+            </div>
+        </div>
+        </section>
+
+        <!-- TAB: PARSING -->
+        <section data-tab-panel="parsing" class="tab-panel space-y-5 hidden">
+        <!-- Date Patterns Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('date-patterns')">
+                <div class="flex items-center">
+                    <svg id="date-patterns-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Date Patterns</h2>
+                </div>
+            </div>
+            <div id="date-patterns-content" class="space-y-3 px-4 py-4">
+                <p class="text-sm text-gray-600 mb-2">Regular expressions for identifying date-like columns</p>
+                <div id="date-patterns-list" class="space-y-2">
+                    {% for pattern in settings.date_patterns.date_patterns %}
+                    <div class="flex items-center justify-between">
+                        <input type="text" name="date_patterns.date_patterns[]" value="{{ pattern }}" 
+                               class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md font-mono focus:outline-none focus:ring-2 focus:ring-secondary">
+                        <button type="button" onclick="removeDatePattern(this)" class="ml-2 text-xs text-red-600 hover:text-red-800">Remove</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" onclick="addDatePattern()" class="mt-2 inline-flex items-center px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                    Add Pattern
+                </button>
+            </div>
+        </div>
+ 
+        <!-- Field Aliases Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('field-aliases')">
+                <div class="flex items-center">
+                    <svg id="field-aliases-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Field Aliases</h2>
+                </div>
+            </div>
+            <div id="field-aliases-content" class="space-y-3 px-4 py-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {% for field_key, field_value in settings.field_aliases.items() %}
+                    <div class="flex items-center space-x-2">
+                        <input type="text" value="{{ field_key }}" class="w-1/2 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50" readonly>
+                        <span>→</span>
+                        <input type="text" name="field_aliases.{{ field_key }}" value="{{ field_value }}" 
+                               class="w-1/2 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        </section>
+
+        <!-- TAB: COMPARISON -->
+        <section data-tab-panel="comparison" class="tab-panel space-y-5 hidden">
+        <!-- Comparison Config Section -->
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer select-none" onclick="toggleSection('comparison')">
+                <div class="flex items-center">
+                    <svg id="comparison-icon" class="h-5 w-5 mr-2 transform rotate-90 transition-transform text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-900">Comparison Configuration</h2>
+                </div>
+            </div>
+            <div id="comparison-content" class="space-y-4 px-4 py-4">
+                {% for comp_key, comp in settings.comparison_config.items() %}
+                <div class="border border-gray-200 rounded-lg p-3 bg-white">
+                    <h4 class="font-medium text-gray-900 mb-2">{{ comp_key|title }}</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Display Name</label>
+                            <input type="text" name="comparison_config.{{ comp_key }}.display_name" value="{{ comp.display_name }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Value Label</label>
+                            <input type="text" name="comparison_config.{{ comp_key }}.value_label" value="{{ comp.value_label }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">File 1</label>
+                            <input type="text" name="comparison_config.{{ comp_key }}.file1" value="{{ comp.file1 }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">File 2</label>
+                            <input type="text" name="comparison_config.{{ comp_key }}.file2" value="{{ comp.file2 }}" 
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-secondary">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        </section>
+        </section>
+        <!-- Sticky Save Bar (bottom) -->
+        <div class="sticky bottom-0 bg-white/80 backdrop-blur border-t border-gray-200 px-4 py-3 mt-4 flex justify-end">
+            <button id="save-settings-btn-bottom" type="button" class="inline-flex items-center justify-center px-5 py-2.5 bg-primary text-white rounded-lg shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+                <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                Save Settings
+            </button>
+        </div>
+    </form>
+
+    <section data-tab-panel="changes" class="tab-panel hidden mt-4">
+    <!-- Change Log -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow transition-shadow">
+        <div class="px-4 py-3 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-900">Recent Changes</h2>
+        </div>
+        <div id="change-log" class="px-4 py-4 space-y-2 text-sm">
+            {% if change_log %}
+                {% for entry in change_log[-10:] | reverse %}
+                <div class="border-b border-gray-100 pb-2">
+                    <span class="text-gray-500">{{ entry.timestamp }}</span>
+                    <span class="mx-2 text-gray-400">•</span>
+                    <span class="text-gray-800">{{ entry.description }}</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-gray-500">No changes recorded yet.</p>
+            {% endif %}
+        </div>
+    </div>
+    </section>
+</div>
+
+<!-- Modal for adding new items -->
+<div id="add-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900 mb-4"></h3>
+            <div id="modal-content" class="mt-2">
+                <!-- Dynamic content will be inserted here -->
+            </div>
+            <div class="flex justify-end mt-4 space-x-2">
+                <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400">
+                    Cancel
+                </button>
+                <button type="button" id="modal-save-btn" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark">
+                    Add
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Section toggle functionality
+function toggleSection(sectionId) {
+    const content = document.getElementById(sectionId + '-content');
+    const icon = document.getElementById(sectionId + '-icon');
+    
+    if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        icon.classList.add('rotate-90');
+        icon.classList.remove('rotate-0');
+    } else {
+        content.classList.add('hidden');
+        icon.classList.remove('rotate-90');
+        icon.classList.add('rotate-0');
+    }
+}
+
+// Initialize all sections as expanded
+document.addEventListener('DOMContentLoaded', function() {
+    const sections = ['app-config', 'template-help', 'spread-files', 'metric-map', 'file-delivery', 'maxmin', 'attribution', 'date-patterns', 'field-aliases', 'comparison'];
+    sections.forEach(section => {
+        const content = document.getElementById(section + '-content');
+        if (content && content.classList.contains('hidden')) {
+            content.classList.remove('hidden');
+        }
+    });
+
+    // Tabs logic
+    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+    const tabPanels = Array.from(document.querySelectorAll('[data-tab-panel]'));
+
+    function activateTab(tabName) {
+        tabButtons.forEach(btn => {
+            const isActive = btn.dataset.tab === tabName;
+            btn.classList.toggle('text-primary', isActive);
+            btn.classList.toggle('border-primary', isActive);
+            btn.classList.toggle('border-transparent', !isActive);
+            btn.classList.toggle('text-gray-600', !isActive);
+        });
+        tabPanels.forEach(panel => {
+            panel.classList.toggle('hidden', panel.getAttribute('data-tab-panel') !== tabName);
+        });
+        // Persist selection
+        try { sessionStorage.setItem('settingsActiveTab', tabName); } catch (e) {}
+    }
+
+    // Restore last active tab
+    let initialTab = 'general';
+    try {
+        const saved = sessionStorage.getItem('settingsActiveTab');
+        if (saved) initialTab = saved;
+    } catch (e) {}
+    activateTab(initialTab);
+
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+    });
+});
+
+// Alert functionality (toast style)
+function showAlert(message, type = 'success') {
+    const alertContainer = document.getElementById('alert-container');
+    const base = 'shadow-lg rounded-lg px-4 py-3 text-sm border flex items-start space-x-2';
+    const variants = type === 'success'
+        ? 'bg-green-50 border-green-200 text-green-800'
+        : 'bg-red-50 border-red-200 text-red-800';
+    const alert = document.createElement('div');
+    alert.className = `${base} ${variants}`;
+    alert.innerHTML = `
+        <span class="mt-0.5">
+            ${type === 'success'
+                ? '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+                : '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'}
+        </span>
+        <span class="flex-1">${message}</span>
+        <button class="ml-2 text-xs text-gray-500 hover:text-gray-700" onclick="this.parentElement.remove()">Dismiss</button>
+    `;
+    alertContainer.appendChild(alert);
+    setTimeout(() => alert.remove(), 5000);
+}
+
+// Modal functionality
+function closeModal() {
+    document.getElementById('add-modal').classList.add('hidden');
+}
+
+function showAddFileDeliveryModal() {
+    const modal = document.getElementById('add-modal');
+    const title = document.getElementById('modal-title');
+    const content = document.getElementById('modal-content');
+    const saveBtn = document.getElementById('modal-save-btn');
+    
+    title.textContent = 'Add File Delivery Monitor';
+    content.innerHTML = `
+        <div class="space-y-3">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Monitor Name</label>
+                <input type="text" id="new-monitor-name" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Directory</label>
+                <input type="text" id="new-monitor-directory" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">File Pattern</label>
+                <input type="text" id="new-monitor-pattern" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Display Name</label>
+                <input type="text" id="new-monitor-display" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">ID Column</label>
+                <input type="text" id="new-monitor-id-column" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+        </div>
+    `;
+    
+    saveBtn.onclick = function() {
+        const name = document.getElementById('new-monitor-name').value;
+        const directory = document.getElementById('new-monitor-directory').value;
+        const pattern = document.getElementById('new-monitor-pattern').value;
+        const display = document.getElementById('new-monitor-display').value;
+        const idColumn = document.getElementById('new-monitor-id-column').value;
+        
+        if (name && directory && pattern && display && idColumn) {
+            addFileDeliveryMonitor(name, directory, pattern, display, idColumn);
+            closeModal();
+        } else {
+            alert('Please fill in all fields');
+        }
+    };
+    
+    modal.classList.remove('hidden');
+}
+
+function showAddThresholdModal() {
+    const modal = document.getElementById('add-modal');
+    const title = document.getElementById('modal-title');
+    const content = document.getElementById('modal-content');
+    const saveBtn = document.getElementById('modal-save-btn');
+    
+    title.textContent = 'Add Max/Min Threshold';
+    content.innerHTML = `
+        <div class="space-y-3">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">File Name</label>
+                <input type="text" id="new-threshold-file" placeholder="e.g., sec_NewMetric.csv" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Display Name</label>
+                <input type="text" id="new-threshold-display" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Group</label>
+                <input type="text" id="new-threshold-group" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Min Value</label>
+                    <input type="number" id="new-threshold-min" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Max Value</label>
+                    <input type="number" id="new-threshold-max" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+        </div>
+    `;
+    
+    saveBtn.onclick = function() {
+        const file = document.getElementById('new-threshold-file').value;
+        const display = document.getElementById('new-threshold-display').value;
+        const group = document.getElementById('new-threshold-group').value;
+        const min = document.getElementById('new-threshold-min').value;
+        const max = document.getElementById('new-threshold-max').value;
+        
+        if (file && display && group && min && max) {
+            addThreshold(file, display, group, min, max);
+            closeModal();
+        } else {
+            alert('Please fill in all fields');
+        }
+    };
+    
+    modal.classList.remove('hidden');
+}
+
+// Dynamic form element management
+function addSpreadFile() {
+    const list = document.getElementById('spread-files-list');
+    const index = list.children.length;
+    
+    const newItem = document.createElement('div');
+    newItem.className = 'spread-file-item border border-gray-300 rounded-md p-3 bg-white';
+    newItem.setAttribute('data-index', index);
+    newItem.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-600">File Name</label>
+                <input type="text" name="spread_files.spread_files[${index}].file" value="" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Label</label>
+                <input type="text" name="spread_files.spread_files[${index}].label" value="" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Color</label>
+                <input type="color" name="spread_files.spread_files[${index}].color" value="#000000" 
+                       class="h-8 w-full">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Description</label>
+                <input type="text" name="spread_files.spread_files[${index}].description" value="" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+        </div>
+        <button type="button" onclick="removeSpreadFile(${index})" class="mt-2 text-xs text-red-600 hover:text-red-800">Remove</button>
+    `;
+    
+    list.appendChild(newItem);
+}
+
+function removeSpreadFile(index) {
+    const item = document.querySelector(`.spread-file-item[data-index="${index}"]`);
+    if (item) {
+        item.remove();
+    }
+}
+
+function addFileDeliveryMonitor(name, directory, pattern, display, idColumn) {
+    const list = document.getElementById('file-delivery-list');
+    
+    const newItem = document.createElement('div');
+    newItem.className = 'file-delivery-item border border-gray-300 rounded-md p-3 bg-white';
+    newItem.setAttribute('data-key', name);
+    newItem.innerHTML = `
+        <h4 class="font-medium text-gray-700 mb-2">${name}</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Directory</label>
+                <input type="text" name="file_delivery.monitors.${name}.directory" value="${directory}" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Pattern</label>
+                <input type="text" name="file_delivery.monitors.${name}.pattern" value="${pattern}" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Display Name</label>
+                <input type="text" name="file_delivery.monitors.${name}.display_name" value="${display}" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600">ID Column</label>
+                <input type="text" name="file_delivery.monitors.${name}.id_column" value="${idColumn}" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+        </div>
+        <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Date Regex</label>
+                <input type="text" name="file_delivery.monitors.${name}.date_parse.regex" value="" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded font-mono text-xs">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Date Format</label>
+                <input type="text" name="file_delivery.monitors.${name}.date_parse.format" value="" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded font-mono text-xs">
+            </div>
+        </div>
+        <button type="button" onclick="removeFileDelivery('${name}')" class="mt-2 text-xs text-red-600 hover:text-red-800">Remove Monitor</button>
+    `;
+    
+    list.appendChild(newItem);
+}
+
+function removeFileDelivery(key) {
+    const item = document.querySelector(`.file-delivery-item[data-key="${key}"]`);
+    if (item) {
+        item.remove();
+    }
+}
+
+function addThreshold(file, display, group, min, max) {
+    const container = document.getElementById('maxmin-content').querySelector('.grid');
+    
+    const newItem = document.createElement('div');
+    newItem.className = 'border border-gray-300 rounded-md p-3 bg-white';
+    newItem.innerHTML = `
+        <h4 class="font-medium text-gray-700 mb-2">${display} (${file})</h4>
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Min</label>
+                <input type="number" name="maxmin_thresholds.${file}.min" value="${min}" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600">Max</label>
+                <input type="number" name="maxmin_thresholds.${file}.max" value="${max}" 
+                       class="w-full px-2 py-1 text-sm border border-gray-200 rounded">
+            </div>
+        </div>
+        <input type="hidden" name="maxmin_thresholds.${file}.display_name" value="${display}">
+        <input type="hidden" name="maxmin_thresholds.${file}.group" value="${group}">
+    `;
+    
+    container.appendChild(newItem);
+}
+
+function addL1Factor() {
+    const list = document.getElementById('l1-factors-list');
+    
+    const newItem = document.createElement('div');
+    newItem.className = 'flex items-center justify-between';
+    newItem.innerHTML = `
+        <input type="text" name="attribution_columns.l1_factors[]" value="" 
+               class="flex-1 px-2 py-1 text-sm border border-gray-200 rounded">
+        <button type="button" onclick="removeL1Factor(this)" class="ml-2 text-xs text-red-600 hover:text-red-800">Remove</button>
+    `;
+    
+    list.appendChild(newItem);
+}
+
+function removeL1Factor(button) {
+    button.parentElement.remove();
+}
+
+function addDatePattern() {
+    const list = document.getElementById('date-patterns-list');
+    
+    const newItem = document.createElement('div');
+    newItem.className = 'flex items-center justify-between';
+    newItem.innerHTML = `
+        <input type="text" name="date_patterns.date_patterns[]" value="" 
+               class="flex-1 px-2 py-1 text-sm border border-gray-200 rounded font-mono text-xs">
+        <button type="button" onclick="removeDatePattern(this)" class="ml-2 text-xs text-red-600 hover:text-red-800">Remove</button>
+    `;
+    
+    list.appendChild(newItem);
+}
+
+function removeDatePattern(button) {
+    button.parentElement.remove();
+}
+
+// Save settings functionality (shared for both top and bottom buttons)
+async function saveSettings() {
+    const form = document.getElementById('settings-form');
+    const formData = new FormData(form);
+    
+    // Convert form data to JSON structure
+    const settings = {};
+    for (let [key, value] of formData.entries()) {
+        // Handle nested keys and arrays
+        const keys = key.split(/[\.\[\]]+/).filter(k => k);
+        let current = settings;
+        
+        for (let i = 0; i < keys.length - 1; i++) {
+            const k = keys[i];
+            if (!current[k]) {
+                // Check if next key is numeric (array index)
+                current[k] = /^\d+$/.test(keys[i + 1]) ? [] : {};
+            }
+            current = current[k];
+        }
+        
+        const lastKey = keys[keys.length - 1];
+        if (key.endsWith('[]')) {
+            // Handle array values
+            if (!current[lastKey]) {
+                current[lastKey] = [];
+            }
+            current[lastKey].push(value);
+        } else {
+            // Handle checkboxes
+            if (form.elements[key] && form.elements[key].type === 'checkbox') {
+                current[lastKey] = form.elements[key].checked;
+            } else {
+                current[lastKey] = value;
+            }
+        }
+    }
+    
+    try {
+        const response = await fetch('/api/save-settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(settings)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showAlert('Settings saved successfully! Please restart the application for changes to take effect.', 'success');
+            
+            // Reload the page to show updated change log
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            showAlert('Error saving settings: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showAlert('Error saving settings: ' + error.message, 'error');
+    }
+}
+document.getElementById('save-settings-btn')?.addEventListener('click', saveSettings);
+document.getElementById('save-settings-btn-bottom')?.addEventListener('click', saveSettings);
+</script>
+{% endblock %}

@@ -8,6 +8,8 @@
 {% block title %}Max/Min Details: {{ display_name or filename }}{% endblock %}
 
 {% block content %}
+{% set template_key = 'maxmin_details' %}
+{% include "_help_link.html" %}
 <div class="p-4">
     {# Styled Back Button #}
     <a href="{{ dashboard_url or url_for('maxmin_bp.dashboard') }}" class="inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 mb-4">

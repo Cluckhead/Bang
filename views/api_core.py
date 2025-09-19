@@ -8,11 +8,12 @@ import pandas as pd
 from flask import Blueprint, current_app, request, jsonify, render_template, Response
 from typing import Dict, List, Optional, Tuple, Any, Union
 import datetime
-import config
+from core import config
 import time
-from data_validation import validate_data
+import logging
+from data_processing.data_validation import validate_data
 from pandas.tseries.offsets import BDay
-from utils import load_fund_groups
+from core.utils import load_fund_groups, time_api_calls
 
 # from tqs import tqs_query as tqs
 
@@ -498,6 +499,7 @@ def get_data_file_statuses(data_folder):
 # --- End Helper Function ---
 
 @api_bp.route("/get_attribution_data")
+@time_api_calls
 def get_attribution_data_page():
     """
     Renders the page for users to select parameters for Attribution Data retrieval.
@@ -506,11 +508,11 @@ def get_attribution_data_page():
     import pandas as pd
     import datetime
     from pandas.tseries.offsets import BDay
-    from utils import load_fund_groups
+    from core.utils import load_fund_groups
     from flask import current_app, render_template
 
     try:
-        data_folder = current_app.config.get("DATA_FOLDER", "Data")
+        data_folder = current_app.config["DATA_FOLDER"]
         fund_list_path = os.path.join(data_folder, "FundList.csv")
         query_map_path = os.path.join(data_folder, "QueryMap_Att.csv")
 
@@ -589,7 +591,88 @@ def get_attribution_data_page():
         data_folder=data_folder,
     )
 
+@api_bp.route("/attribution/file_status", methods=["GET"])
+@time_api_calls
+def get_attribution_file_status():
+    """
+    API endpoint to get attribution file statuses for background loading.
+    Returns JSON with the same data structure as used in get_attribution_data_page.
+    """
+    try:
+        data_folder = current_app.config["DATA_FOLDER"]
+        fund_list_path = os.path.join(data_folder, "FundList.csv")
+
+        if not os.path.exists(fund_list_path):
+            current_app.logger.error(f"FundList.csv not found at {fund_list_path}")
+            return jsonify({"error": "FundList.csv not found"}), 500
+
+        fund_df = pd.read_csv(fund_list_path)
+        if not {"Fund Code"}.issubset(fund_df.columns):
+            current_app.logger.error(f"FundList.csv is missing Fund Code column.")
+            return jsonify({"error": "FundList.csv is missing Fund Code column"}), 500
+
+        # Status for all att_factors_[Fund].csv files
+        status_list = []
+        for fund in fund_df["Fund Code"]:
+            file_name = f"att_factors_{fund}.csv"
+            file_path = os.path.join(data_folder, file_name)
+            status = {
+                "fund": fund,
+                "filename": file_name,
+                "exists": False,
+                "last_modified": "N/A",
+                "row_count": 0,
+                "latest_date": "N/A"
+            }
+            
+            if os.path.exists(file_path):
+                status["exists"] = True
+                try:
+                    # Get file modification time
+                    mod_timestamp = os.path.getmtime(file_path)
+                    status["last_modified"] = datetime.datetime.fromtimestamp(
+                        mod_timestamp
+                    ).strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    # Read CSV and get basic info
+                    df = pd.read_csv(file_path)
+                    status["row_count"] = len(df)
+                    
+                    # Try to find a date column and get the latest date
+                    date_col = None
+                    date_candidates = ["Date", "date", "AsOfDate", "ASOFDATE", "Effective Date"]
+                    
+                    for candidate in date_candidates:
+                        matching_cols = [col for col in df.columns if col.strip().lower() == candidate.lower()]
+                        if matching_cols:
+                            date_col = matching_cols[0]
+                            break
+                    
+                    if date_col and date_col in df.columns:
+                        try:
+                            parsed_dates = pd.to_datetime(df[date_col], errors="coerce")
+                            if not parsed_dates.isnull().all():
+                                latest_date = parsed_dates.max()
+                                if pd.notna(latest_date):
+                                    status["latest_date"] = latest_date.strftime("%Y-%m-%d")
+                        except Exception as date_err:
+                            current_app.logger.warning(f"Error parsing dates in {file_name}: {date_err}")
+                    
+                except Exception as e:
+                    current_app.logger.warning(f"Error reading {file_name}: {e}")
+                    status["last_modified"] = "Error Reading File"
+            
+            status_list.append(status)
+
+        return jsonify({"attribution_file_statuses": status_list})
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting attribution file status: {e}", exc_info=True)
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+
 @api_bp.route("/get_attribution_data/run", methods=["POST"])
+@time_api_calls
 def run_attribution_api_calls():
     """
     Handles the Attribution Data API form submission. For each selected fund, calls the TQS API, writes to att_factors_[Fund].csv, and deduplicates by ISIN+Fund+Date.
@@ -601,7 +684,7 @@ def run_attribution_api_calls():
     import datetime
     from views.api_core import USE_REAL_TQS_API, _simulate_and_print_tqs_call, _fetch_real_tqs_data
 
-    data_folder = current_app.config.get("DATA_FOLDER", "Data")
+    data_folder = current_app.config["DATA_FOLDER"]
     fund_list = request.form.getlist("funds[]") or request.form.getlist("funds")
     days_back = int(request.form.get("days_back", 30))
     end_date = request.form.get("end_date")
@@ -665,3 +748,58 @@ def run_attribution_api_calls():
             current_app.logger.error(f"Error processing fund {fund}: {e}", exc_info=True)
             status_results.append({"fund": fund, "status": f"Error: {e}", "rows_written": 0, "error": True})
     return jsonify({"results": status_results})
+
+
+@api_bp.route('/log-export', methods=['POST'])
+def log_export():
+    """Log CSV export actions for monitoring and analytics."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Validate required fields
+        required_fields = ['action', 'type', 'elementId']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Get logger
+        logger = logging.getLogger('csv_export')
+        if not logger.handlers:
+            # Set up logger if not already configured
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
+        
+        # Log the export action with structured data
+        log_message = (
+            f"CSV_EXPORT | "
+            f"TYPE:{data['type']} | "
+            f"ELEMENT:{data['elementId']} | "
+            f"PREFIX:{data.get('filePrefix', 'unknown')} | "
+            f"CONTEXT:{data.get('context', 'unknown')} | "
+            f"URL:{data.get('url', 'unknown')} | "
+            f"TIMESTAMP:{data.get('timestamp', datetime.datetime.now().isoformat())}"
+        )
+        
+        # Add filter information if available
+        filters = data.get('filters', {})
+        if filters:
+            filter_parts = []
+            for key, value in filters.items():
+                if value:
+                    filter_parts.append(f"{key}:{value}")
+            if filter_parts:
+                log_message += f" | FILTERS:{','.join(filter_parts)}"
+        
+        # Log at INFO level
+        logger.info(log_message)
+        
+        return jsonify({'status': 'success', 'message': 'Export logged successfully'})
+        
+    except Exception as e:
+        current_app.logger.error(f"Error logging CSV export: {e}")
+        return jsonify({'error': 'Failed to log export action'}), 500

@@ -3,6 +3,8 @@
 {% block title %}Data Staleness Dashboard{% endblock %}
 
 {% block content %}
+{% set template_key = 'staleness_dashboard' %}
+{% include "_help_link.html" %}
 <div class="p-4">
     <h1 class="text-2xl font-bold font-heading mb-1">Data Staleness Dashboard</h1>
     <p class="text-sm text-gray-600 mb-4">Overview of potentially stale data in security files. Stale means the last update was more than the specified number of days before the file's latest date.</p>

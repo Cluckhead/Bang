@@ -11,6 +11,8 @@
 {% block title %}Attribution Radar Charts{% endblock %}
 
 {% block content %}
+{% set template_key = 'attribution_radar' %}
+{% include "_help_link.html" %}
 <div class="max-w-none w-full px-8 py-8 mx-auto">
     <h1 class="text-3xl font-bold font-merriweather mb-2">Attribution Radar Charts</h1>
     <p class="text-gray-600 mb-6">Visualize aggregated attribution factors (L1 or L2 + Residual) for Portfolio and Benchmark as radar charts. Use the filters and controls to explore the data.</p>
@@ -371,6 +373,39 @@ function renderRadarChart(canvasId, labels, prodData, spData, title) {
 
 // On DOMContentLoaded, render both radar charts
 window.addEventListener('DOMContentLoaded', function() {
+    // Check if we have valid radar data before proceeding
+    if (!radarData || !radarData.labels || radarData.labels.length === 0) {
+        console.log("No attribution radar data available, skipping chart rendering.");
+        
+        // Display friendly messages in chart containers
+        const portfolioCanvas = document.getElementById('portfolioRadar');
+        const benchmarkCanvas = document.getElementById('benchmarkRadar');
+        
+        if (portfolioCanvas) {
+            portfolioCanvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-[800px] text-gray-500"><p>No attribution data available for portfolio radar chart.</p></div>';
+        }
+        if (benchmarkCanvas) {
+            benchmarkCanvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-[800px] text-gray-500"><p>No attribution data available for benchmark radar chart.</p></div>';
+        }
+        
+        // Disable filter controls when no data
+        const fundSelect = document.getElementById('fund-select');
+        const characteristicSelect = document.getElementById('characteristic-select');
+        const characteristicValueSelect = document.getElementById('characteristic-value-select');
+        const levelToggle = document.getElementById('level-toggle');
+        const sliderStartEl = document.getElementById('date-range-slider');
+        const sliderEndEl = document.getElementById('date-range-slider-end');
+        
+        if (fundSelect) fundSelect.disabled = true;
+        if (characteristicSelect) characteristicSelect.disabled = true;
+        if (characteristicValueSelect) characteristicValueSelect.disabled = true;
+        if (levelToggle) levelToggle.disabled = true;
+        if (sliderStartEl) sliderStartEl.disabled = true;
+        if (sliderEndEl) sliderEndEl.disabled = true;
+        
+        return; // Exit early
+    }
+    
     renderRadarChart(
         'portfolioRadar',
         radarData.labels,

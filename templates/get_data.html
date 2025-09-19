@@ -3,6 +3,8 @@
 {% block title %}Get Data via API{% endblock %}
 
 {% block content %}
+{% set template_key = 'get_data' %}
+{% include "_help_link.html" %}
 <div class="space-y-8">
 
     {# --- Display Data File Statuses --- #}
@@ -172,11 +174,15 @@
                         class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-warning hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-warning">
                     Run and Overwrite Data
                 </button>
-                <button type="button" id="run-cleanup-button"
+                <!-- Cleanup button hidden since cleanup now runs automatically after API calls -->
+                <button type="button" id="run-cleanup-button" style="display: none;"
                         class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-secondary hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
-                    Run Data Cleanup
+                    Run Data Cleanup (Manual)
                 </button>
             </div>
+            <p class="text-xs text-neutral-600 mt-2">
+                <strong>Note:</strong> Data cleanup and quality checks will run automatically after API calls complete.
+            </p>
         </form>
     </div>
     {# --- End Run API Form --- #}
@@ -211,6 +217,13 @@
                     <!-- Results will be populated here -->
                 </tbody>
             </table>
+            <div class="mt-3">
+                <button id="run-schedule-sql"
+                        class="px-3 py-1 rounded-md shadow-sm text-sm font-medium text-white bg-secondary hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
+                    Fetch Schedule via SQL → Write schedule.csv
+                </button>
+                <span id="run-schedule-sql-status" class="ml-2 text-sm text-neutral-600"></span>
+            </div>
         </div>
          <div id="error-message" class="mt-3 p-4 bg-danger-light border border-danger text-danger rounded-md" style="display: none;">
              <!-- Errors shown here -->
@@ -334,6 +347,9 @@
     {# --- Data Consistency Audit Section --- #}
     <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mt-4 hover:shadow-md transition-shadow">
         <h4 class="text-xl font-semibold mb-3">Data Consistency Audit</h4>
+        <p class="text-sm text-neutral-600 mb-3">
+            <strong>Note:</strong> Data quality checks are automatically run after API calls. Use this button for manual auditing or troubleshooting.
+        </p>
         <button id="run-audit-button"
                 class="px-4 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-info hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info">
             Run Data Consistency Audit
@@ -412,6 +428,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const fundSelectionError = document.getElementById('fund-selection-error');
     const cleanupButton = document.getElementById('run-cleanup-button');
     const runOverwriteButton = document.getElementById('run-overwrite-button');
+    const runScheduleSqlButton = document.getElementById('run-schedule-sql');
+    const runScheduleSqlStatus = document.getElementById('run-schedule-sql-status');
     const cleanupStatus = document.createElement('div');
     cleanupStatus.id = 'cleanup-status';
     cleanupStatus.className = 'mt-2'; // Will be replaced by alert classes
@@ -545,6 +563,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!jobResp.job_id) {
                 errorMessageDiv.textContent = 'Failed to start job.';
                 errorMessageDiv.style.display = 'block';
+                // Update navbar status to show error
+                updateNavbarStatusBar({ 
+                    text: 'Failed to start API job', 
+                    error: true,
+                    current: 100,
+                    total: 100
+                });
                 return;
             }
             // Show estimated time if available
@@ -561,29 +586,78 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!pollResp.ok) {
                     errorMessageDiv.textContent = 'Job not found or error.';
                     errorMessageDiv.style.display = 'block';
+                    // Update navbar status to show error
+                    updateNavbarStatusBar({ 
+                        text: 'Job polling failed', 
+                        error: true,
+                        current: 100,
+                        total: 100
+                    });
                     return;
                 }
                 const job = await pollResp.json();
                 if (job.status === 'error') {
                     errorMessageDiv.textContent = job.error || 'Job error.';
                     errorMessageDiv.style.display = 'block';
+                    // Update navbar status to show error
+                    updateNavbarStatusBar({ 
+                        text: 'API calls failed', 
+                        error: true,
+                        current: 100,
+                        total: 100
+                    });
                     return;
                 }
                 if (job.total) {
-                    progressBar.style.width = `${Math.round((job.progress/job.total)*100)}%`;
-                    progressBar.textContent = `${Math.round((job.progress/job.total)*100)}%`;
+                    const percentage = Math.round((job.progress/job.total)*100);
+                    progressBar.style.width = `${percentage}%`;
+                    progressBar.textContent = `${percentage}%`;
+                    // Update navbar status
+                    updateNavbarStatusBar({ 
+                        current: job.progress, 
+                        total: job.total, 
+                        text: `Running API calls... ${percentage}%` 
+                    });
                 }
                 if (job.status === 'done') {
-                    // Show results
-                    // ... populate resultsTableBody as before, using job.result ...
-                    progressBar.style.width = '100%';
-                    progressBar.textContent = '100%';
-                    progressBar.classList.remove('bg-primary');
-                    progressBar.classList.add('bg-success');
-                    statusMessage.textContent = 'Completed.';
-                    done = true;
-                    // ... populate summary/results ...
-                    // (copy from old logic)
+                    // Populate results table
+                    if (job.result && job.result.summary) {
+                        resultsTableBody.innerHTML = '';
+                        for (const result of job.result.summary) {
+                            const statusClass = result.status.includes('OK') || result.status.includes('Saved') ? 'bg-success text-white' : 'bg-danger text-white';
+                            const row = document.createElement('tr');
+                            row.className = 'border-b border-neutral-200 hover:bg-neutral-50';
+                            row.dataset.queryId = result.query_id;
+                            row.innerHTML = `
+                                <td class="py-2 px-1">${result.query_id || 'N/A'}</td>
+                                <td class="py-2 px-1">${result.file_name || 'N/A'}</td>
+                                <td class="py-2 px-1">${result.actual_rows !== undefined ? result.actual_rows : (result.simulated_rows !== undefined ? result.simulated_rows : 'N/A')}</td>
+                                <td class="py-2 px-1">${result.actual_lines !== undefined ? result.actual_lines : (result.simulated_lines !== undefined ? result.simulated_lines : 'N/A')}</td>
+                                <td class="py-2 px-1">${result.last_written || 'N/A'}</td>
+                                <td class="py-2 px-1"><span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}">${result.status}</span></td>
+                                <td class="py-2 px-1">
+                                    <button class="px-2 py-0.5 text-xs rounded-md border border-primary text-primary hover:bg-primary-light focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary rerun-button" data-fund-code="${selectedFunds[0] || 'Unknown'}">
+                                        Rerun
+                                    </button>
+                                </td>
+                            `;
+                            resultsTableBody.appendChild(row);
+                        }
+                    }
+                    
+                    // Update progress to 80% and start cleanup
+                    progressBar.style.width = '80%';
+                    progressBar.textContent = 'Running cleanup...';
+                    statusMessage.textContent = 'API calls completed. Running data cleanup and quality checks...';
+                    // Update navbar status
+                    updateNavbarStatusBar({ 
+                        current: 80, 
+                        total: 100, 
+                        text: 'Running data cleanup and quality checks...' 
+                    });
+                    
+                    // Automatically run cleanup and checks
+                    runAutomaticCleanup();
                     return;
                 }
                 setTimeout(poll, 1000);
@@ -608,6 +682,100 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     // --- End of API call handler function ---
 
+    // --- Automatic cleanup function ---
+    async function runAutomaticCleanup() {
+        try {
+            // Show cleanup status
+            cleanupStatus.textContent = 'Running data cleanup and quality checks...';
+            cleanupStatus.className = 'mt-2 p-4 bg-info-light border border-info text-info rounded-md';
+            cleanupStatus.style.display = 'block';
+
+            // Call cleanup endpoint
+            const response = await fetch('/run-cleanup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const result = await response.json();
+
+            if (response.ok && result.status === 'success') {
+                // Update progress to 90%
+                progressBar.style.width = '90%';
+                progressBar.textContent = 'Finalizing...';
+                statusMessage.textContent = 'Cleanup completed. Quality checks are running in background...';
+                // Update navbar status
+                updateNavbarStatusBar({ 
+                    current: 90, 
+                    total: 100, 
+                    text: 'Finalizing quality checks...' 
+                });
+                
+                // Show success message
+                cleanupStatus.textContent = `✅ Data cleanup and quality checks completed successfully.\n\n${result.output}`;
+                cleanupStatus.className = 'mt-2 p-4 bg-success-light border border-success text-success rounded-md whitespace-pre-wrap';
+                
+                // Final completion
+                setTimeout(() => {
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '100%';
+                    progressBar.classList.remove('bg-primary');
+                    progressBar.classList.add('bg-success');
+                    statusMessage.textContent = 'All processes completed successfully! Data is ready for analysis.';
+                    // Update navbar status to show completion
+                    updateNavbarStatusBar({ 
+                        current: 100, 
+                        total: 100, 
+                        text: 'All processes completed successfully!' 
+                    });
+                    // Hide navbar status after 5 seconds
+                    setTimeout(() => {
+                        updateNavbarStatusBar({ hide: true });
+                    }, 5000);
+                }, 1000);
+                
+            } else {
+                // Show error
+                progressBar.style.width = '100%';
+                progressBar.textContent = 'Cleanup Error';
+                progressBar.classList.remove('bg-primary');
+                progressBar.classList.add('bg-warning');
+                statusMessage.textContent = 'API calls completed but cleanup failed. You may need to run cleanup manually.';
+                
+                cleanupStatus.textContent = `⚠️ Cleanup process failed:\n\n${result.error || result.message || 'Unknown error'}`;
+                cleanupStatus.className = 'mt-2 p-4 bg-warning-light border border-warning text-warning rounded-md whitespace-pre-wrap';
+                
+                // Update navbar status
+                updateNavbarStatusBar({ 
+                    text: 'Data cleanup failed - manual intervention may be needed', 
+                    error: true,
+                    current: 100,
+                    total: 100
+                });
+            }
+
+        } catch (error) {
+            console.error("Automatic cleanup error:", error);
+            
+            // Show error
+            progressBar.style.width = '100%';
+            progressBar.textContent = 'Cleanup Error';
+            progressBar.classList.remove('bg-primary');
+            progressBar.classList.add('bg-danger');
+            statusMessage.textContent = 'API calls completed but cleanup failed. Network error or server unreachable.';
+            
+            cleanupStatus.textContent = '❌ Failed to run automatic cleanup. Network error or server unreachable.\n\nYou may need to run the cleanup manually if needed.';
+            cleanupStatus.className = 'mt-2 p-4 bg-danger-light border border-danger text-danger rounded-md whitespace-pre-wrap';
+            
+            // Update navbar status
+            updateNavbarStatusBar({ 
+                text: 'Cleanup failed - network error', 
+                error: true,
+                current: 100,
+                total: 100
+            });
+        }
+    }
+    // --- End automatic cleanup function ---
+
     // --- Event Listener for the original "Run API Calls" button (which is type="submit") ---
     form.addEventListener('submit', function(event) {
         event.preventDefault();
@@ -620,6 +788,41 @@ document.addEventListener('DOMContentLoaded', function() {
             handleApiCall(true); // Force overwrite
         }
     });
+
+    // --- Event Listener: Run Schedule SQL ---
+    if (runScheduleSqlButton) {
+        runScheduleSqlButton.addEventListener('click', async function() {
+            runScheduleSqlButton.disabled = true;
+            runScheduleSqlButton.classList.add('opacity-50', 'cursor-not-allowed');
+            runScheduleSqlStatus.textContent = 'Running...';
+            try {
+                const res = await fetch('{{ url_for("api_bp.fetch_schedule_from_sql") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // Provide parameters here. For SQL Server, set db_type: 'mssql' and either a connection_string
+                    // or an mssql object with server/database/uid/pwd (or Trusted_Connection via trusted: true).
+                    body: JSON.stringify({ db_type: 'mssql' })
+                });
+                const data = await res.json();
+                if (res.ok && data.status === 'success') {
+                    runScheduleSqlStatus.textContent = `OK (rows: ${data.rows_written})`;
+                    runScheduleSqlStatus.classList.remove('text-danger');
+                    runScheduleSqlStatus.classList.add('text-success');
+                } else {
+                    runScheduleSqlStatus.textContent = data.message || 'Failed';
+                    runScheduleSqlStatus.classList.remove('text-success');
+                    runScheduleSqlStatus.classList.add('text-danger');
+                }
+            } catch (e) {
+                runScheduleSqlStatus.textContent = 'Network Error';
+                runScheduleSqlStatus.classList.remove('text-success');
+                runScheduleSqlStatus.classList.add('text-danger');
+            } finally {
+                runScheduleSqlButton.disabled = false;
+                runScheduleSqlButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        });
+    }
 
     // Add event listener for the Rerun buttons using event delegation
     resultsTableBody.addEventListener('click', async function(event) {
@@ -648,7 +851,7 @@ document.addEventListener('DOMContentLoaded', function() {
             statusCell.innerHTML = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-info text-white animate-pulse">Running</span>`;
 
             try {
-                const response = await fetch('/rerun-api-call', { // Endpoint remains the same
+                const response = await fetch('{{ url_for("api_bp.rerun_api_call") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

@@ -1,0 +1,773 @@
+{% extends "base.html" %}
+
+{% block title %}Spread Analysis - {{ security_id }}{% endblock %}
+
+{% block content %}
+{% set template_key = 'security_spreads_page' %}
+{% include "_help_link.html" %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header with Security Info -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h1 class="text-3xl font-bold text-gray-800 mb-4">Spread Analysis</h1>
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+                <p class="text-sm text-gray-600">ISIN</p>
+                <p class="font-semibold">{{ security_id }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Security Name</p>
+                <p class="font-semibold">{{ security_name or 'N/A' }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Type</p>
+                <p class="font-semibold">{{ security_type or 'N/A' }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Currency</p>
+                <p class="font-semibold">{{ currency or 'N/A' }}</p>
+            </div>
+        </div>
+        
+        <!-- Attribution Links -->
+        {% if available_funds %}
+        <div class="mt-4 pt-4 border-t">
+            <p class="text-sm text-gray-600 mb-2">View Attribution Analysis:</p>
+            <div class="flex flex-wrap gap-2">
+                {% for fund in available_funds %}
+                <a href="/attribution/security/timeseries?fund={{ fund }}&isin={{ security_id }}" 
+                   class="inline-block bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 transition-colors">
+                    {{ fund }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Additional Spreads Configuration -->
+    {% if additional_spreads %}
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Additional Spread Types</h2>
+        <p class="text-sm text-gray-600 mb-4">Select additional spread types to include in the analysis (optional):</p>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {% set disabled_map = additional_spreads['__disabled'] if additional_spreads['__disabled'] is defined else {} %}
+            {% for spread_type in additional_spread_headers %}
+            <label class="flex items-center">
+                <input type="checkbox" class="additional-spread-checkbox mr-2" data-spread-type="{{ spread_type }}" {% if disabled_map.get(spread_type) %}disabled style="opacity:0.5;cursor:not-allowed;"{% endif %}/>
+                <span class="text-sm {% if disabled_map.get(spread_type) %}text-gray-400{% endif %}">{{ spread_type }}</span>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Spread Comparison Chart -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Spread Comparison Over Time</h2>
+        <div class="relative" style="height: 500px;">
+            <canvas id="spreadComparisonChart"></canvas>
+        </div>
+        <div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+            {% for label, data in spread_series.items() %}
+            <div class="flex items-center">
+                <span class="inline-block w-4 h-2 mr-2" style="background-color: {{ data.color }}"></span>
+                <span class="text-gray-700">{{ label }}</span>
+                {% if data.no_data %}
+                <span class="text-red-500 ml-1">(No data)</span>
+                {% elif data.not_found %}
+                <span class="text-gray-400 ml-1">(File not found)</span>
+                {% elif data.error %}
+                <span class="text-red-500 ml-1">(Error)</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <!-- Additional spreads legend (initially hidden) -->
+            {% for spread_type, data in additional_spreads.items() %}
+            <div class="flex items-center additional-spread-legend" id="legend-{{ spread_type }}" style="display: none;">
+                <span class="inline-block w-4 h-2 mr-2" style="background-color: {{ data.color }}"></span>
+                <span class="text-gray-700">{{ spread_type }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Data source descriptions -->
+        <div class="mt-4 text-xs text-gray-500">
+            {% for label, data in spread_series.items() %}
+            {% if data.description %}
+            <p class="mt-1"><strong>{{ label }}:</strong> {{ data.description }}</p>
+            {% endif %}
+            {% endfor %}
+        </div>
+        
+        {% if smart_baseline %}
+        <div class="mt-2 text-xs text-blue-600">
+            <p><strong>Smart Baseline:</strong> {{ "%.2f"|format(smart_baseline) }} bps (median of non-zero spreads)</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Spread Difference Analysis -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Spread Differences from Smart Baseline</h2>
+        <div class="relative" style="height: 400px;">
+            <canvas id="spreadDifferenceChart"></canvas>
+        </div>
+        <div class="mt-4 text-sm text-gray-600">
+            <p class="italic">Shows the difference between each spread type and the dynamic moving average baseline (calculated as the mean of all visible spreads for each time point)</p>
+        </div>
+    </div>
+
+    <!-- Price Data Table -->
+    {% if price_data and price_data['values'] %}
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Price Data</h2>
+        <div class="relative" style="height: 300px;">
+            <canvas id="priceChart"></canvas>
+        </div>
+        <button id="togglePriceTableBtn" type="button" class="mt-4 mb-2 px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm">
+            Show Price Table
+        </button>
+        <div id="priceTableContainer" class="overflow-x-auto" style="display: none;">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for i in range(dates|length) %}
+                    {% if i < price_data['values']|length and price_data['values'][i] is not none %}
+                    <tr>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ dates[i] }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ "%.4f"|format(price_data['values'][i]) }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Summary Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Summary Statistics</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
+                        {% for label in spread_series.keys() %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ label }}</th>
+                        {% endfor %}
+                        <!-- Additional columns for selected additional spreads -->
+                        {% for spread_type in additional_spread_headers %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider additional-stats-header" 
+                            id="stats-header-{{ spread_type }}" style="display: none;">{{ spread_type }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200" id="statsTableBody">
+                    <!-- Stats will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Chart data passed from Flask
+const dates = {{ dates | tojson | safe }}; // Already filtered to business days server-side
+const spreadSeries = {{ spread_series | tojson | safe }};
+const additionalSpreads = {{ additional_spreads | tojson | safe }};
+const priceData = {{ price_data | tojson | safe }};
+const smartBaseline = {{ smart_baseline or 'null' }};
+
+// Chart instances
+let comparisonChart = null;
+let differenceChart = null;
+let priceChart = null;
+
+// Prepare initial datasets for Chart.js
+function getInitialDatasets(includeBaseline = true) {
+    const datasets = [];
+    for (const [label, data] of Object.entries(spreadSeries)) {
+        datasets.push({
+            label: label,
+            data: data.values,
+            borderColor: data.color,
+            backgroundColor: data.color + '20',
+            tension: 0.1,
+            pointRadius: 0,
+            pointBackgroundColor: data.color,
+            pointBorderColor: data.color,
+            showLine: true,
+            borderWidth: 2,
+            spanGaps: true
+        });
+    }
+    // Additional spreads (checked by default is false)
+    Object.keys(additionalSpreads).forEach(spreadType => {
+        const checkbox = document.querySelector(`input[data-spread-type="${spreadType}"]`);
+        if (checkbox && checkbox.checked) {
+            const additionalData = additionalSpreads[spreadType];
+            datasets.push({
+                label: spreadType,
+                data: additionalData.values,
+                borderColor: additionalData.color,
+                backgroundColor: additionalData.color + '20',
+                tension: 0.1,
+                pointRadius: 0,
+                pointBackgroundColor: additionalData.color,
+                pointBorderColor: additionalData.color,
+                showLine: true,
+                borderWidth: 2,
+                spanGaps: true
+            });
+        }
+    });
+    // Add smart baseline as a horizontal line if requested
+    if (includeBaseline) {
+        const baseline = calculateSmartBaselineSeries();
+        if (baseline) {
+            datasets.push({
+                label: 'Smart Baseline',
+                data: baseline,
+                borderColor: '#3b82f6', // blue-500
+                borderWidth: 2,
+                borderDash: [8, 6],
+                pointRadius: 0,
+                fill: false,
+                tension: 0,
+                showLine: true,
+                order: 0
+            });
+        }
+    }
+    return datasets;
+}
+
+// Calculate the smart baseline as a time series (mean of all visible spreads for each day)
+function calculateSmartBaselineSeries() {
+    // Gather all visible series (main + checked additional)
+    const allSeries = [];
+    for (const data of Object.values(spreadSeries)) {
+        allSeries.push(data.values);
+    }
+    Object.keys(additionalSpreads).forEach(spreadType => {
+        const checkbox = document.querySelector(`input[data-spread-type="${spreadType}"]`);
+        if (checkbox && checkbox.checked) {
+            allSeries.push(additionalSpreads[spreadType].values);
+        }
+    });
+    if (allSeries.length === 0) return null;
+    // For each date, compute the mean of all non-null, non-NaN values
+    const baseline = dates.map((_, i) => {
+        const vals = allSeries.map(series => series[i]).filter(v => v !== null && !isNaN(v));
+        if (vals.length === 0) return null;
+        const sum = vals.reduce((a, b) => a + b, 0);
+        return sum / vals.length;
+    });
+    return baseline;
+}
+
+// Update the baseline line on the chart
+function updateSmartBaselineLine() {
+    if (!comparisonChart) return;
+    // Remove any existing baseline dataset
+    comparisonChart.data.datasets = comparisonChart.data.datasets.filter(ds => ds.label !== 'Smart Baseline');
+    // Add new baseline
+    const baseline = calculateSmartBaselineSeries();
+    if (baseline) {
+        comparisonChart.data.datasets.push({
+            label: 'Smart Baseline',
+            data: baseline,
+            borderColor: '#3b82f6',
+            borderWidth: 2,
+            borderDash: [8, 6],
+            pointRadius: 0,
+            fill: false,
+            tension: 0,
+            showLine: true,
+            order: 0
+        });
+    }
+    comparisonChart.update();
+}
+
+// Create comparison chart
+function createComparisonChart() {
+    const ctx1 = document.getElementById('spreadComparisonChart').getContext('2d');
+    comparisonChart = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: getInitialDatasets(true)
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null && !isNaN(context.parsed.y)) {
+                                label += context.parsed.y.toFixed(2) + ' bps';
+                            } else {
+                                label += 'N/A';
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Spread (bps)'
+                    },
+                    min: function(context) {
+                        // Ensure minimum range of 100bps
+                        const data = context.chart.data.datasets.flatMap(d => d.data).filter(v => v !== null && !isNaN(v));
+                        if (data.length === 0) return 0;
+                        const minVal = Math.min(...data);
+                        const maxVal = Math.max(...data);
+                        const range = maxVal - minVal;
+                        if (range < 100) {
+                            const center = (minVal + maxVal) / 2;
+                            return center - 50;
+                        }
+                        return undefined; // Let Chart.js auto-calculate
+                    },
+                    max: function(context) {
+                        // Ensure minimum range of 100bps
+                        const data = context.chart.data.datasets.flatMap(d => d.data).filter(v => v !== null && !isNaN(v));
+                        if (data.length === 0) return 100;
+                        const minVal = Math.min(...data);
+                        const maxVal = Math.max(...data);
+                        const range = maxVal - minVal;
+                        if (range < 100) {
+                            const center = (minVal + maxVal) / 2;
+                            return center + 50;
+                        }
+                        return undefined; // Let Chart.js auto-calculate
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Create difference chart
+function createDifferenceChart() {
+    const diffDatasets = [];
+    
+    // Calculate dynamic baseline series (moving average)
+    const baselineSeries = calculateSmartBaselineSeries();
+    if (!baselineSeries) return;
+    
+    // Process main spread series
+    for (const [label, data] of Object.entries(spreadSeries)) {
+        const differences = data.values.map((val, index) => {
+            if (val !== null && !isNaN(val) && baselineSeries[index] !== null && !isNaN(baselineSeries[index])) {
+                return val - baselineSeries[index];
+            }
+            return null;
+        });
+        
+        diffDatasets.push({
+            label: label + ' - Baseline',
+            data: differences,
+            borderColor: data.color,
+            backgroundColor: data.color + '20',
+            tension: 0.1,
+            pointRadius: 0,
+            pointBackgroundColor: data.color,
+            pointBorderColor: data.color,
+            showLine: true,
+            borderWidth: 2,
+            spanGaps: true
+        });
+    }
+    
+    const ctx2 = document.getElementById('spreadDifferenceChart').getContext('2d');
+    differenceChart = new Chart(ctx2, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: diffDatasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null && !isNaN(context.parsed.y)) {
+                                label += (context.parsed.y >= 0 ? '+' : '') + context.parsed.y.toFixed(2) + ' bps';
+                            } else {
+                                label += 'N/A';
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Difference (bps)'
+                    },
+                    grid: {
+                        color: function(context) {
+                            return context.tick.value === 0 ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)';
+                        },
+                        lineWidth: function(context) {
+                            return context.tick.value === 0 ? 2 : 1;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Create price chart
+function createPriceChart() {
+    if (!priceData || !priceData['values']) return;
+    
+    const ctx3 = document.getElementById('priceChart');
+    if (!ctx3) return;
+    
+    priceChart = new Chart(ctx3.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{
+                label: 'Price',
+                data: priceData['values'],
+                borderColor: priceData['color'],
+                backgroundColor: priceData['color'] + '20',
+                tension: 0.1,
+                pointRadius: 0,
+                pointBackgroundColor: priceData['color'],
+                pointBorderColor: priceData['color'],
+                showLine: true,
+                borderWidth: 2,
+                spanGaps: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Price: ' + (context.parsed.y !== null ? context.parsed.y.toFixed(4) : 'N/A');
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Price'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Handle additional spread checkboxes
+function setupAdditionalSpreads() {
+    const checkboxes = document.querySelectorAll('.additional-spread-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const spreadType = this.dataset.spreadType;
+            const isChecked = this.checked;
+            
+            if (isChecked) {
+                // Add dataset to chart
+                const additionalData = additionalSpreads[spreadType];
+                if (additionalData) {
+                    comparisonChart.data.datasets.push({
+                        label: spreadType,
+                        data: additionalData.values,
+                        borderColor: additionalData.color,
+                        backgroundColor: additionalData.color + '20',
+                        tension: 0.1,
+                        pointRadius: 0,
+                        pointBackgroundColor: additionalData.color,
+                        pointBorderColor: additionalData.color,
+                        showLine: true,
+                        borderWidth: 2,
+                        spanGaps: true
+                    });
+                    
+                    // Add to difference chart if baseline exists
+                    if (differenceChart) {
+                        const baselineSeries = calculateSmartBaselineSeries();
+                        if (baselineSeries) {
+                            const differences = additionalData.values.map((val, index) => {
+                                if (val !== null && !isNaN(val) && baselineSeries[index] !== null && !isNaN(baselineSeries[index])) {
+                                    return val - baselineSeries[index];
+                                }
+                                return null;
+                            });
+                            
+                            differenceChart.data.datasets.push({
+                                label: spreadType + ' - Baseline',
+                                data: differences,
+                                borderColor: additionalData.color,
+                                backgroundColor: additionalData.color + '20',
+                                tension: 0.1,
+                                pointRadius: 0,
+                                pointBackgroundColor: additionalData.color,
+                                pointBorderColor: additionalData.color,
+                                showLine: true,
+                                borderWidth: 2,
+                                spanGaps: true
+                            });
+                        }
+                    }
+                    
+                    // Show legend
+                    document.getElementById('legend-' + spreadType).style.display = 'flex';
+                    
+                    // Show stats header
+                    document.getElementById('stats-header-' + spreadType).style.display = 'table-cell';
+                }
+            } else {
+                // Remove dataset from chart
+                comparisonChart.data.datasets = comparisonChart.data.datasets.filter(dataset => 
+                    dataset.label !== spreadType
+                );
+                
+                if (differenceChart) {
+                    differenceChart.data.datasets = differenceChart.data.datasets.filter(dataset => 
+                        dataset.label !== spreadType + ' - Baseline'
+                    );
+                }
+                
+                // Hide legend
+                document.getElementById('legend-' + spreadType).style.display = 'none';
+                
+                // Hide stats header
+                document.getElementById('stats-header-' + spreadType).style.display = 'none';
+            }
+            
+            comparisonChart.update();
+            if (differenceChart) differenceChart.update();
+            updateStatistics();
+            // Recalculate and update the smart baseline
+            updateSmartBaselineLine();
+        });
+    });
+}
+
+// Calculate and display statistics
+function calculateStats(data) {
+    const validData = data.filter(v => !isNaN(v) && v !== null);
+    if (validData.length === 0) return { mean: 'N/A', std: 'N/A', min: 'N/A', max: 'N/A', count: 0 };
+    
+    const mean = validData.reduce((a, b) => a + b, 0) / validData.length;
+    const variance = validData.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / validData.length;
+    const std = Math.sqrt(variance);
+    const min = Math.min(...validData);
+    const max = Math.max(...validData);
+    
+    return {
+        mean: mean.toFixed(2),
+        std: std.toFixed(2),
+        min: min.toFixed(2),
+        max: max.toFixed(2),
+        count: validData.length
+    };
+}
+
+// Update statistics table
+function updateStatistics() {
+    const statsRows = ['Mean', 'Std Dev', 'Min', 'Max', 'Valid Points'];
+    let statsHTML = '';
+
+    statsRows.forEach(statName => {
+        statsHTML += '<tr>';
+        statsHTML += `<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${statName}</td>`;
+        
+        // Main spread series
+        for (const [label, data] of Object.entries(spreadSeries)) {
+            const stats = calculateStats(data.values);
+            let value = '';
+            
+            switch(statName) {
+                case 'Mean':
+                    value = stats.mean !== 'N/A' ? stats.mean + ' bps' : 'N/A';
+                    break;
+                case 'Std Dev':
+                    value = stats.std !== 'N/A' ? stats.std + ' bps' : 'N/A';
+                    break;
+                case 'Min':
+                    value = stats.min !== 'N/A' ? stats.min + ' bps' : 'N/A';
+                    break;
+                case 'Max':
+                    value = stats.max !== 'N/A' ? stats.max + ' bps' : 'N/A';
+                    break;
+                case 'Valid Points':
+                    value = stats.count + ' / ' + data.values.length;
+                    break;
+            }
+            
+            statsHTML += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${value}</td>`;
+        }
+        
+        // Additional spread series (only if selected)
+        Object.keys(additionalSpreads).forEach(spreadType => {
+            const checkbox = document.querySelector(`input[data-spread-type="${spreadType}"]`);
+            if (checkbox && checkbox.checked) {
+                const data = additionalSpreads[spreadType];
+                const stats = calculateStats(data.values);
+                let value = '';
+                
+                switch(statName) {
+                    case 'Mean':
+                        value = stats.mean !== 'N/A' ? stats.mean + ' bps' : 'N/A';
+                        break;
+                    case 'Std Dev':
+                        value = stats.std !== 'N/A' ? stats.std + ' bps' : 'N/A';
+                        break;
+                    case 'Min':
+                        value = stats.min !== 'N/A' ? stats.min + ' bps' : 'N/A';
+                        break;
+                    case 'Max':
+                        value = stats.max !== 'N/A' ? stats.max + ' bps' : 'N/A';
+                        break;
+                    case 'Valid Points':
+                        value = stats.count + ' / ' + data.values.length;
+                        break;
+                }
+                
+                statsHTML += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 additional-stats-cell" id="stats-cell-${spreadType}-${statName.replace(' ', '')}" style="display: none;">${value}</td>`;
+            }
+        });
+        
+        statsHTML += '</tr>';
+    });
+
+    document.getElementById('statsTableBody').innerHTML = statsHTML;
+    
+    // Show stats cells for selected additional spreads
+    Object.keys(additionalSpreads).forEach(spreadType => {
+        const checkbox = document.querySelector(`input[data-spread-type="${spreadType}"]`);
+        if (checkbox && checkbox.checked) {
+            statsRows.forEach(statName => {
+                const cellId = `stats-cell-${spreadType}-${statName.replace(' ', '')}`;
+                const cell = document.getElementById(cellId);
+                if (cell) cell.style.display = 'table-cell';
+            });
+        }
+    });
+}
+
+// Initialize everything
+document.addEventListener('DOMContentLoaded', function() {
+    createComparisonChart();
+    createDifferenceChart();
+    createPriceChart();
+    setupAdditionalSpreads();
+    updateStatistics();
+    // Initial smart baseline update (in case of default checked spreads)
+    updateSmartBaselineLine();
+
+    // Collapsible price table
+    const toggleBtn = document.getElementById('togglePriceTableBtn');
+    const tableContainer = document.getElementById('priceTableContainer');
+    if (toggleBtn && tableContainer) {
+        toggleBtn.addEventListener('click', function() {
+            if (tableContainer.style.display === 'none') {
+                tableContainer.style.display = '';
+                toggleBtn.textContent = 'Hide Price Table';
+            } else {
+                tableContainer.style.display = 'none';
+                toggleBtn.textContent = 'Show Price Table';
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

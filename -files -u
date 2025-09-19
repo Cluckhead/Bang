@@ -1,0 +1,96 @@
+[1mdiff --git a/.claude/settings.local.json b/.claude/settings.local.json[m
+[1mindex c53679b..327d062 100644[m
+[1m--- a/.claude/settings.local.json[m
+[1m+++ b/.claude/settings.local.json[m
+[36m@@ -5,7 +5,17 @@[m
+       "Bash(python:*)",[m
+       "Bash(where python)",[m
+       "Bash(conda activate:*)",[m
+[31m-      "Bash(curl:*)"[m
+[32m+[m[32m      "Bash(curl:*)",[m
+[32m+[m[32m      "Bash(copy synth_spread_calculator.py synth_spread_calculator_original.py)",[m
+[32m+[m[32m      "Bash(conda info:*)",[m
+[32m+[m[32m      "Bash(C:Userscluckminiconda3envsdq_envpython.exe -c \"from analytics.synth_spread_calculator_refactored import calculate_synthetic_spreads; import os; data_folder = os.path.join(os.getcwd(), ''Data''); print(f''Testing refactored synth_spread_calculator with data folder: {data_folder}''); calculate_synthetic_spreads(data_folder)\")",[m
+[32m+[m[32m      "Bash(\"C:\\Users\\cluck\\miniconda3\\envs\\dq_env\\python.exe\" -c \"from analytics.synth_spread_calculator_refactored import calculate_synthetic_spreads; import os; data_folder = os.path.join(os.getcwd(), ''Data''); print(f''Testing refactored synth_spread_calculator with data folder: {data_folder}''); calculate_synthetic_spreads(data_folder)\")",[m
+[32m+[m[32m      "Bash(\"C:\\Users\\cluck\\miniconda3\\envs\\dq_env\\python.exe\" -c \"print(''Testing refactored module import...''); from analytics.synth_spread_calculator_refactored import calculate_synthetic_spreads, calculate_spread_for_security_using_provider; print(''Module imports successfully''); from analytics.security_data_provider import SecurityDataProvider; print(''SecurityDataProvider imports successfully''); print(''Refactored synth_spread_calculator is ready!'')\")",[m
+[32m+[m[32m      "Bash(copy synth_spread_calculator.py synth_spread_calculator_before_refactor.py)",[m
+[32m+[m[32m      "Bash(\"C:\\Users\\cluck\\miniconda3\\envs\\dq_env\\python.exe\" -c \"print(''Testing refactored synth_analytics_csv_processor...''); from analytics.synth_analytics_csv_processor import generate_comprehensive_analytics_csv; print(''Module loads successfully'')\")",[m
+[32m+[m[32m      "Bash(\"C:\\Users\\cluck\\miniconda3\\envs\\dq_env\\python.exe\" -c \"print(''Testing refactored synth_analytics_csv_processor...''); from analytics.synth_analytics_csv_processor import generate_comprehensive_analytics_csv; print(''Module loads successfully'')\")",[m
+[32m+[m[32m      "Bash(\"C:\\Users\\cluck\\miniconda3\\envs\\dq_env\\python.exe\" teststest_integration_unified_provider.py)",[m
+[32m+[m[32m      "Bash(\"C:\\Users\\cluck\\miniconda3\\envs\\dq_env\\python.exe\" \"tests\\test_integration_unified_provider.py\")"[m
+     ],[m
+     "deny": [],[m
+     "ask": [][m
+[1mdiff --git a/CleanDocs/clean_TECHNICAL_OVERVIEW.md b/CleanDocs/clean_TECHNICAL_OVERVIEW.md[m
+[1mindex 84eceef..078078f 100644[m
+[1m--- a/CleanDocs/clean_TECHNICAL_OVERVIEW.md[m
+[1m+++ b/CleanDocs/clean_TECHNICAL_OVERVIEW.md[m
+[36m@@ -27,7 +27,7 @@[m [mExample description: The application consists of a Flask UI (`app.py`) and a sui[m
+ [m
+ - `run_all_checks.py`: Orchestrates staleness, max/min, file delivery, Z‑score metrics; writes `Data/dashboard_kpis.json`; generates exception tickets.[m
+ - `settings_loader.py`: Centralized settings loader/caching for `settings.yaml` and `config/` overrides.[m
+[31m-- `preprocessing.py` / `run_preprocessing.py`: Normalize headers, coerce types, enrich metadata, write standardized CSVs.[m
+[32m+[m[32m- `preprocessing.py` / `run_preprocessing.py`: Normalize headers, coerce types, enrich metadata, write standardized CSVs, trigger synthetic analytics.[m
+ - `metric_calculator.py`: Compute summary metrics, z‑scores, and statistics.[m
+ - `staleness_detection.py`: Flags long runs of placeholder or identical values (N consecutive business days).[m
+ - `maxmin_processing.py`: Threshold breaches across security‑level files.[m
+[36m@@ -36,9 +36,13 @@[m [mExample description: The application consists of a Flask UI (`app.py`) and a sui[m
+ - `ticket_processing.py`: Automated exception ticket generation with deduplication and suppression.[m
+ - `issue_processing.py`: Manual issue tracking with Jira integration and comment timelines.[m
+ - `populate_attribution_cache.py`: Pre-computes attribution aggregates for performance optimization.[m
+[32m+[m[32m- `analytics/security_data_provider.py`: **NEW** - Unified data layer for consistent security data access across all calculators.[m
+ - `views/*`: Route handlers rendering pages and JSON APIs.[m
+ [m
+[31m-Related analytics (SpreadOMatic): see `tools/SpreadOMatic/` and `synth_spread_calculator.py` for synthetic spreads/durations.[m
+[32m+[m[32mRelated analytics (SpreadOMatic):[m[41m [m
+[32m+[m[32m- `synth_spread_calculator.py` - Synthetic spread calculations with SecurityDataProvider[m
+[32m+[m[32m- `synth_analytics_csv_processor.py` - Comprehensive analytics CSV generation[m
+[32m+[m[32m- `analytics/security_data_provider.py` - Unified data layer ensuring consistent calculations[m
+ [m
+ ### 5. Data Flow (text diagram)[m
+ [m
+[36m@@ -72,6 +76,7 @@[m [mpython run_preprocessing.py[m
+ [m
+ - For exhaustive user documentation and data schemas, see [Complete User Documentation](./clean_encyclopedia.md).[m
+ - For the auto‑generated combined docs snapshot used previously, see `Docs/combined_documentation.md` in this repository.[m
+[32m+[m[32m- **NEW** SecurityDataProvider refactoring: See `Docs/SecurityDataProvider_Refactoring_Complete.md` for implementation details.[m
+ [m
+ [m
+ ### 8. Recent Changes and Versioning (highlights)[m
+[36m@@ -80,6 +85,8 @@[m [mpython run_preprocessing.py[m
+ - Automatic post‑ingestion workflow: preprocessing → quality checks → dashboard cache[m
+ - Security summary caching and performance improvements across views[m
+ - Navigation and naming fixes; centralized logic and metric config mapping[m
+[32m+[m[32m- **NEW** SecurityDataProvider: Unified data layer eliminating calculation divergence between methods[m
+[32m+[m[32m- **NEW** Test-driven development: Comprehensive test coverage for SecurityDataProvider (553 lines)[m
+ [m
+ ### 9. Extension Points (Configuration‑First)[m
+ [m
+[36m@@ -118,6 +125,8 @@[m [mpython run_preprocessing.py[m
+ - Linting via Flake8 (`.flake8` config)[m
+ - Fixed-income analytics harness: `tests/test_fixed_income_harness.py` validates YTM, spreads, duration, convexity[m
+ - Goal seek convergence tests: Binary search optimization with comprehensive edge case coverage[m
+[32m+[m[32m- **NEW** SecurityDataProvider tests: `tests/test_security_data_provider.py` - TDD-driven comprehensive test suite[m
+[32m+[m[32m- **NEW** Integration tests: `tests/test_integration_unified_provider.py` - Validates consistent calculations[m
+ [m
+ ### 13. Bond Calculator & Analytics Tools[m
+ [m
+[1mdiff --git a/CleanDocs/clean_encyclopedia.md b/CleanDocs/clean_encyclopedia.md[m
+[1mindex c9b856f..858fadc 100644[m
+[1m--- a/CleanDocs/clean_encyclopedia.md[m
+[1m+++ b/CleanDocs/clean_encyclopedia.md[m
+[36m@@ -235,7 +235,8 @@[m [mpython run_preprocessing.py[m
+    - Conversion between long/wide formats[m
+    - Vendor-specific file handling[m
+ [m
+[31m-2. **🏛️ Enhanced Synthetic Analytics** (`synth_spread_calculator.py`):[m
+[32m+[m[32m2. **🏛️ Enhanced Synthetic Analytics** (`synth_spread_calculator.py` with `SecurityDataProvider`):[m
+[32m+[m[32m   - **Unified data layer** via SecurityDataProvider ensuring consistency across all calculations[m
+    - **Institutional-grade bond calculations** with automatic enhancement detection[m
+    - **Hull-White OAS** for callable bonds (vs basic Black-Scholes)[m
+    - **Precise ISDA day count conventions** (vs ACT/365.25 approximations)[m
+[36m@@ -927,15 +928,22 @@[m [mThe bond calculator has been enhanced with **institutional-grade precision** tha[m
+ **Graceful Enhancement Detection:**[m
+ The system automatically detects available enhancements and uses the best available methods, falling back gracefully to standard calculations if enhanced modules are unavailable.[m
+ [m
+[31m

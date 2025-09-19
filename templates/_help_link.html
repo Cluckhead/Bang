@@ -1,0 +1,14 @@
+{# Reusable Help link partial. Expects `template_key` variable to be set in caller. #}
+{% set _url = help_url_for(template_key) %}
+{% if _url %}
+<div class="flex justify-end mb-3">
+  <a href="{{ _url }}" target="_blank" rel="noopener" class="inline-flex items-center text-sm text-blue-600 hover:text-blue-800">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM9 13a1 1 0 102 0 1 1 0 00-2 0zm.25-6a.75.75 0 000 1.5h.5a.75.75 0 01.75.75c0 .414-.336.75-.75.75H9a.75.75 0 000 1.5h1a2.25 2.25 0 100-4.5h-.75z" clip-rule="evenodd" />
+    </svg>
+    Help
+  </a>
+  </div>
+{% endif %}
+
+

@@ -1,7 +1,7 @@
 # Purpose: Validate data_validation.validate_data for ts_, sec_, and w_ file scenarios.
 
 import pandas as pd
-from data_validation import validate_data
+from data_processing.data_validation import validate_data
 
 
 # ------------------ Time-Series ------------------

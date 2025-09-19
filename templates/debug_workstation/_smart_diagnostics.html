@@ -1,0 +1,48 @@
+<!-- Smart Diagnostics Panel Component -->
+<div class="bg-white rounded-lg shadow-lg p-6 panel-transition min-h-80">
+  <h2 class="text-lg font-semibold text-gray-900 mb-4">Smart Diagnostics</h2>
+  
+  <div class="space-y-3">
+    <!-- Smart Diagnosis Button -->
+    <button id="smart-diagnosis-btn" 
+            class="w-full bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors">
+      Run Smart Diagnosis
+    </button>
+    
+    <!-- Quick Diagnostic Buttons -->
+    <div class="grid grid-cols-2 gap-2">
+      <button class="quick-diag-btn bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-medium py-2 px-3 rounded transition-colors" 
+              data-check="price_consistency">
+        Price Check
+      </button>
+      <button class="quick-diag-btn bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-medium py-2 px-3 rounded transition-colors" 
+              data-check="yield_validation">
+        Yield Validation
+      </button>
+      <button class="quick-diag-btn bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-medium py-2 px-3 rounded transition-colors" 
+              data-check="spread_analysis">
+        Spread Analysis
+      </button>
+      <button class="quick-diag-btn bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-medium py-2 px-3 rounded transition-colors" 
+              data-check="duration_check">
+        Duration Check
+      </button>
+    </div>
+    
+    <!-- Diagnosis Results -->
+    <div id="diagnosis-results" class="mt-4 hidden">
+      <h4 class="text-sm font-medium text-gray-900 mb-2">Diagnosis Results</h4>
+      <div id="diagnosis-content" class="bg-gray-50 rounded-lg p-3 text-sm">
+        <!-- Results will be populated here -->
+      </div>
+    </div>
+    
+    <!-- Issues and Quick Fixes -->
+    <div id="quick-fixes" class="mt-4 hidden">
+      <h4 class="text-sm font-medium text-gray-900 mb-2">Suggested Fixes</h4>
+      <div id="fixes-content" class="space-y-2">
+        <!-- Quick fix buttons will be populated here -->
+      </div>
+    </div>
+  </div>
+</div>

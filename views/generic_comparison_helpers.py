@@ -10,26 +10,16 @@ import os
 from typing import Optional, List, Tuple, Dict
 from flask import current_app, url_for, request
 from urllib.parse import urlencode
-import config
+from core import config
 
 # Import shared utilities and processing functions
-try:
-    from utils import (
-        load_fund_groups,
-        parse_fund_list,
-        load_weights_and_held_status,
-    )  # Added load_weights
-    from security_processing import load_and_process_security_data
-    from preprocessing import read_and_sort_dates
-except ImportError as e:
-    logging.error(f"Error importing modules in generic_comparison_helpers: {e}")
-    from ..utils import (
-        load_fund_groups,
-        parse_fund_list,
-        load_weights_and_held_status,
-    )  # Added load_weights
-    from ..security_processing import load_and_process_security_data
-    from ..preprocessing import read_and_sort_dates
+from core.utils import (
+    load_fund_groups,
+    parse_fund_list,
+    load_weights_and_held_status,
+)  # Added load_weights
+from analytics.security_processing import load_and_process_security_data
+from data_processing.preprocessing import read_and_sort_dates
 
 # === Stats Calculation Helper ===============================================
 
@@ -70,7 +60,7 @@ def calculate_generic_comparison_stats(merged_df, static_data, id_col):
             group["Date"] = pd.to_datetime(group["Date"], errors="coerce")
 
         # Ensure Value columns are numeric and replace zeros with NaN
-        from data_utils import convert_to_numeric_robustly
+        from core.data_utils import convert_to_numeric_robustly
         group["Value_Orig"] = convert_to_numeric_robustly(group["Value_Orig"])
         group["Value_New"] = convert_to_numeric_robustly(group["Value_New"])
 
@@ -560,7 +550,7 @@ def _apply_summary_sorting(
 
     try:
         if pd.api.types.is_numeric_dtype(df[sort_by]):
-            from data_utils import convert_to_numeric_robustly
+            from core.data_utils import convert_to_numeric_robustly
             df[sort_by] = convert_to_numeric_robustly(df[sort_by])
             sorted_df = df.sort_values(
                 by=sort_by, ascending=ascending, na_position="last"

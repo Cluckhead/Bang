@@ -9,6 +9,7 @@
 # - Loads and merges static security info from w_secs.csv
 # - Supports filtering by fund, date, characteristic, and more
 # - Used by Flask Blueprint 'attribution_bp'
+# - Uses caching system for improved performance with large files
 #
 # Each endpoint is heavily commented for clarity. See function docstrings for details.
 
@@ -24,7 +25,7 @@ from flask import (
 import pandas as pd
 import os
 import json
-from utils import _is_date_like
+from core.utils import _is_date_like
 from .attribution_processing import (
     sum_l2s_block,
     sum_l1s_block,
@@ -34,13 +35,25 @@ from .attribution_processing import (
 )
 import typing
 from typing import Any, Dict, List, Optional
-import config
+from core import config
 from .security_helpers import load_filter_and_extract
+from .attribution_cache import AttributionCache
 
 attribution_bp = Blueprint("attribution_bp", __name__, url_prefix="/attribution")
 
 # Load attribution column config from YAML (prefixes, factors, etc.)
 ATTR_COLS = config.ATTRIBUTION_COLUMNS_CONFIG
+
+# Allowed security-level static characteristics for grouping (Order preserved for dropdown)
+ALLOWED_CHARACTERISTICS: list = [
+    "BBG LEVEL 3",
+    "Country Of Risk",
+    "Is Distressed",
+    "Position Currency",
+    "Rating",
+    "Security Sub Type",
+    "SS Project - In Scope",
+]
 
 # ------------------------------------------------------------
 # Helper functions for JSON serialization of pandas/numpy types
@@ -121,8 +134,10 @@ def attribution_summary() -> Response:
     """
     Loads att_factors_<FUNDCODE>.csv for the selected fund and computes residuals for each day for Benchmark and Portfolio.
     If the file does not exist, shows a user-friendly message. Default fund is the first available alphabetically.
+    Uses caching for improved performance with large files, but falls back to raw CSV for characteristic filtering.
     """
     data_folder = current_app.config["DATA_FOLDER"]
+    cache = AttributionCache(data_folder)
     available_funds = get_available_funds(data_folder)
     selected_fund = request.args.get(
         "fund", default=available_funds[0] if available_funds else "", type=str
@@ -147,212 +162,361 @@ def attribution_summary() -> Response:
             no_data_message="No attribution available.",
         )
 
-    # Load data
-    df = pd.read_csv(file_path)
-    df.columns = df.columns.str.strip()  # Remove accidental spaces
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df = df.dropna(subset=["Date", "Fund"])
+    # Get filter parameters from query string first
+    start_date_str = request.args.get("start_date", default=None, type=str)
+    end_date_str = request.args.get("end_date", default=None, type=str)
+    selected_level = request.args.get("level", default="L0", type=str)
 
-    # --- Load w_secs.csv and extract static characteristics ---
-    wsecs_path = os.path.join(data_folder, "w_secs.csv")
-    wsecs = pd.read_csv(wsecs_path)
-    wsecs.columns = wsecs.columns.str.strip()
-    static_cols = [
-        col for col in wsecs.columns if col not in ["ISIN"] and not _is_date_like(col)
+    # --- Load reference.csv and extract static characteristics ---
+    ref_path = os.path.join(data_folder, "reference.csv")
+    ref_df = pd.read_csv(ref_path)
+    ref_df.columns = ref_df.columns.str.strip()
+    # Filter available static columns to user-approved list
+    static_cols_raw = [
+        col for col in ref_df.columns if col not in ["ISIN"] and not _is_date_like(col)
     ]
-    wsecs_static = wsecs.drop_duplicates(subset=["ISIN"])[["ISIN"] + static_cols]
+    static_cols = [c for c in ALLOWED_CHARACTERISTICS if c in static_cols_raw]
+    ref_static = ref_df.drop_duplicates(subset=["ISIN"])[["ISIN"] + static_cols]
 
     # --- Characteristic selection ---
     available_characteristics = static_cols
-    # Only set selected_characteristic if user selects it; otherwise, default to None (no group by)
     selected_characteristic = request.args.get(
         "characteristic", default=None, type=str
     )
     # If the selected characteristic is not valid, set to None
     if not selected_characteristic or selected_characteristic not in available_characteristics:
         selected_characteristic = None
-
-    # Join att_factors with w_secs static info
-    df = df.merge(wsecs_static, on="ISIN", how="left")
-
-    # Get date range for UI
-    min_date = df["Date"].min()
-    max_date = df["Date"].max()
-
-    # Get filter parameters from query string
-    start_date_str = request.args.get("start_date", default=None, type=str)
-    end_date_str = request.args.get("end_date", default=None, type=str)
-    selected_level = request.args.get("level", default="L0", type=str)
+    
     selected_characteristic_value = request.args.get(
         "characteristic_value", default="", type=str
     )
 
-    # Parse date range
-    start_date = (
-        pd.to_datetime(start_date_str, errors="coerce") if start_date_str else min_date
-    )
-    end_date = (
-        pd.to_datetime(end_date_str, errors="coerce") if end_date_str else max_date
-    )
+    # Determine if we need characteristic filtering
+    use_raw_csv = selected_characteristic is not None
 
-    # Use L1 and L2 groupings from config
-    l1_groups = config.ATTRIBUTION_L1_GROUPS
-    l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
-    # Attribution column prefixes from config
-    pfx_bench = ATTR_COLS['prefixes']['bench']
-    pfx_prod = ATTR_COLS['prefixes']['prod']
-    pfx_sp_bench = ATTR_COLS['prefixes']['sp_bench']
-    pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
-    l0_bench = ATTR_COLS['prefixes']['l0_bench']
-    l0_prod = ATTR_COLS['prefixes']['l0_prod']
+    if use_raw_csv:
+        # Load raw CSV for characteristic filtering (similar to radar view)
+        df = pd.read_csv(file_path)
+        df.columns = df.columns.str.strip()
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date", "Fund"])
 
-    # Prepare results: group by Date, Fund, and selected characteristic
-    group_cols = ["Date", "Fund"]
-    if selected_characteristic:
-        group_cols.append(selected_characteristic)
-    benchmark_results = []
-    portfolio_results = []
+        # Join with static characteristics
+        df = df.merge(ref_static, on="ISIN", how="left")
 
-    # Compute available values for the selected characteristic
-    if selected_characteristic:
+        # Get date range
+        min_date = df["Date"].min()
+        max_date = df["Date"].max()
+
+        # Parse date range
+        start_date = (
+            pd.to_datetime(start_date_str, errors="coerce") if start_date_str else min_date
+        )
+        end_date = (
+            pd.to_datetime(end_date_str, errors="coerce") if end_date_str else max_date
+        )
+
+        # Compute available values for the selected characteristic
         available_characteristic_values = sorted(
             df[selected_characteristic].dropna().unique()
-        )
+        ) if selected_characteristic else []
+
+        # Filter by characteristic value if set
+        if selected_characteristic and selected_characteristic_value:
+            df = df[df[selected_characteristic] == selected_characteristic_value]
+
+        # Filter by date range
+        df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
+
+        # Process raw data for summary tables (implement aggregation logic here)
+        # For now, we'll use the same logic as the radar view but aggregate by date
+        benchmark_results = []
+        portfolio_results = []
+
+        # Group by date and characteristic if selected
+        group_cols = ["Date"]
+        if selected_characteristic:
+            group_cols.append(selected_characteristic)
+
+        # Loop over each group (date [+ characteristic]) and compute aggregates using the same
+        # compute_daily_aggregates helper that powers the cache. This guarantees identical
+        # Return / Total Attribution / Residual calculations no matter how the data is filtered.
+        for group_keys, group_df in df.groupby(group_cols):
+            # Unpack keys – group_keys is either (date,) or (date, characteristic_value)
+            if selected_characteristic:
+                date, char_val = group_keys
+            else:
+                date = group_keys[0]
+                char_val = None
+
+            # Re-run the aggregation logic on this subset only
+            agg_dict = cache.compute_daily_aggregates(group_df, selected_fund)
+            level_key = f"daily_{selected_level.lower()}"
+            daily_df = agg_dict.get(level_key)
+            if daily_df is None or daily_df.empty:
+                continue  # nothing to append
+            daily_row = daily_df.iloc[0]
+
+            l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
+
+            # --- Build benchmark row ---
+            if selected_level == "L0" or not selected_level:
+                bm_row = {
+                    "Date": date,
+                    "Fund": selected_fund,
+                    "Return_Prod": daily_row["Bench_Return"],
+                    "Return_SP": daily_row["Bench_Return"],
+                    "TotalAttrib_Prod": daily_row["Bench_TotalAttrib_Prod"],
+                    "TotalAttrib_SP": daily_row["Bench_TotalAttrib_SP"],
+                    "Residual_Prod": daily_row["Bench_Residual_Prod"],
+                    "Residual_SP": daily_row["Bench_Residual_SP"],
+                    "AbsResidual_Prod": daily_row["Bench_AbsResidual_Prod"],
+                    "AbsResidual_SP": daily_row["Bench_AbsResidual_SP"],
+                }
+                pt_row = {
+                    "Date": date,
+                    "Fund": selected_fund,
+                    "Return_Prod": daily_row["Port_Return"],
+                    "Return_SP": daily_row["Port_Return"],
+                    "TotalAttrib_Prod": daily_row["Port_TotalAttrib_Prod"],
+                    "TotalAttrib_SP": daily_row["Port_TotalAttrib_SP"],
+                    "Residual_Prod": daily_row["Port_Residual_Prod"],
+                    "Residual_SP": daily_row["Port_Residual_SP"],
+                    "AbsResidual_Prod": daily_row["Port_AbsResidual_Prod"],
+                    "AbsResidual_SP": daily_row["Port_AbsResidual_SP"],
+                }
+                if selected_characteristic:
+                    bm_row[selected_characteristic] = char_val
+                    pt_row[selected_characteristic] = char_val
+                benchmark_results.append(bm_row)
+                portfolio_results.append(pt_row)
+            elif selected_level == "L1":
+                bm_row2 = {
+                    "Date": date,
+                    "Fund": selected_fund,
+                    "Return_Prod": daily_row["Bench_Return"],
+                    "Return_SP": daily_row["Bench_Return"],
+                    "TotalAttrib_Prod": daily_row["Bench_TotalAttrib_Prod"],
+                    "TotalAttrib_SP": daily_row["Bench_TotalAttrib_SP"],
+                    "Residual_Prod": daily_row["Bench_Residual_Prod"],
+                    "Residual_SP": daily_row["Bench_Residual_SP"],
+                    "L1Rates_Prod": daily_row["Bench_L1Rates_Prod"],
+                    "L1Rates_SP": daily_row["Bench_L1Rates_SP"],
+                    "L1Credit_Prod": daily_row["Bench_L1Credit_Prod"],
+                    "L1Credit_SP": daily_row["Bench_L1Credit_SP"],
+                    "L1FX_Prod": daily_row["Bench_L1FX_Prod"],
+                    "L1FX_SP": daily_row["Bench_L1FX_SP"],
+                }
+                pt_row2 = {
+                    "Date": date,
+                    "Fund": selected_fund,
+                    "Return_Prod": daily_row["Port_Return"],
+                    "Return_SP": daily_row["Port_Return"],
+                    "TotalAttrib_Prod": daily_row["Port_TotalAttrib_Prod"],
+                    "TotalAttrib_SP": daily_row["Port_TotalAttrib_SP"],
+                    "Residual_Prod": daily_row["Port_Residual_Prod"],
+                    "Residual_SP": daily_row["Port_Residual_SP"],
+                    "L1Rates_Prod": daily_row["Port_L1Rates_Prod"],
+                    "L1Rates_SP": daily_row["Port_L1Rates_SP"],
+                    "L1Credit_Prod": daily_row["Port_L1Credit_Prod"],
+                    "L1Credit_SP": daily_row["Port_L1Credit_SP"],
+                    "L1FX_Prod": daily_row["Port_L1FX_Prod"],
+                    "L1FX_SP": daily_row["Port_L1FX_SP"],
+                }
+                if selected_characteristic:
+                    bm_row2[selected_characteristic] = char_val
+                    pt_row2[selected_characteristic] = char_val
+                benchmark_results.append(bm_row2)
+                portfolio_results.append(pt_row2)
+            elif selected_level == "L2":
+                # Build L2 dictionaries
+                bench_l2prod = {col: daily_row.get(f"Bench_{col}_Prod", 0) for col in l2_all}
+                bench_l2sp = {col: daily_row.get(f"Bench_{col}_SP", 0) for col in l2_all}
+                port_l2prod = {col: daily_row.get(f"Port_{col}_Prod", 0) for col in l2_all}
+                port_l2sp = {col: daily_row.get(f"Port_{col}_SP", 0) for col in l2_all}
+
+                bm_row3 = {
+                    "Date": date,
+                    "Fund": selected_fund,
+                    "Return_Prod": daily_row["Bench_Return"],
+                    "Return_SP": daily_row["Bench_Return"],
+                    "TotalAttrib_Prod": daily_row["Bench_TotalAttrib_Prod"],
+                    "TotalAttrib_SP": daily_row["Bench_TotalAttrib_SP"],
+                    "Residual_Prod": daily_row["Bench_Residual_Prod"],
+                    "Residual_SP": daily_row["Bench_Residual_SP"],
+                    "L2Prod": bench_l2prod,
+                    "L2SP": bench_l2sp,
+                    "L2ProdKeys": l2_all,
+                }
+                pt_row3 = {
+                    "Date": date,
+                    "Fund": selected_fund,
+                    "Return_Prod": daily_row["Port_Return"],
+                    "Return_SP": daily_row["Port_Return"],
+                    "TotalAttrib_Prod": daily_row["Port_TotalAttrib_Prod"],
+                    "TotalAttrib_SP": daily_row["Port_TotalAttrib_SP"],
+                    "Residual_Prod": daily_row["Port_Residual_Prod"],
+                    "Residual_SP": daily_row["Port_Residual_SP"],
+                    "L2Prod": port_l2prod,
+                    "L2SP": port_l2sp,
+                    "L2ProdKeys": l2_all,
+                }
+                if selected_characteristic:
+                    bm_row3[selected_characteristic] = char_val
+                    pt_row3[selected_characteristic] = char_val
+                benchmark_results.append(bm_row3)
+                portfolio_results.append(pt_row3)
+
+        # Sort results by date (and characteristic if present) for consistent display
+        benchmark_results = sorted(benchmark_results, key=lambda x: (x["Date"], x.get(selected_characteristic, "") if selected_characteristic else ""))
+        portfolio_results = sorted(portfolio_results, key=lambda x: (x["Date"], x.get(selected_characteristic, "") if selected_characteristic else ""))
+
     else:
+        # Use cached data (original logic)
+        # --- Get date range from cache or source file for UI ---
+        sample_df = cache.load_cache(selected_fund, f'daily_{selected_level.lower()}')
+        if sample_df is None:
+            # Load just to get dates
+            df_temp = pd.read_csv(file_path, usecols=['Date'])
+            df_temp["Date"] = pd.to_datetime(df_temp["Date"], errors="coerce")
+            min_date = df_temp["Date"].min()
+            max_date = df_temp["Date"].max()
+        else:
+            min_date = sample_df["Date"].min()
+            max_date = sample_df["Date"].max()
+
+        # Parse date range
+        start_date = (
+            pd.to_datetime(start_date_str, errors="coerce") if start_date_str else min_date
+        )
+        end_date = (
+            pd.to_datetime(end_date_str, errors="coerce") if end_date_str else max_date
+        )
+
         available_characteristic_values = []
 
-    for group_keys, group in df.groupby(group_cols):
-        if selected_characteristic:
-            date, fund, char_val = group_keys
-        else:
-            date, fund = group_keys
-            char_val = None
-        if not (start_date <= date <= end_date):
-            continue
-        if selected_characteristic and selected_characteristic_value:
-            if char_val != selected_characteristic_value:
-                continue
-        # L0: Residuals and Abs Residuals
-        if selected_level == "L0" or not selected_level:
-            bench_prod_res = group.apply(
-                lambda row: calc_residual(
-                    row, l0_bench, pfx_bench, l2_all
-                ),
-                axis=1,
-            )
-            bench_sp_res = group.apply(
-                lambda row: calc_residual(
-                    row, l0_bench, pfx_sp_bench, l2_all
-                ),
-                axis=1,
-            )
-            port_prod_res = group.apply(
-                lambda row: calc_residual(
-                    row, l0_prod, pfx_prod, l2_all
-                ),
-                axis=1,
-            )
-            port_sp_res = group.apply(
-                lambda row: calc_residual(
-                    row, l0_prod, pfx_sp_prod, l2_all
-                ),
-                axis=1,
-            )
-            bench_prod = bench_prod_res.sum()
-            bench_sp = bench_sp_res.sum()
-            port_prod = port_prod_res.sum()
-            port_sp = port_sp_res.sum()
-            bench_prod_abs = bench_prod_res.abs().sum()
-            bench_sp_abs = bench_sp_res.abs().sum()
-            port_prod_abs = port_prod_res.abs().sum()
-            port_sp_abs = port_sp_res.abs().sum()
-            row_info_bench = {
-                "Date": date,
-                "Fund": selected_fund,
-                "Residual_Prod": bench_prod,
-                "Residual_SP": bench_sp,
-                "AbsResidual_Prod": bench_prod_abs,
-                "AbsResidual_SP": bench_sp_abs,
-            }
-            row_info_port = {
-                "Date": date,
-                "Fund": selected_fund,
-                "Residual_Prod": port_prod,
-                "Residual_SP": port_sp,
-                "AbsResidual_Prod": port_prod_abs,
-                "AbsResidual_SP": port_sp_abs,
-            }
-            if selected_characteristic:
-                row_info_bench[selected_characteristic] = char_val
-                row_info_port[selected_characteristic] = char_val
-            benchmark_results.append(row_info_bench)
-            portfolio_results.append(row_info_port)
-        # L1: Show L1 Rates, Credit, FX (Prod and S&P)
-        elif selected_level == "L1":
-            bench_l1_prod = sum_l1s_block(group, pfx_bench, l1_groups)
-            bench_l1_sp = sum_l1s_block(group, pfx_sp_bench, l1_groups)
-            port_l1_prod = sum_l1s_block(group, pfx_prod, l1_groups)
-            port_l1_sp = sum_l1s_block(group, pfx_sp_prod, l1_groups)
-            row_info_bench = {
-                "Date": date,
-                "Fund": selected_fund,
-                "L1Rates_Prod": bench_l1_prod[0],
-                "L1Rates_SP": bench_l1_sp[0],
-                "L1Credit_Prod": bench_l1_prod[1],
-                "L1Credit_SP": bench_l1_sp[1],
-                "L1FX_Prod": bench_l1_prod[2],
-                "L1FX_SP": bench_l1_sp[2],
-            }
-            row_info_port = {
-                "Date": date,
-                "Fund": selected_fund,
-                "L1Rates_Prod": port_l1_prod[0],
-                "L1Rates_SP": port_l1_sp[0],
-                "L1Credit_Prod": port_l1_prod[1],
-                "L1Credit_SP": port_l1_sp[1],
-                "L1FX_Prod": port_l1_prod[2],
-                "L1FX_SP": port_l1_sp[2],
-            }
-            if selected_characteristic:
-                row_info_bench[selected_characteristic] = char_val
-                row_info_port[selected_characteristic] = char_val
-            benchmark_results.append(row_info_bench)
-            portfolio_results.append(row_info_port)
-        # L2: Show all L2 values (Prod and S&P) side by side
-        elif selected_level == "L2":
-            l2prod = dict(zip(l2_all, sum_l2s_block(group, pfx_bench, l2_all)))
-            l2sp = dict(zip(l2_all, sum_l2s_block(group, pfx_sp_bench, l2_all)))
-            l2prod_port = dict(zip(l2_all, sum_l2s_block(group, pfx_prod, l2_all)))
-            l2sp_port = dict(zip(l2_all, sum_l2s_block(group, pfx_sp_prod, l2_all)))
-            row_info_bench = {
-                "Date": date,
-                "Fund": selected_fund,
-                "L2Prod": l2prod,
-                "L2SP": l2sp,
-                "L2ProdKeys": l2_all,
-            }
-            row_info_port = {
-                "Date": date,
-                "Fund": selected_fund,
-                "L2Prod": l2prod_port,
-                "L2SP": l2sp_port,
-                "L2ProdKeys": l2_all,
-            }
-            if selected_characteristic:
-                row_info_bench[selected_characteristic] = char_val
-                row_info_port[selected_characteristic] = char_val
-            benchmark_results.append(row_info_bench)
-            portfolio_results.append(row_info_port)
-
-    # Sort
-    benchmark_results = sorted(
-        benchmark_results,
-        key=lambda x: (x["Date"], x["Fund"], x.get(selected_characteristic, "")),
-    )
-    portfolio_results = sorted(
-        portfolio_results,
-        key=lambda x: (x["Date"], x["Fund"], x.get(selected_characteristic, "")),
-    )
+        # Get cached aggregates
+        date_filter = (start_date, end_date)
+        cached_data = cache.get_aggregates_with_cache(selected_fund, selected_level, date_filter)
+        # --- Ensure cache contains latest columns (Bench_Return, etc.) ---
+        # Older cached files created before recent updates may not include the new Return / Attribution columns.
+        # If they are missing, force a cache refresh for this fund and reload.
+        if not cached_data.empty and ('Bench_Return' not in cached_data.columns or 'Port_Return' not in cached_data.columns):
+            # Recompute aggregates to regenerate cache with new columns
+            cache.refresh_cache(selected_fund)
+            cached_data = cache.get_aggregates_with_cache(selected_fund, selected_level, date_filter)
+        
+        # Prepare results based on cached data
+        benchmark_results = []
+        portfolio_results = []
+        
+        if not cached_data.empty:
+            l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
+            
+            for _, row in cached_data.iterrows():
+                date = row['Date']
+                
+                if selected_level == "L0" or not selected_level:
+                    # L0 data format
+                    benchmark_results.append({
+                        "Date": date,
+                        "Fund": selected_fund,
+                        "Return_Prod": row['Bench_Return'],
+                        "Return_SP": row['Bench_Return'],
+                        "TotalAttrib_Prod": row['Bench_TotalAttrib_Prod'],
+                        "TotalAttrib_SP": row['Bench_TotalAttrib_SP'],
+                        "Residual_Prod": row['Bench_Residual_Prod'],
+                        "Residual_SP": row['Bench_Residual_SP'],
+                        "AbsResidual_Prod": row['Bench_AbsResidual_Prod'],
+                        "AbsResidual_SP": row['Bench_AbsResidual_SP'],
+                    })
+                    portfolio_results.append({
+                        "Date": date,
+                        "Fund": selected_fund,
+                        "Return_Prod": row['Port_Return'],
+                        "Return_SP": row['Port_Return'],
+                        "TotalAttrib_Prod": row['Port_TotalAttrib_Prod'],
+                        "TotalAttrib_SP": row['Port_TotalAttrib_SP'],
+                        "Residual_Prod": row['Port_Residual_Prod'],
+                        "Residual_SP": row['Port_Residual_SP'],
+                        "AbsResidual_Prod": row['Port_AbsResidual_Prod'],
+                        "AbsResidual_SP": row['Port_AbsResidual_SP'],
+                    })
+                
+                elif selected_level == "L1":
+                    # L1 data format
+                    benchmark_results.append({
+                        "Date": date,
+                        "Fund": selected_fund,
+                        "Return_Prod": row['Bench_Return'],
+                        "Return_SP": row['Bench_Return'],
+                        "TotalAttrib_Prod": row['Bench_TotalAttrib_Prod'],
+                        "TotalAttrib_SP": row['Bench_TotalAttrib_SP'],
+                        "Residual_Prod": row['Bench_Residual_Prod'],
+                        "Residual_SP": row['Bench_Residual_SP'],
+                        "L1Rates_Prod": row['Bench_L1Rates_Prod'],
+                        "L1Rates_SP": row['Bench_L1Rates_SP'],
+                        "L1Credit_Prod": row['Bench_L1Credit_Prod'],
+                        "L1Credit_SP": row['Bench_L1Credit_SP'],
+                        "L1FX_Prod": row['Bench_L1FX_Prod'],
+                        "L1FX_SP": row['Bench_L1FX_SP'],
+                    })
+                    portfolio_results.append({
+                        "Date": date,
+                        "Fund": selected_fund,
+                        "Return_Prod": row['Port_Return'],
+                        "Return_SP": row['Port_Return'],
+                        "TotalAttrib_Prod": row['Port_TotalAttrib_Prod'],
+                        "TotalAttrib_SP": row['Port_TotalAttrib_SP'],
+                        "Residual_Prod": row['Port_Residual_Prod'],
+                        "Residual_SP": row['Port_Residual_SP'],
+                        "L1Rates_Prod": row['Port_L1Rates_Prod'],
+                        "L1Rates_SP": row['Port_L1Rates_SP'],
+                        "L1Credit_Prod": row['Port_L1Credit_Prod'],
+                        "L1Credit_SP": row['Port_L1Credit_SP'],
+                        "L1FX_Prod": row['Port_L1FX_Prod'],
+                        "L1FX_SP": row['Port_L1FX_SP'],
+                    })
+                
+                elif selected_level == "L2":
+                    # L2 data format - extract columns dynamically
+                    bench_l2prod = {}
+                    bench_l2sp = {}
+                    port_l2prod = {}
+                    port_l2sp = {}
+                    
+                    for col in l2_all:
+                        bench_l2prod[col] = row.get(f'Bench_{col}_Prod', 0)
+                        bench_l2sp[col] = row.get(f'Bench_{col}_SP', 0)
+                        port_l2prod[col] = row.get(f'Port_{col}_Prod', 0)
+                        port_l2sp[col] = row.get(f'Port_{col}_SP', 0)
+                    
+                    benchmark_results.append({
+                        "Date": date,
+                        "Fund": selected_fund,
+                        "Return_Prod": row['Bench_Return'],
+                        "Return_SP": row['Bench_Return'],
+                        "TotalAttrib_Prod": row['Bench_TotalAttrib_Prod'],
+                        "TotalAttrib_SP": row['Bench_TotalAttrib_SP'],
+                        "Residual_Prod": row['Bench_Residual_Prod'],
+                        "Residual_SP": row['Bench_Residual_SP'],
+                        "L2Prod": bench_l2prod,
+                        "L2SP": bench_l2sp,
+                        "L2ProdKeys": l2_all,
+                    })
+                    portfolio_results.append({
+                        "Date": date,
+                        "Fund": selected_fund,
+                        "Return_Prod": row['Port_Return'],
+                        "Return_SP": row['Port_Return'],
+                        "TotalAttrib_Prod": row['Port_TotalAttrib_Prod'],
+                        "TotalAttrib_SP": row['Port_TotalAttrib_SP'],
+                        "Residual_Prod": row['Port_Residual_Prod'],
+                        "Residual_SP": row['Port_Residual_SP'],
+                        "L2Prod": port_l2prod,
+                        "L2SP": port_l2sp,
+                        "L2ProdKeys": l2_all,
+                    })
 
     return render_template(
         "attribution_summary.html",
@@ -377,8 +541,10 @@ def attribution_charts() -> Response:
     """
     Attribution Residuals Chart Page: Shows residuals over time for Benchmark and Portfolio (Prod and S&P),
     with filters and grouping as in the summary view. Data is prepared for JS charts.
+    Uses caching for improved performance with large files.
     """
     data_folder = current_app.config["DATA_FOLDER"]
+    cache = AttributionCache(data_folder)
     available_funds = get_available_funds(data_folder)
     selected_fund = request.args.get(
         "fund", default=available_funds[0] if available_funds else "", type=str
@@ -403,21 +569,40 @@ def attribution_charts() -> Response:
             no_data_message="No attribution available.",
         )
 
-    # Load data
-    df = pd.read_csv(file_path)
-    df.columns = df.columns.str.strip()
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df = df.dropna(subset=["Date", "Fund"])
+    # Get filter parameters from query string
+    start_date_str = request.args.get("start_date", default=None, type=str)
+    end_date_str = request.args.get("end_date", default=None, type=str)
+    
+    # --- Get date range from cache or source file for UI ---
+    # Always use L0 for charts (residuals)
+    sample_df = cache.load_cache(selected_fund, 'daily_l0')
+    if sample_df is None:
+        # Load just to get dates
+        df_temp = pd.read_csv(file_path, usecols=['Date'])
+        df_temp["Date"] = pd.to_datetime(df_temp["Date"], errors="coerce")
+        min_date = df_temp["Date"].min()
+        max_date = df_temp["Date"].max()
+    else:
+        min_date = sample_df["Date"].min()
+        max_date = sample_df["Date"].max()
 
-    # --- Load w_secs.csv and extract static characteristics ---
-    wsecs_path = os.path.join(data_folder, "w_secs.csv")
-    wsecs = pd.read_csv(wsecs_path)
-    wsecs.columns = wsecs.columns.str.strip()
-    static_cols = [
-        col for col in wsecs.columns if col not in ["ISIN"] and not _is_date_like(col)
+    # Parse date range
+    start_date = (
+        pd.to_datetime(start_date_str, errors="coerce") if start_date_str else min_date
+    )
+    end_date = (
+        pd.to_datetime(end_date_str, errors="coerce") if end_date_str else max_date
+    )
+
+    # --- Load reference.csv and extract static characteristics ---
+    ref_path = os.path.join(data_folder, "reference.csv")
+    ref_df = pd.read_csv(ref_path)
+    ref_df.columns = ref_df.columns.str.strip()
+    static_cols_raw = [
+        col for col in ref_df.columns if col not in ["ISIN"] and not _is_date_like(col)
     ]
-    wsecs_static = wsecs.drop_duplicates(subset=["ISIN"])[["ISIN"] + static_cols]
-
+    static_cols = [c for c in ALLOWED_CHARACTERISTICS if c in static_cols_raw]
+    
     # --- Characteristic selection ---
     available_characteristics = static_cols
     # Only set selected_characteristic if user selects it; otherwise, default to None (no group by)
@@ -431,122 +616,48 @@ def attribution_charts() -> Response:
         "characteristic_value", default="", type=str
     )
 
-    # Join att_factors with w_secs static info
-    df = df.merge(wsecs_static, on="ISIN", how="left")
-
-    # Get date range for UI
-    min_date = df["Date"].min()
-    max_date = df["Date"].max()
-
-    # Get filter parameters from query string
-    start_date_str = request.args.get("start_date", default=None, type=str)
-    end_date_str = request.args.get("end_date", default=None, type=str)
-
-    # Parse date range
-    start_date = (
-        pd.to_datetime(start_date_str, errors="coerce") if start_date_str else min_date
-    )
-    end_date = (
-        pd.to_datetime(end_date_str, errors="coerce") if end_date_str else max_date
-    )
-
     # Compute available values for the selected characteristic
+    available_characteristic_values = []
+    
+    # Note: For now, characteristics filtering is not supported with cached chart data
     if selected_characteristic:
-        available_characteristic_values = sorted(
-            df[selected_characteristic].dropna().unique()
-        )
-    else:
-        available_characteristic_values = []
+        current_app.logger.warning("Characteristic filtering not yet supported with cached chart data")
+        selected_characteristic = None
 
-    # Filter by characteristic value if set
-    if selected_characteristic and selected_characteristic_value:
-        df = df[df[selected_characteristic] == selected_characteristic_value]
-
-    # Filter by date range
-    df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
-
-    # Use L1 and L2 groupings from config
-    l1_groups = config.ATTRIBUTION_L1_GROUPS
-    l2_all = sum(config.ATTRIBUTION_L2_GROUPS.values(), [])
-
-    # Group by Date (and characteristic if grouping)
-    group_cols = ["Date"]
-    if selected_characteristic:
-        group_cols.append(selected_characteristic)
-
-    # --- Attribution column prefixes from config (fix for NameError) ---
-    pfx_bench = ATTR_COLS['prefixes']['bench']
-    pfx_prod = ATTR_COLS['prefixes']['prod']
-    pfx_sp_bench = ATTR_COLS['prefixes']['sp_bench']
-    pfx_sp_prod = ATTR_COLS['prefixes']['sp_prod']
-    l0_bench = ATTR_COLS['prefixes']['l0_bench']
-    l0_prod = ATTR_COLS['prefixes']['l0_prod']
-
+    # Get cached L0 data for charts
+    date_filter = (start_date, end_date)
+    cached_data = cache.get_aggregates_with_cache(selected_fund, 'L0', date_filter)
+    
     # Prepare time series data for charts
     chart_data_bench = []
     chart_data_port = []
-    # Sort by date for cumulative
-    for group_keys, group in df.groupby(group_cols):
-        if selected_characteristic:
-            date, char_val = group_keys
-        else:
-            (date,) = group_keys
-            char_val = None
-        bench_prod_res = group.apply(
-            lambda row: calc_residual(row, l0_bench, pfx_bench, l2_all),
-            axis=1,
-        )
-        bench_sp_res = group.apply(
-            lambda row: calc_residual(
-                row,
-                l0_bench,
-                pfx_sp_bench,
-                l2_all,
-            ),
-            axis=1,
-        )
-        port_prod_res = group.apply(
-            lambda row: calc_residual(row, l0_prod, pfx_prod, l2_all),
-            axis=1,
-        )
-        port_sp_res = group.apply(
-            lambda row: calc_residual(
-                row,
-                l0_prod,
-                pfx_sp_prod,
-                l2_all,
-            ),
-            axis=1,
-        )
-        bench_prod = bench_prod_res.sum()
-        bench_sp = bench_sp_res.sum()
-        port_prod = port_prod_res.sum()
-        port_sp = port_sp_res.sum()
-        bench_prod_abs = bench_prod_res.abs().sum()
-        bench_sp_abs = bench_sp_res.abs().sum()
-        port_prod_abs = port_prod_res.abs().sum()
-        port_sp_abs = port_sp_res.abs().sum()
-        chart_data_bench.append(
-            {
+    
+    if not cached_data.empty:
+        for _, row in cached_data.iterrows():
+            date = row['Date']
+            
+            # Benchmark data
+            chart_data_bench.append({
                 "date": date.strftime("%Y-%m-%d"),
-                "residual_prod": bench_prod,
-                "residual_sp": bench_sp,
-                "abs_residual_prod": bench_prod_abs,
-                "abs_residual_sp": bench_sp_abs,
-            }
-        )
-        chart_data_port.append(
-            {
+                "residual_prod": row['Bench_Residual_Prod'],
+                "residual_sp": row['Bench_Residual_SP'],
+                "abs_residual_prod": row['Bench_AbsResidual_Prod'],
+                "abs_residual_sp": row['Bench_AbsResidual_SP'],
+            })
+            
+            # Portfolio data
+            chart_data_port.append({
                 "date": date.strftime("%Y-%m-%d"),
-                "residual_prod": port_prod,
-                "residual_sp": port_sp,
-                "abs_residual_prod": port_prod_abs,
-                "abs_residual_sp": port_sp_abs,
-            }
-        )
+                "residual_prod": row['Port_Residual_Prod'],
+                "residual_sp": row['Port_Residual_SP'],
+                "abs_residual_prod": row['Port_AbsResidual_Prod'],
+                "abs_residual_sp": row['Port_AbsResidual_SP'],
+            })
+    
     # Sort by date
     chart_data_bench = sorted(chart_data_bench, key=lambda x: x["date"])
     chart_data_port = sorted(chart_data_port, key=lambda x: x["date"])
+    
     # Add cumulative net residuals
     cum_bench_prod = 0
     cum_bench_sp = 0
@@ -621,14 +732,15 @@ def attribution_radar() -> Response:
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.dropna(subset=["Date", "Fund"])
 
-    # --- Load w_secs.csv and extract static characteristics ---
-    wsecs_path = os.path.join(data_folder, "w_secs.csv")
-    wsecs = pd.read_csv(wsecs_path)
-    wsecs.columns = wsecs.columns.str.strip()
-    static_cols = [
-        col for col in wsecs.columns if col not in ["ISIN"] and not _is_date_like(col)
+    # --- Load reference.csv and extract static characteristics ---
+    ref_path = os.path.join(data_folder, "reference.csv")
+    ref_df = pd.read_csv(ref_path)
+    ref_df.columns = ref_df.columns.str.strip()
+    static_cols_raw = [
+        col for col in ref_df.columns if col not in ["ISIN"] and not _is_date_like(col)
     ]
-    wsecs_static = wsecs.drop_duplicates(subset=["ISIN"])[["ISIN"] + static_cols]
+    static_cols = [c for c in ALLOWED_CHARACTERISTICS if c in static_cols_raw]
+    ref_static = ref_df.drop_duplicates(subset=["ISIN"])[["ISIN"] + static_cols]
 
     # --- Characteristic selection ---
     available_characteristics = static_cols
@@ -644,7 +756,7 @@ def attribution_radar() -> Response:
     )
 
     # Join att_factors with w_secs static info
-    df = df.merge(wsecs_static, on="ISIN", how="left")
+    df = df.merge(ref_static, on="ISIN", how="left")
 
     # Get date range for UI
     min_date = df["Date"].min()
@@ -820,13 +932,29 @@ def attribution_security_page() -> Response:
     df.columns = df.columns.str.strip()
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.dropna(subset=["Date", "Fund", "ISIN"])
-    wsecs_path = os.path.join(data_folder, "w_secs.csv")
-    wsecs = pd.read_csv(wsecs_path)
-    wsecs.columns = wsecs.columns.str.strip()
-    static_cols = [
-        col for col in wsecs.columns if col not in ["ISIN"] and not _is_date_like(col)
+    ref_path = os.path.join(data_folder, "reference.csv")
+    ref_df = pd.read_csv(ref_path)
+    ref_df.columns = ref_df.columns.str.strip()
+    static_cols_raw = [
+        col for col in ref_df.columns if col not in ["ISIN"] and not _is_date_like(col)
     ]
-    wsecs_static = wsecs.drop_duplicates(subset=["ISIN"])[["ISIN"] + static_cols]
+    static_cols = [c for c in ALLOWED_CHARACTERISTICS if c in static_cols_raw]
+    
+    # Always include Security Name if it exists, regardless of ALLOWED_CHARACTERISTICS
+    required_cols = ["ISIN"]
+    if "Security Name" in ref_df.columns:
+        required_cols.append("Security Name")
+    
+    # Add the filtered static columns
+    all_cols = required_cols + [col for col in static_cols if col not in required_cols]
+    ref_static = ref_df.drop_duplicates(subset=["ISIN"])[all_cols]
+
+    # Map Security Sub Type to Type for template compatibility if Type doesn't exist
+    if "Type" not in ref_static.columns and "Security Sub Type" in ref_static.columns:
+        ref_static["Type"] = ref_static["Security Sub Type"]
+    elif "Type" not in ref_static.columns:
+        # If neither Type nor Security Sub Type exists, create an empty Type column
+        ref_static["Type"] = ""
 
     # --- UI Controls ---
     # Date picker: default to previous business day
@@ -843,8 +971,8 @@ def attribution_security_page() -> Response:
     selected_fund = request.args.get(
         "fund", default=available_funds[0] if available_funds else "", type=str
     )
-    # Type filter
-    available_types = sorted(wsecs_static["Type"].dropna().unique())
+    # Type filter - now safely accesses the Type column
+    available_types = sorted(ref_static["Type"].dropna().unique()) if "Type" in ref_static.columns else []
     selected_type = request.args.get("type", default="", type=str)
     # Bench/Portfolio toggle
     bench_or_port = request.args.get(
@@ -861,11 +989,12 @@ def attribution_security_page() -> Response:
     # --- Filter and Join Data ---
     df = df[df["Fund"] == selected_fund]
     if selected_type:
-        # Join to get type for filtering
-        df = df.merge(wsecs_static[["ISIN", "Type"]], on="ISIN", how="left")
+        # Merge Type and Security Name for subsequent display in the table
+        df = df.merge(ref_static[["ISIN", "Type", "Security Name"]], on="ISIN", how="left")
         df = df[df["Type"] == selected_type]
     else:
-        df = df.merge(wsecs_static[["ISIN", "Type"]], on="ISIN", how="left")
+        # Merge Type and Security Name even when no specific Type filter is applied
+        df = df.merge(ref_static[["ISIN", "Type", "Security Name"]], on="ISIN", how="left")
 
     # Date filtering/aggregation
     if mtd:
@@ -906,7 +1035,7 @@ def attribution_security_page() -> Response:
                 agg_dict[col] = "first"
         df = df.groupby(group_cols).agg(agg_dict).reset_index()
         # Add back static info
-        df = df.merge(wsecs_static, on="ISIN", how="left")
+        df = df.merge(ref_static, on="ISIN", how="left")
     else:
         df = df[df["Date"] == selected_date]
 
@@ -1112,6 +1241,7 @@ def security_attribution_timeseries():
             chart_bench_json="[]",
             chart_port_json="[]",
             spread_data_json="null",
+            spread_data=None,
             link_security_details=None,
         )
 
@@ -1131,6 +1261,7 @@ def security_attribution_timeseries():
             chart_bench_json="[]",
             chart_port_json="[]",
             spread_data_json="null",
+            spread_data=None,
             link_security_details=None,
         )
 
@@ -1231,7 +1362,8 @@ def security_attribution_timeseries():
     # -----------------------------
     # 5. Load Spread data (Orig + SP) - REFACTORED
     # -----------------------------
-    spread_data_json = json.dumps(None) # Default to null if issues occur
+    spread_data = None  # Python dict placeholder for template condition
+    spread_data_json = json.dumps(None)  # Default to null if issues occur
     attribution_dates = [item['date'] for item in chart_port] if chart_port else []
 
     if attribution_dates and isin: # Proceed if we have dates and an ISIN
@@ -1315,6 +1447,7 @@ def security_attribution_timeseries():
         chart_port_json=chart_port_json,
         chart_bench_json=chart_bench_json,
         spread_data_json=spread_data_json,
+        spread_data=spread_data,
         link_security_details=link_security_details,
         error=None,
     )

@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Exclusion{% endblock %}
+
+{% block content %}
+{% set template_key = 'exclusion_edit_page' %}
+{% include "_help_link.html" %}
+<div class="p-4">
+    <h2 class="text-2xl font-bold mb-3">Edit Exclusion – {{ exclusion.SecurityID }}</h2>
+
+    {% if message %}
+        {% set alert_colors = {
+            'success': 'border-green-300 bg-green-50 text-green-700',
+            'warning': 'border-yellow-300 bg-yellow-50 text-yellow-700',
+            'danger': 'border-red-300 bg-red-50 text-red-700',
+            'info': 'border-blue-300 bg-blue-50 text-blue-700'
+        } %}
+        {% set colors = alert_colors.get(message_type, alert_colors['info']) %}
+        <div class="mb-4 p-3 border {{ colors }} rounded-md text-sm" role="alert">
+            {{ message }}
+        </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Edit Form -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h4 class="text-lg font-semibold text-gray-800 mb-4">Edit Reason & End Date</h4>
+            <form method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Reason:</label>
+                    <textarea id="reason" name="reason" rows="3" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">{{ exclusion.Reason }}</textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Current End Date:</label>
+                    <p class="mt-1 text-sm text-gray-900">{{ exclusion.EndDate.strftime('%Y-%m-%d') if exclusion.EndDate else 'N/A' }}</p>
+                </div>
+                <div>
+                    <label for="end_date" class="block text-sm font-medium text-gray-700">New End Date (optional):</label>
+                    <input type="date" id="end_date" name="end_date" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                </div>
+                <div>
+                    <label for="user-select" class="block text-sm font-medium text-gray-700">User:</label>
+                    <select id="user-select" name="user" class="mt-1 block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" required>
+                        <option value="" disabled selected>Select User</option>
+                        {% for user in users %}
+                            <option value="{{ user }}">{{ user }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="comment" class="block text-sm font-medium text-gray-700">Additional Comment (optional):</label>
+                    <textarea id="comment" name="comment" rows="4" class="mt-1 block w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" placeholder="Add an additional reason or comment..."></textarea>
+                </div>
+                <div>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">Save Changes</button>
+                    <a href="{{ url_for('exclusion_bp.manage_exclusions') }}" class="ml-2 text-sm text-gray-600 hover:underline">Back to list</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Comment History -->
+        <div class="bg-[#F7F7F7] rounded-lg shadow-sm p-4">
+            <h4 class="text-lg font-semibold text-gray-800 mb-4">Reason History</h4>
+            {% if comments %}
+                <ul class="space-y-3 max-h-[32rem] overflow-y-auto pr-2">
+                    {% for c in comments %}
+                        <li class="bg-white border border-gray-200 rounded p-3">
+                            <div class="text-xs text-gray-500 flex justify-between"><span>{{ c.Timestamp }}</span> <span>{{ c.User }}</span></div>
+                            <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap">{{ c.Reason }}</p>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-sm text-gray-500 italic">No additional reasons recorded.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

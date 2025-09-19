@@ -1,0 +1,229 @@
+template_help_urls:
+  attribution_charts: https://www.google.com
+  attribution_radar: ''
+  attribution_security_page: ''
+  attribution_security_timeseries: ''
+  attribution_summary: ''
+  base: ''
+  bond_calculator: ''
+  comparison_details_base: ''
+  comparison_summary_base: ''
+  curve_details: ''
+  curve_summary: ''
+  dashboard: ''
+  error: ''
+  exclusion_edit_page: ''
+  exclusions_page: ''
+  file_delivery_dashboard: ''
+  fund_detail_page: ''
+  fund_duration_details: ''
+  fund_metric_details: ''
+  get_attribution_data: ''
+  get_data: ''
+  govt_yield_curve: ''
+  index: ''
+  inspect_results: ''
+  issue_detail_page: ''
+  issues_page: ''
+  krd_historical_chart: ''
+  krd_vs_duration: ''
+  maxmin_dashboard: ''
+  maxmin_details: ''
+  metric_page_js: ''
+  price_matching_dashboard: ''
+  securities_page: ''
+  security_details_page: ''
+  security_spreads_page: ''
+  settings_page: ''
+  staleness_dashboard: ''
+  staleness_details: ''
+  tickets_page: ''
+  watchlist_page: ''
+  weight_check_page: ''
+  zscore_flags: ''
+app_config:
+  data_folder: Data
+  api_timing_log_retention_hours: '48'
+  api_timing_enabled: true
+spread_files:
+  spread_files:
+  - file: sec_Spread.csv
+    label: Original Spread
+    color: '#1f77b4'
+    description: Market spread data from vendor
+  - file: sec_SpreadSP.csv
+    label: S&P Spread
+    color: '#ff7f0e'
+    description: S&P benchmark spread data
+  - file: synth_sec_ZSpread.csv
+    label: Z-Spread
+    color: '#2ca02c'
+    description: Zero-volatility spread calculated from first principles
+  - file: synth_sec_GSpread.csv
+    label: G-Spread
+    color: '#d62728'
+    description: Government spread calculated from first principles
+metric_file_map:
+  metrics:
+    duration:
+      display_name: Duration
+      ts_file: ts_Duration.csv
+      sp_ts_file: sp_ts_Duration.csv
+      sec_file: sec_Duration.csv
+      sec_sp_file: sec_DurationSP.csv
+      units: Years
+    spread:
+      display_name: Spread
+      ts_file: ts_Spread.csv
+      sp_ts_file: sp_ts_Spread.csv
+      sec_file: sec_Spread.csv
+      sec_sp_file: sec_SpreadSP.csv
+      units: bps
+    ytm:
+      display_name: Yield to Maturity
+      ts_file: ts_YTM.csv
+      sp_ts_file: sp_ts_YTM.csv
+      sec_file: sec_YTM.csv
+      sec_sp_file: sec_YTMSP.csv
+      units: '%'
+    ytw:
+      display_name: Yield to Worst
+      ts_file: ts_YTW.csv
+      sp_ts_file: sp_ts_YTW.csv
+      sec_file: sec_YTW.csv
+      sec_sp_file: sec_YTWSP.csv
+      units: '%'
+    spread_duration:
+      display_name: Spread Duration
+      ts_file: ts_Spread Duration.csv
+      sp_ts_file: sp_ts_Spread Duration.csv
+      sec_file: sec_Spread duration.csv
+      sec_sp_file: sec_Spread durationSP.csv
+      units: Years
+file_delivery:
+  monitors:
+    Minneapolis:
+      directory: Minneapolis
+      pattern: Minneapolis_*.csv
+      display_name: Minneapolis Daily Delivery
+      id_column: Security
+      date_parse:
+        regex: Minneapolis_(\d{8})
+        format: '%Y%m%d'
+        source: filename
+      group: FileDelivery
+    Minny:
+      directory: Minny
+      pattern: BondAnalyticsResults_Full_*.csv
+      display_name: Minny Bond Analytics Delivery
+      id_column: Name
+      date_parse:
+        regex: BondAnalyticsResults_Full_(\d{8})_\d{6}
+        format: '%Y%m%d'
+        source: filename
+      group: FileDelivery
+maxmin_thresholds:
+  sec_Spread:
+    csv:
+      min: '-50'
+      max: '1000'
+    display_name: Sec Spread
+    group: Default
+  sec_SpreadSP:
+    csv:
+      min: '-50'
+      max: '1000'
+    display_name: Sec Spreadsp
+    group: Default
+  sec_YTM:
+    csv:
+      min: '0'
+      max: '100'
+    display_name: Sec Ytm
+    group: Default
+  sec_YTMSP:
+    csv:
+      min: '0'
+      max: '100'
+    display_name: Sec Ytmsp
+    group: Default
+  sec_YTW:
+    csv:
+      min: '0'
+      max: '100'
+    display_name: Sec Ytw
+    group: Default
+  sec_YTWSP:
+    csv:
+      min: '0'
+      max: '100'
+    display_name: Sec Ytwsp
+    group: Default
+attribution_columns:
+  prefixes:
+    prod: L2 Port
+    bench: L2 Bench
+    sp_prod: RobAtt3_L2 Port
+    sp_bench: RobAtt3_L2 Bench
+    l0_prod: L0 Port Total Daily
+    l0_bench: L0 Bench Total Daily
+  l1_factors:
+  - Rates Carry Daily
+  - Rates Convexity Daily
+  - Rates Curve Daily
+  - Rates Duration Daily
+  - Rates Roll Daily
+  - Credit Spread Change Daily
+  - Credit Convexity Daily
+  - Credit Carry Daily
+  - Credit Defaulted
+  - FX Carry Daily
+  - FX Change Daily
+date_patterns:
+  date_patterns:
+  - \d{4}-\d{2}-\d{2}
+  - \d{2}/\d{2}/\d{4}
+  - \d{2}-\d{2}-\d{4}
+  - \d{4}/\d{2}/\d{2}
+  - ^Date$
+  - ^Position Date$
+  - ^Trade Date$
+  - ^AsOfDate$
+  - ^Effective Date$
+field_aliases:
+  Spread: Spread
+  Duration: Duration
+  Spread Duration: Spread_Duration
+  YTM: YTM
+  YTW: YTW
+  SpreadSP: SpreadSP
+  DurationSP: DurationSP
+  Spread DurationSP: Spread_DurationSP
+  YTMSP: YTMSP
+  YTWSP: YTWSP
+comparison_config:
+  spread:
+    display_name: Spread
+    value_label: Spread
+    file1: sec_spread.csv
+    file2: sec_spreadSP.csv
+  duration:
+    display_name: Duration
+    value_label: Duration
+    file1: sec_duration.csv
+    file2: sec_durationSP.csv
+  ytm:
+    display_name: Yield to Maturity (YTM)
+    value_label: YTM (%)
+    file1: sec_YTM.csv
+    file2: sec_YTMSP.csv
+  ytw:
+    display_name: Yield to Worst (YTW)
+    value_label: YTW (%)
+    file1: sec_YTW.csv
+    file2: sec_YTWSP.csv
+  spread_duration:
+    display_name: Spread Duration
+    value_label: Spread Duration
+    file1: sec_Spread duration.csv
+    file2: sec_Spread durationSP.csv

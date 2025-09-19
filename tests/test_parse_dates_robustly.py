@@ -3,7 +3,7 @@
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 
-from data_utils import parse_dates_robustly
+from core.data_utils import parse_dates_robustly
 
 
 def test_parse_dates_robustly_mixed_formats():

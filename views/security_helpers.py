@@ -16,14 +16,15 @@ import math
 import os
 from datetime import datetime
 from typing import Any, Dict, Set, Tuple
+import re
 
 import numpy as np
 import pandas as pd
 from flask import current_app
 
-import config
-from security_processing import load_and_process_security_data
-from utils import load_fund_groups, parse_fund_list
+from core import config
+from analytics.security_processing import load_and_process_security_data
+from core.utils import load_fund_groups, parse_fund_list
 from views.exclusion_views import load_exclusions
 
 __all__ = [
@@ -280,34 +281,123 @@ def load_filter_and_extract(
             else:
                 return None, set(), {}
 
-        # ---- Filter by security id -----------------------------------
+        # ---- Filter by security id (with base-ISIN fallback) ----------
+        def _select_best_variant(df_subset: pd.DataFrame, value_col: str, level_name: str) -> pd.DataFrame:
+            """Given rows for multiple ISIN variants, select the one with the most non-null values.
+            Falls back to the first variant deterministically if tie/empty."""
+            try:
+                if df_subset.empty:
+                    return df_subset
+                if isinstance(df_subset.index, pd.MultiIndex):
+                    level_idx = df_subset.index.names.index(level_name)
+                    variant_ids = df_subset.index.get_level_values(level_idx)
+                else:
+                    variant_ids = df_subset.index
+                # Build counts per variant
+                counts = (
+                    df_subset.assign(_variant=variant_ids)
+                    .groupby("_variant")[value_col]
+                    .apply(lambda s: s.notna().sum())
+                    .sort_values(ascending=False)
+                )
+                best = counts.index[0] if len(counts) > 0 else None
+                if best is None:
+                    return df_subset
+                if isinstance(df_subset.index, pd.MultiIndex):
+                    return df_subset[variant_ids == best]
+                return df_subset.loc[[best]]
+            except Exception:
+                return df_subset
+
+        # Helper: attempt exact, then base-ISIN matching (handles hyphenated variants)
+        def _filter_by_isin_with_fallback(df_src: pd.DataFrame, id_name: str, target_id: str) -> Tuple[pd.DataFrame, str]:
+            base = re.sub(r"-\d+$", "", target_id or "")
+            target_has_suffix = bool(re.search(r"-\d+$", target_id or ""))
+
+            # Gather variant subset for this base (base and any -n variants)
+            subset = df_src.iloc[0:0]
+            if id_name == config.ISIN_COL and base:
+                if id_name in df_src.index.names:
+                    if isinstance(df_src.index, pd.MultiIndex):
+                        lvl = df_src.index.names.index(id_name)
+                        id_vals = df_src.index.get_level_values(lvl).astype(str)
+                    else:
+                        id_vals = df_src.index.astype(str)
+                else:
+                    id_vals = df_src[id_name].astype(str)
+                mask = (id_vals == base) | id_vals.str.match(rf"^{re.escape(base)}-\d+$")
+                subset = df_src[mask]
+
+            # 1) If target includes a suffix, prefer exact variant if present
+            if target_has_suffix:
+                if id_name in df_src.index.names:
+                    if isinstance(df_src.index, pd.MultiIndex):
+                        lvl = df_src.index.names.index(id_name)
+                        exact = df_src[df_src.index.get_level_values(lvl) == target_id]
+                    else:
+                        exact = df_src.loc[[target_id]] if target_id in df_src.index else df_src.iloc[0:0]
+                else:
+                    exact = df_src[df_src[id_name] == target_id]
+                if not exact.empty:
+                    return exact, id_name
+                # Fallback to best among variants if exact missing
+                if not subset.empty:
+                    value_col = config.VALUE_COL if config.VALUE_COL in subset.columns else subset.columns.difference([id_name]).tolist()[0]
+                    best = _select_best_variant(subset, value_col, id_name)
+                    if not best.empty:
+                        return best, id_name
+
+            # 2) If target is base (or not suffixed), choose the best variant among all variants when available
+            if not target_has_suffix and not subset.empty:
+                value_col = config.VALUE_COL if config.VALUE_COL in subset.columns else subset.columns.difference([id_name]).tolist()[0]
+                best = _select_best_variant(subset, value_col, id_name)
+                if not best.empty:
+                    return best, id_name
+
+            # 3) Otherwise try exact match for non-ISIN IDs or when no variants present
+            if id_name in df_src.index.names:
+                if isinstance(df_src.index, pd.MultiIndex):
+                    lvl = df_src.index.names.index(id_name)
+                    exact = df_src[df_src.index.get_level_values(lvl) == target_id]
+                else:
+                    exact = df_src.loc[[target_id]] if target_id in df_src.index else df_src.iloc[0:0]
+            else:
+                exact = df_src[df_src[id_name] == target_id]
+            if not exact.empty:
+                return exact, id_name
+
+            # 4) Final fallback: try Security Name equality (legacy)
+            alt_id_col = config.SEC_NAME_COL
+            if id_name == config.ISIN_COL and alt_id_col in df_src.columns:
+                alt = df_src[df_src[alt_id_col] == target_id]
+                if not alt.empty:
+                    return alt, alt_id_col
+            return df_src.iloc[0:0], id_name
+
+        # Execute filtering with fallback
         if id_column_name in df_long.index.names:
             if isinstance(df_long.index, pd.MultiIndex):
-                level_idx = df_long.index.names.index(id_column_name)
-                filtered_df = df_long[
-                    df_long.index.get_level_values(level_idx) == security_id_to_filter
-                ]
+                # No direct filtering here; use helper to handle all cases uniformly
+                filtered_df, id_column_name = _filter_by_isin_with_fallback(
+                    df_long, id_column_name, security_id_to_filter
+                )
             else:
-                filtered_df = df_long.loc[[security_id_to_filter]]
+                filtered_df, id_column_name = _filter_by_isin_with_fallback(
+                    df_long, id_column_name, security_id_to_filter
+                )
         else:
-            filtered_df = df_long[df_long[id_column_name] == security_id_to_filter]
+            filtered_df, id_column_name = _filter_by_isin_with_fallback(
+                df_long, id_column_name, security_id_to_filter
+            )
 
         if filtered_df.empty:
             current_app.logger.warning(
-                "No data found for %s='%s' in %s",
+                "No data found for %s='%s' in %s (after base-ISIN fallback)",
                 id_column_name,
                 security_id_to_filter,
                 filename,
             )
-            alt_id_col = config.SEC_NAME_COL
-            if id_column_name == config.ISIN_COL and alt_id_col in df_long.columns:
-                current_app.logger.info("Retrying filter with '%s'", alt_id_col)
-                filtered_df = df_long[df_long[alt_id_col] == security_id_to_filter]
-                if filtered_df.empty:
-                    return None, set(), {}
-                id_column_name = alt_id_col
-            else:
-                return None, set(), {}
+            return None, set(), {}
 
         value_col_name = config.VALUE_COL
         if value_col_name not in filtered_df.columns:

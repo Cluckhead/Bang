@@ -1,0 +1,77 @@
+{
+  "calibration_date": "2023-12-31",
+  "currency": "USD",
+  "parameters": {
+    "mean_reversion": {
+      "value": 0.1046,
+      "standard_error": 0.0209,
+      "confidence_interval": [
+        0.0628,
+        0.1464
+      ],
+      "calibration_method": "MLE",
+      "data_period": "2019-01-01 to 2023-12-31"
+    },
+    "volatility": {
+      "value": 0.0164,
+      "standard_error": 0.0025,
+      "confidence_interval": [
+        0.0115,
+        0.0213
+      ],
+      "calibration_method": "SWAPTION_IMPLIED",
+      "calibration_instruments": [
+        "1Yx10Y",
+        "2Yx10Y",
+        "5Yx10Y",
+        "10Yx10Y"
+      ]
+    },
+    "theta_function": {
+      "type": "piecewise_constant",
+      "values": [
+        {
+          "tenor": 0.25,
+          "value": 0.0561
+        },
+        {
+          "tenor": 0.5,
+          "value": 0.0457
+        },
+        {
+          "tenor": 1.0,
+          "value": 0.0601
+        },
+        {
+          "tenor": 2.0,
+          "value": 0.0548
+        },
+        {
+          "tenor": 5.0,
+          "value": 0.0488
+        },
+        {
+          "tenor": 10.0,
+          "value": 0.0392
+        }
+      ]
+    }
+  },
+  "calibration_quality": {
+    "rmse": 0.0009,
+    "max_error": 0.0039,
+    "instruments_used": 45,
+    "instruments_fitted": 42
+  },
+  "alternative_models": {
+    "black_karasinski": {
+      "mean_reversion": 0.1621,
+      "volatility": 0.1942
+    },
+    "cox_ingersoll_ross": {
+      "mean_reversion": 0.1266,
+      "long_term_mean": 0.0377,
+      "volatility": 0.076
+    }
+  }
+}

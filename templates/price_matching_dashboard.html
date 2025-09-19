@@ -1,0 +1,337 @@
+{% extends 'base.html' %}
+
+{% block title %}Price Matching Dashboard{% endblock %}
+
+{% block content %}
+{% set template_key = 'price_matching_dashboard' %}
+{% include "_help_link.html" %}
+<div class="p-4">
+    <h1 class="text-2xl font-bold font-heading mb-1">Price Matching Dashboard</h1>
+    <p class="text-sm text-gray-600 mb-6">
+        Compares prices between the most recent BondAnalyticsResults file and sec_Price.csv. 
+        Shows percentage match where both files have data for the same security (External Security ID mapped to ISIN).
+    </p>
+    
+    <!-- Current Status Section -->
+    <div class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Current Status</h2>
+        
+        {% if latest_result %}
+            {% if latest_result.get('error') %}
+                <!-- Error State -->
+                <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">Price Matching Check Failed</h3>
+                            <div class="mt-1 text-sm text-red-700">
+                                <p>{{ latest_result.error }}</p>
+                                <p class="mt-1 text-xs">Date: {{ latest_result.get('latest_date', 'Unknown') }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <!-- Success State -->
+                {% set match_percentage = latest_result.get('match_percentage', 0) %}
+                {% set is_low_match = match_percentage < 90 %}
+                
+                <div class="{% if is_low_match %}bg-red-50 border-l-4 border-red-500{% else %}bg-green-50 border-l-4 border-green-500{% endif %} p-4 rounded-lg">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            {% if is_low_match %}
+                                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                </svg>
+                            {% else %}
+                                <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>
+                            {% endif %}
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium {% if is_low_match %}text-red-800{% else %}text-green-800{% endif %}">
+                                {% if is_low_match %}Low Match Rate Alert{% else %}Price Matching Status{% endif %}
+                            </h3>
+                            <div class="mt-1 text-sm {% if is_low_match %}text-red-700{% else %}text-green-700{% endif %}">
+                                <p><strong>{{ match_percentage }}%</strong> match rate 
+                                   ({{ latest_result.get('matches', 0) }}/{{ latest_result.get('total_comparisons', 0) }} comparisons)</p>
+                                <p class="text-xs mt-1">
+                                    Date: {{ latest_result.get('latest_date', 'Unknown') }} | 
+                                    File: {{ latest_result.get('bond_analytics_file', 'Unknown') }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        {% else %}
+            <!-- No Data State -->
+            <div class="bg-gray-50 border-l-4 border-gray-400 p-4 rounded-lg">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-gray-800">No Recent Data</h3>
+                        <div class="mt-1 text-sm text-gray-600">
+                            <p>No price matching data available. Run the data quality checks to generate results.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Historical Data Section -->
+    {% if historical_data and historical_data|length > 0 %}
+    <div class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Historical Match Rates</h2>
+        
+        <!-- Chart Container -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+            <canvas id="priceMatchingChart" width="400" height="200"></canvas>
+        </div>
+        
+        <!-- Summary Statistics -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            {% set avg_match = (historical_data | map(attribute='match_percentage') | list | sum) / (historical_data | length) %}
+            {% set total_days = historical_data | length %}
+            {% set low_match_days = historical_data | selectattr('match_percentage', 'lt', 90) | list | length %}
+            {% set latest_data = historical_data | last %}
+            
+            <div class="bg-blue-50 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-blue-600">{{ "%.1f"|format(avg_match) }}%</div>
+                <div class="text-sm text-blue-800">Average Match Rate</div>
+            </div>
+            
+            <div class="bg-green-50 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-green-600">{{ total_days }}</div>
+                <div class="text-sm text-green-800">Days Checked</div>
+            </div>
+            
+            <div class="bg-{% if low_match_days > 0 %}red{% else %}gray{% endif %}-50 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-{% if low_match_days > 0 %}red{% else %}gray{% endif %}-600">{{ low_match_days }}</div>
+                <div class="text-sm text-{% if low_match_days > 0 %}red{% else %}gray{% endif %}-800">Days Below 90%</div>
+            </div>
+            
+            <div class="bg-purple-50 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-purple-600">{{ latest_data.get('total_comparisons', 0) }}</div>
+                <div class="text-sm text-purple-800">Latest Comparisons</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Missing Days Section -->
+    {% if missing_days %}
+    <div class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Missing Check Days</h2>
+        <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <div class="flex items-start">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-orange-800">Checks Not Run</h3>
+                    <div class="mt-1 text-sm text-orange-700">
+                        <p class="mb-2">The following weekdays appear to be missing price matching checks:</p>
+                        <div class="flex flex-wrap gap-2">
+                            {% for missing_date in missing_days %}
+                            <button onclick="runManualCheck('{{ missing_date }}')" 
+                                    class="px-2 py-1 bg-orange-200 text-orange-800 text-xs rounded hover:bg-orange-300 transition-colors manual-check-btn">
+                                {{ missing_date }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                        <p class="mt-2 text-xs">Click on a date to run a manual check for that day.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Manual Check Section -->
+    <div class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Manual Check</h2>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div class="flex items-center gap-3">
+                <div>
+                    <label for="manualCheckDate" class="block text-sm font-medium text-gray-700">Run check for date (YYYYMMDD):</label>
+                    <input type="text" 
+                           class="mt-1 px-3 py-2 w-32 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" 
+                           id="manualCheckDate" 
+                           placeholder="20240330"
+                           pattern="[0-9]{8}">
+                </div>
+                <button onclick="runManualCheck()" 
+                        id="manualCheckBtn"
+                        class="self-end px-4 py-2 bg-primary text-white text-sm font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">
+                    Run Check
+                </button>
+            </div>
+            <div id="manualCheckResult" class="mt-3 hidden"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if historical_data and historical_data|length > 0 %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        var ctx = document.getElementById('priceMatchingChart');
+        if (!ctx) {
+            console.error('Chart canvas element not found');
+            return;
+        }
+        
+        var chartData = {{ historical_data | tojson | safe }};
+        console.log('Chart data:', chartData);
+        
+        if (!chartData || chartData.length === 0) {
+            console.warn('No chart data available');
+            return;
+        }
+
+        new Chart(ctx.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: chartData.map(function(d) {
+                    var date = String(d.date);
+                    if (date.length === 8) {
+                        return date.substring(4,6) + '/' + date.substring(6,8) + '/' + date.substring(0,4);
+                    }
+                    return date; // fallback if date format is unexpected
+                }),
+                datasets: [{
+                    label: 'Match Percentage',
+                    data: chartData.map(function(d) { 
+                        var percentage = parseFloat(d.match_percentage);
+                        return isNaN(percentage) ? 0 : percentage;
+                    }),
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.1,
+                    fill: true,
+                    pointRadius: chartData.length === 1 ? 6 : 3,  // Larger points for single data point
+                    pointHoverRadius: chartData.length === 1 ? 8 : 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: { display: true, text: 'Match Percentage (%)' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Date' }
+                    }
+                },
+                plugins: {
+                    title: { display: true, text: 'Price Matching Rate Over Time' },
+                    legend: { display: false }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error creating chart:', error);
+        // Show error message in chart container
+        var chartContainer = document.getElementById('priceMatchingChart').parentElement;
+        chartContainer.innerHTML = '<div class="text-center text-red-600 p-4">Error loading chart: ' + error.message + '</div>';
+    }
+});
+</script>
+{% endif %}
+
+<script>
+function runManualCheck(dateParam) {
+    var dateInput = document.getElementById('manualCheckDate');
+    var button = document.getElementById('manualCheckBtn');
+    var resultDiv = document.getElementById('manualCheckResult');
+    
+    var targetDate = dateParam || dateInput.value;
+    
+    if (!targetDate || !/^\d{8}$/.test(targetDate)) {
+        showResult('error', 'Please enter a valid date in YYYYMMDD format');
+        return;
+    }
+    
+    if (dateParam) {
+        dateInput.value = dateParam;
+    }
+    
+    button.disabled = true;
+    button.textContent = 'Running...';
+    
+    var manualCheckBtns = document.querySelectorAll('.manual-check-btn');
+    for (var i = 0; i < manualCheckBtns.length; i++) {
+        manualCheckBtns[i].disabled = true;
+        manualCheckBtns[i].textContent = 'Running...';
+    }
+    
+    fetch('{{ url_for("price_matching_bp.run_manual_check") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: targetDate })
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (data.success) {
+            var result = data.result;
+            var message = 'Manual check completed for ' + targetDate + ':<br>' +
+                         'Match Rate: <strong>' + result.match_percentage + '%</strong><br>' +
+                         'Comparisons: <strong>' + result.matches + '/' + result.total_comparisons + '</strong><br>' +
+                         'File: ' + (result.bond_analytics_file || 'Unknown');
+            showResult('success', message);
+            
+            setTimeout(function() { window.location.reload(); }, 2000);
+        } else {
+            showResult('error', data.error || 'Unknown error occurred');
+        }
+    })
+    .catch(function(error) {
+        console.error('Error:', error);
+        showResult('error', 'Network error occurred');
+    })
+    .finally(function() {
+        button.disabled = false;
+        button.textContent = 'Run Check';
+        
+        var manualCheckBtns = document.querySelectorAll('.manual-check-btn');
+        for (var i = 0; i < manualCheckBtns.length; i++) {
+            manualCheckBtns[i].disabled = false;
+            var onclickAttr = manualCheckBtns[i].getAttribute('onclick');
+            if (onclickAttr) {
+                var match = onclickAttr.match(/'(\d{8})'/);
+                if (match) {
+                    manualCheckBtns[i].textContent = match[1];
+                }
+            }
+        }
+    });
+}
+
+function showResult(type, message) {
+    var resultDiv = document.getElementById('manualCheckResult');
+    var bgColor = type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800';
+    
+    resultDiv.innerHTML = '<div class="p-3 rounded-md border ' + bgColor + '"><div class="text-sm">' + message + '</div></div>';
+    resultDiv.classList.remove('hidden');
+}
+</script>
+{% endblock %} onmn

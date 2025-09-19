@@ -4,40 +4,36 @@
 {% block title %}Get Attribution Data{% endblock %}
 
 {% block content %}
+{% set template_key = 'get_attribution_data' %}
+{% include "_help_link.html" %}
 <div class="space-y-8">
     <!-- Attribution File Status Table -->
-    <div class="bg-neutral-100 rounded-lg shadow p-4">
-        <div class="flex justify-between items-center mb-3 pb-2 border-b border-neutral-300">
-            <h4 class="text-xl font-semibold">Current Attribution Data File Status</h4>
+    <div class="bg-neutral-100 rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-neutral-300 cursor-pointer" id="toggle-attribution-status-header">
+            <h4 class="text-xl font-semibold">
+                Current Attribution Data File Status
+            </h4>
+            <button id="toggle-attribution-status-button" class="text-neutral-500 hover:text-neutral-700 focus:outline-none" aria-expanded="false" aria-controls="attribution-status-content">
+                <svg id="toggle-attribution-status-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform transform rotate-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+                <span class="sr-only">Toggle attribution status details</span>
+            </button>
         </div>
-        <div>
+        <div id="attribution-status-content" class="mt-2 hidden">
             <p class="text-sm text-neutral-500">Data Folder: <code>{{ data_folder }}</code></p>
-            {% if attribution_file_statuses %}
-            <table class="w-full text-left text-sm border-collapse">
-                <thead>
-                    <tr class="border-b border-neutral-300">
-                        <th class="py-2 px-1 font-semibold">Fund</th>
-                        <th class="py-2 px-1 font-semibold">File Name</th>
-                        <th class="py-2 px-1 font-semibold">Latest Data Date</th>
-                        <th class="py-2 px-1 font-semibold">File Last Modified</th>
-                        <th class="py-2 px-1 font-semibold">Row Count</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for status in attribution_file_statuses %}
-                    <tr class="border-b border-neutral-200 hover:bg-neutral-50">
-                        <td class="py-2 px-1">{{ status.fund }}</td>
-                        <td class="py-2 px-1">{{ status.filename }}</td>
-                        <td class="py-2 px-1">{% if status.exists %}{{ status.latest_date }}{% else %}<span class="text-neutral-500">File Not Found</span>{% endif %}</td>
-                        <td class="py-2 px-1">{% if status.exists %}{{ status.last_modified }}{% else %}<span class="text-neutral-500">N/A</span>{% endif %}</td>
-                        <td class="py-2 px-1">{% if status.exists %}{{ status.row_count }}{% else %}<span class="text-neutral-500">0</span>{% endif %}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p class="text-neutral-500">No attribution file statuses found.</p>
-            {% endif %}
+            <div id="attribution-status-loading" class="text-sm text-neutral-500 py-4">
+                <div class="flex items-center space-x-2">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                    <span>Loading attribution file status...</span>
+                </div>
+            </div>
+            <div id="attribution-status-data" style="display: none;">
+                <!-- Attribution file status table will be loaded here -->
+            </div>
+            <div id="attribution-status-error" class="text-danger text-sm" style="display: none;">
+                <!-- Error messages will be shown here -->
+            </div>
         </div>
     </div>
 
@@ -140,6 +136,122 @@
 
 {% block scripts %}
 <script>
+// Fund groups data from server
+const FUND_GROUPS = {{ fund_groups|tojson|safe }};
+
+// Attribution File Status Toggle and Background Loading
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleHeader = document.getElementById('toggle-attribution-status-header');
+    const toggleButton = document.getElementById('toggle-attribution-status-button');
+    const statusContent = document.getElementById('attribution-status-content');
+    const toggleIcon = document.getElementById('toggle-attribution-status-icon');
+    const loadingDiv = document.getElementById('attribution-status-loading');
+    const dataDiv = document.getElementById('attribution-status-data');
+    const errorDiv = document.getElementById('attribution-status-error');
+    
+    let dataLoaded = false;
+
+    // Toggle functionality
+    function toggleAttributionStatus() {
+        const isHidden = statusContent.classList.contains('hidden');
+        
+        if (isHidden) {
+            statusContent.classList.remove('hidden');
+            toggleIcon.classList.remove('rotate-0');
+            toggleIcon.classList.add('rotate-90');
+            toggleButton.setAttribute('aria-expanded', 'true');
+            
+            // Load data if not already loaded
+            if (!dataLoaded) {
+                loadAttributionStatusData();
+            }
+        } else {
+            statusContent.classList.add('hidden');
+            toggleIcon.classList.remove('rotate-90');
+            toggleIcon.classList.add('rotate-0');
+            toggleButton.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    // Background data loading
+    async function loadAttributionStatusData() {
+        try {
+            // Show loading state
+            loadingDiv.style.display = 'block';
+            dataDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+
+            // Make API call to get attribution file statuses
+            const response = await fetch('/api/attribution/file_status');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            // Build the table HTML
+            let tableHtml = '';
+            if (data.attribution_file_statuses && data.attribution_file_statuses.length > 0) {
+                tableHtml = `
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead>
+                            <tr class="border-b border-neutral-300">
+                                <th class="py-2 px-1 font-semibold">Fund</th>
+                                <th class="py-2 px-1 font-semibold">File Name</th>
+                                <th class="py-2 px-1 font-semibold">Latest Data Date</th>
+                                <th class="py-2 px-1 font-semibold">File Last Modified</th>
+                                <th class="py-2 px-1 font-semibold">Row Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+                
+                data.attribution_file_statuses.forEach(status => {
+                    const latestDate = status.exists ? status.latest_date : '<span class="text-neutral-500">File Not Found</span>';
+                    const lastModified = status.exists ? status.last_modified : '<span class="text-neutral-500">N/A</span>';
+                    const rowCount = status.exists ? status.row_count : '<span class="text-neutral-500">0</span>';
+                    
+                    tableHtml += `
+                        <tr class="border-b border-neutral-200 hover:bg-neutral-50">
+                            <td class="py-2 px-1">${status.fund}</td>
+                            <td class="py-2 px-1">${status.filename}</td>
+                            <td class="py-2 px-1">${latestDate}</td>
+                            <td class="py-2 px-1">${lastModified}</td>
+                            <td class="py-2 px-1">${rowCount}</td>
+                        </tr>`;
+                });
+                
+                tableHtml += '</tbody></table>';
+            } else {
+                tableHtml = '<p class="text-neutral-500">No attribution file statuses found.</p>';
+            }
+            
+            // Show the data
+            dataDiv.innerHTML = tableHtml;
+            loadingDiv.style.display = 'none';
+            dataDiv.style.display = 'block';
+            dataLoaded = true;
+            
+        } catch (error) {
+            console.error('Error loading attribution file status:', error);
+            
+            // Show error message
+            errorDiv.innerHTML = `Failed to load attribution file status: ${error.message}`;
+            loadingDiv.style.display = 'none';
+            errorDiv.style.display = 'block';
+        }
+    }
+
+    // Event listeners
+    if (toggleHeader && toggleButton) {
+        toggleHeader.addEventListener('click', toggleAttributionStatus);
+        toggleButton.addEventListener('click', function(e) {
+            e.stopPropagation(); // Prevent double-click when clicking the button
+            toggleAttributionStatus();
+        });
+    }
+});
+
 // Modal logic for redo confirmation
 function showRedoModal(onConfirm) {
     const modal = document.createElement('div');
@@ -215,7 +327,7 @@ function runAttributionApiCall() {
 document.getElementById('fund-group-select')?.addEventListener('change', function() {
     const group = this.value;
     if (!group) return;
-    const groupFunds = {{ fund_groups|tojson }}[group] || [];
+    const groupFunds = FUND_GROUPS[group] || [];
     document.querySelectorAll('.fund-checkbox').forEach(cb => {
         cb.checked = groupFunds.includes(cb.value);
     });

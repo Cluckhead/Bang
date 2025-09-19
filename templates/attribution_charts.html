@@ -12,6 +12,8 @@
 {% block title %}Attribution Residuals Charts{% endblock %}
 
 {% block content %}
+{% set template_key = 'attribution_charts' %}
+{% include "_help_link.html" %}
 <div class="p-4"> {# Replaced container-fluid mt-4 #}
     <h1 class="text-2xl font-bold font-heading mb-1">Attribution Residuals Charts</h1>
     <p class="text-gray-600 text-sm mb-4">Visualize residuals over time for Benchmark and Portfolio. Use the filters and controls to explore the data.</p>
@@ -68,14 +70,20 @@
             </div>
 
             {# --- Date Range Slider --- #}
-             {# Note: Styling range inputs precisely is complex. Using basic styling + labels. #}
-             {# Consider a dedicated JS library (e.g., noUiSlider) for better dual-handle slider UI if needed. #}
              <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
-                <div class="relative h-8"> {# Container for sliders #}
-                    <input type="range" class="absolute w-full h-2 bg-transparent appearance-none pointer-events-none top-1/2 -translate-y-1/2" id="date-range-track" min="0" max="100" disabled> {# Visual track #}
-                    <input type="range" class="absolute w-full h-2 bg-transparent appearance-none pointer-events-auto top-1/2 -translate-y-1/2 range-slider-thumb" id="date-range-slider" min="0" max="0" value="0" step="1"> {# Start Thumb #}
-                    <input type="range" class="absolute w-full h-2 bg-transparent appearance-none pointer-events-auto top-1/2 -translate-y-1/2 range-slider-thumb" id="date-range-slider-end" min="0" max="0" value="0" step="1"> {# End Thumb #}
+                <div class="relative h-10 px-3">
+                    <!-- Background track -->
+                    <div class="absolute top-1/2 w-full h-2 bg-gray-300 rounded-full transform -translate-y-1/2"></div>
+                    
+                    <!-- Selected range highlight -->
+                    <div id="date-range-slider-track" class="absolute top-1/2 h-2 bg-secondary rounded-full transform -translate-y-1/2 pointer-events-none transition-all duration-150"></div>
+
+                    <!-- Start (left) handle -->
+                    <input type="range" class="dual-range-slider dual-range-start absolute w-full h-2 bg-transparent appearance-none cursor-pointer" id="date-range-slider" min="0" max="0" value="0" step="1">
+
+                    <!-- End (right) handle -->
+                    <input type="range" class="dual-range-slider dual-range-end absolute w-full h-2 bg-transparent appearance-none cursor-pointer" id="date-range-slider-end" min="0" max="0" value="0" step="1">
                 </div>
                 <div class="flex justify-between text-xs text-gray-500 mt-1">
                     <span id="start-date-label">Start Date</span>
@@ -123,22 +131,6 @@
 
 {% block styles %}
 {{ super() }}
-{# Basic styling for range slider thumbs - browser support varies #}
-<style>
-.range-slider-thumb::-webkit-slider-thumb {
-  @apply appearance-none w-4 h-4 bg-secondary rounded-full cursor-pointer;
-}
-.range-slider-thumb::-moz-range-thumb {
-   @apply appearance-none w-4 h-4 bg-secondary rounded-full cursor-pointer border-none;
-}
-/* Visual track styling (optional) */
-#date-range-track::-webkit-slider-runnable-track {
-    @apply h-1 bg-gray-200 rounded-full;
-}
-#date-range-track::-moz-range-track {
-     @apply h-1 bg-gray-200 rounded-full;
-}
-</style>
 {% endblock %}
 
 {% block scripts %}
@@ -150,12 +142,102 @@
 <script id="port-data" type="application/json">{{ chart_data_port_json|safe }}</script>
 <script id="abs-toggle-default-data" type="application/json">{{ abs_toggle_default|tojson|safe }}</script>
 
+<style>
+/* Custom dual-range slider styles */
+.dual-range-slider {
+    pointer-events: none;
+}
+
+.dual-range-slider::-webkit-slider-thumb {
+    appearance: none;
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+    background: #1F7A8C;
+    border: 3px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    pointer-events: all;
+    transition: all 0.15s ease;
+}
+
+.dual-range-slider::-webkit-slider-thumb:hover {
+    background: #1a6b7a;
+    transform: scale(1.1);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.dual-range-slider::-moz-range-thumb {
+    appearance: none;
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+    background: #1F7A8C;
+    border: 3px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    pointer-events: all;
+    transition: all 0.15s ease;
+}
+
+.dual-range-slider::-moz-range-thumb:hover {
+    background: #1a6b7a;
+    transform: scale(1.1);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.dual-range-slider::-webkit-slider-track {
+    background: transparent;
+    height: 8px;
+}
+
+.dual-range-slider::-moz-range-track {
+    background: transparent;
+    height: 8px;
+}
+
+.dual-range-start {
+    z-index: 1;
+}
+
+.dual-range-end {
+    z-index: 2;
+}
+</style>
 <script>
 // Client-side chart rendering
 document.addEventListener('DOMContentLoaded', function() {
     const chartDataBench = JSON.parse(document.getElementById('bench-data').textContent);
     const chartDataPort  = JSON.parse(document.getElementById('port-data').textContent);
     const absToggleDefaultValue = JSON.parse(document.getElementById('abs-toggle-default-data').textContent);
+    
+    // Check if we have valid data before proceeding
+    if (!chartDataBench || !Array.isArray(chartDataBench) || chartDataBench.length === 0 ||
+        !chartDataPort || !Array.isArray(chartDataPort) || chartDataPort.length === 0) {
+        console.log("No attribution chart data available, skipping chart rendering.");
+        
+        // Display friendly messages in chart containers
+        const benchCanvas = document.getElementById('benchChart');
+        const portCanvas = document.getElementById('portChart');
+        
+        if (benchCanvas) {
+            benchCanvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-80 text-gray-500"><p>No attribution data available for benchmark charts.</p></div>';
+        }
+        if (portCanvas) {
+            portCanvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-80 text-gray-500"><p>No attribution data available for portfolio charts.</p></div>';
+        }
+        
+        // Disable controls when no data
+        const absToggle = document.getElementById('absToggle');
+        const sliderStartEl = document.getElementById('date-range-slider');
+        const sliderEndEl = document.getElementById('date-range-slider-end');
+        
+        if (absToggle) absToggle.disabled = true;
+        if (sliderStartEl) sliderStartEl.disabled = true;
+        if (sliderEndEl) sliderEndEl.disabled = true;
+        
+        return; // Exit early
+    }
     
     // Initial state
     let showAbs = document.getElementById('absToggle') ? document.getElementById('absToggle').checked : absToggleDefaultValue;
@@ -164,8 +246,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let dateLabels = getDateLabels(benchData);
     let sliderMin = 0;
     let sliderMax = dateLabels.length > 0 ? dateLabels.length - 1 : 0;
-    let sliderStart = 0;
-    let sliderEnd = sliderMax;
     
     // DOM elements
     const absToggle = document.getElementById('absToggle');
@@ -192,12 +272,27 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderCharts() {
         if (!benchCanvas || !portCanvas || !benchData || !portData) return;
         
+        // Calculate current slider range dynamically
+        const startIdx = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+        const endIdx = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+        
         // Slice data for selected date range
-        const dataSlice = (data) => data.slice(sliderStart, sliderEnd + 1);
+        const dataSlice = (data) => data.slice(startIdx, endIdx + 1);
         const benchSlice = dataSlice(benchData);
         const portSlice = dataSlice(portData);
         const labels = getDateLabels(benchSlice);
         
+        // Helper function to calculate cumulative sum for selected range
+        function calculateCumulative(data) {
+            let cumulative = [];
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) {
+                sum += (data[i] || 0);
+                cumulative.push(sum);
+            }
+            return cumulative;
+        }
+
         // Datasets
         let benchBarProd, benchBarSP, benchLineProd, benchLineSP;
         let portBarProd, portBarSP, portLineProd, portLineSP;
@@ -212,10 +307,11 @@ document.addEventListener('DOMContentLoaded', function() {
             benchBarSP = getValues(benchSlice, 'residual_sp');
             portBarProd = getValues(portSlice, 'residual_prod');
             portBarSP = getValues(portSlice, 'residual_sp');
-            benchLineProd = getValues(benchSlice, 'cum_residual_prod');
-            benchLineSP = getValues(benchSlice, 'cum_residual_sp');
-            portLineProd = getValues(portSlice, 'cum_residual_prod');
-            portLineSP = getValues(portSlice, 'cum_residual_sp');
+            // Calculate cumulative from the selected date range, not pre-calculated values
+            benchLineProd = calculateCumulative(benchBarProd);
+            benchLineSP = calculateCumulative(benchBarSP);
+            portLineProd = calculateCumulative(portBarProd);
+            portLineSP = calculateCumulative(portBarSP);
         }
         
         // Common Chart.js options based on style guide
@@ -340,15 +436,32 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Slider update logic
+    // Slider update logic - matches radar implementation
     function updateSliderLabels() {
+        const startIdx = Math.min(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+        const endIdx = Math.max(parseInt(sliderStartEl.value), parseInt(sliderEndEl.value));
+        
         if (dateLabels.length > 0) {
-             startDateLabel.textContent = dateLabels[sliderStart] || dateLabels[0];
-             endDateLabel.textContent = dateLabels[sliderEnd] || dateLabels[sliderMax];
+             startDateLabel.textContent = dateLabels[startIdx] || dateLabels[0];
+             endDateLabel.textContent = dateLabels[endIdx] || dateLabels[dateLabels.length - 1];
         } else {
             startDateLabel.textContent = 'N/A';
             endDateLabel.textContent = 'N/A';
         }
+        
+        // Update highlighted track bar
+        const sliderTrack = document.getElementById('date-range-slider-track');
+        if (sliderTrack && dateLabels.length > 0) {
+            const percentStart = (startIdx / (dateLabels.length - 1)) * 100;
+            const percentEnd = (endIdx / (dateLabels.length - 1)) * 100;
+            sliderTrack.style.left = percentStart + '%';
+            sliderTrack.style.width = (percentEnd - percentStart) + '%';
+        }
+    }
+
+    function handleSliderInput() {
+        updateSliderLabels(); // Update labels immediately for responsiveness
+        renderCharts(); 
     }
 
     function setupSliders() {
@@ -357,27 +470,32 @@ document.addEventListener('DOMContentLoaded', function() {
         sliderStartEl.max = sliderMax;
         sliderEndEl.min = sliderMin;
         sliderEndEl.max = sliderMax;
-        sliderStartEl.value = sliderStart;
-        sliderEndEl.value = sliderEnd;
+        sliderStartEl.value = sliderMin; // Start at beginning
+        sliderEndEl.value = sliderMax;   // End at end
         updateSliderLabels();
         
-        sliderStartEl.addEventListener('input', function() {
-            sliderStart = parseInt(sliderStartEl.value);
-            if (sliderStart > sliderEnd) { // Prevent crossing thumbs
-                sliderEnd = sliderStart;
-                sliderEndEl.value = sliderEnd;
-            }
-            updateSliderLabels();
-            renderCharts(); 
+        sliderStartEl.addEventListener('input', handleSliderInput);
+        sliderEndEl.addEventListener('input', handleSliderInput);
+
+        // Handle z-index for proper slider interaction
+        sliderStartEl.addEventListener('mousedown', function() {
+            sliderStartEl.style.zIndex = '3';
+            sliderEndEl.style.zIndex = '2';
         });
-        sliderEndEl.addEventListener('input', function() {
-            sliderEnd = parseInt(sliderEndEl.value);
-             if (sliderEnd < sliderStart) { // Prevent crossing thumbs
-                sliderStart = sliderEnd;
-                sliderStartEl.value = sliderStart;
-            }
-            updateSliderLabels();
-            renderCharts();
+
+        sliderEndEl.addEventListener('mousedown', function() {
+            sliderEndEl.style.zIndex = '3';
+            sliderStartEl.style.zIndex = '2';
+        });
+
+        sliderStartEl.addEventListener('touchstart', function() {
+            sliderStartEl.style.zIndex = '3';
+            sliderEndEl.style.zIndex = '2';
+        });
+
+        sliderEndEl.addEventListener('touchstart', function() {
+            sliderEndEl.style.zIndex = '3';
+            sliderStartEl.style.zIndex = '2';
         });
     }
 

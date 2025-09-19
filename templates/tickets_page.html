@@ -1,0 +1,574 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket Management{% endblock %}
+
+{% block content %}
+{% set template_key = 'tickets_page' %}
+{% include "_help_link.html" %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div>
+        <h1 class="text-3xl font-bold font-merriweather-sans text-gray-800 mb-2">Data Exception Tickets</h1>
+        <p class="text-base text-gray-600">Manage automatically generated tickets for data quality exceptions.</p>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-4 hover:shadow-md transition-shadow">
+        <form method="GET" action="{{ url_for('ticket_bp.manage_tickets') }}" id="filter-form">
+            <h5 class="text-base font-semibold text-gray-700 mb-3">Filters</h5>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end">
+                <div class="mb-2">
+                    <label for="source_filter" class="block text-xs font-medium text-gray-700 mb-1">Source</label>
+                    <select name="source_filter" id="source_filter" class="mt-1 block w-full pl-2 pr-8 py-1 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                        <option value="All" {% if current_filters.source_filter == "All" %}selected{% endif %}>All Sources</option>
+                        {% for source in available_sources %}
+                        <option value="{{ source }}" {% if current_filters.source_filter == source %}selected{% endif %}>{{ source }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-2">
+                    <label for="status_filter" class="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                    <select name="status_filter" id="status_filter" class="mt-1 block w-full pl-2 pr-8 py-1 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                        <option value="All" {% if current_filters.status_filter == "All" %}selected{% endif %}>All Statuses</option>
+                        <option value="Unallocated" {% if current_filters.status_filter == "Unallocated" %}selected{% endif %}>Unallocated</option>
+                        <option value="Assigned" {% if current_filters.status_filter == "Assigned" %}selected{% endif %}>Assigned</option>
+                        <option value="WaitingRerun" {% if current_filters.status_filter == "WaitingRerun" %}selected{% endif %}>Waiting for Rerun</option>
+                        <option value="Cleared" {% if current_filters.status_filter == "Cleared" %}selected{% endif %}>Cleared</option>
+                    </select>
+                </div>
+                
+                <div class="mb-2">
+                    <label for="entity_filter" class="block text-xs font-medium text-gray-700 mb-1">Entity (ISIN)</label>
+                    <input type="text" name="entity_filter" id="entity_filter" value="{{ current_filters.entity_filter }}" 
+                           class="mt-1 block w-full pl-2 pr-2 py-1 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" 
+                           placeholder="Search ISIN...">
+                </div>
+                
+                <div class="mb-2">
+                    <label for="assigned_to_filter" class="block text-xs font-medium text-gray-700 mb-1">Assigned To</label>
+                    <select name="assigned_to_filter" id="assigned_to_filter" class="mt-1 block w-full pl-2 pr-8 py-1 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                        <option value="All" {% if current_filters.assigned_to_filter == "All" %}selected{% endif %}>All Users</option>
+                        <option value="Unassigned" {% if current_filters.assigned_to_filter == "Unassigned" %}selected{% endif %}>Unassigned</option>
+                        {% for assignee in available_assignees %}
+                        <option value="{{ assignee }}" {% if current_filters.assigned_to_filter == assignee %}selected{% endif %}>{{ assignee }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-2 flex items-center space-x-2 pt-4">
+                    <button type="submit" class="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">Apply</button>
+                    {% if current_filters.source_filter != "All" or current_filters.status_filter != "All" or current_filters.entity_filter or current_filters.assigned_to_filter != "All" %}
+                    <a href="{{ url_for('ticket_bp.manage_tickets') }}" class="px-3 py-1.5 border border-secondary text-secondary text-xs font-medium rounded-md hover:bg-secondary hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-150 ease-in-out">Clear</a>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Preserve user selection -->
+            <input type="hidden" name="user" value="{{ selected_user }}">
+        </form>
+    </div>
+
+    <!-- User Selection -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4 max-w-md">
+        <label for="userSelect" class="block text-sm font-medium text-gray-700 mb-1">Current User:</label>
+        <select id="userSelect" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm rounded-md" onchange="changeUser()">
+            {% for user in users %}
+            <option value="{{ user }}" {% if user == selected_user %}selected{% endif %}>{{ user }}</option>
+            {% endfor %}
+        </select>
+        <p class="mt-2 text-xs text-gray-500">Select your user account to view and manage your assigned tickets.</p>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="border-b border-gray-200 mb-4">
+        <nav class="-mb-px flex space-x-8">
+            <button class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors" 
+                    onclick="showTab('unallocated')" id="unallocated-tab">
+                Unallocated Tickets ({{ unallocated_tickets|length }})
+            </button>
+            <button class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors" 
+                    onclick="showTab('waiting')" id="waiting-tab">
+                Waiting for Rerun ({{ waiting_rerun_tickets|length }})
+            </button>
+            <button class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors" 
+                    onclick="showTab('assigned')" id="assigned-tab">
+                My Tickets ({{ my_tickets|length }})
+            </button>
+        </nav>
+    </div>
+
+    <!-- Unallocated Tickets Section -->
+    <div id="unallocated-section" class="tab-content">
+        <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden">
+            {% if unallocated_tickets %}
+            <div class="px-4 py-2 text-xs text-gray-500 border-b border-gray-200">
+                Displaying {{ unallocated_tickets|length }} unallocated tickets requiring assignment.
+            </div>
+            
+            <form method="POST" action="{{ url_for('ticket_bp.manage_tickets') }}">
+                <!-- Bulk Operations Bar -->
+                <div class="bg-blue-50 p-3 border-b border-gray-200 flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="selectAllUnallocated" class="rounded border-gray-300 text-primary shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50" onchange="toggleAllTickets('unallocated')">
+                            <span class="ml-2 text-sm font-medium text-gray-700">Select All</span>
+                        </label>
+                        <span id="selectedCountUnallocated" class="text-sm text-gray-600">0 selected</span>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2">
+                        <select name="bulk_assigned_to" class="block pl-2 pr-8 py-1 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                            <option value="">Select User</option>
+                            {% for user in users %}
+                            <option value="{{ user }}">{{ user }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" name="action" value="bulk_assign" 
+                                class="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out"
+                                onclick="return confirmBulkAction('assign')">
+                            Bulk Assign
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Select</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Ticket ID</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Source</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Entity</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Details</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Generated</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for ticket in unallocated_tickets %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <input type="checkbox" name="selected_tickets" value="{{ ticket.TicketID }}" 
+                                           class="rounded border-gray-300 text-primary shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 ticket-checkbox-unallocated" 
+                                           onchange="updateSelectedCount('unallocated')">
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <span class="text-primary hover:text-primary-dark font-medium">{{ ticket.TicketID }}</span>
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                        {% if ticket.SourceCheck == 'Staleness' %}bg-yellow-100 text-yellow-800
+                                        {% elif ticket.SourceCheck == 'MaxMin' %}bg-red-100 text-red-800
+                                        {% elif ticket.SourceCheck == 'ZScore' %}bg-purple-100 text-purple-800
+                                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                        {{ ticket.SourceCheck }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    {%- set entity_id = ticket.EntityID | trim -%}
+                                    {%- if entity_id and entity_id|length == 12 -%}
+                                        {# Assume 12-character IDs are ISINs (securities) #}
+                                        <a href="{{ url_for('security.security_details', metric_name='Spread', security_id=entity_id) }}" class="text-primary hover:text-primary-dark hover:underline">{{ entity_id }}</a>
+                                    {%- else -%}
+                                        {# Otherwise treat as fund code #}
+                                        <a href="{{ url_for('fund.fund_detail', fund_code=entity_id) }}" class="text-secondary hover:text-primary hover:underline">{{ entity_id }}</a>
+                                    {%- endif -%}
+                                </td>
+                                <td class="px-4 py-2">
+                                    <span class="text-gray-700">{{ ticket.Details }}</span>
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <span class="text-gray-700">{{ ticket.GenerationDate }}</span>
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <button type="button" onclick="assignTicket('{{ ticket.TicketID }}')" 
+                                            class="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out">
+                                        Assign to Me
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+            {% else %}
+            <div class="px-4 py-5">
+                <p class="text-center py-4 text-gray-500 italic">No unallocated tickets at this time.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Waiting Rerun Tickets Section -->
+    <div id="waiting-section" class="tab-content hidden">
+        <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden">
+            {% if waiting_rerun_tickets %}
+            <div class="px-4 py-2 text-xs text-gray-500 border-b border-gray-200">
+                Displaying {{ waiting_rerun_tickets|length }} tickets awaiting rerun.
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Ticket ID</th>
+                            <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Source</th>
+                            <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Entity</th>
+                            <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Details</th>
+                            <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Generated</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for ticket in waiting_rerun_tickets %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 whitespace-nowrap"><span class="text-primary font-medium">{{ ticket.TicketID }}</span></td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                    {% if ticket.SourceCheck == 'Staleness' %}bg-yellow-100 text-yellow-800
+                                    {% elif ticket.SourceCheck == 'MaxMin' %}bg-red-100 text-red-800
+                                    {% elif ticket.SourceCheck == 'ZScore' %}bg-purple-100 text-purple-800
+                                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ ticket.SourceCheck }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                {%- set entity_id = ticket.EntityID | trim -%}
+                                {%- if entity_id and entity_id|length == 12 -%}
+                                    <a href="{{ url_for('security.security_details', metric_name='Spread', security_id=entity_id) }}" class="text-primary hover:underline">{{ entity_id }}</a>
+                                {%- else -%}
+                                    <a href="{{ url_for('fund.fund_detail', fund_code=entity_id) }}" class="text-secondary hover:underline">{{ entity_id }}</a>
+                                {%- endif -%}
+                            </td>
+                            <td class="px-4 py-2"><span class="text-gray-700">{{ ticket.Details }}</span></td>
+                            <td class="px-4 py-2 whitespace-nowrap"><span class="text-gray-700">{{ ticket.GenerationDate }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="px-4 py-5"><p class="text-center py-4 text-gray-500 italic">No tickets awaiting rerun.</p></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- My Tickets Section -->
+    <div id="assigned-section" class="tab-content hidden">
+        <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] hover:shadow-md transition-shadow overflow-hidden">
+            {% if my_tickets %}
+            <div class="px-4 py-2 text-xs text-gray-500 border-b border-gray-200">
+                Displaying {{ my_tickets|length }} tickets assigned to {{ selected_user }}.
+            </div>
+
+            <form method="POST" action="{{ url_for('ticket_bp.manage_tickets') }}">
+                <!-- Bulk Operations Bar -->
+                <div class="bg-blue-50 p-3 border-b border-gray-200 flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="selectAllAssigned" class="rounded border-gray-300 text-primary shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50" onchange="toggleAllTickets('assigned')">
+                            <span class="ml-2 text-sm font-medium text-gray-700">Select All</span>
+                        </label>
+                        <span id="selectedCountAssigned" class="text-sm text-gray-600">0 selected</span>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Fields for bulk clear -->
+                        <select name="bulk_cleared_by" class="block pl-2 pr-8 py-1 text-sm border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary">
+                            <option value="">Cleared By</option>
+                            {% for user in users %}
+                            <option value="{{ user }}">{{ user }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="bulk_clearance_reason" placeholder="Clearance Reason" class="block w-48 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-secondary focus:border-secondary" />
+                        <button type="submit" name="action" value="bulk_clear" class="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition">Bulk Clear</button>
+
+                        <button type="submit" name="action" value="bulk_retest" class="px-3 py-1.5 bg-yellow-500 text-white text-xs font-medium rounded-md shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition">Bulk Retest</button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Select</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Ticket ID</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Source</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Entity</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Details</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Assigned</th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for ticket in my_tickets %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <input type="checkbox" name="selected_tickets" value="{{ ticket.TicketID }}" class="rounded border-gray-300 text-primary shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 ticket-checkbox-assigned" onchange="updateSelectedCount('assigned')">
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <span class="text-primary hover:text-primary-dark font-medium">{{ ticket.TicketID }}</span>
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                        {% if ticket.SourceCheck == 'Staleness' %}bg-yellow-100 text-yellow-800
+                                        {% elif ticket.SourceCheck == 'MaxMin' %}bg-red-100 text-red-800
+                                        {% elif ticket.SourceCheck == 'ZScore' %}bg-purple-100 text-purple-800
+                                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                        {{ ticket.SourceCheck }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    {%- set entity_id = ticket.EntityID | trim -%}
+                                    {%- if entity_id and entity_id|length == 12 -%}
+                                        <a href="{{ url_for('security.security_details', metric_name='Spread', security_id=entity_id) }}" class="text-primary hover:text-primary-dark hover:underline">{{ entity_id }}</a>
+                                    {%- else -%}
+                                        <a href="{{ url_for('fund.fund_detail', fund_code=entity_id) }}" class="text-secondary hover:text-primary hover:underline">{{ entity_id }}</a>
+                                    {%- endif -%}
+                                </td>
+                                <td class="px-4 py-2"><span class="text-gray-700">{{ ticket.Details }}</span></td>
+                                <td class="px-4 py-2 whitespace-nowrap"><span class="text-gray-700">{{ ticket.AssignedDate }}</span></td>
+                                <td class="px-4 py-2 whitespace-nowrap space-x-1">
+                                    <button type="button" onclick="clearTicket('{{ ticket.TicketID }}')" class="px-2 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700">Clear</button>
+                                    <button type="button" onclick="retestTicket('{{ ticket.TicketID }}')" class="px-2 py-1 bg-yellow-500 text-white text-xs font-medium rounded hover:bg-yellow-600">Retest</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+            {% else %}
+            <div class="px-4 py-5">
+                <p class="text-center py-4 text-gray-500 italic">No assigned tickets for {{ selected_user }}.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Clear Ticket Modal -->
+<div id="clearTicketModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-lg bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Clear Ticket</h3>
+            <form id="clearTicketForm">
+                <input type="hidden" id="clearTicketId" name="ticket_id">
+                
+                <div class="mb-4">
+                    <label for="clearedBy" class="block text-sm font-medium text-gray-700 mb-1">Cleared By:</label>
+                    <select id="clearedBy" name="cleared_by" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm rounded-md">
+                        {% for user in users %}
+                        <option value="{{ user }}" {% if user == selected_user %}selected{% endif %}>{{ user }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="clearanceReason" class="block text-sm font-medium text-gray-700 mb-1">Clearance Reason:</label>
+                    <textarea id="clearanceReason" name="clearance_reason" required 
+                              class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-secondary focus:border-secondary" 
+                              rows="3" placeholder="Explain why this exception is being cleared..."></textarea>
+                </div>
+                <div class="mb-4 flex items-center space-x-2">
+                    <input type="checkbox" id="raiseIssueCheckbox" name="raise_issue" class="h-4 w-4 text-primary border-gray-300 rounded">
+                    <label for="raiseIssueCheckbox" class="text-sm text-gray-700">Raise Issue for this exception</label>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeClearModal()" 
+                            class="px-3 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-150 ease-in-out">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                            class="px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out">
+                        Clear Ticket
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Tab management
+function showTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    // Remove active styling from all tabs
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('border-primary', 'text-primary');
+        button.classList.add('border-transparent', 'text-gray-500');
+    });
+    
+    // Show selected tab content
+    document.getElementById(tabName + '-section').classList.remove('hidden');
+    
+    // Add active styling to selected tab
+    const activeTab = document.getElementById(tabName + '-tab');
+    activeTab.classList.remove('border-transparent', 'text-gray-500');
+    activeTab.classList.add('border-primary', 'text-primary');
+}
+
+// User selection change
+function changeUser() {
+    const userSelect = document.getElementById('userSelect');
+    const selectedUser = userSelect.value;
+    window.location.href = '{{ url_for("ticket_bp.manage_tickets") }}?user=' + encodeURIComponent(selectedUser);
+}
+
+// Assign ticket function
+function assignTicket(ticketId) {
+    const selectedUser = document.getElementById('userSelect').value;
+    
+    fetch(`/tickets/api/assign/${ticketId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            assigned_to: selectedUser
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage(data.message, 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showMessage(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showMessage('Error assigning ticket', 'error');
+    });
+}
+
+// Clear ticket functions
+function clearTicket(ticketId) {
+    document.getElementById('clearTicketId').value = ticketId;
+    document.getElementById('clearTicketModal').classList.remove('hidden');
+}
+
+function closeClearModal() {
+    document.getElementById('clearTicketModal').classList.add('hidden');
+    document.getElementById('clearTicketForm').reset();
+}
+
+// Handle clear ticket form submission
+document.getElementById('clearTicketForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        ticket_id: formData.get('ticket_id'),
+        cleared_by: formData.get('cleared_by'),
+        clearance_reason: formData.get('clearance_reason'),
+        raise_issue: document.getElementById('raiseIssueCheckbox').checked
+    };
+    
+    fetch('/tickets/api/clear', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage(data.message, 'success');
+            closeClearModal();
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showMessage(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showMessage('Error clearing ticket', 'error');
+    });
+});
+
+// Message display function
+function showMessage(message, type) {
+    // Create message element
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `fixed top-4 right-4 p-4 rounded-md shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-100 border-green-500 text-green-700' : 'bg-red-100 border-red-500 text-red-700'
+    } border`;
+    messageDiv.textContent = message;
+    
+    document.body.appendChild(messageDiv);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        messageDiv.remove();
+    }, 3000);
+}
+
+// Bulk operations functions
+function toggleAllTickets(section) {
+    const selectAllCheckbox = document.getElementById('selectAll' + section.charAt(0).toUpperCase() + section.slice(1));
+    const ticketCheckboxes = document.querySelectorAll('.ticket-checkbox-' + section);
+    
+    ticketCheckboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+    });
+    
+    updateSelectedCount(section);
+}
+
+function updateSelectedCount(section) {
+    const ticketCheckboxes = document.querySelectorAll('.ticket-checkbox-' + section);
+    const selectedCount = Array.from(ticketCheckboxes).filter(checkbox => checkbox.checked).length;
+    
+    document.getElementById('selectedCount' + section.charAt(0).toUpperCase() + section.slice(1)).textContent = 
+        selectedCount + ' selected';
+}
+
+function confirmBulkAction(action) {
+    const selectedTickets = document.querySelectorAll('.ticket-checkbox-unallocated:checked');
+    if (selectedTickets.length === 0) {
+        alert('Please select at least one ticket.');
+        return false;
+    }
+    
+    const actionText = action === 'assign' ? 'assign' : 'clear';
+    return confirm(`Are you sure you want to ${actionText} ${selectedTickets.length} ticket(s)?`);
+}
+
+// Retest ticket via AJAX
+function retestTicket(ticketId) {
+    fetch('/tickets/api/retest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_id: ticketId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        showMessage(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            setTimeout(() => window.location.reload(), 800);
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showMessage('Error resetting ticket', 'error');
+    });
+}
+
+// Initialize with unallocated tab active
+document.addEventListener('DOMContentLoaded', function() {
+    showTab('unallocated');
+});
+</script>
+{% endblock %} 

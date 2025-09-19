@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wsl tail:*)",
+      "Bash(powershell:*)",
+      "Bash(dir:*)",
+      "Bash(pytest:*)",
+      "Bash(python:*)",
+      "Bash(git checkout:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

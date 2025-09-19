@@ -1,0 +1,248 @@
+# Settlement Conventions Configuration
+# Defines standard settlement periods for different currencies and security types
+# Used throughout the application for trade settlement calculations
+
+# Currency-based settlement conventions (T+n business days)
+currency_conventions:
+  # Major currencies
+  USD:
+    spot: 2  # T+2 for spot FX
+    securities: 2  # T+2 for US securities (stocks, bonds)
+    government_bonds: 1  # T+1 for US Treasuries
+    money_market: 0  # T+0 for money market instruments
+    
+  EUR:
+    spot: 2
+    securities: 2
+    government_bonds: 2
+    money_market: 0
+    
+  GBP:
+    spot: 2
+    securities: 2
+    government_bonds: 1
+    money_market: 0
+    
+  JPY:
+    spot: 2
+    securities: 3  # T+3 for Japanese equities
+    government_bonds: 2
+    money_market: 0
+    
+  CAD:
+    spot: 1  # T+1 for USD/CAD
+    securities: 2
+    government_bonds: 2
+    money_market: 0
+    
+  AUD:
+    spot: 2
+    securities: 2
+    government_bonds: 2
+    money_market: 0
+    
+  CHF:
+    spot: 2
+    securities: 2
+    government_bonds: 2
+    money_market: 0
+    
+  CNY:
+    spot: 2
+    securities: 1  # T+1 for Chinese A-shares
+    government_bonds: 1
+    money_market: 0
+    
+  HKD:
+    spot: 2
+    securities: 2
+    government_bonds: 2
+    money_market: 0
+    
+  SGD:
+    spot: 2
+    securities: 2
+    government_bonds: 2
+    money_market: 0
+
+# Security type-based settlement conventions
+security_type_conventions:
+  # Fixed Income
+  treasury:
+    standard: 1  # T+1 for US Treasuries
+    when_issued: 1  # When-issued trades
+    
+  corporate_bond:
+    standard: 2  # T+2 for corporate bonds
+    high_yield: 2
+    investment_grade: 2
+    convertible: 2
+    
+  municipal_bond:
+    standard: 2  # T+2 for munis
+    
+  mortgage_backed:
+    standard: 3  # T+3 for MBS (or specific PSA dates)
+    tba: 30  # TBA trades settle on PSA dates
+    specified_pool: 3
+    
+  asset_backed:
+    standard: 3  # T+3 for ABS
+    
+  sovereign:
+    standard: 2  # T+2 for non-US sovereigns
+    emerging_market: 3  # T+3 for EM bonds
+    
+  # Equities
+  equity:
+    standard: 2  # T+2 for most markets
+    japan: 3  # T+3 for Japanese equities
+    china_a: 1  # T+1 for China A-shares
+    
+  etf:
+    standard: 2  # T+2 for ETFs
+    creation_redemption: 2  # Creation/redemption units
+    
+  # Derivatives
+  futures:
+    standard: 1  # T+1 for futures
+    physical_delivery: 3  # Physical delivery futures
+    
+  options:
+    equity: 1  # T+1 for equity options
+    index: 1  # T+1 for index options
+    fx: 2  # T+2 for FX options
+    
+  swaps:
+    interest_rate: 2  # T+2 for IRS
+    credit_default: 1  # T+1 for CDS
+    total_return: 2  # T+2 for TRS
+    
+  # Money Market
+  commercial_paper:
+    standard: 0  # Same-day settlement
+    
+  certificate_deposit:
+    standard: 0  # Same-day settlement
+    
+  repo:
+    overnight: 0  # Same-day settlement
+    term: 0  # Same-day settlement
+    
+  treasury_bill:
+    standard: 1  # T+1 for T-bills
+
+# Special settlement rules and exceptions
+special_rules:
+  # Holiday adjustments
+  holiday_adjustment:
+    method: "modified_following"  # modified_following, following, preceding
+    
+  # End-of-month conventions
+  month_end_rules:
+    apply: true
+    us_treasury_month_end: true  # Special US Treasury month-end settlement
+    
+  # When-issued trading
+  when_issued:
+    enabled: true
+    settlement_on_issue: true
+    
+  # Fail rules
+  fail_rules:
+    penalty_rate: 3.0  # 3% annual penalty rate (in basis points)
+    buy_in_period: 3  # Days before buy-in
+    
+  # Regional variations
+  regional_variations:
+    japan:
+      golden_week_adjustment: true  # Special handling for Golden Week
+    china:
+      spring_festival_adjustment: true  # Special handling for Spring Festival
+    middle_east:
+      friday_saturday_weekend: true  # Friday-Saturday weekend
+      
+# Calculation methods
+calculation_methods:
+  # Business day conventions
+  business_day_convention:
+    default: "modified_following"
+    options:
+      - "following"
+      - "modified_following"
+      - "preceding"
+      - "modified_preceding"
+      - "unadjusted"
+      
+  # Day count conventions
+  day_count_convention:
+    default: "ACT/360"
+    treasury: "ACT/ACT"
+    corporate: "30/360"
+    money_market: "ACT/360"
+    
+# Calendar references
+calendars:
+  # Define which calendars to use for each currency/market
+  USD: ["NYSE", "SIFMA"]
+  EUR: ["TARGET"]
+  GBP: ["LSE"]
+  JPY: ["TSE"]
+  CAD: ["TSX"]
+  AUD: ["ASX"]
+  CHF: ["SIX"]
+  CNY: ["SSE", "SZSE"]
+  HKD: ["HKEX"]
+  SGD: ["SGX"]
+  
+# Cutoff times (in local market time, 24-hour format)
+cutoff_times:
+  USD:
+    securities: "15:00"  # 3:00 PM ET
+    fx: "17:00"  # 5:00 PM ET
+    wire: "16:00"  # 4:00 PM ET for wire transfers
+    
+  EUR:
+    securities: "17:30"  # 5:30 PM CET
+    fx: "16:00"  # 4:00 PM CET
+    wire: "17:00"
+    
+  GBP:
+    securities: "16:30"  # 4:30 PM GMT
+    fx: "16:00"  # 4:00 PM GMT
+    wire: "15:30"
+    
+  JPY:
+    securities: "15:00"  # 3:00 PM JST
+    fx: "15:00"
+    wire: "15:00"
+
+# Settlement instruction defaults
+settlement_instructions:
+  # Default settlement instruction types
+  instruction_types:
+    dvp: "Delivery versus Payment"
+    fop: "Free of Payment"
+    dap: "Delivery against Payment"
+    
+  # Preferred settlement methods by security type
+  preferred_method:
+    treasury: "dvp"
+    corporate_bond: "dvp"
+    equity: "dvp"
+    money_market: "dvp"
+    
+# Version and metadata
+metadata:
+  version: "1.0.0"
+  last_updated: "2025-01-25"
+  maintained_by: "Risk Management Team"
+  review_frequency: "quarterly"
+  
+# Notes for implementation
+notes:
+  - "All settlement days are in business days unless specified otherwise"
+  - "Actual settlement may vary based on bilateral agreements"
+  - "Special corporate actions may override standard settlement"
+  - "Cross-border trades may have different settlement periods"
+  - "Always verify with counterparty for non-standard trades"

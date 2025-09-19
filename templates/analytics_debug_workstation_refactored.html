@@ -1,0 +1,150 @@
+<!--
+Analytics Debug Workstation - Refactored Version
+Purpose: Institutional-grade debugging interface with modular, maintainable architecture.
+
+REFACTORED ARCHITECTURE:
+- Modular Template Components: Each panel is a separate, reusable component
+- Separated JavaScript Modules: Functionality split into focused modules
+- Reduced Complexity: Main template focuses on layout and component inclusion
+- Better Maintainability: Components can be updated independently
+- Enhanced Testability: Each module can be tested in isolation
+
+PRIMARY (Most Important): Security Setup + Analytics Comparison
+SECONDARY (Interactive): Smart Diagnostics + Sensitivity Analysis  
+TERTIARY (Reference): Raw Data Inspector + Advanced Tools
+-->
+{% extends 'base.html' %}
+{% block title %}Analytics Debug Workstation{% endblock %}
+
+{% block content %}
+{% set template_key = 'analytics_debug_workstation' %}
+{% include "_help_link.html" %}
+
+<!-- Sticky Header Component -->
+{% include "debug_workstation/_header.html" %}
+
+<div class="w-full px-4">
+  <!-- 3-Column Priority-Based Layout for 1500px+ -->
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    
+    <!-- PRIMARY COLUMN: Critical Functions -->
+    <div class="space-y-6">
+      <!-- Security Setup & Analytics Comparison -->
+      {% include "debug_workstation/_security_setup.html" %}
+      
+      <!-- Smart Diagnostics Panel -->
+      {% include "debug_workstation/_smart_diagnostics.html" %}
+    </div>
+    
+    <!-- SECONDARY COLUMN: Interactive Tools -->
+    <div class="space-y-6">
+      <!-- Sensitivity Analysis Panel -->
+      {% include "debug_workstation/_sensitivity_analysis.html" %}
+      
+      <!-- Goal Seek Panel -->
+      {% include "debug_workstation/_goal_seek.html" %}
+    </div>
+    
+    <!-- TERTIARY COLUMN: Reference Data -->
+    <div class="space-y-6">
+      <!-- Raw Data Inspector Panel -->
+      {% include "debug_workstation/_data_inspector.html" %}
+      
+      <!-- Advanced Tools Panel -->
+      {% include "debug_workstation/_advanced_tools.html" %}
+    </div>
+  </div>
+</div>
+
+<!-- Shared Styles -->
+<style>
+  .panel-transition {
+    transition: all 0.2s ease-in-out;
+  }
+  .panel-transition:hover {
+    box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+  
+  /* Data Tab Styling */
+  .data-tab.active {
+    border-color: #3b82f6;
+    color: #2563eb;
+  }
+  
+  /* Scenario Tab Styling */
+  .scenario-tab.active {
+    border-color: #3b82f6;
+    color: #2563eb;
+  }
+  
+  /* Loading Animation */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  
+  .loading {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+</style>
+
+<!-- Module Scripts -->
+<script src="{{ url_for('static', filename='js/modules/analytics/debugWorkstation.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/analytics/securitySearch.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/analytics/smartDiagnostics.js') }}"></script>
+
+<!-- Lazy Load Additional Modules -->
+<script>
+// Lazy load additional modules to improve initial page load time
+const loadAdditionalModules = async () => {
+  try {
+    // Load remaining modules dynamically
+    await Promise.all([
+      import('{{ url_for("static", filename="js/modules/analytics/sensitivityAnalysis.js") }}'),
+      import('{{ url_for("static", filename="js/modules/analytics/goalSeek.js") }}'),
+      import('{{ url_for("static", filename="js/modules/analytics/dataInspector.js") }}'),
+      import('{{ url_for("static", filename="js/modules/analytics/advancedTools.js") }}')
+    ]);
+    
+    console.log('All analytics modules loaded successfully');
+  } catch (error) {
+    console.warn('Some analytics modules failed to load:', error);
+    // Fallback to basic functionality
+  }
+};
+
+// Initialize the main workstation
+document.addEventListener('DOMContentLoaded', function() {
+  // Initialize main workstation
+  window.debugWorkstation = new DebugWorkstation();
+  
+  // Initialize sub-modules
+  if (window.SecuritySearch) {
+    window.debugWorkstation.securitySearch = new SecuritySearch(window.debugWorkstation);
+  }
+  
+  if (window.SmartDiagnostics) {
+    window.debugWorkstation.smartDiagnostics = new SmartDiagnostics(window.debugWorkstation);
+  }
+  
+  // Load additional modules after initial page load
+  setTimeout(loadAdditionalModules, 100);
+  
+  console.log('Analytics Debug Workstation initialized');
+});
+
+// Global helper function for quick fixes (called from templates)
+window.applyQuickFix = function(fixId) {
+  if (window.debugWorkstation && window.debugWorkstation.smartDiagnostics) {
+    window.debugWorkstation.smartDiagnostics.applyQuickFix(fixId);
+  }
+};
+
+// Global helper function for security selection (called from templates)
+window.selectSecurityFromSearch = function(isin, name, currency) {
+  if (window.debugWorkstation) {
+    window.debugWorkstation.selectSecurityFromSearch(isin, name, currency);
+  }
+};
+</script>
+{% endblock %}

@@ -10,11 +10,12 @@ from flask import (
     flash,
     current_app,
 )
-import issue_processing  # Use the new module
+import analytics.issue_processing as issue_processing  # Use the new module
 import pandas as pd
 from datetime import datetime
 import os  # Added to check for users.csv
-from config import DATA_SOURCES, JIRA_BASE_URL  # Import from config.py
+from core.config import DATA_SOURCES, JIRA_BASE_URL  # Import from config.py
+from analytics.issue_processing import get_issue_by_id, add_comment_to_issue
 from typing import List
 import re  # Added for regex pattern matching
 
@@ -225,3 +226,51 @@ def close_issue_route():
         flash(f"An unexpected error occurred while closing the issue: {e}", "danger")
 
     return redirect(url_for("issue_bp.manage_issues"))
+
+
+@issue_bp.route("/issues/<issue_id>", methods=["GET", "POST"])
+def issue_detail(issue_id):
+    """Display single issue detail; allow adding comments or updating status."""
+    data_folder = current_app.config["DATA_FOLDER"]
+    users = load_users()
+
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "add_comment":
+            commenter = request.form.get("comment_user")
+            comment_text = request.form.get("comment_text")
+            if commenter and comment_text:
+                success = add_comment_to_issue(issue_id, commenter, comment_text, data_folder)
+                flash("Comment added." if success else "Failed to add comment.", "success" if success else "danger")
+            else:
+                flash("User and comment required", "warning")
+        elif action == "close_issue":
+            closed_by = request.form.get("closed_by")
+            resolution_comment = request.form.get("resolution_comment")
+            if closed_by and resolution_comment:
+                success = issue_processing.close_issue(issue_id, closed_by, resolution_comment, data_folder)
+                flash("Issue closed." if success else "Failed to close issue.", "success" if success else "danger")
+            else:
+                flash("All fields required to close issue", "warning")
+        return redirect(url_for("issue_bp.issue_detail", issue_id=issue_id))
+
+    # GET flow: load issue and comments
+    issue_row = get_issue_by_id(issue_id, data_folder)
+    if issue_row is None:
+        flash(f"Issue {issue_id} not found", "danger")
+        return redirect(url_for("issue_bp.manage_issues"))
+
+    from json import loads
+    comments = loads(issue_row.get("Comments", "[]")) if isinstance(issue_row.get("Comments"), str) else []
+
+    # Prepare Jira link display
+    jira_url, jira_display = process_jira_link(issue_row.get("JiraLink", "")) if issue_row.get("JiraLink") else (None, None)
+
+    return render_template(
+        "issue_detail_page.html",
+        issue=issue_row,
+        comments=comments,
+        users=users,
+        jira_url=jira_url,
+        jira_display=jira_display,
+    )

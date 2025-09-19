@@ -9,13 +9,13 @@ from flask import Blueprint, render_template, request, url_for, current_app
 import os
 import logging
 import urllib.parse
-from maxmin_processing import (
+from analytics.maxmin_processing import (
     get_breach_summary,
     get_breach_details,
     DEFAULT_MAX_THRESHOLD,
     DEFAULT_MIN_THRESHOLD,
 )
-from config import DATA_FOLDER, ID_COLUMN, MAXMIN_THRESHOLDS
+from core.config import DATA_FOLDER, ID_COLUMN, MAXMIN_THRESHOLDS
 
 maxmin_bp = Blueprint("maxmin_bp", __name__, template_folder="../templates")
 

@@ -7,6 +7,8 @@ Purpose: Renders the security details page, showing all static info (from refere
 {% block title %}Security Details: {{ security_id }} - {{ metric_name }}{% endblock %}
 
 {% block content %}
+{% set template_key = 'security_details_page' %}
+{% include "_help_link.html" %}
 <div class="grid grid-cols-1 lg:grid-cols-10 gap-4">
   <!-- Left Column: Static Info Tile -->
   <div class="lg:col-span-3">
@@ -72,6 +74,7 @@ Purpose: Renders the security details page, showing all static info (from refere
         <button type="button" id="open-raise-issue-modal" class="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 transition-colors">Raise Data Issue</button>
         <button type="button" id="open-add-exclusion-modal" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors">Add Exclusion</button>
         <button type="button" id="open-edit-data-modal-step1" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors">Edit Data</button>
+        <a href="{{ url_for('security.security_spreads', security_id=security_id) }}" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition-colors inline-block">Spread Analysis</a>
       </div>
     </div>
   </div>
@@ -123,6 +126,12 @@ Purpose: Renders the security details page, showing all static info (from refere
       <h2 class="text-lg font-semibold text-gray-700 mb-2">YTW Time Series</h2>
       <div id="ytw-chart-container" class="h-80 relative bg-white rounded shadow-inner flex items-center justify-center">
         <canvas id="ytwChart" class="w-full h-full"></canvas>
+      </div>
+    </div>
+    <div class="bg-neutral-100 rounded-lg shadow p-4 mb-4">
+      <h2 class="text-lg font-semibold text-gray-700 mb-2">Key-Rate Duration Buckets (Latest)</h2>
+      <div id="krd-bar-container" class="h-80 relative bg-white rounded shadow-inner flex items-center justify-center">
+        <canvas id="krdBarChart" class="w-full h-full"></canvas>
       </div>
     </div>
     {% if holdings_data and chart_dates %}
@@ -529,6 +538,40 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     } else {
         document.getElementById('ytw-chart-container').innerHTML = '<p class="text-info">YTW data not available for this security.</p>';
+    }
+
+    // --- Render KRD Bar Chart ---
+    if (chartData.krd_labels && chartData.krd_labels.length > 0) {
+        const krdCtx = document.getElementById('krdBarChart').getContext('2d');
+        const krdDatasets = [];
+        if (chartData.krd_dataset && chartData.krd_dataset.data) {
+            krdDatasets.push(chartData.krd_dataset);
+        }
+        if (chartData.krdsp_dataset && chartData.krdsp_dataset.data) {
+            krdDatasets.push(chartData.krdsp_dataset);
+        }
+        if (krdDatasets.length > 0) {
+            new Chart(krdCtx, {
+                type: 'bar',
+                data: {
+                    labels: chartData.krd_labels,
+                    datasets: krdDatasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Tenor' } },
+                        y: { title: { display: true, text: 'KRD Value' } }
+                    },
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        } else {
+            document.getElementById('krd-bar-container').innerHTML = '<p class="text-info">No KRD data available.</p>';
+        }
+    } else {
+        document.getElementById('krd-bar-container').innerHTML = '<p class="text-info">No KRD data available for this security.</p>';
     }
 });
 

@@ -28,6 +28,8 @@
 {% block title %}{{ display_name }} Comparison Details: {{ security_name }}{% endblock %}
 
 {% block content %}
+{% set template_key = 'comparison_details_base' %}
+{% include "_help_link.html" %}
 <div class="p-4"> {# Replaced container-fluid px-4 mt-4 #}
     
     {# --- Header --- #}
@@ -36,7 +38,7 @@
             <h1 class="text-2xl font-bold font-heading">{{ display_name }} Comparison Details</h1>
             {# Styled sub-heading #}
             <h2 class="text-lg text-gray-600 font-medium mt-1">
-                {{ id_column_name }}: <span class="font-mono bg-gray-100 px-1 rounded">{{ security_id }}</span>
+                {{ id_column_name }}: <a href="{{ url_for('security.security_details', metric_name=display_name, security_id=security_id) }}" class="font-mono bg-gray-100 px-1 rounded text-primary-600 hover:underline">{{ security_id }}</a>
                 {% if security_name and security_name != security_id %} | Name: {{ security_name }} {% endif %}
             </h2>
         </div>

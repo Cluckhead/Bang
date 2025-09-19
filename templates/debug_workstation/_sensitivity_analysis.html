@@ -1,0 +1,67 @@
+<!-- Sensitivity Analysis Panel Component -->
+<div class="bg-white rounded-lg shadow-lg p-6 panel-transition min-h-80">
+  <h2 class="text-lg font-semibold text-gray-900 mb-4">Sensitivity Analysis</h2>
+  
+  <div class="space-y-4">
+    <!-- Parameter Selection -->
+    <div>
+      <label class="block text-sm font-medium mb-2">Parameter to Shock</label>
+      <select id="sensitivity-parameter" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        <option value="yield_curve">Yield Curve (+/- bps)</option>
+        <option value="spread">Credit Spread (+/- bps)</option>
+        <option value="volatility">Volatility (+/- %)</option>
+        <option value="clean_price">Clean Price (+/- %)</option>
+      </select>
+    </div>
+    
+    <!-- Shock Range -->
+    <div class="grid grid-cols-3 gap-2">
+      <div>
+        <label class="block text-xs font-medium mb-1">Min Shock</label>
+        <input type="number" id="shock-min" value="-100" 
+               class="w-full border border-gray-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1">Max Shock</label>
+        <input type="number" id="shock-max" value="100" 
+               class="w-full border border-gray-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1">Steps</label>
+        <input type="number" id="shock-steps" value="11" 
+               class="w-full border border-gray-300 rounded px-2 py-1 text-sm">
+      </div>
+    </div>
+    
+    <!-- Run Analysis -->
+    <button id="run-sensitivity-btn" 
+            class="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors">
+      Run Sensitivity Analysis
+    </button>
+    
+    <!-- Results Chart Container -->
+    <div id="sensitivity-chart-container" class="mt-4 hidden">
+      <canvas id="sensitivity-chart" width="400" height="300"></canvas>
+    </div>
+    
+    <!-- Results Table -->
+    <div id="sensitivity-results" class="mt-4 hidden">
+      <h4 class="text-sm font-medium text-gray-900 mb-2">Sensitivity Results</h4>
+      <div class="overflow-x-auto">
+        <table id="sensitivity-table" class="min-w-full text-xs border border-gray-300">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-2 py-1 border-b text-left">Shock</th>
+              <th class="px-2 py-1 border-b text-right">Price</th>
+              <th class="px-2 py-1 border-b text-right">YTM</th>
+              <th class="px-2 py-1 border-b text-right">Duration</th>
+            </tr>
+          </thead>
+          <tbody id="sensitivity-table-body">
+            <!-- Results will be populated here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

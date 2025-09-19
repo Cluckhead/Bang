@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Data Quality Overview{% endblock %}
+
+{% block content %}
+{% set template_key = 'dashboard' %}
+{% include "_help_link.html" %}
+<div class="space-y-10">
+    <!-- Section 1: KPI Summary Tiles -->
+    <div>
+        {% if last_run_time %}
+        <div class="mb-2">
+            <a href="{{ url_for('api_bp.get_data_page') }}" class="text-sm font-semibold {% if is_data_stale %}text-red-600 hover:text-red-700{% else %}text-gray-700 hover:text-gray-900{% endif %} hover:underline">
+                Last data refresh: {{ last_run_time }}
+            </a>
+        </div>
+        {% else %}
+        <div class="mb-2">
+            <a href="{{ url_for('api_bp.get_data_page') }}" class="text-sm font-semibold text-red-600 hover:text-red-700 hover:underline">Data not yet generated</a>
+        </div>
+        {% endif %}
+
+        <!-- Refresh Checks Button -->
+        <div class="mb-4">
+            <button id="refresh-checks-btn" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark focus:outline-none">
+                Refresh Checks
+            </button>
+        </div>
+
+        <!-- Holiday Alert Section -->
+        {% if holiday_info and (holiday_info.has_holiday_today or holiday_info.has_holiday_last_business_day) %}
+        <div class="mb-4 p-4 bg-orange-100 border-l-4 border-orange-500 rounded-r-lg">
+            <div class="flex items-start">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-orange-800">Holiday Alert</h3>
+                    <div class="mt-1 text-sm text-orange-700">
+                        <p>{{ holiday_info.alert_message }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <h1 class="text-3xl font-bold font-merriweather-sans text-gray-800 mb-4">Key Performance Indicators</h1>
+        
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {% for tile in kpi_tiles %}
+            {% set tile_classes = 'bg-neutral-100' %}
+            {% if tile.highlight %}
+                {% set tile_classes = 'bg-yellow-100' %}
+            {% endif %}
+            <div class="flex flex-col justify-between {{ tile_classes }} rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 mb-2">{{ tile.title }}</p>
+                    <p class="text-4xl font-bold text-gray-900">{{ tile.value }}</p>
+                </div>
+                <div class="pt-3">
+                    <a href="{{ tile.link }}" class="text-primary text-sm font-medium hover:underline">View Details &rarr;</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Section: Data Quality Checks -->
+    {% if data_quality_tiles %}
+    <div>
+        <h2 class="text-2xl font-semibold font-merriweather-sans text-gray-700 mb-4">Data Quality Checks</h2>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {% for tile in data_quality_tiles %}
+            {% set tile_classes = 'bg-neutral-100' %}
+            {% if tile.highlight %}
+                {% set tile_classes = 'bg-red-100' %}
+            {% endif %}
+            <div class="flex flex-col justify-between {{ tile_classes }} rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 mb-2">{{ tile.title }}</p>
+                    <p class="text-4xl font-bold text-gray-900">{{ tile.value }}</p>
+                    {% if tile.subtitle %}
+                        <p class="text-xs text-gray-600 mt-1">{{ tile.subtitle }}</p>
+                    {% endif %}
+                </div>
+                <div class="pt-3">
+                    <a href="{{ tile.link }}" class="text-primary text-sm font-medium hover:underline">View Details &rarr;</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Section: File Delivery Checks -->
+    {% if file_delivery_tiles %}
+    <div>
+        <h2 class="text-2xl font-semibold font-merriweather-sans text-gray-700 mb-4">File Delivery Checks</h2>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {% for tile in file_delivery_tiles %}
+            {% set tile_classes = 'bg-neutral-100' %}
+            {% if tile.highlight %}
+                {% set tile_classes = 'bg-red-100' %}
+            {% endif %}
+            <div class="flex flex-col justify-between {{ tile_classes }} rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 mb-2">{{ tile.title }}</p>
+                    <p class="text-4xl font-bold text-gray-900">{{ tile.value }}</p>
+                    {% if tile.delta_rows is not none %}
+                        <p class="text-xs text-gray-600 mt-1">Δ Rows: {{ tile.delta_rows }}</p>
+                    {% endif %}
+                </div>
+                <div class="pt-3">
+                    <a href="{{ tile.link }}" class="text-primary text-sm font-medium hover:underline">View Details &rarr;</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Section: Fund Health Summary Table -->
+    <div>
+        <h2 class="text-2xl font-semibold font-merriweather-sans text-gray-700 mb-4">Fund Health Summary</h2>
+        
+        <!-- Fund Group Filter -->
+        {% if fund_groups %}
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4 max-w-md">
+            <form id="fund-group-form" method="get">
+                <label for="fund-group-select" class="block text-sm font-medium text-gray-700 mb-1">Filter by Fund Group:</label>
+                <select class="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-secondary focus:border-secondary sm:text-sm rounded-md" id="fund-group-select" name="fund_group" onchange="this.form.submit()">
+                    <option value="" {% if not selected_fund_group %}selected{% endif %}>All</option>
+                    {% for group, funds in fund_groups.items() %}
+                        <option value="{{ group }}" {% if selected_fund_group == group %}selected{% endif %}>{{ group }} ({{ funds|length }})</option>
+                    {% endfor %}
+                </select>
+                <p class="mt-2 text-xs text-gray-500">Select a fund group to filter the view. Only groups with funds in the current data are shown.</p>
+            </form>
+        </div>
+        {% endif %}
+
+        <div class="overflow-x-auto bg-white rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)]">
+            <table id="fund-health-table" class="w-full text-left border-collapse sortable">
+                <thead class="border-b border-gray-300 bg-gray-50">
+                    <tr>
+                        {% for col in fund_health_columns %}
+                            {% if col == 'RAG' %}
+                                <th class="px-4 py-2 text-sm font-medium text-gray-600 uppercase tracking-wider text-center cursor-pointer sortable hover:bg-gray-100" data-column-name="RAG" data-sort-default="asc">{{ col }}</th>
+                            {% else %}
+                                <th class="px-4 py-2 text-sm font-medium text-gray-600 uppercase tracking-wider text-center cursor-pointer sortable hover:bg-gray-100" data-column-name="{{ col }}">{{ col }}</th>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in fund_health_rows %}
+                    <tr class="border-b border-gray-200 last:border-b-0 hover:bg-gray-100 transition-colors">
+                        {% for col in fund_health_columns %}
+                            {% if col == 'Fund' %}
+                                <td class="px-4 py-2 text-sm text-center text-gray-700">
+                                    <a href="{{ url_for('fund.fund_detail', fund_code=row[col]) }}" class="text-secondary hover:text-primary hover:underline">{{ row[col] }}</a>
+                                </td>
+                            {% elif col == 'RAG' %}
+                                {% set rag_bg = 'bg-green-100 text-green-800' if row[col]=='Green' else ('bg-orange-100 text-orange-800' if row[col]=='Amber' else ('bg-red-100 text-red-800' if row[col]=='Red' else '')) %}
+                                <td class="px-4 py-2 text-sm text-center {{ rag_bg }}">{{ row[col] }}</td>
+                            {% elif col in ['Issues','Exceptions','Watchlist'] %}
+                                <td class="px-4 py-2 text-sm" {% if row[col] is number %}data-value="{{ row[col] }}"{% endif %}>
+                                    {% if col == 'Issues' %}
+                                        <a href="{{ url_for('issue_bp.manage_issues') }}" class="text-primary hover:underline">{{ row[col] }}</a>
+                                    {% elif col == 'Exceptions' %}
+                                        <a href="{{ url_for('exclusion_bp.manage_exclusions') }}" class="text-primary hover:underline">{{ row[col] }}</a>
+                                    {% else %}
+                                        <a href="{{ url_for('watchlist_bp.manage_watchlist') }}" class="text-primary hover:underline">{{ row[col] }}</a>
+                                    {% endif %}
+                                </td>
+                            {% else %}
+                                {# Metric Z-score columns with conditional formatting #}
+                                {% if row[col] is number %}
+                                    {% set z_abs = (row[col] | abs) %}
+                                    {% set z_class = 'text-red-600 font-semibold' if z_abs > 3 else ('text-orange-600 font-semibold' if z_abs > 2 else 'text-gray-900') %}
+                                    <td class="px-4 py-2 text-sm text-center {{ z_class }}" data-value="{{ row[col] }}">{{ "%.2f"|format(row[col]) }}</td>
+                                {% else %}
+                                    <td class="px-4 py-2 text-sm text-center text-gray-400">-</td>
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize table sorter on DOM load
+import('/static/js/main.js').then(module => {
+    if (module.initTableSorter) {
+        module.initTableSorter('fund-health-table');
+    }
+});
+
+// Refresh Checks button handler
+const refreshBtn = document.getElementById('refresh-checks-btn');
+if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = 'Refreshing...';
+        fetch("{{ url_for('main.refresh_checks') }}", { method: 'POST' })
+            .then(resp => resp.json().then(j => ({ ok: resp.ok, body: j })))
+            .then(({ ok, body }) => {
+                if (ok && body.status === 'ok') {
+                    // Reload page to fetch new KPIs
+                    location.reload();
+                } else {
+                    alert(body.message || 'Failed to refresh checks');
+                    refreshBtn.disabled = false;
+                    refreshBtn.textContent = 'Refresh Checks';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error refreshing checks');
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = 'Refresh Checks';
+            });
+    });
+}
+</script>
+{% endblock %} 

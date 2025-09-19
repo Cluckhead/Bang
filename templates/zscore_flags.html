@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Extreme Z-Score Details{% endblock %}
+
+{% block content %}
+{% set template_key = 'zscore_flags' %}
+{% include "_help_link.html" %}
+<div class="space-y-6">
+    <!-- Header Section -->
+    <div>
+        <h1 class="text-3xl font-bold font-merriweather-sans text-gray-800">Extreme Z-Score Details</h1>
+        <p class="mt-2 text-gray-600">Fund-metric pairs with |Z-Score| > 2 requiring attention</p>
+    </div>
+
+    <!-- Back to Dashboard Link -->
+    <div>
+        <a href="{{ url_for('main.index') }}" class="inline-flex items-center text-primary hover:text-primary-dark hover:underline">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+            Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Flags Table -->
+    <div class="bg-white rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] overflow-hidden">
+        {% if flags %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead class="border-b border-gray-300 bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-4 text-sm font-medium text-gray-600 uppercase tracking-wider">Fund</th>
+                        <th class="px-6 py-4 text-sm font-medium text-gray-600 uppercase tracking-wider">Metric</th>
+                        <th class="px-6 py-4 text-sm font-medium text-gray-600 uppercase tracking-wider">Source Field</th>
+                        <th class="px-6 py-4 text-sm font-medium text-gray-600 uppercase tracking-wider text-right">Z-Score</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for flag in flags %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 text-sm text-gray-900 font-medium">
+                            <a href="{{ url_for('fund.fund_detail', fund_code=flag.fund_code) }}" class="text-secondary hover:text-primary hover:underline">
+                                {{ flag.fund_code }}
+                            </a>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            <a href="{{ url_for('metric.metric_page', metric_name=flag.metric) }}" class="text-primary hover:text-primary-dark hover:underline font-medium">
+                                {{ flag.metric.title() }}
+                            </a>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-700">
+                            {{ flag.source_field }}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-right font-semibold">
+                            {% set abs_z = flag.z_score|abs %}
+                            {% if abs_z > 3 %}
+                                <span class="text-red-600">{{ "%.2f"|format(flag.z_score) }}</span>
+                            {% elif abs_z > 2 %}
+                                <span class="text-orange-600">{{ "%.2f"|format(flag.z_score) }}</span>
+                            {% else %}
+                                <span class="text-gray-900">{{ "%.2f"|format(flag.z_score) }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Summary Footer -->
+        <div class="bg-gray-50 px-6 py-3 border-t border-gray-200">
+            <p class="text-sm text-gray-600">
+                Showing {{ flags|length }} extreme Z-score{% if flags|length != 1 %}s{% endif %} 
+                (sorted by severity, most extreme first)
+            </p>
+        </div>
+        
+        {% else %}
+        <!-- Empty State -->
+        <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No Extreme Z-Scores</h3>
+            <p class="mt-1 text-sm text-gray-500">All fund-metric Z-scores are within normal ranges (|Z| ≤ 2).</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Legend -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 class="text-sm font-medium text-blue-900 mb-2">Z-Score Interpretation</h3>
+        <div class="text-sm text-blue-800 space-y-1">
+            <div><span class="text-red-600 font-semibold">Red (|Z| > 3):</span> Highly unusual, requires immediate attention</div>
+            <div><span class="text-orange-600 font-semibold">Orange (2 < |Z| ≤ 3):</span> Moderately unusual, worth investigating</div>
+            <div><span class="text-gray-600">Normal (|Z| ≤ 2):</span> Within expected ranges</div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

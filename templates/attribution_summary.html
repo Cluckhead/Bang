@@ -9,6 +9,8 @@
 {% block title %}Attribution Residuals Summary{% endblock %}
 
 {% block content %}
+{% set template_key = 'attribution_summary' %}
+{% include "_help_link.html" %}
 <div class="container mx-auto px-4 py-8">
     <h1 class="text-3xl font-bold font-merriweather mb-2">Attribution Residuals Summary</h1>
     <p class="text-gray-600 mb-6">Sum of {{ selected_level }} attribution factors by fund and date. Use filters to explore.</p>
@@ -73,8 +75,8 @@
             <div class="lg:col-span-2">
                 <label for="date-range-slider-container" class="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
                 <div id="date-range-slider-container" class="relative h-5">
-                    <input type="range" class="absolute w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb-secondary" id="date-range-slider" min="0" max="0" value="0" step="1">
-                    <input type="range" class="absolute w-full h-2 bg-transparent rounded-lg appearance-none cursor-pointer slider-thumb-secondary" id="date-range-slider-end" min="0" max="0" value="0" step="1">
+                    <input type="range" class="dual-range-slider dual-range-start absolute w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" id="date-range-slider" min="0" max="0" value="0" step="1">
+                    <input type="range" class="dual-range-slider dual-range-end absolute w-full h-2 bg-transparent rounded-lg appearance-none cursor-pointer" id="date-range-slider-end" min="0" max="0" value="0" step="1">
                 </div>
                 <div class="flex justify-between text-xs text-gray-500 mt-1">
                     <span id="start-date-label"></span>
@@ -107,6 +109,9 @@
     <!-- Benchmark Results Card -->
     <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 mb-6 hover:shadow-md transition-shadow">
         <h3 class="text-xl font-semibold font-merriweather mb-3">Benchmark {{ selected_level }} Attribution</h3>
+        <div class="flex justify-end mb-2">
+            <button type="button" onclick="exportBenchmarkCSV()" class="bg-primary text-white px-3 py-1 rounded-md text-xs font-medium hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">Export CSV</button>
+        </div>
         <div class="overflow-x-auto">
             <table id="benchmark-attribution-table" class="min-w-full divide-y divide-gray-200 border border-gray-200 sortable">
                 <thead class="bg-gray-50">
@@ -115,9 +120,9 @@
                         <th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Fund</th>
                         {% if selected_characteristic %}<th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">{{ selected_characteristic }}</th>{% endif %}
                         {# Dynamic Headers based on Level #}
-                        {% set headers = [] %}
+                        {% set headers = ['Return', 'Total Attribution', 'Residual'] %}
                         {% if selected_level == 'L0' or selected_level == None %}
-                            {% set headers = headers + ['Residual', 'Abs Residual'] %}
+                            {% set headers = headers + ['Abs Residual'] %}
                         {% elif selected_level == 'L1' %}
                             {% set headers = headers + ['L1 Rates', 'L1 Credit', 'L1 FX'] %}
                         {% elif selected_level == 'L2' %}
@@ -142,11 +147,21 @@
                         {% if selected_characteristic %}<td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200">{{ row[selected_characteristic] }}</td>{% endif %}
                         {# Dynamic Data based on Level #}
                         {% if selected_level == 'L0' or selected_level == None %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Return_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Return_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_SP) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Residual_Prod) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Residual_SP) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.AbsResidual_Prod) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.AbsResidual_SP) }}</td>
                         {% elif selected_level == 'L1' %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Return_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Return_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Residual_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Residual_SP) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1Rates_Prod) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1Rates_SP) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1Credit_Prod) }}</td>
@@ -154,6 +169,12 @@
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1FX_Prod) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1FX_SP) }}</td>
                         {% elif selected_level == 'L2' %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Return_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Return_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Residual_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Residual_SP) }}</td>
                             {% for key in row.L2ProdKeys %}
                                 <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L2Prod[key]) }}</td>
                                 <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L2SP[key]) }}</td>
@@ -170,11 +191,21 @@
                             <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}" class="px-3 py-2 text-left border-r border-gray-300">Total</td>
                              {# Dynamic Totals based on Level #}
                             {% if selected_level == 'L0' or selected_level == None %}
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Return_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Return_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='TotalAttrib_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='TotalAttrib_SP')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_Prod')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_SP')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='AbsResidual_Prod')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='AbsResidual_SP')) }}</td>
                             {% elif selected_level == 'L1' %}
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Return_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Return_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='TotalAttrib_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='TotalAttrib_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='Residual_SP')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1Rates_Prod')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1Rates_SP')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(benchmark_results|sum(attribute='L1Credit_Prod')) }}</td>
@@ -197,6 +228,9 @@
     <!-- Portfolio Results Card -->
     <div class="bg-[#F7F7F7] rounded-lg shadow-[0_0_4px_rgba(0,0,0,0.06)] p-4 hover:shadow-md transition-shadow">
          <h3 class="text-xl font-semibold font-merriweather mb-3">Portfolio {{ selected_level }} Attribution</h3>
+        <div class="flex justify-end mb-2">
+            <button type="button" onclick="exportPortfolioCSV()" class="bg-primary text-white px-3 py-1 rounded-md text-xs font-medium hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">Export CSV</button>
+        </div>
         <div class="overflow-x-auto">
             <table id="portfolio-attribution-table" class="min-w-full divide-y divide-gray-200 border border-gray-200 sortable">
                 <thead class="bg-gray-50">
@@ -205,9 +239,9 @@
                         <th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Fund</th>
                         {% if selected_characteristic %}<th rowspan="2" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">{{ selected_characteristic }}</th>{% endif %}
                          {# Dynamic Headers based on Level #}
-                        {% set headers = [] %}
+                        {% set headers = ['Return', 'Total Attribution', 'Residual'] %}
                         {% if selected_level == 'L0' or selected_level == None %}
-                            {% set headers = headers + ['Residual', 'Abs Residual'] %}
+                            {% set headers = headers + ['Abs Residual'] %}
                         {% elif selected_level == 'L1' %}
                             {% set headers = headers + ['L1 Rates', 'L1 Credit', 'L1 FX'] %}
                         {% elif selected_level == 'L2' %}
@@ -232,11 +266,21 @@
                          {% if selected_characteristic %}<td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200">{{ row[selected_characteristic] }}</td>{% endif %}
                          {# Dynamic Data based on Level #}
                         {% if selected_level == 'L0' or selected_level == None %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Return_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Return_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_SP) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Residual_Prod) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Residual_SP) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.AbsResidual_Prod) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.AbsResidual_SP) }}</td>
                         {% elif selected_level == 'L1' %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Return_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Return_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Residual_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Residual_SP) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1Rates_Prod) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1Rates_SP) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1Credit_Prod) }}</td>
@@ -244,6 +288,12 @@
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L1FX_Prod) }}</td>
                             <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L1FX_SP) }}</td>
                         {% elif selected_level == 'L2' %}
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Return_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Return_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.TotalAttrib_SP) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.Residual_Prod) }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.Residual_SP) }}</td>
                             {% for key in row.L2ProdKeys %}
                                 <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-l border-gray-200 text-right">{{ '%.6f'|format(row.L2Prod[key]) }}</td>
                                 <td class="px-3 py-1.5 whitespace-nowrap text-sm text-gray-700 border-r border-gray-200 text-right">{{ '%.6f'|format(row.L2SP[key]) }}</td>
@@ -260,11 +310,21 @@
                             <td colspan="{% if selected_characteristic %}3{% else %}2{% endif %}" class="px-3 py-2 text-left border-r border-gray-300">Total</td>
                             {# Dynamic Totals based on Level #}
                             {% if selected_level == 'L0' or selected_level == None %}
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Return_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Return_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='TotalAttrib_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='TotalAttrib_SP')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_Prod')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_SP')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='AbsResidual_Prod')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='AbsResidual_SP')) }}</td>
                              {% elif selected_level == 'L1' %}
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Return_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Return_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='TotalAttrib_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='TotalAttrib_SP')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_Prod')) }}</td>
+                                <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='Residual_SP')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1Rates_Prod')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1Rates_SP')) }}</td>
                                 <td class="px-3 py-2 text-right border-r border-l border-gray-300">{{ '%.6f'|format(portfolio_results|sum(attribute='L1Credit_Prod')) }}</td>
@@ -289,7 +349,70 @@
 
 {% block scripts %}
 {{ super() }}
+<style>
+/* Custom dual-range slider styles */
+.dual-range-slider {
+    pointer-events: none;
+}
+
+.dual-range-slider::-webkit-slider-thumb {
+    appearance: none;
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+    background: #1F7A8C;
+    border: 3px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    pointer-events: all;
+    transition: all 0.15s ease;
+}
+
+.dual-range-slider::-webkit-slider-thumb:hover {
+    background: #1a6b7a;
+    transform: scale(1.1);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.dual-range-slider::-moz-range-thumb {
+    appearance: none;
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+    background: #1F7A8C;
+    border: 3px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    pointer-events: all;
+    transition: all 0.15s ease;
+}
+
+.dual-range-slider::-moz-range-thumb:hover {
+    background: #1a6b7a;
+    transform: scale(1.1);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.dual-range-slider::-webkit-slider-track,
+.dual-range-slider::-moz-range-track {
+    background: transparent;
+    height: 8px;
+}
+
+.dual-range-start {
+    z-index: 1;
+}
+
+.dual-range-end {
+    z-index: 2;
+}
+</style>
 <script>
+// Template variables
+const selectedFund = "{{ selected_fund if selected_fund else 'AllFunds' }}";
+const selectedLevel = "{{ selected_level }}";
+const selectedEndDate = "{{ end_date.strftime('%Y-%m-%d') }}";
+
 // Date slider logic (using allDates array similar to attribution_radar)
 const minDate = new Date("{{ min_date.strftime('%Y-%m-%d') }}");
 const maxDate = new Date("{{ max_date.strftime('%Y-%m-%d') }}");
@@ -342,6 +465,24 @@ updateSliderLabelsAndInput();
 sliderStartEl.addEventListener('input', updateSliderLabelsAndInput);
 sliderEndEl.addEventListener('input', updateSliderLabelsAndInput);
 
+// Handle z-index for proper slider interaction
+sliderStartEl.addEventListener('mousedown', function() {
+    sliderStartEl.style.zIndex = '3';
+    sliderEndEl.style.zIndex = '2';
+});
+sliderEndEl.addEventListener('mousedown', function() {
+    sliderEndEl.style.zIndex = '3';
+    sliderStartEl.style.zIndex = '2';
+});
+sliderStartEl.addEventListener('touchstart', function() {
+    sliderStartEl.style.zIndex = '3';
+    sliderEndEl.style.zIndex = '2';
+});
+sliderEndEl.addEventListener('touchstart', function() {
+    sliderEndEl.style.zIndex = '3';
+    sliderStartEl.style.zIndex = '2';
+});
+
 // Submit main filter form when dropdowns change
 document.getElementById('fund-select').addEventListener('change', () => { document.getElementById('filter-form').submit(); });
 document.getElementById('characteristic-select').addEventListener('change', () => { document.getElementById('filter-form').submit(); });
@@ -369,5 +510,31 @@ document.addEventListener('DOMContentLoaded', function() {
 /*.slider-thumb-secondary::-webkit-slider-thumb { ... }
 .slider-thumb-secondary::-moz-range-thumb { ... }
 */
+
+function exportBenchmarkCSV() {
+    // Use the global CSV export utility
+    window.exportTableToCSV('benchmark-attribution-table', {
+        filePrefix: 'attribution',
+        context: 'benchmark',
+        filters: {
+            fund: selectedFund,
+            level: selectedLevel,
+            end_date: selectedEndDate
+        }
+    });
+}
+
+function exportPortfolioCSV() {
+    // Use the global CSV export utility
+    window.exportTableToCSV('portfolio-attribution-table', {
+        filePrefix: 'attribution',
+        context: 'portfolio',
+        filters: {
+            fund: selectedFund,
+            level: selectedLevel,
+            end_date: selectedEndDate
+        }
+    });
+}
 </script>
 {% endblock %} 

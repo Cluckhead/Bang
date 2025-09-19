@@ -24,6 +24,7 @@
 import { renderChartsAndTables, renderSingleSecurityChart, renderFundCharts, toggleSecondaryDataVisibility } from './modules/ui/chartRenderer.js';
 import { initSecurityTableFilter } from './modules/ui/securityTableFilter.js';
 import { initTableSorter } from './modules/ui/tableSorter.js';
+import { exportTableToCSV, exportChartToCSV, addExportButtonsToTables, getCurrentPageContext } from './modules/utils/csvExport.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM fully loaded and parsed");
@@ -422,6 +423,20 @@ document.addEventListener('DOMContentLoaded', () => {
         initTableSorter('fund-duration-table'); 
     }
 
+    // --- Fund Health Summary Page ---
+    const fundHealthTable = document.getElementById('fund-health-table');
+    if (fundHealthTable) {
+        console.log("Fund health summary page table detected. Initializing sorter.");
+        initTableSorter('fund-health-table');
+    }
+
+    // --- KRD vs Duration Comparison Page ---
+    const krdDurationTable = document.getElementById('krd-duration-table');
+    if (krdDurationTable) {
+        console.log("KRD vs Duration comparison page table detected. Initializing sorter.");
+        initTableSorter('krd-duration-table');
+    }
+
     // --- Filters Drawer Logic ---
     const showFiltersBtn = document.getElementById('show-filters-btn');
     const closeFiltersBtn = document.getElementById('close-filters-btn');
@@ -448,6 +463,68 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Add any other global initializations here
+    
+    // --- CSV Export Integration ---
+    // Automatically add export buttons to all tables with IDs
+    const pageContext = getCurrentPageContext();
+    console.log('Adding CSV export buttons to tables...');
+    
+    addExportButtonsToTables({
+        selector: 'table[id]', // Only tables with IDs
+        buttonText: 'Export CSV',
+        buttonOptions: {
+            size: 'small',
+            style: 'primary',
+            className: 'mb-2'
+        },
+        generateOptions: (table) => {
+            // Generate context-specific export options
+            const tableId = table.id;
+            let filePrefix = pageContext.filePrefix;
+            let context = pageContext.context;
+            
+            // Override based on table ID patterns
+            if (tableId.includes('securities')) {
+                filePrefix = 'securities';
+            } else if (tableId.includes('attribution')) {
+                filePrefix = 'attribution';
+            } else if (tableId.includes('comparison')) {
+                filePrefix = 'comparison';
+            } else if (tableId.includes('fund')) {
+                filePrefix = 'funds';
+            } else if (tableId.includes('metric')) {
+                filePrefix = 'metrics';
+            } else if (tableId.includes('watchlist')) {
+                filePrefix = 'watchlist';
+            } else if (tableId.includes('tickets')) {
+                filePrefix = 'tickets';
+            } else if (tableId.includes('issues')) {
+                filePrefix = 'issues';
+            } else if (tableId.includes('exclusions')) {
+                filePrefix = 'exclusions';
+            } else if (tableId.includes('staleness')) {
+                filePrefix = 'staleness';
+            } else if (tableId.includes('maxmin')) {
+                filePrefix = 'maxmin';
+            } else if (tableId.includes('curve')) {
+                filePrefix = 'curves';
+            } else if (tableId.includes('krd')) {
+                filePrefix = 'krd';
+            } else if (tableId.includes('zscore')) {
+                filePrefix = 'zscore';
+            }
+            
+            return {
+                filePrefix: filePrefix,
+                context: context,
+                filters: pageContext.filters
+            };
+        }
+    });
+    
+    // Make CSV export functions globally available for inline onclick handlers
+    window.exportTableToCSV = exportTableToCSV;
+    window.exportChartToCSV = exportChartToCSV;
 });
 
 /**

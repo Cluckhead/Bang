@@ -1,7 +1,7 @@
 # Purpose: End-to-end test for data_loader.load_and_process_data on a small time-series CSV.
 
 import pandas as pd
-from data_loader import load_and_process_data
+from core.data_loader import load_and_process_data
 
 
 def _write_ts_csv(tmp_dir):

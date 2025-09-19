@@ -5,19 +5,19 @@ from flask import Blueprint, render_template, request, url_for, current_app, red
 import os
 import logging
 import urllib.parse
-from staleness_processing import (
+from analytics.staleness_processing import (
     get_staleness_summary,
     get_stale_securities_details,
 )
-from utils import load_exclusions
-from config import (
+from core.utils import load_exclusions
+from core.config import (
     DATA_FOLDER,
     EXCLUSIONS_FILE,
     ID_COLUMN,
     COMPARISON_CONFIG,
     MAXMIN_THRESHOLDS,
 )
-import config
+from core import config
 
 # Create blueprint
 staleness_bp = Blueprint("staleness_bp", __name__, template_folder="../templates")

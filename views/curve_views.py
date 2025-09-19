@@ -2,6 +2,7 @@
 
 # Stdlib imports
 from datetime import datetime
+import re  # local import to avoid global dependency overhead
 
 # Third-party imports
 from flask import Blueprint, render_template, request, jsonify, current_app
@@ -9,14 +10,17 @@ import pandas as pd
 import numpy as np
 
 # Local imports
-from curve_processing import (
+from data_processing.curve_processing import (
     load_curve_data,
     check_curve_inconsistencies,
     get_latest_curve_date,
 )
-from config import COLOR_PALETTE
+from core.config import COLOR_PALETTE
 
 curve_bp = Blueprint("curve_bp", __name__, template_folder="../templates")
+
+# Regex pattern to identify canonical YYYY-MM-DD column headers
+date_col_pattern = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 # --- Routes ---
 
@@ -347,3 +351,461 @@ def curve_details(currency):
         num_prev_days=num_prev_days,
         color_palette=COLOR_PALETTE,
     )
+
+
+@curve_bp.route("/govt_yield_curve")
+def govt_yield_curve():
+    """Display government bond yields against yield curves."""
+    import pandas as pd
+    import numpy as np
+    from datetime import datetime, timedelta
+    import os
+    
+    try:
+        data_folder = current_app.config.get("DATA_FOLDER")
+        
+        # Load data files
+        sec_ytm_path = os.path.join(data_folder, "sec_YTM.csv")
+        sec_ytmsp_path = os.path.join(data_folder, "sec_YTMSP.csv")  # New SP dataset
+        curves_path = os.path.join(data_folder, "curves.csv")
+        reference_path = os.path.join(data_folder, "reference.csv")
+        
+        # Read the data files
+        sec_ytm_df = pd.read_csv(sec_ytm_path)
+        sec_ytmsp_df = pd.read_csv(sec_ytmsp_path)
+        curves_df = pd.read_csv(curves_path)
+        reference_df = pd.read_csv(reference_path)
+        
+        # ---------------------------------------------------------------
+        # Derive available dates using the same canonicalisation logic as
+        # the API endpoint (handles DD/MM/YYYY vs YYYY-MM-DD).
+        # ---------------------------------------------------------------
+
+        date_col_pattern = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+        def build_date_lookup_view(columns):
+            lookup = {}
+            for col in columns:
+                if date_col_pattern.match(str(col)) or '/' in str(col):
+                    try:
+                        # For YYYY-MM-DD format, don't use dayfirst=True
+                        if date_col_pattern.match(str(col)):
+                            canon = pd.to_datetime(col).strftime('%Y-%m-%d')
+                        else:
+                            # For DD/MM/YYYY format (with slashes), use dayfirst=True
+                            canon = pd.to_datetime(col, dayfirst=True).strftime('%Y-%m-%d')
+                        lookup.setdefault(canon, col)
+                    except Exception:
+                        continue
+            return lookup
+
+        date_lookup_view = build_date_lookup_view(sec_ytm_df.columns)
+
+        available_dates = sorted(date_lookup_view.keys(), reverse=True)
+
+        latest_date = available_dates[0] if available_dates else None
+
+        current_app.logger.info(
+            "govt_yield_curve view – total available dates: %d (latest: %s)",
+            len(available_dates),
+            latest_date,
+        )
+
+        # Get available currencies from curves data (filter out NaN values)
+        available_currencies = sorted(curves_df['Currency Code'].dropna().unique().tolist())
+        
+        # Country options by currency – only include countries that have gov bonds with YTM data for that currency
+        govt_df = reference_df[reference_df['Security Sub Type'] == 'Govt Bond']
+        
+        # Merge with YTM data to ensure we only show countries that have bonds with actual YTM data
+        govt_with_ytm = pd.merge(
+            govt_df,
+            sec_ytm_df[['ISIN']],  # Only need ISIN column to check existence
+            on='ISIN',
+            how='inner'  # Only keep government bonds that have YTM data
+        )
+        
+        current_app.logger.info(
+            "Government bonds filtering: %d total govt bonds in reference, %d have YTM data available",
+            len(govt_df),
+            len(govt_with_ytm)
+        )
+        
+        country_map = {}
+        for ccy in available_currencies:
+            # Filter by currency and get unique countries that have YTM data
+            ccy_bonds = govt_with_ytm[govt_with_ytm['Position Currency'] == ccy]
+            ctry_list = sorted(ccy_bonds['Country Of Risk'].dropna().unique().tolist())
+            ctry_list.insert(0, 'All Countries')
+            country_map[ccy] = ctry_list
+            
+            current_app.logger.debug(
+                "Currency %s: %d govt bonds with YTM data, countries: %s",
+                ccy,
+                len(ccy_bonds),
+                ctry_list[1:] if len(ctry_list) > 1 else []  # Exclude 'All Countries'
+            )
+
+        # Initial available countries (default currency 'USD' or first currency)
+        default_currency = 'USD'
+        initial_countries = country_map.get(default_currency, list(next(iter(country_map.values()))))
+
+        # Get government securities from reference data (filtering by precise subtype)
+        govt_securities = reference_df[reference_df['Security Sub Type'] == 'Govt Bond'].copy()
+
+        current_app.logger.info(
+            "Total 'Govt Bond' securities found: %d",
+            len(govt_securities)
+        )
+
+        current_app.logger.info(f"Found {len(govt_securities)} government securities")
+        current_app.logger.info(f"Available currencies: {available_currencies}")
+        current_app.logger.info(f"Latest date: {latest_date}")
+        
+        return render_template(
+            "govt_yield_curve.html",
+            available_currencies=available_currencies,
+            available_dates=available_dates,
+            latest_date=latest_date,
+            country_map=country_map,
+            initial_countries=initial_countries,
+            govt_securities_count=len(govt_securities)
+        )
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in govt_yield_curve: {e}", exc_info=True)
+        return render_template("error.html", error_message=str(e))
+
+
+@curve_bp.route("/curve/api/govt_yield_curve_data")
+def api_govt_yield_curve_data():
+    """API endpoint to get government bond yield curve data."""
+    import pandas as pd
+    import numpy as np
+    from datetime import datetime
+    import os
+    
+    try:
+        # Get parameters
+        currency = request.args.get('currency', 'USD')
+        country = request.args.get('country', 'All Countries')
+        date = request.args.get('date')
+        
+        data_folder = current_app.config.get("DATA_FOLDER")
+        
+        # Load data files
+        sec_ytm_path = os.path.join(data_folder, "sec_YTM.csv")
+        sec_ytmsp_path = os.path.join(data_folder, "sec_YTMSP.csv")  # New SP dataset
+        curves_path = os.path.join(data_folder, "curves.csv")
+        reference_path = os.path.join(data_folder, "reference.csv")
+        
+        sec_ytm_df = pd.read_csv(sec_ytm_path)
+        sec_ytmsp_df = pd.read_csv(sec_ytmsp_path)
+        curves_df = pd.read_csv(curves_path)
+        reference_df = pd.read_csv(reference_path)
+        
+        # ------------------------------------------------------------------
+        # Canonicalise date columns – handle both YYYY-MM-DD and DD/MM/YYYY.
+        # Build mapping so we can transparently look up the right original
+        # column name regardless of formatting.
+        # ------------------------------------------------------------------
+
+        date_col_pattern = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+        def build_date_lookup(columns):
+            """Return dict mapping canonical YYYY-MM-DD → original column name."""
+            lookup = {}
+            for col in columns:
+                if date_col_pattern.match(str(col)) or '/' in str(col):
+                    try:
+                        # For YYYY-MM-DD format, don't use dayfirst=True
+                        if date_col_pattern.match(str(col)):
+                            canon = pd.to_datetime(col).strftime('%Y-%m-%d')
+                        else:
+                            # For DD/MM/YYYY format (with slashes), use dayfirst=True
+                            canon = pd.to_datetime(col, dayfirst=True).strftime('%Y-%m-%d')
+                        # Only set first occurrence
+                        lookup.setdefault(canon, col)
+                    except Exception:
+                        continue
+            return lookup
+
+        ytm_date_lookup = build_date_lookup(sec_ytm_df.columns)
+        ytmsp_date_lookup = build_date_lookup(sec_ytmsp_df.columns)
+
+        current_app.logger.info(
+            "Date lookup built – sec_YTM keys: %d (earliest %s, latest %s), sec_YTMSP keys: %d",
+            len(ytm_date_lookup),
+            min(ytm_date_lookup.keys()) if ytm_date_lookup else "n/a",
+            max(ytm_date_lookup.keys()) if ytm_date_lookup else "n/a",
+            len(ytmsp_date_lookup)
+        )
+
+        # ------------------------------------------------------------------
+        # Debug helper: pick the first bond in sec_YTM for the requested
+        # currency (if available) and log whether this ISIN exists in each
+        # dataset we join against. This helps trace data-mismatch issues in
+        # production where no government bonds appear on the chart.
+        # ------------------------------------------------------------------
+
+        sample_isin = None
+        if 'Currency' in sec_ytm_df.columns:
+            usd_subset = sec_ytm_df[sec_ytm_df['Currency'] == currency]
+            if not usd_subset.empty:
+                sample_isin = usd_subset['ISIN'].iloc[0]
+
+        # Fallback: take the first ISIN overall if currency-specific one not found
+        if sample_isin is None and not sec_ytm_df.empty:
+            sample_isin = sec_ytm_df['ISIN'].iloc[0]
+
+        if sample_isin:
+            presence_sec_ytm = not sec_ytm_df[sec_ytm_df['ISIN'] == sample_isin].empty
+            presence_sec_ytmsp = not sec_ytmsp_df[sec_ytmsp_df['ISIN'] == sample_isin].empty
+            presence_reference = not reference_df[reference_df['ISIN'] == sample_isin].empty
+
+            current_app.logger.info(
+                "Presence check for sample ISIN %s — sec_YTM:%s, sec_YTMSP:%s, reference:%s",
+                sample_isin,
+                presence_sec_ytm,
+                presence_sec_ytmsp,
+                presence_reference
+            )
+
+        # Filter for government bonds in the specified currency. We now match on
+        # 'Govt Bond' rather than the previous, overly-broad 'Govt' subtype.
+        govt_filter = (
+            (reference_df['Security Sub Type'] == 'Govt Bond') &
+            (reference_df['Position Currency'] == currency)
+        )
+        if country and country != 'All Countries':
+            govt_filter &= (reference_df['Country Of Risk'] == country)
+
+        govt_securities = reference_df[govt_filter].copy()
+
+        current_app.logger.info(
+            "Currency filter: %s – Govt bonds after currency filter: %d",
+            currency,
+            len(govt_securities)
+        )
+
+        # If nothing found, log some diagnostics
+        if govt_securities.empty:
+            available_currencies_govt = reference_df[reference_df['Security Sub Type'] == 'Govt Bond']['Position Currency'].unique().tolist()
+            current_app.logger.warning(
+                "No govt bonds found for currency %s. Available currencies containing govt bonds: %s",
+                currency,
+                available_currencies_govt
+            )
+
+        # Get curve data for the specified currency and date
+        curves_df['Date'] = pd.to_datetime(curves_df['Date']).dt.strftime('%Y-%m-%d')
+        curve_data = curves_df[
+            (curves_df['Currency Code'] == currency) & 
+            (curves_df['Date'] == date)
+        ].copy()
+        
+        # Convert terms to months for plotting
+        def term_to_months(term):
+            """Convert term string to months."""
+            if 'D' in term:
+                return float(term.replace('D', '')) / 30.0  # Approximate days to months
+            elif 'M' in term:
+                return float(term.replace('M', ''))
+            else:
+                return 0
+        
+        curve_data['Months'] = curve_data['Term'].apply(term_to_months)
+        curve_data = curve_data.sort_values('Months')
+        
+        # Calculate maturity in months for government securities
+        # Assuming maturity date format is MM/DD/YYYY
+        def calc_months_to_maturity(maturity_date_str, current_date_str):
+            """Calculate months to maturity."""
+            try:
+                current_date = datetime.strptime(current_date_str, '%Y-%m-%d')
+                # Handle various maturity date formats including Excel serial dates
+                try:
+                    # Import enhanced date parser that handles Excel serial dates
+                    from synth_spread_calculator import parse_date_robust
+                    maturity_parsed = parse_date_robust(maturity_date_str, dayfirst=False)
+                    if pd.isna(maturity_parsed):
+                        raise ValueError(f"Could not parse maturity date: {maturity_date_str}")
+                    maturity_date = maturity_parsed.to_pydatetime()
+                except Exception:
+                    # Fallback to existing parsing logic
+                    if '/' in maturity_date_str:
+                        # Format like DD/MM/YYYY or MM/DD/YYYY – let pandas infer with dayfirst=False
+                        maturity_date = pd.to_datetime(maturity_date_str, dayfirst=False).to_pydatetime()
+                    else:
+                        # Possible ISO format with 'T', e.g., '2025-07-01T00:00:00'
+                        maturity_date_clean = maturity_date_str.split('T')[0]
+                        maturity_date = datetime.strptime(maturity_date_clean, '%Y-%m-%d')
+                
+                delta = maturity_date - current_date
+                return delta.days / 30.0  # Convert days to approximate months
+            except:
+                return None
+        
+        govt_securities['Months_To_Maturity'] = govt_securities['Maturity Date'].apply(
+            lambda x: calc_months_to_maturity(x, date)
+        )
+        
+        # Get YTM data for the specified date
+        # Convert date format to match sec_YTM columns
+        ytm_date_col = pd.to_datetime(date).strftime('%Y-%m-%d')
+        
+        # ---------------------------------------------------------------
+        # Resolve original column name for requested date
+        # ---------------------------------------------------------------
+
+        orig_ytm_col = ytm_date_lookup.get(ytm_date_col)
+
+        if orig_ytm_col is None:
+            current_app.logger.warning(
+                "Requested date column '%s' could not be resolved in sec_YTM. Available canonical keys (sample): %s",
+                ytm_date_col,
+                list(ytm_date_lookup.keys())[:10]
+            )
+
+        orig_ytmsp_col = ytmsp_date_lookup.get(ytm_date_col)
+
+        current_app.logger.info(
+            "Resolved original columns – sec_YTM:%s, sec_YTMSP:%s for requested date %s",
+            orig_ytm_col,
+            orig_ytmsp_col,
+            ytm_date_col,
+        )
+
+        # ---------------------------------------------------------------
+        # Merge government securities with YTM data
+        # ---------------------------------------------------------------
+
+        if orig_ytm_col is None:
+            current_app.logger.warning(
+                "Requested date column '%s' could not be resolved in sec_YTM. Available canonical keys (sample): %s",
+                ytm_date_col,
+                list(ytm_date_lookup.keys())[:10]
+            )
+
+        # Merge government securities with YTM data
+        ytm_data = []
+        # --- Counters for summary logging ---
+        processed_count = 0
+        matched_count = 0
+        ytm_value_present = 0  # non-NaN regardless of maturity validity
+        debug_examples = []  # Store first few examples for logging
+        
+        for _, govt_sec in govt_securities.iterrows():
+            isin = govt_sec['ISIN']
+            ytm_row = sec_ytm_df[sec_ytm_df['ISIN'] == isin]
+            
+            ytm_value = None
+            if not ytm_row.empty and orig_ytm_col and orig_ytm_col in ytm_row.columns:
+                ytm_value = ytm_row[orig_ytm_col].iloc[0]
+                if pd.notna(ytm_value):
+                    ytm_value_present += 1
+
+                if pd.notna(ytm_value) and pd.notna(govt_sec['Months_To_Maturity']):
+                    ytm_data.append({
+                        'ISIN': isin,
+                        'Security_Name': govt_sec['Security Name'],
+                        'YTM': float(ytm_value),
+                        'Months_To_Maturity': float(govt_sec['Months_To_Maturity']),
+                        'Currency': govt_sec['Position Currency']
+                    })
+                    matched_count += 1
+
+            processed_count += 1
+
+            # Store first 3 examples for debugging
+            if len(debug_examples) < 3:
+                debug_examples.append({
+                    'isin': isin,
+                    'ytm_value': ytm_value if ytm_value is not None else 'n/a',
+                    'months_to_maturity': govt_sec['Months_To_Maturity']
+                })
+
+        # Summary logging
+        current_app.logger.info(
+            "Processed %d govt bonds – YTM present: %d, matched with maturity: %d for date %s",
+            processed_count,
+            ytm_value_present,
+            matched_count,
+            ytm_date_col
+        )
+        
+        # Log debug examples
+        if debug_examples:
+            current_app.logger.debug(f"Debug examples for {currency} bonds:")
+            for example in debug_examples:
+                current_app.logger.debug(
+                    f"  - ISIN:{example['isin']}, YTM:{example['ytm_value']}, MonthsToMat:{example['months_to_maturity']}"
+                )
+        
+        # --- Process sec_YTMSP.csv securities (other securities) ---
+        # Join SP data with reference to pick up maturity, currency and subtype information
+        sp_join_df = pd.merge(
+            sec_ytmsp_df,
+            reference_df[['ISIN', 'Maturity Date', 'Position Currency', 'Security Sub Type', 'Country Of Risk']],
+            on='ISIN',
+            how='left'
+        )
+
+        # Filter for the requested currency AND limit to government bonds only
+        sp_filter = (
+            (sp_join_df['Position Currency'] == currency) &
+            (sp_join_df['Security Sub Type'] == 'Govt Bond')
+        )
+        if country and country != 'All Countries' and 'Country Of Risk' in sp_join_df.columns:
+            sp_filter &= (sp_join_df['Country Of Risk'] == country)
+
+        sp_join_df = sp_join_df[sp_filter].copy()
+
+        current_app.logger.info(
+            "SP join – rows after currency & subtype filter: %d",
+            len(sp_join_df)
+        )
+
+        # Compute Months_To_Maturity for SP securities
+        sp_join_df['Months_To_Maturity'] = sp_join_df['Maturity Date'].apply(
+            lambda x: calc_months_to_maturity(x, date)
+        )
+
+        sp_bonds = []
+        for _, sp_row in sp_join_df.iterrows():
+            isin = sp_row['ISIN']
+            if orig_ytmsp_col and orig_ytmsp_col in sp_row:
+                ytm_value = sp_row[orig_ytmsp_col]
+                if pd.notna(ytm_value) and pd.notna(sp_row['Months_To_Maturity']):
+                    sp_bonds.append({
+                        'ISIN': isin,
+                        'Security_Name': sp_row['Security Name'],
+                        'YTM': float(ytm_value),
+                        'Months_To_Maturity': float(sp_row['Months_To_Maturity']),
+                        'Currency': sp_row['Position Currency']
+                    })
+        
+        # Prepare curve data for JSON
+        curve_points = []
+        for _, row in curve_data.iterrows():
+            curve_points.append({
+                'Term': row['Term'],
+                'Months': float(row['Months']),
+                'Yield': float(row['Daily Value'])
+            })
+        
+        current_app.logger.info(
+            f"Returning {len(ytm_data)} govt bonds, {len(sp_bonds)} SP bonds and {len(curve_points)} curve points"
+        )
+        
+        return jsonify({
+            'curve_data': curve_points,
+            'govt_bonds': ytm_data,
+            'sp_bonds': sp_bonds,
+            'currency': currency,
+            'date': date
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in api_govt_yield_curve_data: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500

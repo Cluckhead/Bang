@@ -21,6 +21,8 @@
 {% block title %}Security Attribution Time Series{% endblock %}
 
 {% block content %}
+{% set template_key = 'attribution_security_timeseries' %}
+{% include "_help_link.html" %}
 <div class="p-4">
     <h1 class="text-2xl font-bold mb-2">Security Attribution Time Series</h1>
     <p class="text-gray-600 text-sm mb-4">View attribution factor values over time for a single security and fund. Compare S&P and Original data, and view Spread below.</p>
@@ -120,8 +122,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Portfolio chart
-    if(portData && portData.length){
-        new Chart(document.getElementById('portChart').getContext('2d'),{
+    const portCanvas = document.getElementById('portChart');
+    if(portData && Array.isArray(portData) && portData.length > 0 && portCanvas){
+        new Chart(portCanvas.getContext('2d'),{
             type:'bar',
             data:{labels:portData.map(d=>d.date),datasets:buildDatasets(portData)},
             options:{
@@ -138,11 +141,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
+    } else if (portCanvas) {
+        portCanvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-80 text-gray-500"><p>No portfolio attribution data available for this security.</p></div>';
     }
 
     // Benchmark chart
-    if(benchData && benchData.length){
-        new Chart(document.getElementById('benchChart').getContext('2d'),{
+    const benchCanvas = document.getElementById('benchChart');
+    if(benchData && Array.isArray(benchData) && benchData.length > 0 && benchCanvas){
+        new Chart(benchCanvas.getContext('2d'),{
             type:'bar',
             data:{labels:benchData.map(d=>d.date),datasets:buildDatasets(benchData)},
             options:{
@@ -159,11 +165,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
+    } else if (benchCanvas) {
+        benchCanvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-80 text-gray-500"><p>No benchmark attribution data available for this security.</p></div>';
     }
 
     // Spread Chart
     const spreadCanvas = document.getElementById('spreadChart'); // Get the element first
-    if(spreadCanvas && spreadData && spreadData.dates && spreadData.dates.length > 0){ // Check element and data
+    if(spreadCanvas && spreadData && spreadData.dates && Array.isArray(spreadData.dates) && spreadData.dates.length > 0){ // Check element and data
         const spreadCtx = spreadCanvas.getContext('2d'); // Now use the existing element
         const datasets=[
             {label:'Spread (Orig)',data:spreadData.orig,borderColor:'#1F77B4',backgroundColor:'#1F77B41A',type:'line',fill:false}
@@ -189,6 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    // Note: No need for else handling here as the template already handles missing spread data
 });
 </script>
 {% endblock %} 

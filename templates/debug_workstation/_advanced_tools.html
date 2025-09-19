@@ -1,0 +1,121 @@
+<!-- Advanced Tools Panel Component -->
+<div class="bg-white rounded-lg shadow-lg p-6 panel-transition min-h-96">
+  <h2 class="text-lg font-semibold text-gray-900 mb-4">Advanced Tools</h2>
+  
+  <!-- Scenario Tabs -->
+  <div class="border-b border-gray-200 mb-4">
+    <nav class="-mb-px flex space-x-6">
+      <button class="scenario-tab py-2 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600" 
+              data-scenario="scenarios">
+        Scenarios
+      </button>
+      <button class="scenario-tab py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700" 
+              data-scenario="curves">
+        Curves
+      </button>
+      <button class="scenario-tab py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700" 
+              data-scenario="export">
+        Export
+      </button>
+    </nav>
+  </div>
+  
+  <!-- Scenarios Tab -->
+  <div id="scenarios-tab" class="scenario-tab-content">
+    <div class="space-y-4">
+      <!-- Predefined Scenarios -->
+      <div class="grid grid-cols-2 gap-2">
+        <button class="scenario-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-800 text-xs font-medium py-2 px-3 rounded transition-colors" 
+                data-scenario-type="rate_shock_up">
+          +100bp Shock
+        </button>
+        <button class="scenario-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-800 text-xs font-medium py-2 px-3 rounded transition-colors" 
+                data-scenario-type="rate_shock_down">
+          -100bp Shock
+        </button>
+        <button class="scenario-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-800 text-xs font-medium py-2 px-3 rounded transition-colors" 
+                data-scenario-type="spread_widening">
+          Credit Widening
+        </button>
+        <button class="scenario-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-800 text-xs font-medium py-2 px-3 rounded transition-colors" 
+                data-scenario-type="vol_shock">
+          Vol Shock
+        </button>
+      </div>
+      
+      <!-- Scenario Results -->
+      <div id="scenario-results" class="hidden">
+        <h4 class="text-sm font-medium text-gray-900 mb-2">Scenario Results</h4>
+        <div class="overflow-x-auto">
+          <table id="scenario-table" class="min-w-full text-xs border border-gray-300">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-2 py-1 border-b text-left">Scenario</th>
+                <th class="px-2 py-1 border-b text-right">Price Impact</th>
+                <th class="px-2 py-1 border-b text-right">P&L</th>
+              </tr>
+            </thead>
+            <tbody id="scenario-tbody">
+              <!-- Scenario results will be populated here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Curves Tab -->
+  <div id="curves-tab" class="scenario-tab-content hidden">
+    <div class="space-y-4">
+      <!-- Curve Display Options -->
+      <div class="space-y-2">
+        <label class="flex items-center">
+          <input type="checkbox" id="show-our-curve" checked class="mr-2">
+          <span class="text-sm">Show Our Curve</span>
+        </label>
+        <label class="flex items-center">
+          <input type="checkbox" id="show-vendor-curve" class="mr-2">
+          <span class="text-sm">Show Vendor Curve</span>
+        </label>
+        <label class="flex items-center">
+          <input type="checkbox" id="show-shocked-curve" class="mr-2">
+          <span class="text-sm">Show Shocked Curve</span>
+        </label>
+      </div>
+      
+      <!-- Curve Analysis -->
+      <button id="run-curve-analysis-btn" 
+              class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors">
+        Analyze Curves
+      </button>
+      
+      <!-- Curve Chart -->
+      <div id="curve-chart-container" class="mt-4 hidden">
+        <canvas id="curve-chart" width="400" height="250"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Export Tab -->
+  <div id="export-tab" class="scenario-tab-content hidden">
+    <div class="space-y-4">
+      <!-- Export Options -->
+      <div class="space-y-3">
+        <button class="w-full bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors">
+          Export to Excel
+        </button>
+        <button class="w-full bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors">
+          Export Raw Data CSV
+        </button>
+        <button class="w-full bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors">
+          Export Analysis Report
+        </button>
+      </div>
+      
+      <!-- Export Status -->
+      <div id="export-status" class="text-sm text-gray-600 hidden">
+        <!-- Export status will be shown here -->
+      </div>
+    </div>
+  </div>
+</div>

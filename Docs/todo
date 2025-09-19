@@ -1,0 +1,101 @@
+
+## 🎯 NEXT: Minimal High-Impact Improvements
+- [ ] Add Day_Count_Convention to reference.csv (HIGH IMPACT)
+- [ ] Add Business_Day_Convention to schedule.csv (HIGH IMPACT)
+- [ ] Add Accrual_Basis to sec_accrued.csv (MEDIUM IMPACT)
+- [ ] Implement transaction cost overlay (separate from pricing)
+- [ ] Validate mathematical fixes with test cases
+
+## 🔧 CODE REFACTORING TASKS - TOP 3 LARGEST FILES
+
+### 📊 **OVERVIEW**: Largest Files Analysis Complete
+- **File 1**: `views/bond_calc_views.py` (2,523 lines) - Flask web interface with debug workstation
+- **File 2**: `analytics/synth_analytics_csv_processor.py` (1,202 lines) - Comprehensive analytics generator
+- **File 3**: `bond_calculation/bond_calculation_excel.py` (958 lines) - Excel report generator
+
+### 🎯 **TOTAL REFACTORING IMPACT**
+- **18 high-priority tasks** across 3 files
+- **15 medium-priority improvements**
+- **12 low-priority enhancements**
+- **3 comprehensive refactoring phases** defined
+- **Expected: 60-70% reduction** in file sizes and complexity
+
+### 📊 **File: analytics/synth_analytics_csv_processor.py (1202 lines)**
+
+#### 🚨 HIGH PRIORITY - Critical Improvements
+- [ ] **Refactor complex import structure** - Extract the massive try/except import block (lines 28-95) into separate module
+- [ ] **Split main calculation function** - Break down `calculate_all_analytics_for_security` (200+ lines) into smaller functions
+- [ ] **Extract day count logic** - Move `year_fraction` function and related day count handling to separate module
+- [ ] **Consolidate cashflow builders** - Merge `_build_cashflows_from_security_data` and `_build_cashflows_from_combined_data` (significant duplication)
+
+#### ⚠️ MEDIUM PRIORITY - Quality Improvements
+- [ ] **Replace hard-coded fallback values** - Move magic numbers like `rates = [0.03] * len(terms)` to configuration
+- [ ] **Standardize error handling** - Create consistent error response patterns throughout
+- [ ] **Add comprehensive type hints** - Many functions lack proper type annotations
+- [ ] **Optimize data loading** - Implement caching for frequently accessed CSV data
+- [ ] **Extract data parsing utilities** - Create reusable functions for curve and schedule parsing
+
+#### 📊 LOW PRIORITY - Enhancement Tasks
+- [ ] **Add performance monitoring** - Track processing times for large datasets
+- [ ] **Improve logging granularity** - Add more detailed progress logging
+- [ ] **Create configuration module** - Extract all hard-coded values to config
+- [ ] **Add input validation** - Better validation of input parameters
+- [ ] **Documentation updates** - Update docstrings for new function structure
+
+#### 🎯 REFACTORING PHASES FOR SYNTH ANALYTICS PROCESSOR
+1. **Phase 1**: Extract import management and create `analytics/imports.py`
+2. **Phase 2**: Create `analytics/daycount_utils.py` for day count logic
+3. **Phase 3**: Create `analytics/cashflow_builders.py` for cashflow functions
+4. **Phase 4**: Split main processor into focused modules
+5. **Phase 5**: Add comprehensive tests and performance monitoring
+
+### 📈 EXPECTED BENEFITS FOR SYNTH ANALYTICS PROCESSOR
+- **Maintainability**: Complex import logic becomes manageable
+- **Testability**: Smaller functions are easier to unit test
+- **Performance**: Better caching reduces I/O operations
+- **Reliability**: Reduced complexity means fewer bugs
+- **Developer Experience**: Easier to understand and modify
+
+### 📊 **File: bond_calculation/bond_calculation_excel.py (958 lines)**
+
+#### 🚨 HIGH PRIORITY - Critical Improvements
+- [ ] **Extract Excel formatting logic** - Move complex styling code to separate module
+- [ ] **Refactor main generation function** - Split `write_enhanced_excel_with_oas` (200+ lines)
+- [ ] **Consolidate calculation dispatch** - Clean up the complex if/elif chain in `calculate_spreads_durations_and_oas`
+
+#### ⚠️ MEDIUM PRIORITY - Quality Improvements
+- [ ] **Replace hard-coded Excel styles** - Move styling constants to configuration
+- [ ] **Improve error handling** - Add more specific error types and recovery
+- [ ] **Add type hints** - Enhance type annotations throughout
+- [ ] **Extract data transformation** - Create utility functions for data preparation
+
+### 📋 **File: views/bond_calc_views.py (2523 lines)** - PREVIOUSLY REVIEWED
+
+#### 🚨 HIGH PRIORITY - Critical Improvements
+- [ ] **Split bond_calc_views.py (2523 lines)** - Break into smaller modules:
+  - `views/bond_calc/calculator.py` - Core calculation logic
+  - `views/bond_calc/debug_workstation.py` - Debug functionality
+  - `views/bond_calc/excel_generator.py` - Excel export features
+  - `views/bond_calc/utils.py` - Helper functions
+- [ ] **Extract CSV loading utilities** - Create reusable data loading functions to eliminate code duplication
+- [ ] **Refactor complex functions** - Break down `api_calculate_bond` (~200+ lines) into smaller functions
+
+### ⚠️ MEDIUM PRIORITY - Quality Improvements
+- [ ] **Replace hard-coded values** - Move magic numbers to configuration constants
+- [ ] **Improve type hints consistency** - Add type annotations throughout
+- [ ] **Standardize error handling** - Create consistent error response patterns
+- [ ] **Optimize CSV loading** - Implement caching for frequently accessed data
+- [ ] **Refactor day count logic** - Extract complex `_year_fraction` function to separate module
+
+### 📊 LOW PRIORITY - Enhancement Tasks
+- [ ] **Add comprehensive tests** - Unit and integration tests for refactored modules
+- [ ] **Performance optimizations** - Memory usage and API response time improvements
+- [ ] **Documentation updates** - Update docs for new module structure
+- [ ] **Security review** - Validate file path handling and input sanitization
+
+### 🎯 IMMEDIATE NEXT STEPS
+1. **Phase 1**: Extract utility functions into `views/bond_calc/utils.py`
+2. **Phase 2**: Split debug workstation into `views/bond_calc/debug_workstation.py`
+3. **Phase 3**: Extract Excel generation to `views/bond_calc/excel_generator.py`
+4. **Phase 4**: Refactor core calculator logic into `views/bond_calc/calculator.py`
+5. **Phase 5**: Add comprehensive tests for all new modules

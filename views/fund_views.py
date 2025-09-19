@@ -10,18 +10,18 @@ import logging  # Added for logging
 import glob  # Added for finding files
 import re  # Added for extracting metric name
 import numpy as np
-import config
+from core import config
 
 # Import necessary functions from other modules
-from utils import _is_date_like, parse_fund_list  # Import required utils
+from core.utils import _is_date_like, parse_fund_list, filter_business_dates  # Import required utils
 
 # Updated import to include data loader
-from data_loader import load_and_process_data
-from security_processing import (
+from core.data_loader import load_and_process_data
+from analytics.security_processing import (
     load_and_process_security_data,
     calculate_security_latest_metrics,
 )  # For fund_duration_details
-from preprocessing import read_and_sort_dates
+from data_processing.preprocessing import read_and_sort_dates
 
 # Define the blueprint
 fund_bp = Blueprint("fund", __name__, url_prefix="/fund")
@@ -330,6 +330,8 @@ def fund_duration_details(fund_code):
                 column_order=[],
                 id_col_name=None,
                 message=f"No securities found held by fund '{fund_code}' in {duration_filename}.",
+                metric_name="Duration",  # Pass metric name to prevent malformed URLs
+                display_name="Duration",  # Pass display name for template headings
             )
 
         current_app.logger.info(
@@ -401,6 +403,8 @@ def fund_duration_details(fund_code):
             column_order=final_col_order,
             id_col_name=config.ISIN_COL,
             message=None,
+            metric_name="Duration",  # Pass metric name for correct URL generation
+            display_name="Duration",  # Human-readable display name for template headings
         )
 
     except FileNotFoundError:
@@ -436,6 +440,8 @@ def fund_detail(fund_code):
     ]  # Define data_folder using app config
     dates_file_path = os.path.join(data_folder, "Dates.csv")
     full_date_list = read_and_sort_dates(dates_file_path) or []
+    # Exclude weekends and UK bank holidays
+    full_date_list = filter_business_dates(full_date_list, data_folder)
     all_chart_data = []
     available_metrics = []
     processed_files = 0

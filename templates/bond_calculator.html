@@ -1,0 +1,576 @@
+{% extends 'base.html' %}
+{% block title %}Bond Calculator{% endblock %}
+
+{% block content %}
+{% set template_key = 'bond_calculator' %}
+{% include "_help_link.html" %}
+<div class="max-w-[1400px] mx-auto">
+  <h1 class="text-2xl font-semibold mb-4">Bond Calculator</h1>
+  <p class="text-sm text-gray-600 mb-6">Interactive calculator powered by SpreadOMatic. Adjust inputs and view cashflows, PV vs Z-Spread, and curve analytics.</p>
+
+  <!-- Inputs Panel -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="lg:col-span-1 bg-white rounded-md shadow p-4">
+      <h2 class="font-semibold mb-3">Inputs</h2>
+      <!-- Bond Search (autocomplete) -->
+      <div class="mb-3 relative">
+        <label class="text-sm block mb-1">Search Bond (ISIN, Ticker, Name)
+          <input type="text" id="bond_search" class="w-full border rounded px-2 py-1" placeholder="e.g. US912828Z781, VOD LN, Vodafone" />
+        </label>
+        <div id="bond_search_results" class="absolute z-20 mt-1 w-full bg-white border rounded shadow max-h-64 overflow-auto hidden"></div>
+      </div>
+      <form id="bond-form" class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm">Valuation Date
+            <input type="date" id="valuation_date" class="w-full border rounded px-2 py-1" value="{{ default_date }}" />
+          </label>
+          <label class="text-sm">Currency
+            <select id="currency" class="w-full border rounded px-2 py-1">
+              {% for c in currencies %}
+              <option value="{{ c }}" {% if c == default_currency %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="text-sm">Issue Date
+            <input type="date" id="issue_date" class="w-full border rounded px-2 py-1" />
+          </label>
+          <label class="text-sm">First Coupon
+            <input type="date" id="first_coupon" class="w-full border rounded px-2 py-1" />
+          </label>
+          <label class="text-sm">Maturity Date
+            <input type="date" id="maturity_date" class="w-full border rounded px-2 py-1" />
+          </label>
+          <label class="text-sm">Clean Price <span id="price_source" class="text-xs text-gray-500">(manual)</span>
+            <input type="number" step="0.0001" id="clean_price" class="w-full border rounded px-2 py-1" value="100" />
+          </label>
+          <label class="text-sm">Coupon Rate (%)
+            <input type="number" step="0.0001" id="coupon_rate_pct" class="w-full border rounded px-2 py-1" value="5" />
+          </label>
+          <label class="text-sm">Frequency
+            <select id="coupon_frequency" class="w-full border rounded px-2 py-1">
+              <option value="1">Annual</option>
+              <option value="2" selected>Semiannual</option>
+              <option value="4">Quarterly</option>
+            </select>
+          </label>
+          <label class="text-sm">Day Basis
+            <select id="day_basis" class="w-full border rounded px-2 py-1">
+              <option>ACT/ACT</option>
+              <option>30/360</option>
+              <option>30E/360</option>
+              <option>ACT/360</option>
+              <option>ACT/365</option>
+            </select>
+          </label>
+          <label class="text-sm">Compounding
+            <select id="compounding" class="w-full border rounded px-2 py-1">
+              <option>semiannual</option>
+              <option>annual</option>
+              <option>quarterly</option>
+              <option>continuous</option>
+            </select>
+          </label>
+          <label class="text-sm">G-Spread Basis
+            <select id="g_spread_basis" class="w-full border rounded px-2 py-1">
+              <option value="zero" selected>Zero curve</option>
+              <option value="par">Par curve</option>
+            </select>
+          </label>
+          <label class="text-sm">Next Call Date (optional)
+            <input type="date" id="next_call_date" class="w-full border rounded px-2 py-1" />
+          </label>
+          <label class="text-sm">Next Call Price (optional)
+            <input type="number" step="0.0001" id="next_call_price" class="w-full border rounded px-2 py-1" />
+          </label>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" id="runCalc" class="px-3 py-1 rounded bg-blue-600 text-white">Calculate</button>
+          <button type="button" id="loadExample" class="px-3 py-1 rounded bg-gray-200">Load Example</button>
+          <button type="button" id="downloadExcel" class="px-3 py-1 rounded bg-emerald-600 text-white">Download Excel</button>
+        </div>
+      </form>
+
+      <div class="mt-4 text-sm">
+        <div>Accrued: <span id="accrued_label">—</span></div>
+        <div>Dirty: <span id="dirty_label">—</span></div>
+      </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div class="bg-white rounded-md shadow p-4"><div class="text-xs text-gray-500">YTM</div><div id="kpi_ytm" class="text-xl font-semibold">—</div></div>
+      <div class="bg-white rounded-md shadow p-4"><div class="text-xs text-gray-500">Z-Spread (bps)</div><div id="kpi_z" class="text-xl font-semibold">—</div></div>
+      <div class="bg-white rounded-md shadow p-4"><div class="text-xs text-gray-500">G-Spread (bps)</div><div id="kpi_g" class="text-xl font-semibold">—</div></div>
+      <div class="bg-white rounded-md shadow p-4"><div class="text-xs text-gray-500">Eff Duration</div><div id="kpi_effdur" class="text-xl font-semibold">—</div></div>
+      <div class="bg-white rounded-md shadow p-4"><div class="text-xs text-gray-500">Mod Duration</div><div id="kpi_moddur" class="text-xl font-semibold">—</div></div>
+      <div class="bg-white rounded-md shadow p-4"><div class="text-xs text-gray-500">Convexity</div><div id="kpi_convex" class="text-xl font-semibold">—</div></div>
+      <div class="bg-white rounded-md shadow p-4"><div class="text-xs text-gray-500">Spread Duration</div><div id="kpi_sprdur" class="text-xl font-semibold">—</div></div>
+      <div class="bg-white rounded-md shadow p-4"><div class="text-xs text-gray-500">OAS (bps)</div><div id="kpi_oas" class="text-xl font-semibold">—</div></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+    <div class="bg-white rounded-md shadow p-4">
+      <h3 class="font-semibold mb-2">Cashflows (Amount over Time)</h3>
+      <div class="relative w-full h-96">
+        <canvas id="cfChart" class="chart-canvas absolute inset-0 w-full h-full"></canvas>
+      </div>
+    </div>
+    <div class="bg-white rounded-md shadow p-4">
+      <h3 class="font-semibold mb-2">PV vs Z-Spread</h3>
+      <div class="relative w-full h-96">
+        <canvas id="pvzChart" class="chart-canvas absolute inset-0 w-full h-full"></canvas>
+      </div>
+    </div>
+    <div class="bg-white rounded-md shadow p-4 lg:col-span-2">
+      <h3 class="font-semibold mb-2">Zero Curve</h3>
+      <div class="relative w-full h-72">
+        <canvas id="curveChart" class="chart-canvas absolute inset-0 w-full h-full"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cashflows Table -->
+  <div class="bg-white rounded-md shadow p-4 mt-6">
+    <h2 class="font-semibold mb-2">Cashflows</h2>
+    <div class="overflow-x-auto">
+      <table id="cfTable" class="min-w-full text-sm">
+        <thead><tr class="text-left border-b">
+          <th class="py-1 pr-3">#</th>
+          <th class="py-1 pr-3">Date</th>
+          <th class="py-1 pr-3">Years</th>
+          <th class="py-1 pr-3">Coupon</th>
+          <th class="py-1 pr-3">Principal</th>
+          <th class="py-1 pr-3">Total</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Key Rate Durations Table -->
+  <div class="bg-white rounded-md shadow p-4 mt-6">
+    <h2 class="font-semibold mb-2">Key Rate Durations</h2>
+    <div id="krdTableContainer" class="overflow-x-auto"></div>
+  </div>
+  
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+import { format } from 'https://cdn.jsdelivr.net/npm/date-fns@3.6.0/+esm';
+
+const $ = (id) => document.getElementById(id);
+
+// Simple number/tick formatters for cleaner charts
+function tickFormatter(decimals = 0) {
+  const nf = new Intl.NumberFormat(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return (value) => nf.format(Number(value));
+}
+
+function formatTenor(years) {
+  const y = Number(years);
+  if (y > 0 && y < 1) {
+    const m = Math.round(y * 12);
+    return `${m}M`;
+  }
+  if (y < 10) return `${Number(y.toFixed(1))}Y`;
+  return `${Number(y.toFixed(0))}Y`;
+}
+
+function parseTenorToYears(tenor) {
+  // Convert tenor strings like "5Y", "5M", "10Y" to years
+  const match = tenor.match(/^(\d+(?:\.\d+)?)([YM])$/);
+  if (!match) return 0;
+  
+  const value = parseFloat(match[1]);
+  const unit = match[2];
+  
+  if (unit === 'Y') return value;
+  if (unit === 'M') return value / 12;
+  
+  return 0;
+}
+
+function defaultDates() {
+  const val = $('valuation_date').value || '{{ default_date }}';
+  const vd = new Date(val);
+  const issue = new Date(vd); issue.setFullYear(issue.getFullYear() - 5);
+  const first = new Date(issue); first.setMonth(first.getMonth() + 6);
+  const mat = new Date(vd); mat.setFullYear(mat.getFullYear() + 5);
+  $('issue_date').value = format(issue, 'yyyy-MM-dd');
+  $('first_coupon').value = format(first, 'yyyy-MM-dd');
+  $('maturity_date').value = format(mat, 'yyyy-MM-dd');
+}
+
+function toPayload() {
+  return {
+    valuation_date: $('valuation_date').value,
+    isin: document.getElementById('bond_search').value.trim() || null,
+    currency: $('currency').value,
+    issue_date: $('issue_date').value,
+    first_coupon: $('first_coupon').value,
+    maturity_date: $('maturity_date').value,
+    clean_price: parseFloat($('clean_price').value || '100'),
+    coupon_rate_pct: parseFloat($('coupon_rate_pct').value || '5'),
+    coupon_frequency: parseInt($('coupon_frequency').value || '2'),
+    day_basis: $('day_basis').value,
+    compounding: $('compounding').value,
+    g_spread_basis: $('g_spread_basis').value,
+    next_call_date: $('next_call_date').value || null,
+    next_call_price: $('next_call_price').value ? parseFloat($('next_call_price').value) : null,
+  };
+}
+
+let cfChart, pvzChart, curveChart;
+
+function ensureChart(ctxId, cfg) {
+  const existing = Chart.getChart(ctxId);
+  if (existing) existing.destroy();
+  return new Chart($(ctxId).getContext('2d'), cfg);
+}
+
+function renderAll(resp) {
+  // KPIs
+  $('kpi_ytm').textContent = (resp.summary.ytm_pct ?? 0).toFixed(2) + '%';
+  $('kpi_z').textContent = (resp.summary.z_spread_bps ?? 0).toFixed(1);
+  $('kpi_g').textContent = (resp.summary.g_spread_bps ?? 0).toFixed(1);
+  $('kpi_effdur').textContent = (resp.summary.effective_duration ?? 0).toFixed(3);
+  $('kpi_moddur').textContent = (resp.summary.modified_duration ?? 0).toFixed(3);
+  $('kpi_convex').textContent = (resp.summary.convexity ?? 0).toFixed(1);
+  if (resp.summary.spread_duration != null) $('kpi_sprdur').textContent = (resp.summary.spread_duration ?? 0).toFixed(3);
+  if (resp.summary.oas_bps != null) $('kpi_oas').textContent = (resp.summary.oas_bps ?? 0).toFixed(1);
+  $('accrued_label').textContent = (resp.inputs.accrued_interest ?? 0).toFixed(2);
+  $('dirty_label').textContent = (resp.inputs.dirty_price ?? 0).toFixed(2);
+  
+  // Update clean price field if it came from CSV
+  if (resp.inputs.clean_price != null) {
+    $('clean_price').value = resp.inputs.clean_price.toFixed(4);
+  }
+
+  // Cashflows Table
+  const tbody = $('cfTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  const fmt = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt4 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  (resp.cashflows || []).forEach((cf, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class='py-1 pr-3'>${i+1}</td>
+                    <td class='py-1 pr-3'>${cf.date}</td>
+                    <td class='py-1 pr-3 text-right'>${fmt4.format(cf.time_years)}</td>
+                    <td class='py-1 pr-3 text-right'>${fmt.format(cf.coupon)}</td>
+                    <td class='py-1 pr-3 text-right'>${fmt.format(cf.principal)}</td>
+                    <td class='py-1 pr-3 text-right'>${fmt.format(cf.total)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Cashflows Chart (bar)
+  const cfLabels = (resp.cashflows || []).map(cf => cf.date);
+  const cfTotals = (resp.cashflows || []).map(cf => cf.total);
+  cfChart = ensureChart('cfChart', {
+    type: 'bar',
+    data: { labels: cfLabels, datasets: [{ label: 'Cashflow', data: cfTotals, backgroundColor: '#1F77B4' }]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, title: { display: true, text: 'Future Payments' } },
+      scales: { x: { title: { display: true, text: 'Date'} }, y: { title: { display: true, text: 'Amount' }, beginAtZero: true, ticks: { callback: tickFormatter(0) } } }
+    }
+  });
+
+  // PV vs Z-Spread Chart
+  const z = resp.charts.pv_vs_z?.z_bps || [];
+  const pv = (resp.charts.pv_vs_z?.pv || []).map(v => parseFloat(v.toFixed(2)));
+  const target = resp.charts.pv_vs_z?.target_price || null;
+  const ds = [{ label: 'PV', data: pv, borderColor: '#E34A33', backgroundColor: 'transparent' }];
+  if (target != null) {
+    ds.push({ label: 'Target Dirty', data: z.map(()=> target), borderColor: '#888', borderDash: [6,4], pointRadius: 0 });
+  }
+  const zLabels = z.map(v => Math.round(v));
+  pvzChart = ensureChart('pvzChart', {
+    type: 'line',
+    data: { labels: zLabels, datasets: ds },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' }, title: { display: true, text: 'PV vs Z-Spread (bps)' } },
+      scales: { x: { title: { display: true, text: 'Z-Spread (bps)'}, ticks: { callback: tickFormatter(0) } }, y: { title: { display: true, text: 'PV'}, ticks: { callback: tickFormatter(0) } } }
+    }
+  });
+
+  // Zero Curve Chart
+  const t = resp.charts.zero_curve?.times_years || [];
+  const r = (resp.charts.zero_curve?.rates_bps || []).map(v => parseFloat(v.toFixed(1)));
+  const tLabels = t.map(formatTenor);
+  curveChart = ensureChart('curveChart', {
+    type: 'line',
+    data: { labels: tLabels, datasets: [{ label: 'Zero Rate (bps)', data: r, borderColor: '#2CA02C', backgroundColor: 'transparent' }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' }, title: { display: true, text: 'Zero Curve'} },
+      scales: { x: { title: { display: true, text: 'Tenor'} }, y: { title: { display: true, text: 'Rate (bps)' }, ticks: { callback: tickFormatter(0) } } }
+    }
+  });
+
+  // Key Rate Durations (if provided)
+  if (resp.summary.key_rate_durations) {
+    const krd = resp.summary.key_rate_durations;
+    
+    // Sort labels by maturity time (convert tenor strings to years for proper sorting)
+    const labels = Object.keys(krd).sort((a, b) => {
+      const aYears = parseTenorToYears(a);
+      const bYears = parseTenorToYears(b);
+      return aYears - bYears;
+    });
+    
+    const values = labels.map(k => krd[k]);
+    
+    // Render inline bar chart under Zero Curve if desired in future
+    // For now, append a small table after cashflows
+    const container = document.querySelector('#krdTableContainer');
+    if (container) {
+      container.innerHTML = '';
+      const tbl = document.createElement('table');
+      tbl.className = 'min-w-full text-sm';
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+      trh.className = 'text-left border-b';
+      trh.innerHTML = '<th class="py-1 pr-3">Tenor</th><th class="py-1 pr-3">KRD</th>';
+      thead.appendChild(trh);
+      const tbody = document.createElement('tbody');
+      labels.forEach((k, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class='py-1 pr-3'>${k}</td><td class='py-1 pr-3 text-right'>${(values[i] ?? 0).toFixed(4)}</td>`;
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(thead);
+      tbl.appendChild(tbody);
+      container.appendChild(tbl);
+    }
+  }
+}
+
+async function runCalc() {
+  const payload = toPayload();
+  const resp = await fetch('/bond/api/calc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const json = await resp.json();
+  if (!resp.ok) {
+    alert(json.error || 'Calculation error');
+    return;
+  }
+  renderAll(json);
+}
+
+$('runCalc').addEventListener('click', runCalc);
+$('downloadExcel').addEventListener('click', async () => {
+  try {
+    const payload = toPayload();
+    if (!payload.valuation_date) { alert('Please enter a valuation date.'); return; }
+    if (!payload.issue_date || !payload.first_coupon || !payload.maturity_date) { 
+      alert('Please fill in all required date fields (Issue Date, First Coupon, Maturity Date).'); 
+      return; 
+    }
+    
+    const resp = await fetch('/bond/api/excel', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify(payload) 
+    });
+    
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      alert(err.error || 'Failed to create Excel');
+      return;
+    }
+    
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    const href = URL.createObjectURL(blob);
+    a.href = href;
+    const isin = payload.isin || 'MANUAL_BOND';
+    const name = `bond_calc_${isin}_${payload.valuation_date}.xlsx`;
+    a.setAttribute('download', name);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(href);
+  } catch (e) {
+    alert('Download error: ' + e.message);
+  }
+});
+$('loadExample').addEventListener('click', () => {
+  defaultDates();
+  $('clean_price').value = '97.5';
+  $('coupon_rate_pct').value = '4.0';
+  $('coupon_frequency').value = '2';
+  $('day_basis').value = 'ACT/ACT';
+  $('compounding').value = 'semiannual';
+});
+
+// Initialize dates on first load if empty
+defaultDates();
+
+// Auto-update price and other fields when ISIN or valuation date changes
+async function updateFieldsFromCSV() {
+  const isin = $('bond_search').value.trim();
+  const vd = $('valuation_date').value;
+  
+  if (!isin || !vd) {
+    $('price_source').textContent = '(manual)';
+    return;
+  }
+  
+  try {
+    // Get price from CSV
+    const priceResp = await fetch(`/bond/api/price?isin=${encodeURIComponent(isin)}&valuation_date=${encodeURIComponent(vd)}`);
+    if (priceResp.ok) {
+      const priceData = await priceResp.json();
+      if (priceData.price !== null) {
+        $('clean_price').value = priceData.price.toFixed(4);
+        $('price_source').textContent = '(from CSV)';
+      } else {
+        $('price_source').textContent = '(manual - not in CSV)';
+      }
+    }
+    
+    // Get bond details from lookup API
+    const lookupResp = await fetch(`/bond/api/lookup?isin=${encodeURIComponent(isin)}&valuation_date=${encodeURIComponent(vd)}`);
+    if (lookupResp.ok) {
+      const bondData = await lookupResp.json();
+      
+      // Update all fields that have CSV data
+      if (bondData.currency) $('currency').value = bondData.currency;
+      if (bondData.issue_date) $('issue_date').value = bondData.issue_date;
+      if (bondData.first_coupon) $('first_coupon').value = bondData.first_coupon;
+      if (bondData.maturity_date) $('maturity_date').value = bondData.maturity_date;
+      if (typeof bondData.coupon_rate_pct === 'number' && !Number.isNaN(bondData.coupon_rate_pct)) {
+        $('coupon_rate_pct').value = String(bondData.coupon_rate_pct);
+      }
+      if (typeof bondData.coupon_frequency === 'number') $('coupon_frequency').value = String(bondData.coupon_frequency);
+      if (bondData.day_basis) $('day_basis').value = bondData.day_basis;
+      if (bondData.next_call_date) $('next_call_date').value = bondData.next_call_date;
+      if (bondData.next_call_price) $('next_call_price').value = String(bondData.next_call_price);
+    }
+  } catch (e) {
+    $('price_source').textContent = '(manual)';
+  }
+}
+
+// Auto-load first available bond on page load
+async function loadFirstAvailableBond() {
+  try {
+    const searchResp = await fetch('/api/search-securities', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ query: 'A' }) // Get bonds starting with A
+    });
+    if (searchResp.ok) {
+      const data = await searchResp.json();
+      const bonds = data.results || [];
+      if (bonds.length > 0) {
+        const firstBond = bonds[0];
+        $('bond_search').value = firstBond.isin || '';
+        await updateFieldsFromCSV();
+      }
+    }
+  } catch (e) {
+    console.log('Could not auto-load bond:', e);
+  }
+}
+
+// Add event listeners for auto-update
+$('valuation_date').addEventListener('change', updateFieldsFromCSV);
+
+// Declare timer variable for field updates
+let priceUpdateTimer;
+
+// Auto-load first bond after page loads
+setTimeout(loadFirstAvailableBond, 100);
+
+// --- Bond Search ---
+let searchAbort;
+const resultsBox = $('bond_search_results');
+const searchInput = $('bond_search');
+function hideResults() { resultsBox.classList.add('hidden'); resultsBox.innerHTML = ''; }
+function showResults(items) {
+  if (!items || items.length === 0) { hideResults(); return; }
+  resultsBox.innerHTML = '';
+  items.slice(0, 50).forEach(it => {
+    const div = document.createElement('div');
+    div.className = 'px-2 py-1 hover:bg-gray-100 cursor-pointer';
+    div.textContent = `${it.isin || ''} ${it.ticker ? '('+it.ticker+')' : ''} — ${it.security_name || ''}`.trim();
+    // Use mousedown to avoid blur-hide race conditions when users click
+    div.addEventListener('mousedown', async (ev) => {
+      ev.preventDefault();
+      hideResults();
+      try {
+        // Lookup full bond details by ISIN and populate inputs
+        const resp = await fetch(`/bond/api/lookup?isin=${encodeURIComponent(it.isin)}`);
+        if (resp.ok) {
+          const d = await resp.json();
+          if (d.currency) $('currency').value = d.currency;
+          if (d.issue_date) $('issue_date').value = d.issue_date;
+          if (d.first_coupon) $('first_coupon').value = d.first_coupon;
+          if (d.maturity_date) $('maturity_date').value = d.maturity_date;
+          if (typeof d.coupon_rate_pct === 'number' && !Number.isNaN(d.coupon_rate_pct)) $('coupon_rate_pct').value = String(d.coupon_rate_pct);
+          if (typeof d.coupon_frequency === 'number') $('coupon_frequency').value = String(d.coupon_frequency);
+          if (d.day_basis) $('day_basis').value = d.day_basis;
+        }
+      } catch {}
+      searchInput.value = it.isin || '';
+      // Update all fields from CSV
+      await updateFieldsFromCSV();
+      // Auto-run calculate for faster UX
+      document.getElementById('runCalc').click();
+    });
+    resultsBox.appendChild(div);
+  });
+  resultsBox.classList.remove('hidden');
+}
+
+async function searchBonds(q) {
+  try {
+    const resp = await fetch('/api/search-securities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: q }) });
+    if (resp.ok) {
+      const data = await resp.json();
+      return data.results || [];
+    }
+  } catch {}
+  return [];
+}
+
+let searchTimer;
+searchInput?.addEventListener('input', (e) => {
+  const q = e.target.value.trim();
+  clearTimeout(searchTimer);
+  clearTimeout(priceUpdateTimer);
+  
+  // Reset price source when typing
+  if (q.length === 0) {
+    $('price_source').textContent = '(manual)';
+    $('clean_price').placeholder = '';
+  } else {
+    // Auto-update fields when typing ISIN
+    priceUpdateTimer = setTimeout(updateFieldsFromCSV, 500);
+  }
+  
+  if (q.length < 2) { hideResults(); return; }
+  searchTimer = setTimeout(async () => {
+    const items = await searchBonds(q);
+    showResults(items);
+  }, 200);
+});
+document.addEventListener('click', (e) => {
+  if (!resultsBox.contains(e.target) && e.target !== searchInput) hideResults();
+});
+
+// Basic keyboard support: Enter selects first suggestion
+searchInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const first = resultsBox.firstElementChild;
+    if (first) {
+      e.preventDefault();
+      first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    }
+  }
+});
+</script>
+{% endblock %}
+

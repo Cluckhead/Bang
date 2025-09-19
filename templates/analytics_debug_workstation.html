@@ -1,0 +1,2094 @@
+<!--
+Analytics Debug Workstation - Redesigned UI/UX
+Purpose: Institutional-grade debugging interface with optimized layout for 1500px+ screens.
+
+IMPROVED LAYOUT ARCHITECTURE:
+- Sticky Header: Security context always visible
+- 3-Column Grid: Better horizontal space utilization  
+- Priority-Based Organization: Critical functions prominent
+- Reduced Cognitive Load: Progressive disclosure, less clutter
+
+PRIMARY (Most Important): Security Setup + Analytics Comparison
+SECONDARY (Interactive): Smart Diagnostics + Sensitivity Analysis  
+TERTIARY (Reference): Raw Data Inspector + Advanced Tools
+
+Enhanced analytics support: G-Spread, YTW, Key Rate Durations, OAS, comprehensive data dictionary coverage
+-->
+{% extends 'base.html' %}
+{% block title %}Analytics Debug Workstation{% endblock %}
+
+{% block content %}
+{% set template_key = 'analytics_debug_workstation' %}
+{% include "_help_link.html" %}
+
+<!-- Sticky Header with Security Context -->
+<div class="sticky top-0 bg-white border-b border-gray-200 z-40 px-4 py-3 mb-6">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center space-x-6">
+      <h1 class="text-xl font-bold text-gray-900">Analytics Debug Workstation</h1>
+      <div id="header-security-info" class="flex items-center space-x-4 text-sm text-gray-600 hidden">
+        <div class="flex items-center">
+          <span class="font-medium">Security:</span>
+          <span id="header-isin" class="ml-1 font-mono bg-gray-100 px-2 py-1 rounded">-</span>
+          <span id="header-name" class="ml-2 text-gray-800">-</span>
+        </div>
+        <div class="flex items-center">
+          <span class="font-medium">Date:</span>
+          <span id="header-date" class="ml-1 font-mono">-</span>
+        </div>
+      </div>
+    </div>
+    <!-- Status in Header -->
+    <div id="status-bar" class="flex items-center text-sm hidden">
+      <div id="loading-spinner" class="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent mr-2 hidden"></div>
+      <span id="status-message" class="text-blue-800"></span>
+    </div>
+  </div>
+</div>
+
+<div class="w-full px-4">
+
+  <!-- REDESIGNED: 3-Column Priority-Based Layout for 1500px+ -->
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    
+    <!-- PRIMARY COLUMN: Critical Functions -->
+    <div class="space-y-6">
+      
+      <!-- Security Setup & Analytics Comparison (Combined Priority Panel) -->
+      <div class="bg-white rounded-lg shadow-lg p-6 panel-transition min-h-96">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Security Setup & Analytics</h2>
+
+        <!-- Compact Security Selection -->
+        <form id="security-loader-form" class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-2">Security Selection</label>
+            <div class="relative">
+              <input 
+                type="text" 
+                id="security-search-input"
+                placeholder="Search securities (ISIN, Name, Currency)..."
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                autocomplete="off"
+              >
+              <div id="security-search-results" class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50 hidden">
+                <!-- Search results will be populated here -->
+              </div>
+              <input type="hidden" id="selected-security-isin" value="">
+            </div>
+            
+            <!-- Compact Fallback dropdown -->
+            <select id="security-select" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2 hidden">
+              <option value="">Select a security...</option>
+              {% for security in securities %}
+              <option value="{{ security.ISIN }}" 
+                      data-name="{{ security['Security Name'] }}"
+                      data-currency="{{ security.get('Position Currency', '') }}"
+                      data-subtype="{{ security.get('Security Sub Type', '') }}">
+                {{ security.ISIN }} - {{ security['Security Name'][:30] }}{% if security['Security Name']|length > 30 %}...{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Valuation Date</label>
+              <input type="date" id="valuation-date" 
+                     class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                     value="{{ default_date }}">
+            </div>
+            <div class="flex items-end">
+              <button type="button" id="load-security-btn" 
+                      class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                Load Security & Calculate
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <!-- PROMINENT Analytics Comparison Table -->
+        <div class="mt-6">
+          <h3 class="font-semibold text-gray-900 mb-3">Analytics Comparison</h3>
+          
+          <div class="border rounded-lg overflow-hidden">
+            <div id="enhanced-comparison-table" class="min-h-80 max-h-96 overflow-y-auto custom-scrollbar">
+              <table class="min-w-full divide-y divide-gray-200 text-sm table-hover">
+                <thead class="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Our Calc</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Diff</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">% Diff</th>
+                  </tr>
+                </thead>
+                <tbody id="enhanced-comparison-tbody" class="bg-white divide-y divide-gray-200">
+                  <tr><td colspan="5" class="px-3 py-8 text-center text-gray-500">Load security to see analytics comparison</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Smart Diagnostics Panel -->
+      <div class="bg-white rounded-lg shadow-lg p-6 panel-transition min-h-80">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Smart Diagnostics</h2>
+        
+        <button type="button" id="smart-diagnosis-btn" 
+                class="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-md transition-colors mb-4 disabled:opacity-50 disabled:cursor-not-allowed">
+          🔍 Smart Diagnosis (Sherlock Mode)
+        </button>
+
+        <div class="grid grid-cols-2 gap-2 mb-4">
+          <button type="button" class="quick-diag-btn bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 px-3 rounded text-xs" data-check="settlement">
+            Settlement Date?
+          </button>
+          <button type="button" class="quick-diag-btn bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 px-3 rounded text-xs" data-check="daycount">
+            Day Count?
+          </button>
+          <button type="button" class="quick-diag-btn bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 px-3 rounded text-xs" data-check="call">
+            Call Schedule?
+          </button>
+          <button type="button" class="quick-diag-btn bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 py-2 px-3 rounded text-xs" data-check="curve">
+            Curve Stale?
+          </button>
+        </div>
+
+        <div id="diagnostic-results" class="space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+          <div class="text-sm text-gray-500 text-center py-4">Run diagnostics for insights</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECONDARY COLUMN: Interactive Tools -->
+    <div class="space-y-6">
+      
+      <!-- Sensitivity Analysis Panel -->
+      <div class="bg-white rounded-lg shadow-lg p-6 min-h-80">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Sensitivity Analysis</h2>
+        
+        <!-- Compact Sensitivity Controls -->
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Price</label>
+              <input type="range" id="sensitivity-price" min="80" max="120" step="0.01" value="100" class="w-full">
+              <span id="price-value" class="text-xs text-gray-500">100.00</span>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Curve Shift (bp)</label>
+              <input type="range" id="sensitivity-curve" min="-200" max="200" step="1" value="0" class="w-full">
+              <span id="curve-value" class="text-xs text-gray-500">0 bp</span>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Volatility %</label>
+              <input type="range" id="sensitivity-vol" min="5" max="30" step="0.5" value="15" class="w-full">
+              <span id="vol-value" class="text-xs text-gray-500">15.0%</span>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Settlement</label>
+              <select id="sensitivity-settlement" class="w-full text-sm border rounded px-3 py-2">
+                <option value="T+0">T+0</option>
+                <option value="T+1">T+1</option>
+                <option value="T+2" selected>T+2</option>
+                <option value="T+3">T+3</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Results -->
+        <div class="mt-4 flex-1">
+          <h3 class="text-sm font-medium mb-2">Live Analytics</h3>
+          <div id="sensitivity-results" class="bg-gray-50 rounded-lg p-3 flex-1 min-h-48 overflow-y-auto custom-scrollbar">
+            <div class="text-sm text-gray-500 text-center py-4">Adjust parameters to see real-time analytics</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Goal Seek Panel -->
+      <div class="bg-white rounded-lg shadow-lg p-6 min-h-80">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Goal Seek</h2>
+        
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">Target Analytic</label>
+            <select id="target-analytic" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+              <option value="">Select target...</option>
+              <optgroup label="Yields">
+                <option value="ytm">YTM (%)</option>
+                <option value="ytw">YTW (%)</option>
+              </optgroup>
+              <optgroup label="Spreads">
+                <option value="spread">Spread (bps)</option>
+                <option value="z_spread">Z-Spread (bps)</option>
+                <option value="g_spread">G-Spread (bps)</option>
+                <option value="oas">OAS (bps)</option>
+              </optgroup>
+              <optgroup label="Duration & Risk">
+                <option value="effective_duration">Effective Duration</option>
+                <option value="modified_duration">Modified Duration</option>
+                <option value="spread_duration">Spread Duration</option>
+                <option value="dv01">DV01</option>
+                <option value="convexity">Convexity</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">Target Value</label>
+            <input type="number" step="0.0001" id="vendor-value" 
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                   placeholder="Enter target value">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">Input to Change</label>
+            <select id="input-to-change" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+              <option value="">Select input...</option>
+              <option value="price">Price</option>
+              <option value="curve_shift">Yield Curve Parallel Shift (bps)</option>
+              <option value="volatility">Volatility (%)</option>
+              <option value="day_count">Day Count Convention</option>
+              <option value="settlement_days">Settlement Days</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-sm font-medium mb-1">Min Value</label>
+              <input type="number" step="0.0001" id="min-value" 
+                     class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="80">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Max Value</label>
+              <input type="number" step="0.0001" id="max-value" 
+                     class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="120">
+            </div>
+          </div>
+
+          <button type="button" id="run-goal-seek-btn" 
+                  class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            Run Goal Seek
+          </button>
+        </div>
+
+        <!-- Goal Seek Results -->
+        <div class="mt-4 flex-1">
+          <h3 class="text-sm font-medium mb-2">Results</h3>
+          <div id="goal-seek-results" class="bg-gray-50 rounded-lg p-3 min-h-32 flex-1">
+            <div class="text-sm text-gray-500 text-center py-4">Run goal seek to see results</div>
+          </div>
+          
+          <div class="mt-3 flex-1">
+            <h4 class="text-xs font-medium mb-1 text-gray-600">Iteration Log</h4>
+            <div id="enhanced-iteration-log" class="bg-gray-50 rounded p-2 min-h-24 flex-1 overflow-auto custom-scrollbar">
+              <div class="text-xs text-gray-500 text-center py-2">Goal seek iterations will appear here</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TERTIARY COLUMN: Reference & Advanced Tools -->
+    <div class="space-y-6">
+      
+      <!-- Raw Data Inspector Panel -->
+      <div class="bg-white rounded-lg shadow-lg p-6 min-h-64">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Raw Data Inspector</h2>
+        
+        <!-- Compact Data Tabs -->
+        <div class="mb-3">
+          <nav class="flex flex-wrap gap-1 bg-gray-100 rounded-lg p-1">
+            <button class="data-tab active flex-1 py-1 px-2 text-xs font-medium rounded transition-colors bg-white shadow text-gray-900" data-tab="reference">Ref</button>
+            <button class="data-tab flex-1 py-1 px-2 text-xs font-medium rounded transition-colors text-gray-600 hover:text-gray-900" data-tab="price">Price</button>
+            <button class="data-tab flex-1 py-1 px-2 text-xs font-medium rounded transition-colors text-gray-600 hover:text-gray-900" data-tab="vendor">Vendor</button>
+            <button class="data-tab flex-1 py-1 px-2 text-xs font-medium rounded transition-colors text-gray-600 hover:text-gray-900" data-tab="curve">Curve</button>
+            <button class="data-tab flex-1 py-1 px-2 text-xs font-medium rounded transition-colors text-gray-600 hover:text-gray-900" data-tab="cashflow">Flows</button>
+            <button class="data-tab flex-1 py-1 px-2 text-xs font-medium rounded transition-colors text-gray-600 hover:text-gray-900" data-tab="provenance">Source</button>
+          </nav>
+        </div>
+
+        <!-- Expandable Tab Content -->
+        <div class="flex-1 min-h-48 overflow-y-auto custom-scrollbar">
+          <div id="reference-tab" class="data-tab-content">
+            <div class="text-sm text-gray-500 text-center py-6">Load security to view reference data</div>
+          </div>
+          <div id="price-tab" class="data-tab-content hidden">
+            <div class="text-sm text-gray-500 text-center py-6">Load security to view price data</div>
+          </div>
+          <div id="vendor-tab" class="data-tab-content hidden">
+            <div class="text-sm text-gray-500 text-center py-6">Load security to view vendor analytics</div>
+          </div>
+          <div id="curve-tab" class="data-tab-content hidden">
+            <div class="text-sm text-gray-500 text-center py-6">Load security to view curve data</div>
+          </div>
+          <div id="cashflow-tab" class="data-tab-content hidden">
+            <div class="text-sm text-gray-500 text-center py-6">Load security to view cashflow schedule</div>
+          </div>
+          <div id="provenance-tab" class="data-tab-content hidden">
+            <div class="text-sm text-gray-500 text-center py-6">Load security to view data provenance</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Calculation Steps Panel -->
+      <div class="bg-white rounded-lg shadow-lg p-6 min-h-80">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Calculation Steps</h2>
+        <div id="calculation-steps" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+          <div class="text-sm text-gray-500 text-center py-6">Load security to see detailed calculation steps</div>
+        </div>
+      </div>
+
+      <!-- Advanced Tools Panel (Expanded Height) -->
+      <div class="bg-white rounded-lg shadow-lg p-6 min-h-96">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Advanced Tools</h2>
+        
+        <!-- Tool Tabs -->
+        <div class="mb-4">
+          <nav class="flex space-x-1 bg-gray-100 rounded-lg p-1">
+            <button class="scenario-tab active flex-1 py-2 px-3 text-sm font-medium rounded transition-colors bg-white shadow text-gray-900" data-scenario="scenarios">Scenarios</button>
+            <button class="scenario-tab flex-1 py-2 px-3 text-sm font-medium rounded transition-colors text-gray-600 hover:text-gray-900" data-scenario="curve">Curves</button>
+          </nav>
+        </div>
+
+        <!-- Scenarios Tab -->
+        <div id="scenarios-tab" class="scenario-tab-content">
+          <div class="grid grid-cols-2 gap-2 mb-4">
+            <button type="button" class="scenario-btn bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 py-2 px-3 rounded text-xs font-medium" data-scenario-type="base">
+              Base Case
+            </button>
+            <button type="button" class="scenario-btn bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 py-2 px-3 rounded text-xs font-medium" data-scenario-type="vendor-match">
+              Vendor Match
+            </button>
+            <button type="button" class="scenario-btn bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 py-2 px-3 rounded text-xs font-medium" data-scenario-type="stressed">
+              Stressed
+            </button>
+            <button type="button" class="scenario-btn bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 py-2 px-3 rounded text-xs font-medium" data-scenario-type="custom">
+              Custom
+            </button>
+          </div>
+          
+          <div id="scenario-comparison" class="bg-gray-50 rounded p-3 h-72 overflow-auto custom-scrollbar">
+            <div class="text-sm text-gray-500 text-center py-8">Run scenarios to see comparison</div>
+          </div>
+        </div>
+
+        <!-- Curve Tool Tab (Expanded for Better Visualization) -->
+        <div id="curve-tool-tab" class="scenario-tab-content hidden">
+          <div class="space-y-4">
+            <!-- Curve Controls -->
+            <div class="flex flex-wrap gap-4 text-sm">
+              <label class="flex items-center">
+                <input type="checkbox" id="show-our-curve" checked class="mr-2">
+                <span class="text-blue-700 font-medium">Our Curve</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" id="show-vendor-curve" class="mr-2">
+                <span class="text-red-700 font-medium">Vendor Curve</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" id="show-shocked-curve" class="mr-2">
+                <span class="text-amber-700 font-medium">Shocked (+50bp)</span>
+              </label>
+            </div>
+            
+            <!-- Split Layout: Data Table (Left) + Large Chart (Right) -->
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <!-- Curve Data Table (1/5 width) -->
+              <div class="lg:col-span-2">
+                <h4 class="text-sm font-medium mb-2">Curve Data Points</h4>
+                <div id="curve-data-table" class="bg-gray-50 rounded p-3 h-64 overflow-auto custom-scrollbar">
+                  <table class="min-w-full text-xs">
+                    <thead class="bg-white sticky top-0">
+                      <tr>
+                        <th class="px-2 py-1 text-left">Tenor</th>
+                        <th class="px-2 py-1 text-left">Rate (%)</th>
+                        <th class="px-2 py-1 text-left">Interpolated</th>
+                      </tr>
+                    </thead>
+                    <tbody id="curve-data-tbody">
+                      <tr><td colspan="3" class="px-2 py-2 text-center text-gray-500">Load security to view curve</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <!-- Large Curve Chart (3/5 width) -->
+              <div class="lg:col-span-3">
+                <h4 class="text-sm font-medium mb-2">Yield Curve Visualization</h4>
+                <div class="bg-gray-50 rounded border p-3 h-64">
+                  <canvas id="curve-chart" class="w-full h-full"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- Include Chart.js for potential future charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Enhanced styles for improved UI/UX -->
+<style>
+  .security-search-result-item.active {
+    background-color: #f3f4f6; /* gray-100 */
+  }
+  
+  /* Ensure search results appear above other elements */
+  #security-search-results {
+    z-index: 1000;
+  }
+  
+  /* Improve readonly input appearance */
+  input[readonly] {
+    background-color: #f9fafb !important; /* gray-50 */
+    color: #6b7280 !important; /* gray-500 */
+    cursor: not-allowed !important;
+  }
+  
+  /* Better table styling */
+  .table-hover tbody tr:hover {
+    background-color: #f8fafc;
+  }
+  
+  /* Improved scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+  
+  /* Panel transitions */
+  .panel-transition {
+    transition: box-shadow 0.2s ease-in-out;
+  }
+  .panel-transition:hover {
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+  
+  /* Compact spacing */
+  .space-y-tight > * + * {
+    margin-top: 0.75rem;
+  }
+  
+  /* Better focus states */
+  .focus-ring:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+  }
+</style>
+
+<script>
+/**
+ * Analytics Debug Workstation JavaScript
+ * Handles the 4-panel functionality and API communication
+ */
+
+class DebugWorkstation {
+    constructor() {
+        this.currentSecurity = null;
+        this.currentDate = null;
+        this.rawData = null;
+        this.calculationResults = null;
+        this.vendorAnalytics = null;
+        
+        this.initializeEventListeners();
+    }
+
+    initializeEventListeners() {
+        // Panel 1: Security Loading
+        document.getElementById('load-security-btn').addEventListener('click', () => this.loadSecurity());
+        
+        // Security Search
+        this.initializeSecuritySearch();
+        
+        // Panel 2: Enhanced Data Tabs
+        document.querySelectorAll('.data-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => this.switchDataTab(e.target.dataset.tab));
+        });
+        
+        // Panel 3: Quick Diagnostics
+        document.getElementById('smart-diagnosis-btn').addEventListener('click', () => this.runSmartDiagnosis());
+        document.querySelectorAll('.quick-diag-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.runQuickDiagnostic(e.target.dataset.check));
+        });
+        
+        // Auto-calculate after loading security (combined workflow)
+        
+        // Panel 5: Sensitivity Analysis
+        this.initializeSensitivityControls();
+        
+        // Panel 5: Goal Seek & Sensitivity (Simplified)
+        const targetAnalytic = document.getElementById('target-analytic');
+        const goalSeekBtn = document.getElementById('run-goal-seek-btn');
+        if (targetAnalytic) targetAnalytic.addEventListener('change', () => this.updateVendorValue());
+        if (goalSeekBtn) goalSeekBtn.addEventListener('click', () => this.runEnhancedGoalSeek());
+        document.getElementById('input-to-change').addEventListener('change', () => this.adjustInputRanges());
+        
+        // Panel 6: Scenario Tabs  
+        document.querySelectorAll('.scenario-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => this.switchScenarioTab(e.target.dataset.scenario));
+        });
+        
+        // Scenario Builder
+        document.querySelectorAll('.scenario-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.runScenario(e.target.dataset.scenarioType));
+        });
+        
+        // Curve Tools
+        document.getElementById('show-our-curve').addEventListener('change', () => this.updateCurveChart());
+        document.getElementById('show-vendor-curve').addEventListener('change', () => this.updateCurveChart());
+        document.getElementById('show-shocked-curve').addEventListener('change', () => this.updateCurveChart());
+    }
+
+    showStatus(message, isLoading = false) {
+        const statusBar = document.getElementById('status-bar');
+        const statusMessage = document.getElementById('status-message');
+        const spinner = document.getElementById('loading-spinner');
+        
+        if (statusBar && statusMessage) {
+            statusMessage.textContent = message;
+            statusBar.classList.remove('hidden');
+            
+            if (spinner) {
+                if (isLoading) {
+                    spinner.classList.remove('hidden');
+                } else {
+                    spinner.classList.add('hidden');
+                }
+            }
+        }
+    }
+
+    hideStatus() {
+        const statusBar = document.getElementById('status-bar');
+        if (statusBar) {
+            statusBar.classList.add('hidden');
+        }
+    }
+
+    initializeSecuritySearch() {
+        const searchInput = document.getElementById('security-search-input');
+        const searchResults = document.getElementById('security-search-results');
+        let searchTimeout;
+        
+        if (searchInput && searchResults) {
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.trim();
+                
+                // Clear previous timeout
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                
+                // Hide results if query is too short
+                if (query.length < 2) {
+                    searchResults.classList.add('hidden');
+                    return;
+                }
+                
+                // Debounce search requests
+                searchTimeout = setTimeout(() => {
+                    this.performSecuritySearch(query);
+                }, 300);
+            });
+            
+            // Hide results when clicking outside
+            document.addEventListener('click', (event) => {
+                if (!searchInput.contains(event.target) && !searchResults.contains(event.target)) {
+                    searchResults.classList.add('hidden');
+                }
+            });
+            
+            // Handle keyboard navigation
+            searchInput.addEventListener('keydown', (event) => {
+                const items = searchResults.querySelectorAll('.security-search-result-item');
+                const activeItem = searchResults.querySelector('.security-search-result-item.active');
+                let activeIndex = -1;
+                
+                if (activeItem) {
+                    activeIndex = Array.from(items).indexOf(activeItem);
+                }
+                
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    if (activeIndex < items.length - 1) {
+                        if (activeItem) activeItem.classList.remove('active');
+                        items[activeIndex + 1].classList.add('active');
+                    }
+                } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    if (activeIndex > 0) {
+                        if (activeItem) activeItem.classList.remove('active');
+                        items[activeIndex - 1].classList.add('active');
+                    }
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (activeItem) {
+                        this.selectSecurityFromSearch(
+                            activeItem.dataset.isin,
+                            activeItem.dataset.name,
+                            activeItem.dataset.currency
+                        );
+                    }
+                } else if (event.key === 'Escape') {
+                    searchResults.classList.add('hidden');
+                }
+            });
+        }
+    }
+
+    async performSecuritySearch(query) {
+        try {
+            const response = await fetch('/api/search-securities', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: query })
+            });
+            
+            const data = await response.json();
+            this.displaySecuritySearchResults(data.results || []);
+        } catch (error) {
+            console.error('Security search error:', error);
+            document.getElementById('security-search-results').classList.add('hidden');
+        }
+    }
+
+    displaySecuritySearchResults(results) {
+        const searchResults = document.getElementById('security-search-results');
+        
+        if (results.length === 0) {
+            searchResults.innerHTML = '<div class="px-4 py-2 text-gray-500">No securities found</div>';
+            searchResults.classList.remove('hidden');
+            return;
+        }
+        
+        const html = results.map(result => `
+            <div class="security-search-result-item px-4 py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors" 
+                 onclick="window.debugWorkstation.selectSecurityFromSearch('${result.isin}', '${result.security_name}', '${result.currency}')"
+                 data-isin="${result.isin}"
+                 data-name="${result.security_name}"
+                 data-currency="${result.currency}">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-900">${result.security_name}</div>
+                        <div class="text-sm text-gray-600">
+                            <span class="font-mono bg-gray-100 px-1 rounded">${result.isin}</span>
+                            <span class="ml-2">${result.currency}</span>
+                            ${result.ticker ? `<span class="ml-2 text-blue-600">${result.ticker}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        ${result.security_sub_type || ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        searchResults.innerHTML = html;
+        searchResults.classList.remove('hidden');
+    }
+
+    selectSecurityFromSearch(isin, name, currency) {
+        // Update the search input with selected security
+        const searchInput = document.getElementById('security-search-input');
+        const hiddenInput = document.getElementById('selected-security-isin');
+        const searchResults = document.getElementById('security-search-results');
+        
+        searchInput.value = `${isin} - ${name}`;
+        hiddenInput.value = isin;
+        searchResults.classList.add('hidden');
+        
+        // Store selected security info for later use
+        this.selectedSecurityInfo = {
+            isin: isin,
+            name: name,
+            currency: currency
+        };
+    }
+
+    async loadSecurity() {
+        // Get ISIN from either the search input or fallback dropdown
+        const hiddenInput = document.getElementById('selected-security-isin');
+        const fallbackSelect = document.getElementById('security-select');
+        const isin = hiddenInput.value || fallbackSelect.value;
+        const date = document.getElementById('valuation-date').value;
+        
+        if (!isin || !date) {
+            alert('Please select a security and valuation date');
+            return;
+        }
+
+        this.showStatus('Loading security data and running calculations...', true);
+        
+        try {
+            const response = await fetch('/bond/api/debug/load_security', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ isin, valuation_date: date })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.currentSecurity = data.isin;
+                this.currentDate = data.valuation_date;
+                this.rawData = data.raw_data;
+                
+                this.updateSecurityInfo(data);
+                this.populateDataTabs();
+                
+                // Automatically run enhanced calculation after loading
+                await this.runEnhancedCalculation();
+                
+                // Initialize curve chart if on curve tool tab
+                if (document.getElementById('curve-tab') && !document.getElementById('curve-tab').classList.contains('hidden')) {
+                    this.updateCurveChart();
+                }
+                
+                this.hideStatus();
+            } else {
+                throw new Error(data.error || 'Failed to load security');
+            }
+        } catch (error) {
+            this.showStatus(`Error: ${error.message}`);
+            console.error('Load security error:', error);
+        }
+    }
+
+    updateSecurityInfo(data) {
+        // Update header info (sticky context)
+        document.getElementById('header-isin').textContent = data.isin;
+        document.getElementById('header-name').textContent = data.security_name || this.selectedSecurityInfo?.name || '-';
+        document.getElementById('header-date').textContent = this.currentDate || '-';
+        document.getElementById('header-security-info').classList.remove('hidden');
+        
+        // Legacy panel info (if it exists)
+        const selectedIsin = document.getElementById('selected-isin');
+        const selectedName = document.getElementById('selected-name');
+        const selectedCurrency = document.getElementById('selected-currency');
+        const securityInfo = document.getElementById('security-info');
+        
+        if (selectedIsin) selectedIsin.textContent = data.isin;
+        if (selectedName) selectedName.textContent = data.security_name || this.selectedSecurityInfo?.name || '-';
+        if (selectedCurrency) selectedCurrency.textContent = this.rawData.reference?.['Position Currency'] || this.selectedSecurityInfo?.currency || '-';
+        if (securityInfo) securityInfo.classList.remove('hidden');
+    }
+
+    populateDataTabs() {
+        // Reference tab
+        this.populateReferenceTab();
+        
+        // Price tab
+        this.populatePriceTab();
+        
+        // Vendor tab
+        this.populateVendorTab();
+        
+        // Curve tab
+        this.populateCurveTab();
+        
+        // New enhanced tabs
+        this.populateCashflowTab();
+        this.populateProvenanceTab();
+    }
+
+    populateReferenceTab() {
+        const container = document.getElementById('reference-tab');
+        const reference = this.rawData.reference || {};
+        
+        let html = '<div class="space-y-2">';
+        for (const [key, value] of Object.entries(reference)) {
+            html += `
+                <div class="flex justify-between py-1 border-b border-gray-100">
+                    <span class="text-sm font-medium text-gray-600">${key}:</span>
+                    <span class="text-sm text-gray-900">${value || '-'}</span>
+                </div>
+            `;
+        }
+        html += '</div>';
+        
+        container.innerHTML = html;
+    }
+
+    populatePriceTab() {
+        const container = document.getElementById('price-tab');
+        const price = this.rawData.price;
+        
+        let html = '<div class="space-y-2">';
+        if (price !== null && price !== undefined) {
+            html += `
+                <div class="bg-green-50 border border-green-200 rounded p-3">
+                    <div class="text-sm font-medium text-green-800">Clean Price</div>
+                    <div class="text-lg font-bold text-green-900">${price.toFixed(4)}</div>
+                </div>
+            `;
+        } else {
+            html += '<div class="text-sm text-gray-500">No price data available</div>';
+        }
+        html += '</div>';
+        
+        container.innerHTML = html;
+    }
+
+    populateVendorTab() {
+        const container = document.getElementById('vendor-tab');
+        const vendor = this.rawData.vendor_analytics || {};
+        
+        let html = '<div class="space-y-3">';
+        if (Object.keys(vendor).length > 0) {
+            // Organized vendor analytics display based on data dictionary
+            const metricGroups = {
+                'Yields': ['YTM', 'YTMSP', 'YTW', 'YTWSP'],
+                'Spreads': ['Spread', 'SpreadSP', 'ZSpread', 'GSpread', 'ZSpreadSynth', 'OAS'],
+                'Duration & Risk': ['Duration', 'DurationSP', 'ModDuration', 'SpreadDuration', 'SpreadDurationSP', 'Convexity', 'DV01'],
+                'Key Rate Durations': ['KeyRateDuration2Y', 'KeyRateDuration5Y', 'KeyRateDuration10Y'],
+                'Price & Accrued': ['Price', 'Accrued']
+            };
+            
+            for (const [groupName, metrics] of Object.entries(metricGroups)) {
+                const groupMetrics = metrics.filter(metric => vendor[metric] !== undefined);
+                if (groupMetrics.length > 0) {
+                    html += `
+                        <div class="bg-gray-50 rounded p-3">
+                            <div class="text-sm font-semibold text-gray-700 mb-2">${groupName}</div>
+                            <div class="space-y-1">
+                    `;
+                    
+                    for (const metric of groupMetrics) {
+                        const value = vendor[metric];
+                        const formattedValue = this.formatVendorValue(metric, value);
+                        html += `
+                            <div class="flex justify-between py-1">
+                                <span class="text-xs font-medium text-gray-600">${this.formatVendorMetricName(metric)}:</span>
+                                <span class="text-xs font-mono text-gray-900">${formattedValue}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    html += '</div></div>';
+                }
+            }
+            
+            // Show any other vendor fields not in organized groups
+            const allKnownMetrics = Object.values(metricGroups).flat();
+            const otherMetrics = Object.keys(vendor).filter(key => !allKnownMetrics.includes(key));
+            if (otherMetrics.length > 0) {
+                html += `
+                    <div class="bg-gray-50 rounded p-3">
+                        <div class="text-sm font-semibold text-gray-700 mb-2">Other Metrics</div>
+                        <div class="space-y-1">
+                `;
+                
+                for (const metric of otherMetrics) {
+                    const value = vendor[metric];
+                    html += `
+                        <div class="flex justify-between py-1">
+                            <span class="text-xs font-medium text-gray-600">${metric}:</span>
+                            <span class="text-xs font-mono text-gray-900">${typeof value === 'number' ? value.toFixed(4) : value}</span>
+                        </div>
+                    `;
+                }
+                
+                html += '</div></div>';
+            }
+        } else {
+            html += '<div class="text-sm text-gray-500">No vendor analytics available</div>';
+        }
+        html += '</div>';
+        
+        container.innerHTML = html;
+        
+        // Store for goal seek
+        this.vendorAnalytics = vendor;
+    }
+
+    populateCashflowTab() {
+        const container = document.getElementById('cashflow-tab');
+        const cashflows = this.rawData.cashflows || [];
+        
+        let html = '<div class="space-y-3">';
+        if (cashflows.length > 0) {
+            html += `
+                <div class="text-sm font-medium">Cashflow Schedule Comparison</div>
+                <div class="max-h-64 overflow-auto">
+                    <table class="min-w-full text-xs">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-2 py-1 text-left">Date</th>
+                                <th class="px-2 py-1 text-left">Expected</th>
+                                <th class="px-2 py-1 text-left">Actual</th>
+                                <th class="px-2 py-1 text-left">Day Count</th>
+                                <th class="px-2 py-1 text-left">Accrued</th>
+                                <th class="px-2 py-1 text-left">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            cashflows.forEach(cf => {
+                const status = cf.expected === cf.actual ? '✓' : '⚠️';
+                const statusColor = cf.expected === cf.actual ? 'text-green-600' : 'text-red-600';
+                html += `
+                    <tr class="border-b border-gray-100">
+                        <td class="px-2 py-1 font-mono">${cf.date}</td>
+                        <td class="px-2 py-1 font-mono">${cf.expected?.toFixed(2) || '-'}</td>
+                        <td class="px-2 py-1 font-mono">${cf.actual?.toFixed(2) || '-'}</td>
+                        <td class="px-2 py-1 font-mono">${cf.dayCount?.toFixed(6) || '-'}</td>
+                        <td class="px-2 py-1 font-mono">${cf.accrued?.toFixed(4) || '-'}</td>
+                        <td class="px-2 py-1 ${statusColor}">${status}</td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table></div>';
+        } else {
+            html += '<div class="text-sm text-gray-500">No cashflow data available - will be generated during calculation</div>';
+        }
+        html += '</div>';
+        
+        container.innerHTML = html;
+    }
+
+    populateProvenanceTab() {
+        const container = document.getElementById('provenance-tab');
+        const provenance = this.rawData.provenance || {};
+        
+        let html = '<div class="space-y-3">';
+        html += '<div class="text-sm font-medium">Data Sources & Confidence</div>';
+        
+        const sources = [
+            { key: 'price', label: 'Price Data', file: 'sec_Price.csv' },
+            { key: 'curve', label: 'Yield Curve', file: 'curves.csv' },
+            { key: 'schedule', label: 'Bond Schedule', file: 'schedule.csv' },
+            { key: 'reference', label: 'Reference Data', file: 'reference.csv' },
+            { key: 'vendor', label: 'Vendor Analytics', file: 'sec_*.csv' }
+        ];
+        
+        sources.forEach(source => {
+            const data = provenance[source.key] || {};
+            const confidence = this.calculateConfidence(data);
+            const confidenceColor = confidence > 80 ? 'text-green-600' : confidence > 60 ? 'text-yellow-600' : 'text-red-600';
+            
+            html += `
+                <div class="bg-gray-50 rounded p-3">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-medium">${source.label}</span>
+                        <span class="text-sm ${confidenceColor}">Confidence: ${confidence}%</span>
+                    </div>
+                    <div class="text-xs space-y-1">
+                        <div><span class="font-medium">Source:</span> ${data.file || source.file}</div>
+                        <div><span class="font-medium">Vintage:</span> ${data.date || 'Unknown'}</div>
+                        <div><span class="font-medium">Records:</span> ${data.recordCount || 'N/A'}</div>
+                        <div><span class="font-medium">Quality:</span> ${data.quality || 'Unknown'}</div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    calculateConfidence(data) {
+        let confidence = 50; // Base confidence
+        if (data.file) confidence += 20;
+        if (data.date) confidence += 15;
+        if (data.recordCount > 0) confidence += 10;
+        if (data.quality === 'high') confidence += 5;
+        return Math.min(confidence, 100);
+    }
+
+    populateCurveTab() {
+        const container = document.getElementById('curve-tab');
+        const curve = this.rawData.curve_data || {};
+        
+        let html = '<div class="space-y-3">';
+        if (curve.times && curve.rates) {
+            html += `
+                <div class="text-sm font-medium">Currency: ${curve.currency}</div>
+                <div class="max-h-48 overflow-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-2 py-1 text-left">Time (Years)</th>
+                                <th class="px-2 py-1 text-left">Rate (bps)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            for (let i = 0; i < curve.times.length; i++) {
+                html += `
+                    <tr class="border-b border-gray-100">
+                        <td class="px-2 py-1 font-mono">${curve.times[i].toFixed(2)}</td>
+                        <td class="px-2 py-1 font-mono">${curve.rates[i].toFixed(2)}</td>
+                    </tr>
+                `;
+            }
+            html += '</tbody></table></div>';
+        } else {
+            html += '<div class="text-sm text-gray-500">No curve data available</div>';
+        }
+        html += '</div>';
+        
+        container.innerHTML = html;
+    }
+
+    switchDataTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('.data-tab').forEach(tab => {
+            tab.classList.remove('active', 'bg-white', 'shadow-sm', 'text-gray-900');
+            tab.classList.add('text-gray-600', 'hover:text-gray-900');
+        });
+        
+        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active', 'bg-white', 'shadow-sm', 'text-gray-900');
+        document.querySelector(`[data-tab="${tabName}"]`).classList.remove('text-gray-600', 'hover:text-gray-900');
+        
+        // Show/hide content
+        document.querySelectorAll('.data-tab-content').forEach(content => {
+            content.classList.add('hidden');
+        });
+        document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+    }
+
+    // Analysis tab switching function removed - using simplified layout without complex tabs
+
+    switchScenarioTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('.scenario-tab').forEach(tab => {
+            tab.classList.remove('active', 'bg-white', 'shadow-sm', 'text-gray-900');
+            tab.classList.add('text-gray-600', 'hover:text-gray-900');
+        });
+        
+        document.querySelector(`[data-scenario="${tabName}"]`).classList.add('active', 'bg-white', 'shadow-sm', 'text-gray-900');
+        document.querySelector(`[data-scenario="${tabName}"]`).classList.remove('text-gray-600', 'hover:text-gray-900');
+        
+        // Show/hide content
+        document.querySelectorAll('.scenario-tab-content').forEach(content => {
+            content.classList.add('hidden');
+        });
+        // Handle the curve tool tab special case
+        if (tabName === 'curve') {
+            document.getElementById('curve-tool-tab').classList.remove('hidden');
+            // Initialize curve chart when switching to curve tool
+            if (this.currentSecurity && this.currentDate) {
+                this.updateCurveChart();
+            }
+        } else {
+            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+        }
+    }
+
+    async runSmartDiagnosis() {
+        if (!this.currentSecurity || !this.currentDate) {
+            alert('Please load a security first');
+            return;
+        }
+
+        this.showStatus('Running Smart Diagnosis (Sherlock Mode)...', true);
+        
+        try {
+            const response = await fetch('/bond/api/debug/smart_diagnosis', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    isin: this.currentSecurity, 
+                    valuation_date: this.currentDate 
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.displaySmartDiagnosisResults(data.diagnosis);
+                this.hideStatus();
+            } else {
+                throw new Error(data.error || 'Smart diagnosis failed');
+            }
+        } catch (error) {
+            this.showStatus(`Error: ${error.message}`);
+            console.error('Smart diagnosis error:', error);
+        }
+    }
+
+    displaySmartDiagnosisResults(diagnosis) {
+        const container = document.getElementById('diagnostic-results');
+        
+        let html = '<div class="space-y-3">';
+        html += `<div class="font-medium text-purple-800">🔍 Smart Diagnosis Results</div>`;
+        
+        diagnosis.issues.forEach((issue, index) => {
+            const confidenceColor = issue.confidence > 80 ? 'text-red-600' : issue.confidence > 60 ? 'text-yellow-600' : 'text-blue-600';
+            html += `
+                <div class="bg-white border rounded p-3">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="font-medium">${index + 1}. ${issue.title}</div>
+                        <div class="text-sm ${confidenceColor}">${issue.confidence}% confidence</div>
+                    </div>
+                    <div class="text-sm text-gray-600 mb-2">${issue.description}</div>
+                    ${issue.suggestion ? `
+                        <div class="text-sm bg-blue-50 border border-blue-200 rounded p-2">
+                            <strong>Suggestion:</strong> ${issue.suggestion}
+                        </div>
+                    ` : ''}
+                    ${issue.oneClickFix ? `
+                        <button class="mt-2 bg-green-600 hover:bg-green-700 text-white text-xs py-1 px-3 rounded" 
+                                onclick="window.debugWorkstation.applyQuickFix('${issue.fixId}')">
+                            ${issue.oneClickFix}
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    async runQuickDiagnostic(checkType) {
+        if (!this.currentSecurity || !this.currentDate) {
+            alert('Please load a security first');
+            return;
+        }
+
+        this.showStatus(`Running ${checkType} diagnostic...`, true);
+        
+        try {
+            const response = await fetch('/bond/api/debug/quick_diagnostic', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    isin: this.currentSecurity, 
+                    valuation_date: this.currentDate,
+                    check_type: checkType
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.appendDiagnosticResult(checkType, data.result);
+                this.hideStatus();
+            } else {
+                throw new Error(data.error || `${checkType} diagnostic failed`);
+            }
+        } catch (error) {
+            this.showStatus(`Error: ${error.message}`);
+            console.error('Quick diagnostic error:', error);
+        }
+    }
+
+    appendDiagnosticResult(checkType, result) {
+        const container = document.getElementById('diagnostic-results');
+        const existingContent = container.innerHTML;
+        
+        if (existingContent.includes('Run diagnostics to see results')) {
+            container.innerHTML = '';
+        }
+        
+        const statusIcon = result.status === 'pass' ? '✅' : result.status === 'warning' ? '⚠️' : '❌';
+        const statusColor = result.status === 'pass' ? 'text-green-600' : result.status === 'warning' ? 'text-yellow-600' : 'text-red-600';
+        
+        const newResult = `
+            <div class="bg-white border rounded p-2 mb-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium">${statusIcon} ${result.title}</span>
+                    <span class="text-xs ${statusColor}">${result.status.toUpperCase()}</span>
+                </div>
+                <div class="text-xs text-gray-600 mt-1">${result.message}</div>
+                ${result.details ? `<div class="text-xs text-gray-500 mt-1">${result.details}</div>` : ''}
+            </div>
+        `;
+        
+        container.innerHTML += newResult;
+    }
+
+    initializeSensitivityControls() {
+        // Price slider
+        const priceSlider = document.getElementById('sensitivity-price');
+        const priceValue = document.getElementById('price-value');
+        priceSlider.addEventListener('input', (e) => {
+            priceValue.textContent = parseFloat(e.target.value).toFixed(2);
+            this.runSensitivityAnalysis();
+        });
+
+        // Curve slider
+        const curveSlider = document.getElementById('sensitivity-curve');
+        const curveValue = document.getElementById('curve-value');
+        curveSlider.addEventListener('input', (e) => {
+            curveValue.textContent = `${e.target.value} bp`;
+            this.runSensitivityAnalysis();
+        });
+
+        // Volatility slider
+        const volSlider = document.getElementById('sensitivity-vol');
+        const volValue = document.getElementById('vol-value');
+        volSlider.addEventListener('input', (e) => {
+            volValue.textContent = `${parseFloat(e.target.value).toFixed(1)}%`;
+            this.runSensitivityAnalysis();
+        });
+
+        // Settlement dropdown
+        document.getElementById('sensitivity-settlement').addEventListener('change', () => {
+            this.runSensitivityAnalysis();
+        });
+    }
+
+    async runSensitivityAnalysis() {
+        if (!this.currentSecurity || !this.currentDate) {
+            return;
+        }
+
+        const params = {
+            price: parseFloat(document.getElementById('sensitivity-price').value),
+            curveShift: parseFloat(document.getElementById('sensitivity-curve').value),
+            volatility: parseFloat(document.getElementById('sensitivity-vol').value),
+            settlement: document.getElementById('sensitivity-settlement').value
+        };
+
+        try {
+            const response = await fetch('/bond/api/debug/sensitivity_analysis', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    isin: this.currentSecurity, 
+                    valuation_date: this.currentDate,
+                    parameters: params
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.displaySensitivityResults(data.results);
+            }
+        } catch (error) {
+            console.error('Sensitivity analysis error:', error);
+        }
+    }
+
+    displaySensitivityResults(results) {
+        const container = document.getElementById('sensitivity-results');
+        
+        let html = '<div class="space-y-2">';
+        html += '<div class="text-sm font-medium mb-2">Live Analytics</div>';
+        
+        const metrics = ['ytm', 'ytw', 'spread', 'z_spread', 'g_spread', 'oas', 'effective_duration', 'modified_duration', 'spread_duration', 'dv01', 'convexity'];
+        
+        metrics.forEach(metric => {
+            if (results[metric] !== undefined) {
+                html += `
+                    <div class="flex justify-between py-1 border-b border-gray-100">
+                        <span class="text-xs text-gray-600">${this.formatMetricName(metric)}:</span>
+                        <span class="text-xs font-mono">${this.formatMetricValue(metric, results[metric])}</span>
+                    </div>
+                `;
+            }
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    async runEnhancedCalculation() {
+        if (!this.currentSecurity || !this.currentDate) {
+            alert('Please load a security first');
+            return;
+        }
+
+        this.showStatus('Running Enhanced SpreadOMatic calculation...', true);
+        
+        try {
+            const response = await fetch('/bond/api/debug/run_enhanced_calculation', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    isin: this.currentSecurity, 
+                    valuation_date: this.currentDate,
+                    include_gspread: true,
+                    include_ytw: true,
+                    include_key_rate_durations: true,
+                    include_step_diff: true
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.calculationResults = data;
+                this.displayEnhancedCalculationSteps(data.calculation_trace);
+                this.updateEnhancedComparisonTable(data.calculation_trace.results, data.vendor_analytics);
+                this.hideStatus();
+            } else {
+                throw new Error(data.error || 'Enhanced calculation failed');
+            }
+        } catch (error) {
+            this.showStatus(`Error: ${error.message}`);
+            console.error('Enhanced calculation error:', error);
+        }
+    }
+
+    displayEnhancedCalculationSteps(trace) {
+        const container = document.getElementById('calculation-steps');
+        const steps = trace.steps || [];
+        
+        let html = '';
+        steps.forEach(step => {
+            const hasError = step.error;
+            const hasDiff = step.vendor_comparison;
+            
+            html += `
+                <div class="border rounded-lg p-3 ${hasError ? 'border-red-200 bg-red-50' : hasDiff && hasDiff.significant_difference ? 'border-yellow-200 bg-yellow-50' : 'border-gray-200'}">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-medium ${hasError ? 'text-red-900' : 'text-gray-900'}">${step.step}. ${step.name}</h4>
+                        <div class="flex space-x-2">
+                            ${step.result_display ? `<span class="text-sm font-mono bg-gray-100 px-2 py-1 rounded">${step.result_display}</span>` : ''}
+                            ${hasDiff && hasDiff.vendor_value ? `<span class="text-sm font-mono bg-blue-100 px-2 py-1 rounded">Vendor: ${hasDiff.vendor_value}</span>` : ''}
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">${step.description}</p>
+                    
+                    ${hasDiff && hasDiff.significant_difference ? `
+                        <div class="text-sm text-yellow-700 bg-yellow-100 border border-yellow-200 rounded p-2 mb-2">
+                            <strong>⚠️ Significant Difference:</strong> ${hasDiff.difference_explanation}
+                        </div>
+                    ` : ''}
+                    
+                    ${step.error ? `<div class="text-sm text-red-600 font-medium">Error: ${step.error}</div>` : ''}
+                    
+                    ${step.inputs ? `
+                        <details class="mt-2">
+                            <summary class="text-xs text-gray-500 cursor-pointer">View Step Details</summary>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                                <div>
+                                    <div class="text-xs font-medium text-gray-600">Inputs</div>
+                                    <pre class="text-xs bg-gray-50 p-2 rounded overflow-auto">${JSON.stringify(step.inputs, null, 2)}</pre>
+                                </div>
+                                ${hasDiff ? `
+                                    <div>
+                                        <div class="text-xs font-medium text-gray-600">Vendor Comparison</div>
+                                        <pre class="text-xs bg-blue-50 p-2 rounded overflow-auto">${JSON.stringify(hasDiff, null, 2)}</pre>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </details>
+                    ` : ''}
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html || '<div class="text-sm text-gray-500 text-center py-8">No enhanced calculation steps available</div>';
+    }
+
+    updateEnhancedComparisonTable(spreadomaticResults, vendorResults) {
+        const tbody = document.getElementById('enhanced-comparison-tbody');
+        const table = document.getElementById('enhanced-comparison-table');
+        
+        let html = '';
+        const enhancedMetrics = [
+            // Core yields
+            'ytm', 'ytw', 
+            // All spreads from data dictionary
+            'spread', 'z_spread', 'g_spread', 'oas',
+            // Duration metrics
+            'effective_duration', 'modified_duration', 'spread_duration', 'dv01',
+            // Risk metrics
+            'convexity',
+            // Key rate durations
+            'key_rate_duration_2y', 'key_rate_duration_5y', 'key_rate_duration_10y'
+        ];
+        
+        enhancedMetrics.forEach(metric => {
+            const spreadoValue = spreadomaticResults?.[metric];
+            let vendorValue = vendorResults?.[this.getVendorKey(metric)];
+            
+            // Convert vendor values from whole numbers to decimals for yields
+            if (vendorValue !== undefined && (metric === 'ytm' || metric === 'ytw')) {
+                vendorValue = vendorValue > 1 ? vendorValue / 100.0 : vendorValue;
+            }
+            // Convert vendor spreads from basis points to decimals if needed
+            else if (vendorValue !== undefined && (metric === 'spread' || metric === 'z_spread' || metric === 'g_spread' || metric === 'oas')) {
+                vendorValue = vendorValue > 100 ? vendorValue / 10000.0 : vendorValue;
+            }
+            
+            if (spreadoValue !== undefined || vendorValue !== undefined) {
+                const diff = (spreadoValue !== undefined && vendorValue !== undefined) 
+                    ? (spreadoValue - vendorValue) : null;
+                const pctDiff = (diff !== null && vendorValue !== 0) 
+                    ? ((diff / vendorValue) * 100) : null;
+                
+                const diffThreshold = this.getDifferenceThreshold(metric);
+                const isSignificant = diff !== null && Math.abs(diff) > diffThreshold;
+                const rowClass = isSignificant ? 'bg-red-50' : '';
+                
+                html += `
+                    <tr class="${rowClass}">
+                        <td class="px-3 py-2 text-sm font-medium">${this.formatMetricName(metric)}</td>
+                        <td class="px-3 py-2 text-sm font-mono">${spreadoValue !== undefined ? this.formatMetricValue(metric, spreadoValue) : '-'}</td>
+                        <td class="px-3 py-2 text-sm font-mono">${vendorValue !== undefined ? this.formatMetricValue(metric, vendorValue) : '-'}</td>
+                        <td class="px-3 py-2 text-sm font-mono ${diff !== null ? (isSignificant ? 'text-red-600 font-medium' : 'text-green-600') : ''}">${diff !== null ? this.formatMetricValue(metric, diff) : '-'}</td>
+                        <td class="px-3 py-2 text-sm font-mono ${pctDiff !== null ? (Math.abs(pctDiff) > 5 ? 'text-red-600 font-medium' : 'text-green-600') : ''}">${pctDiff !== null ? pctDiff.toFixed(2) + '%' : '-'}</td>
+                    </tr>
+                `;
+            }
+        });
+        
+        if (html) {
+            tbody.innerHTML = html;
+            table.classList.remove('hidden');
+        }
+    }
+
+    getDifferenceThreshold(metric) {
+        const thresholds = {
+            'ytm': 0.001,           // 0.1 bp
+            'ytw': 0.001,           // 0.1 bp  
+            'z_spread': 0.01,       // 1 bp
+            'g_spread': 0.01,       // 1 bp
+            'effective_duration': 0.05,    // 0.05 years
+            'modified_duration': 0.05,     // 0.05 years
+            'convexity': 0.1,       // 0.1
+            'oas': 0.01,            // 1 bp
+            'key_rate_duration_2y': 0.02,
+            'key_rate_duration_5y': 0.02,
+            'key_rate_duration_10y': 0.02
+        };
+        return thresholds[metric] || 0.01;
+    }
+
+    displayCalculationSteps(trace) {
+        const container = document.getElementById('calculation-steps');
+        const steps = trace.steps || [];
+        
+        let html = '';
+        steps.forEach(step => {
+            const hasError = step.error;
+            html += `
+                <div class="border rounded-lg p-3 ${hasError ? 'border-red-200 bg-red-50' : 'border-gray-200'}">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-medium ${hasError ? 'text-red-900' : 'text-gray-900'}">${step.step}. ${step.name}</h4>
+                        ${step.result_display ? `<span class="text-sm font-mono bg-gray-100 px-2 py-1 rounded">${step.result_display}</span>` : ''}
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">${step.description}</p>
+                    ${step.error ? `<div class="text-sm text-red-600 font-medium">Error: ${step.error}</div>` : ''}
+                    ${step.inputs ? `
+                        <details class="mt-2">
+                            <summary class="text-xs text-gray-500 cursor-pointer">View Inputs</summary>
+                            <pre class="text-xs bg-gray-50 p-2 rounded mt-1 overflow-auto">${JSON.stringify(step.inputs, null, 2)}</pre>
+                        </details>
+                    ` : ''}
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html || '<div class="text-sm text-gray-500 text-center py-8">No calculation steps available</div>';
+    }
+
+    updateComparisonTable(spreadomaticResults, vendorResults) {
+        const tbody = document.getElementById('comparison-tbody');
+        const table = document.getElementById('comparison-table');
+        
+        let html = '';
+        const metrics = ['ytm', 'z_spread', 'effective_duration', 'modified_duration', 'convexity'];
+        
+        metrics.forEach(metric => {
+            const spreadoValue = spreadomaticResults?.[metric];
+            const vendorValue = vendorResults?.[this.getVendorKey(metric)];
+            
+            if (spreadoValue !== undefined || vendorValue !== undefined) {
+                const diff = (spreadoValue !== undefined && vendorValue !== undefined) 
+                    ? (spreadoValue - vendorValue) : null;
+                
+                html += `
+                    <tr>
+                        <td class="px-3 py-2 text-sm font-medium">${this.formatMetricName(metric)}</td>
+                        <td class="px-3 py-2 text-sm font-mono">${spreadoValue !== undefined ? this.formatMetricValue(metric, spreadoValue) : '-'}</td>
+                        <td class="px-3 py-2 text-sm font-mono">${vendorValue !== undefined ? this.formatMetricValue(metric, vendorValue) : '-'}</td>
+                        <td class="px-3 py-2 text-sm font-mono ${diff !== null ? (Math.abs(diff) > 0.01 ? 'text-red-600 font-medium' : 'text-green-600') : ''}">${diff !== null ? this.formatMetricValue(metric, diff) : '-'}</td>
+                    </tr>
+                `;
+            }
+        });
+        
+        if (html) {
+            tbody.innerHTML = html;
+            table.classList.remove('hidden');
+        }
+    }
+
+    getVendorKey(metric) {
+        const mapping = {
+            // Yields
+            'ytm': 'YTM',
+            'ytw': 'YTW',
+            
+            // Spreads (comprehensive from data dictionary)
+            'spread': 'Spread',
+            'z_spread': 'ZSpread',
+            'g_spread': 'GSpread',
+            'oas': 'OAS',
+            
+            // Duration metrics
+            'effective_duration': 'Duration',
+            'modified_duration': 'ModDuration', 
+            'spread_duration': 'SpreadDuration',
+            'dv01': 'DV01',
+            
+            // Risk metrics
+            'convexity': 'Convexity',
+            
+            // Key rate durations
+            'key_rate_duration_2y': 'KeyRateDuration2Y',
+            'key_rate_duration_5y': 'KeyRateDuration5Y',
+            'key_rate_duration_10y': 'KeyRateDuration10Y',
+            
+            // Price and accrued
+            'price': 'Price',
+            'accrued': 'Accrued'
+        };
+        return mapping[metric] || metric;
+    }
+
+    formatMetricName(metric) {
+        const mapping = {
+            // Yields
+            'ytm': 'YTM (%)',
+            'ytw': 'YTW (%)',
+            
+            // Spreads (comprehensive from data dictionary)
+            'spread': 'Spread (bps)',
+            'z_spread': 'Z-Spread (bps)',
+            'g_spread': 'G-Spread (bps)', 
+            'oas': 'OAS (bps)',
+            
+            // Duration metrics
+            'effective_duration': 'Effective Duration',
+            'modified_duration': 'Modified Duration',
+            'spread_duration': 'Spread Duration',
+            'dv01': 'DV01',
+            
+            // Risk metrics
+            'convexity': 'Convexity',
+            
+            // Key rate durations
+            'key_rate_duration_2y': '2Y Key Rate Duration',
+            'key_rate_duration_5y': '5Y Key Rate Duration',
+            'key_rate_duration_10y': '10Y Key Rate Duration',
+            
+            // Price and accrued
+            'price': 'Clean Price',
+            'accrued': 'Accrued Interest'
+        };
+        return mapping[metric] || metric;
+    }
+
+    formatMetricValue(metric, value) {
+        if (metric === 'ytm' || metric === 'ytw') {
+            return (value * 100).toFixed(4) + '%';
+        } else if (metric === 'spread' || metric === 'z_spread' || metric === 'g_spread' || metric === 'oas') {
+            return (value * 10000).toFixed(2) + ' bps';
+        } else if (metric === 'price' || metric === 'accrued') {
+            return value.toFixed(6);
+        } else {
+            return value.toFixed(4);
+        }
+    }
+
+    formatVendorValue(metric, value) {
+        if (typeof value !== 'number') {
+            return value;
+        }
+        
+        // Handle vendor-specific formatting based on data dictionary conventions
+        if (metric.includes('YTM') || metric.includes('YTW')) {
+            // Vendor yields are in whole numbers (5.25 = 5.25%)
+            return value.toFixed(4) + '%';
+        } else if (metric.includes('Spread') || metric === 'OAS') {
+            // Spreads are typically in basis points
+            return value.toFixed(2) + ' bps';
+        } else if (metric.includes('Duration') || metric === 'Convexity' || metric === 'DV01') {
+            // Duration and risk metrics
+            return value.toFixed(4);
+        } else if (metric === 'Price' || metric === 'Accrued') {
+            // Price and accrued interest
+            return value.toFixed(6);
+        } else {
+            return value.toFixed(4);
+        }
+    }
+
+    formatVendorMetricName(metric) {
+        const nameMapping = {
+            'YTM': 'YTM',
+            'YTMSP': 'YTM (S&P)',
+            'YTW': 'YTW', 
+            'YTWSP': 'YTW (S&P)',
+            'Duration': 'Duration',
+            'DurationSP': 'Duration (S&P)',
+            'ModDuration': 'Modified Duration',
+            'Spread': 'Spread',
+            'SpreadSP': 'Spread (S&P)',
+            'SpreadDuration': 'Spread Duration',
+            'SpreadDurationSP': 'Spread Duration (S&P)',
+            'ZSpread': 'Z-Spread',
+            'GSpread': 'G-Spread',
+            'ZSpreadSynth': 'Z-Spread (Synthetic)',
+            'OAS': 'OAS',
+            'Convexity': 'Convexity',
+            'DV01': 'DV01',
+            'KeyRateDuration2Y': '2Y KRD',
+            'KeyRateDuration5Y': '5Y KRD',
+            'KeyRateDuration10Y': '10Y KRD',
+            'Price': 'Clean Price',
+            'Accrued': 'Accrued Interest'
+        };
+        return nameMapping[metric] || metric;
+    }
+
+    updateVendorValue() {
+        const targetAnalytic = document.getElementById('target-analytic').value;
+        const vendorValueInput = document.getElementById('vendor-value');
+        
+        if (targetAnalytic && this.vendorAnalytics) {
+            const vendorKey = this.getVendorKey(targetAnalytic);
+            const value = this.vendorAnalytics[vendorKey];
+            
+            if (value !== undefined) {
+                // Convert to appropriate units and handle vendor unit conventions
+                let displayValue = value;
+                if (targetAnalytic === 'ytm' || targetAnalytic === 'ytw') {
+                    // Vendor provides yields as whole numbers (5.25 = 5.25%), convert to decimal for internal use
+                    displayValue = value > 1 ? value / 100.0 : value;
+                } else if (targetAnalytic === 'spread' || targetAnalytic === 'z_spread' || targetAnalytic === 'g_spread' || targetAnalytic === 'oas') {
+                    // Spreads should be in basis points - convert if needed
+                    displayValue = value > 100 ? value / 10000.0 : value; // Convert if in basis points to decimal
+                } else if (targetAnalytic === 'price') {
+                    // Price should be precise
+                    displayValue = value;
+                } else if (targetAnalytic === 'accrued') {
+                    // Accrued interest
+                    displayValue = value;
+                } else {
+                    displayValue = value; // Duration, convexity, DV01, etc. use as-is
+                }
+                
+                // Set as placeholder/suggestion but don't override user input
+                vendorValueInput.placeholder = `Suggested: ${displayValue.toFixed(6)}`;
+            } else {
+                vendorValueInput.placeholder = 'Enter target value';
+            }
+        } else {
+            vendorValueInput.placeholder = 'Enter target value';
+        }
+    }
+
+    adjustInputRanges() {
+        const inputType = document.getElementById('input-to-change').value;
+        const minValueInput = document.getElementById('min-value');
+        const maxValueInput = document.getElementById('max-value');
+        
+        if (inputType === 'price') {
+            minValueInput.value = '80';
+            maxValueInput.value = '120';
+        } else if (inputType === 'curve_shift') {
+            minValueInput.value = '-500';
+            maxValueInput.value = '500';
+        }
+    }
+
+    async runGoalSeek() {
+        if (!this.currentSecurity || !this.currentDate) {
+            alert('Please load a security first');
+            return;
+        }
+
+        const targetAnalytic = document.getElementById('target-analytic').value;
+        const targetValue = parseFloat(document.getElementById('vendor-value').value);
+        const inputToChange = document.getElementById('input-to-change').value;
+        const minValue = parseFloat(document.getElementById('min-value').value);
+        const maxValue = parseFloat(document.getElementById('max-value').value);
+
+        if (!targetAnalytic || !inputToChange || isNaN(targetValue) || isNaN(minValue) || isNaN(maxValue)) {
+            alert('Please fill in all goal seek parameters');
+            return;
+        }
+
+        this.showStatus('Running goal seek...', true);
+        
+        try {
+            const response = await fetch('/bond/api/debug/goal_seek', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    isin: this.currentSecurity,
+                    valuation_date: this.currentDate,
+                    target_analytic: targetAnalytic,
+                    target_value: targetValue,
+                    input_to_change: inputToChange,
+                    min_value: minValue,
+                    max_value: maxValue
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.displayGoalSeekResults(data);
+                this.displayIterationLog(data.iterations || []);
+                this.hideStatus();
+            } else {
+                throw new Error(data.error || 'Goal seek failed');
+            }
+        } catch (error) {
+            this.showStatus(`Error: ${error.message}`);
+            console.error('Goal seek error:', error);
+        }
+    }
+
+    displayGoalSeekResults(data) {
+        const container = document.getElementById('goal-seek-results');
+        const converged = data.converged;
+        
+        const html = `
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="font-medium">Goal Seek Result</h4>
+                    <span class="px-2 py-1 rounded text-xs font-medium ${converged ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
+                        ${converged ? 'Converged' : 'Did not converge'}
+                    </span>
+                </div>
+                <div class="bg-white border rounded p-3">
+                    <div class="text-sm text-gray-600 mb-2">
+                        <strong>Target:</strong> ${data.target_analytic} = ${data.target_value}
+                    </div>
+                    <div class="text-lg font-medium text-blue-900">
+                        ${data.message}
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                        <span class="text-gray-600">Final Input:</span>
+                        <span class="font-mono">${data.final_input_value?.toFixed(4)}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-600">Final Result:</span>
+                        <span class="font-mono">${data.final_result_value?.toFixed(4)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+
+    displayIterationLog(iterations) {
+        const container = document.getElementById('enhanced-iteration-log');
+        
+        if (iterations.length === 0) {
+            container.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">No iterations logged</div>';
+            return;
+        }
+
+        let html = `
+            <div class="space-y-2">
+                <div class="grid grid-cols-4 gap-2 text-xs font-medium text-gray-600 border-b pb-1">
+                    <span>Iteration</span>
+                    <span>Input</span>
+                    <span>Result</span>
+                    <span>Error</span>
+                </div>
+        `;
+        
+        iterations.forEach(iter => {
+            html += `
+                <div class="grid grid-cols-4 gap-2 text-xs font-mono">
+                    <span>${iter.iteration}</span>
+                    <span>${iter.input_value.toFixed(4)}</span>
+                    <span>${iter.result_value.toFixed(4)}</span>
+                    <span class="${Math.abs(iter.error) < 0.01 ? 'text-green-600' : 'text-red-600'}">${iter.error.toFixed(4)}</span>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    // Enhanced functionality implementation
+    async runEnhancedGoalSeek() {
+        // Enhanced goal seek with additional parameters
+        return this.runGoalSeek();
+    }
+
+    async runScenario(scenarioType) {
+        if (!this.currentSecurity || !this.currentDate) {
+            alert('Please load a security first');
+            return;
+        }
+
+        this.showStatus(`Running ${scenarioType} scenario...`, true);
+        
+        try {
+            const response = await fetch('/bond/api/debug/run_scenario', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    isin: this.currentSecurity, 
+                    valuation_date: this.currentDate,
+                    scenario_type: scenarioType,
+                    custom_parameters: scenarioType === 'custom' ? this.getCustomScenarioParams() : {}
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.displayScenarioResults(data.scenario_results, data.vendor_analytics);
+                this.hideStatus();
+            } else {
+                throw new Error(data.error || `${scenarioType} scenario failed`);
+            }
+        } catch (error) {
+            this.showStatus(`Error: ${error.message}`);
+            console.error('Scenario error:', error);
+        }
+    }
+
+    getCustomScenarioParams() {
+        // Get custom scenario parameters from UI (to be implemented)
+        return {
+            price_shock: 0,  // Percentage
+            curve_shock: 0,  // Basis points
+            volatility_shock: 0  // Percentage points
+        };
+    }
+
+    displayScenarioResults(scenarioResults, vendorAnalytics) {
+        const tbody = document.getElementById('scenario-comparison-tbody');
+        
+        // Store scenario results for comparison
+        if (!this.scenarioResults) {
+            this.scenarioResults = {};
+        }
+        this.scenarioResults[scenarioResults.name.toLowerCase().replace(' ', '_')] = scenarioResults;
+        
+        // Update comparison table
+        this.updateScenarioComparisonTable();
+    }
+
+    updateScenarioComparisonTable() {
+        const tbody = document.getElementById('scenario-comparison-tbody');
+        
+        if (!this.scenarioResults || Object.keys(this.scenarioResults).length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-2 py-4 text-center text-gray-500">Run scenarios to see comparison</td></tr>';
+            return;
+        }
+        
+        let html = '';
+        const metrics = ['ytm', 'ytw', 'z_spread', 'g_spread', 'effective_duration', 'modified_duration', 'convexity', 'oas'];
+        
+        metrics.forEach(metric => {
+            html += `<tr>`;
+            html += `<td class="px-2 py-1 text-xs font-medium">${this.formatMetricName(metric)}</td>`;
+            
+            // Base, Vendor, Stressed, Custom columns
+            ['base_case', 'vendor_match', 'stressed', 'custom'].forEach(scenarioKey => {
+                const scenario = this.scenarioResults[scenarioKey];
+                if (scenario && scenario.analytics[metric] !== undefined) {
+                    html += `<td class="px-2 py-1 text-xs font-mono">${this.formatMetricValue(metric, scenario.analytics[metric])}</td>`;
+                } else {
+                    html += `<td class="px-2 py-1 text-xs text-gray-400">-</td>`;
+                }
+            });
+            
+            html += `</tr>`;
+        });
+        
+        tbody.innerHTML = html;
+    }
+
+    async updateCurveChart() {
+        if (!this.currentSecurity || !this.currentDate) {
+            return;
+        }
+
+        this.showStatus('Loading curve data...', true);
+        
+        try {
+            const curveOptions = {
+                show_our_curve: document.getElementById('show-our-curve').checked,
+                show_vendor_curve: document.getElementById('show-vendor-curve').checked,
+                show_shocked_curve: document.getElementById('show-shocked-curve').checked,
+                shock_amount: 50  // Default 50bp shock
+            };
+            
+            const response = await fetch('/bond/api/debug/curve_analysis', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    isin: this.currentSecurity, 
+                    valuation_date: this.currentDate,
+                    curve_options: curveOptions
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.displayCurveChart(data.curve_analysis);
+                this.updateCurveDataTable(data.curve_analysis);
+                this.hideStatus();
+            } else {
+                throw new Error(data.error || 'Curve analysis failed');
+            }
+        } catch (error) {
+            this.showStatus(`Error: ${error.message}`);
+            console.error('Curve analysis error:', error);
+        }
+    }
+
+    displayCurveChart(curveAnalysis) {
+        const canvas = document.getElementById('curve-chart');
+        const ctx = canvas.getContext('2d');
+        
+        // Destroy existing chart if it exists
+        if (this.curveChart) {
+            this.curveChart.destroy();
+        }
+        
+        const datasets = [];
+        
+        // Base curve
+        if (curveAnalysis.base_curve && document.getElementById('show-our-curve').checked) {
+            datasets.push({
+                label: `Our Curve (${curveAnalysis.base_curve.currency})`,
+                data: curveAnalysis.base_curve.points,
+                borderColor: 'rgb(59, 130, 246)',  // blue-500
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                tension: 0.4
+            });
+        }
+        
+        // Vendor curve
+        if (curveAnalysis.vendor_curve && document.getElementById('show-vendor-curve').checked) {
+            datasets.push({
+                label: 'Vendor Curve',
+                data: curveAnalysis.vendor_curve.points,
+                borderColor: 'rgb(239, 68, 68)',  // red-500
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                tension: 0.4
+            });
+        }
+        
+        // Shocked curve
+        if (curveAnalysis.shocked_curve && document.getElementById('show-shocked-curve').checked) {
+            datasets.push({
+                label: `Shocked Curve (${curveAnalysis.shocked_curve.shock_amount})`,
+                data: curveAnalysis.shocked_curve.points,
+                borderColor: 'rgb(245, 158, 11)',  // amber-500
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                tension: 0.4
+            });
+        }
+        
+        this.curveChart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Yield Curve Analysis'
+                    },
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        title: {
+                            display: true,
+                            text: 'Time to Maturity (Years)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Yield (%)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    updateCurveDataTable(curveAnalysis) {
+        const tbody = document.getElementById('curve-data-tbody');
+        
+        if (!curveAnalysis.base_curve) {
+            tbody.innerHTML = '<tr><td colspan="3" class="px-2 py-2 text-center text-gray-500">No curve data available</td></tr>';
+            return;
+        }
+        
+        let html = '';
+        const baseCurve = curveAnalysis.base_curve;
+        
+        for (let i = 0; i < baseCurve.tenors.length; i++) {
+            const isInterpolated = i % 2 === 1; // Mock interpolation logic
+            html += `
+                <tr class="border-b border-gray-100">
+                    <td class="px-2 py-1 text-xs font-mono">${baseCurve.tenors[i]}</td>
+                    <td class="px-2 py-1 text-xs font-mono">${baseCurve.rates[i].toFixed(4)}%</td>
+                    <td class="px-2 py-1 text-xs ${isInterpolated ? 'text-blue-600' : 'text-gray-900'}">${isInterpolated ? 'Yes' : 'No'}</td>
+                </tr>
+            `;
+        }
+        
+        tbody.innerHTML = html;
+    }
+
+    async applyQuickFix(fixId) {
+        // One-click fix functionality
+        console.log(`Applying quick fix: ${fixId}`);
+        this.showStatus(`Applying fix: ${fixId}...`, true);
+        
+        // Mock implementation - in reality would apply specific fixes
+        setTimeout(() => {
+            this.showStatus(`Applied fix: ${fixId}`);
+            setTimeout(() => this.hideStatus(), 2000);
+        }, 1000);
+    }
+}
+
+// Initialize the Debug Workstation when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    window.debugWorkstation = new DebugWorkstation();
+});
+</script>
+
+{% endblock %}

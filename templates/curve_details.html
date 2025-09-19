@@ -10,6 +10,8 @@
 {% block title %}Yield Curve Details - {{ currency }}{% endblock %}
 
 {% block content %}
+{% set template_key = 'curve_details' %}
+{% include "_help_link.html" %}
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-4">
         <h2 class="text-3xl font-bold font-merriweather">Yield Curve Details: <strong class="font-semibold">{{ currency }}</strong></h2>

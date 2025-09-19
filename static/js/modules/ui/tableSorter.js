@@ -118,6 +118,16 @@ function getCompareFunction(rows, columnIndex, columnName) {
         }
     }
 
+    // Special handling for RAG column (Red, Amber, Green priority order)
+    if (columnName === 'RAG') {
+        const ragOrder = { 'Red': 1, 'Amber': 2, 'Green': 3 };
+        return (a, b) => {
+            const orderA = ragOrder[a] || 999; // Unknown values go to end
+            const orderB = ragOrder[b] || 999;
+            return orderA - orderB;
+        };
+    }
+
     if (isNumeric) {
         // Check if it's the special column 'Change Z-Score'
         if (columnName === 'Change Z-Score') {

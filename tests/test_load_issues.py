@@ -1,7 +1,7 @@
 # Purpose: Test issue_processing.load_issues adds missing columns without altering row count.
 
 import pandas as pd
-from issue_processing import load_issues, REQUIRED_ISSUE_COLUMNS
+from analytics.issue_processing import load_issues, REQUIRED_ISSUE_COLUMNS
 
 
 def _write_issues_csv(tmp_path):

@@ -1,0 +1,24 @@
+<!-- Analytics Debug Workstation - Sticky Header Component -->
+<div class="sticky top-0 bg-white border-b border-gray-200 z-40 px-4 py-3 mb-6">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center space-x-6">
+      <h1 class="text-xl font-bold text-gray-900">Analytics Debug Workstation</h1>
+      <div id="header-security-info" class="flex items-center space-x-4 text-sm text-gray-600 hidden">
+        <div class="flex items-center">
+          <span class="font-medium">Security:</span>
+          <span id="header-isin" class="ml-1 font-mono bg-gray-100 px-2 py-1 rounded">-</span>
+          <span id="header-name" class="ml-2 text-gray-800">-</span>
+        </div>
+        <div class="flex items-center">
+          <span class="font-medium">Date:</span>
+          <span id="header-date" class="ml-1 font-mono">-</span>
+        </div>
+      </div>
+    </div>
+    <!-- Status in Header -->
+    <div id="status-bar" class="flex items-center text-sm hidden">
+      <div id="loading-spinner" class="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent mr-2 hidden"></div>
+      <span id="status-message" class="text-blue-800"></span>
+    </div>
+  </div>
+</div>

@@ -8,6 +8,8 @@
 {% block title %}Inspect Results - {{ metric_name }} ({{ fund_code }}){% endblock %}
 
 {% block content %}
+{% set template_key = 'inspect_results' %}
+{% include "_help_link.html" %}
     {# Removed inline style block #}
 
     <!-- Inspect Results Page Content -->

@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from data_utils import convert_to_numeric_robustly, replace_zeros_with_nan
+from core.data_utils import convert_to_numeric_robustly, replace_zeros_with_nan
 
 
 def test_convert_to_numeric_basic(caplog):

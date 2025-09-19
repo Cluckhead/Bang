@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.csv
+*.csv.bak
 *.xlsx
 *.txt
 
@@ -118,4 +119,4 @@ dmypy.json
 .pyre/
 
 # Do not ignore requirements-dev.txt
-!requirements-dev.txt 
+!requirements-dev.txt combined_documentation.md

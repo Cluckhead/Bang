@@ -1,7 +1,7 @@
 # Purpose: Unit test for utils._is_date_like validating date header detection.
 
 import pytest
-from utils import _is_date_like
+from core.utils import _is_date_like
 
 
 @pytest.mark.parametrize(
